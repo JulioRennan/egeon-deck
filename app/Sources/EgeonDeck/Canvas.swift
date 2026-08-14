@@ -1,5 +1,6 @@
 import AppKit
 import SwiftTerm
+import WebKit
 
 // MARK: - Nó base
 
@@ -155,6 +156,66 @@ class NodeView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: - Rasterização
+
+    private var appliedContentsScale: CGFloat = 0
+
+    /// Rasteriza o card na resolução em que ele de fato aparece.
+    ///
+    /// `NSScrollView.magnification` é escala no layer, e layer rasteriza no
+    /// `contentsScale` dele — que ninguém atualiza. O card era desenhado na
+    /// escala da tela e esticado pela GPU: em 112% numa tela 1x, todo glifo
+    /// passava por filtro bilinear e o canvas inteiro ficava embaçado.
+    ///
+    /// Quem chama é o canvas, a cada troca de zoom e de tela.
+    func applyContentsScale(_ scale: CGFloat) {
+        guard abs(scale - appliedContentsScale) > 0.001 else { return }
+        appliedContentsScale = scale
+        NodeView.rasterize(self, at: scale)
+    }
+
+    private static func rasterize(_ view: NSView, at scale: CGFloat) {
+        // O WKWebView rasteriza num processo e num layer que não são nossos, e
+        // pelo deviceScaleFactor da página — `contentsScale` no layer de cá não
+        // muda nada. Quem manda nele é o override abaixo.
+        if let web = view as? WKWebView {
+            overrideDeviceScale(web, at: scale)
+            return
+        }
+        if let layer = view.layer {
+            rasterize(layer, at: scale)
+            view.needsDisplay = true
+        }
+        view.subviews.forEach { rasterize($0, at: scale) }
+    }
+
+    /// Diz à página em quantos pixels por ponto ela está sendo mostrada.
+    ///
+    /// É o mesmo que o WebKit faz ao arrastar uma janela para o Retina; a
+    /// diferença é que o zoom do canvas ele não enxerga, porque a magnificação
+    /// mora num scroll view que não é dele. Sem isto o code-server desenha em 1x
+    /// e chega esticado — resolvido o terminal, o editor era o que sobrava
+    /// embaçado.
+    ///
+    /// API privada, então o `responds(to:)` não é decoração: sem ele, uma
+    /// versão de WebKit que largue o seletor derruba o app. Perder a nitidez do
+    /// editor é o pior que pode acontecer aqui.
+    private static func overrideDeviceScale(_ web: WKWebView, at scale: CGFloat) {
+        let selector = Selector(("_setOverrideDeviceScaleFactor:"))
+        guard web.responds(to: selector), let imp = web.method(for: selector) else { return }
+        typealias Setter = @convention(c) (AnyObject, Selector, CGFloat) -> Void
+        unsafeBitCast(imp, to: Setter.self)(web, selector, scale)
+    }
+
+    /// Sublayer não herda `contentsScale` do pai — cada um guarda o seu.
+    private static func rasterize(_ layer: CALayer, at scale: CGFloat) {
+        if layer.contentsScale != scale {
+            layer.contentsScale = scale
+            layer.setNeedsDisplay()
+        }
+        layer.sublayers?.forEach { rasterize($0, at: scale) }
+    }
 
     override var isFlipped: Bool { true }
 
@@ -570,8 +631,9 @@ final class CanvasContainer: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
 
-        // NSScrollView já entrega pan (trackpad) e zoom (pinça) nativos,
-        // renderizando as subviews de forma nítida em qualquer magnificação.
+        // NSScrollView já entrega pan (trackpad) e zoom (pinça) nativos. Nítido
+        // ele não entrega: a magnificação é escala no layer, e quem acompanha o
+        // zoom no `contentsScale` de cada card é `refreshContentsScale`.
         // Atrás dos nós, como no n8n: a curva passa por baixo dos cards e some
         // sob eles em vez de riscar o terminal.
         edgeLayer.frame = doc.bounds
@@ -882,11 +944,16 @@ final class CanvasContainer: NSView {
         if event.isDirectionInvertedFromDevice { delta = -delta }
         guard delta != 0 else { return }
 
+        // Parte do valor cru enquanto a magnificação for dele — é assim que a
+        // roda atravessa a detente. Se o zoom mudou por fora (pinça, ⌘0, botão),
+        // o cru está velho e quem manda é a magnificação.
+        let base = abs(detente(rawMagnification) - scroll.magnification) < 0.0001
+            ? rawMagnification : scroll.magnification
+
         // Exponencial: o passo é proporcional ao zoom atual, então a sensação é
         // a mesma em 0.3x e em 2x. Sinal negativo para casar com o Figma —
         // deslizar para cima aproxima.
-        applyZoom(scroll.magnification * pow(1.0025, -delta),
-                  keeping: event.locationInWindow)
+        applyZoom(base * pow(1.0025, -delta), keeping: event.locationInWindow)
     }
 
     override func layout() {
@@ -909,9 +976,64 @@ final class CanvasContainer: NSView {
 
     /// Pan e zoom passam os dois por aqui: o bounds do clip view muda nos dois
     /// casos, inclusive na pinça do trackpad.
-    @objc private func viewMoved() { toolbar.showZoom(scroll.magnification) }
+    @objc private func viewMoved() {
+        toolbar.showZoom(scroll.magnification)
+        refreshContentsScale()
+    }
+
+    // MARK: - Nitidez
+
+    /// Teto da rasterização. Numa tela Retina, 3x de zoom pediria escala 6, e o
+    /// backing store cresce com o quadrado dela.
+    private static let maxContentsScale: CGFloat = 3
+
+    /// Em quantos pixels de verdade cada ponto do card aparece: a escala da tela
+    /// vezes o zoom do canvas.
+    ///
+    /// Piso em 1 porque abaixo disso o glifo é rasterizado menor que o pixel e o
+    /// ganho vira ruído — em zoom out ninguém lê o terminal mesmo.
+    private var contentsScaleForNodes: CGFloat {
+        let backing = window?.backingScaleFactor ?? 2
+        return min(max(backing * scroll.magnification, 1), Self.maxContentsScale)
+    }
+
+    /// Manda cada nó se redesenhar na resolução em que está aparecendo.
+    ///
+    /// Chamado a cada quadro de pan e de zoom: a guarda é o que segura o custo,
+    /// já que pan não muda escala nenhuma.
+    private func refreshContentsScale() {
+        let scale = contentsScaleForNodes
+        guard abs(scale - appliedContentsScale) > 0.001 else { return }
+        appliedContentsScale = scale
+        nodes.forEach { $0.applyContentsScale(scale) }
+    }
+
+    private var appliedContentsScale: CGFloat = 0
+
+    /// Trocar de tela muda o fator de escala sem mexer no zoom — arrastar a
+    /// janela do monitor 1x para o Retina precisa redesenhar tudo.
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        refreshContentsScale()
+    }
 
     // MARK: - Zoom
+
+    /// Zoom pedido antes da detente. O gesto continua a partir daqui: partindo
+    /// do valor já grudado, cada evento cairia de novo dentro da janela de
+    /// captura e a roda ficaria presa no passo.
+    private var rawMagnification: CGFloat = 1
+
+    /// Gruda no passo mais próximo dentro de 3%.
+    ///
+    /// O zoom da roda é exponencial e nunca cai em 1.0 exato — 112%, 78%, 141%.
+    /// Fora dos passos redondos o canvas some do lugar onde os números são
+    /// legíveis, e 100% é o único ponto em que ninguém reamostra nada.
+    private func detente(_ value: CGFloat) -> CGFloat {
+        guard let step = Self.zoomSteps.min(by: { abs($0 - value) < abs($1 - value) })
+        else { return value }
+        return abs(step - value) <= step * 0.03 ? step : value
+    }
 
     /// Zoom que deixa um ponto da tela parado no lugar.
     ///
@@ -922,17 +1044,22 @@ final class CanvasContainer: NSView {
     /// diferença, é o que de fato ancora.
     private func applyZoom(_ value: CGFloat, keeping windowPoint: NSPoint) {
         let clamped = min(max(value, scroll.minMagnification), scroll.maxMagnification)
-        guard abs(clamped - scroll.magnification) > 0.0001 else { return }
+        // Antes da guarda: preso na detente, a magnificação não muda e sair dela
+        // depende justamente de o valor cru continuar andando.
+        rawMagnification = clamped
+
+        let target = detente(clamped)
+        guard abs(target - scroll.magnification) > 0.0001 else { return }
 
         // Crescer antes: em zoom out o viewport passa a cobrir mais unidades do
         // que o documento tem, e o scroll seria clampeado — o que sozinho já
         // desloca a vista.
-        growDocumentIfNeeded(forMagnification: clamped)
+        growDocumentIfNeeded(forMagnification: target)
 
         let magBefore = scroll.magnification
         let originBefore = scroll.contentView.bounds.origin
         let before = doc.convert(windowPoint, from: nil)
-        scroll.magnification = clamped
+        scroll.magnification = target
         let after = doc.convert(windowPoint, from: nil)
 
         var origin = scroll.contentView.bounds.origin
@@ -994,6 +1121,9 @@ final class CanvasContainer: NSView {
         // tamanho real na primeira interação — até lá o pty roda numa tela de
         // dimensão degenerada e o buffer sai vazio.
         node.layoutSubtreeIfNeeded()
+        // Nó novo nasce na escala do zoom atual: quem só reage à troca de zoom
+        // deixaria este desenhado na escala da tela até você mexer na roda.
+        node.applyContentsScale(contentsScaleForNodes)
         node.onFrameChanged = { [weak self] _ in
             self?.growDocumentIfNeeded()
             self?.onLayoutChanged?()
