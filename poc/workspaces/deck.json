@@ -1,0 +1,24 @@
+{
+  "name": "deck",
+  "path": "/caminho/do/projeto",
+  "display": 0,
+  "editor": {
+    "enabled": true,
+    "titleMatch": "mega-brain",
+    "frac": [0.0, 0.0, 0.62, 1.0]
+  },
+  "terminals": [
+    {
+      "id": "back",
+      "cwd": ".",
+      "cmd": "echo '[back] pane pronto — aqui rodaria o dev do backend'",
+      "frac": [0.62, 0.0, 0.38, 0.5]
+    },
+    {
+      "id": "front",
+      "cwd": ".",
+      "cmd": "echo '[front] pane pronto — aqui rodaria o dev do frontend'",
+      "frac": [0.62, 0.5, 0.38, 0.5]
+    }
+  ]
+}

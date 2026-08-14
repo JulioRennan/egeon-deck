@@ -1,0 +1,254 @@
+:root {
+  --mb-gap: 20px;
+  --mb-accent: var(--vscode-textLink-foreground, #4daafc);
+  --mb-pending: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+}
+
+/* ------------------------------------------------------------------ barra */
+
+#bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px var(--mb-gap);
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(255, 255, 255, .1));
+  background: var(--vscode-editorWidget-background, transparent);
+}
+
+#file { font-weight: 600; }
+#status { margin-left: auto; opacity: .8; font-size: 12px; }
+#status[data-tone="ok"] { color: var(--vscode-testing-iconPassed, #3fb950); }
+#status[data-tone="error"] { color: var(--vscode-errorForeground, #f85149); }
+
+button {
+  font: inherit;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+button:disabled { opacity: .4; cursor: default; }
+button:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+
+#source {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}
+
+/* --------------------------------------------------------------- markdown */
+
+#doc {
+  padding: var(--mb-gap) 32px 120px;
+  overflow: auto;
+  line-height: 1.65;
+  max-width: 900px;
+}
+
+#doc h1, #doc h2, #doc h3 { line-height: 1.3; margin: 1.6em 0 .6em; }
+#doc h1 { font-size: 1.9em; }
+#doc h2 { font-size: 1.45em; border-bottom: 1px solid var(--vscode-panel-border, #333); padding-bottom: .25em; }
+#doc h3 { font-size: 1.15em; }
+#doc p, #doc ul, #doc ol, #doc blockquote, #doc pre, #doc table { margin: .7em 0; }
+#doc code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: .92em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background, rgba(255, 255, 255, .07));
+}
+#doc pre {
+  padding: 12px 14px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--vscode-textCodeBlock-background, rgba(255, 255, 255, .05));
+}
+#doc pre code { background: none; padding: 0; }
+#doc blockquote {
+  margin-left: 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--mb-accent);
+  opacity: .85;
+}
+#doc table { border-collapse: collapse; width: 100%; }
+#doc th, #doc td {
+  border: 1px solid var(--vscode-panel-border, #333);
+  padding: 6px 10px;
+  text-align: left;
+}
+#doc a { color: var(--mb-accent); }
+
+/* Marca só na margem: destacar o bloco inteiro competiria com a leitura. */
+.mb-block { position: relative; }
+.mb-commented::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--mb-accent);
+}
+.mb-pending::before { background: var(--mb-pending); }
+.mb-editing { outline: 1px dashed var(--mb-accent); }
+
+/* O trecho comentado, pintado. Fundo translúcido para o texto continuar
+   legível e o syntax highlight de código sobreviver por baixo. */
+mark.mb-highlight {
+  color: inherit;
+  background: color-mix(in srgb, var(--mb-pending) 28%, transparent);
+  border-bottom: 2px solid var(--mb-pending);
+  border-radius: 2px;
+  padding: 0 1px;
+  cursor: pointer;
+}
+mark.mb-highlight-sent {
+  background: color-mix(in srgb, var(--mb-accent) 20%, transparent);
+  border-bottom-color: var(--mb-accent);
+}
+mark.mb-highlight:hover { filter: brightness(1.35); }
+
+/* Seleção viva, enquanto o balão de comentário está aberto. Usa a cor de
+   seleção do próprio editor para não parecer um estado novo. */
+mark.mb-selecting {
+  color: inherit;
+  background: var(--vscode-editor-selectionBackground, rgba(88, 166, 255, .35));
+  border-radius: 2px;
+}
+
+.mb-flash {
+  animation: mb-flash 1.2s ease-out;
+}
+@keyframes mb-flash {
+  0%, 40% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mb-accent) 60%, transparent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+
+.mb-editor {
+  width: 100%;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--vscode-editor-font-size, 12px);
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 4px;
+  padding: 8px;
+  resize: vertical;
+}
+
+/* ---------------------------------------------------------------- threads */
+
+#threads {
+  overflow: auto;
+  padding: var(--mb-gap) 16px 80px;
+  border-left: 1px solid var(--vscode-panel-border, rgba(255, 255, 255, .1));
+  background: var(--vscode-sideBar-background, transparent);
+}
+
+.mb-empty { opacity: .5; font-size: 12px; }
+
+.mb-thread {
+  position: relative;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border-left: 3px solid var(--mb-pending);
+  background: var(--vscode-editorWidget-background, rgba(255, 255, 255, .04));
+  cursor: pointer;
+}
+.mb-thread.mb-sent { border-left-color: var(--vscode-testing-iconPassed, #3fb950); opacity: .6; }
+.mb-thread.mb-orphan { border-left-color: var(--vscode-errorForeground, #f85149); }
+
+/* Corte por número de linhas com reticências, não max-height cego: a seleção
+   pode ter vários parágrafos, e cortar em silêncio faz parecer que só a
+   primeira linha foi capturada. */
+.mb-thread blockquote {
+  margin: 0 0 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--vscode-panel-border, #444);
+  font-size: 11px;
+  opacity: .7;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mb-thread blockquote:hover {
+  -webkit-line-clamp: initial;
+  max-height: 300px;
+  overflow: auto;
+}
+.mb-thread p { margin: 0 0 6px; font-size: 12.5px; }
+.mb-meta { font-size: 10.5px; opacity: .55; }
+
+.mb-toggle-sent {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px;
+  font-size: 11px;
+  opacity: .55;
+  color: var(--vscode-foreground);
+  background: none;
+}
+.mb-toggle-sent:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, .06));
+}
+
+.mb-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  opacity: 0;
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}
+.mb-thread:hover .mb-remove { opacity: 1; }
+
+/* ----------------------------------------------------------------- bubble */
+
+#bubble {
+  position: absolute;
+  z-index: 20;
+  width: 300px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-focusBorder);
+  background: var(--vscode-editorWidget-background, #252526);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+}
+#bubbleText {
+  width: 100%;
+  font: inherit;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  padding: 6px;
+  resize: vertical;
+}
+#bubbleActions { display: flex; gap: 8px; margin-top: 8px; }
+#bubbleCancel {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}

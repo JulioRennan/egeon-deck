@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# mb — mega-brain PoC
+# Sobe um workspace: N terminais (tmux + Terminal.app) + VSCode.app real,
+# e tila as janelas na tela.
+#
+#   mb up deck       sobe tudo e posiciona
+#   mb layout deck   so reposiciona as janelas
+#   mb down deck     mata as sessoes tmux e fecha as janelas de terminal
+#   mb ls             lista workspaces
+#
+# Terminal.app tem AppleScript proprio (posiciona por window id, exato).
+# VSCode nao tem, entao vai pela Accessibility API casando pelo titulo.
+
+set -euo pipefail
+
+MB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WS_DIR="$MB_ROOT/workspaces"
+STATE_DIR="$MB_ROOT/.state"
+PLACE_JS="$MB_ROOT/lib/place.js"
+SCREEN_JS="$MB_ROOT/lib/screen.js"
+CODE_BIN="${MB_CODE_BIN:-/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code}"
+
+die() { echo "mb: $*" >&2; exit 1; }
+
+cfg_path() {
+  local name="$1" f="$WS_DIR/$1.json"
+  [[ -f "$f" ]] || die "workspace '$name' nao existe ($f)"
+  echo "$f"
+}
+
+state_path() { mkdir -p "$STATE_DIR"; echo "$STATE_DIR/$1.json"; }
+
+# Escapa uma string para virar literal dentro de um script AppleScript.
+as_quote() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+
+# ---------------------------------------------------------------- tmux
+
+# A sessao base guarda as janelas de verdade. Cada Terminal aberto na tela
+# attacha numa sessao "agrupada" (tmux new-session -t), que compartilha as
+# janelas mas mantem a janela ativa independente — sem isso os dois Terminals
+# ficariam espelhados um no outro.
+tmux_up() {
+  local cfg="$1" name="$2" root sess
+  root="$(jq -r '.path' "$cfg")"
+  sess="mb-$name"
+
+  if ! tmux has-session -t "=$sess" 2>/dev/null; then
+    local first_id first_cwd
+    first_id="$(jq -r '.terminals[0].id' "$cfg")"
+    first_cwd="$(jq -r '.terminals[0].cwd // "."' "$cfg")"
+    tmux new-session -d -s "$sess" -n "$first_id" -c "$root/$first_cwd"
+
+    local n i id cwd cmd
+    n="$(jq -r '.terminals | length' "$cfg")"
+    for ((i = 1; i < n; i++)); do
+      id="$(jq -r ".terminals[$i].id" "$cfg")"
+      cwd="$(jq -r ".terminals[$i].cwd // \".\"" "$cfg")"
+      tmux new-window -d -t "$sess:" -n "$id" -c "$root/$cwd"
+    done
+
+    for ((i = 0; i < n; i++)); do
+      id="$(jq -r ".terminals[$i].id" "$cfg")"
+      cmd="$(jq -r ".terminals[$i].cmd // empty" "$cfg")"
+      [[ -n "$cmd" ]] && tmux send-keys -t "$sess:$id" "$cmd" C-m
+    done
+  fi
+}
+
+# ------------------------------------------------------- Terminal.app
+
+terminal_window_alive() {
+  local wid="$1" n
+  [[ -n "$wid" && "$wid" != "null" ]] || return 1
+  n="$(osascript -e "tell application \"Terminal\" to return (count of (every window whose id is $wid))" 2>/dev/null || echo 0)"
+  [[ "$n" -gt 0 ]]
+}
+
+# Abre uma janela do Terminal.app attachada a um terminal do workspace e
+# devolve o window id — a ancora estavel. (Titulo nao serve: `do script`
+# sobrescreve o custom title com o texto do proprio comando.)
+terminal_open() {
+  local name="$1" id="$2" sess="mb-$1" csess="mb-$1__$2"
+  local shell_cmd="clear; exec tmux attach -t '$csess'"
+
+  tmux has-session -t "=$csess" 2>/dev/null || tmux new-session -d -t "$sess" -s "$csess"
+  tmux select-window -t "$csess:$id"
+
+  osascript <<APPLESCRIPT
+tell application "Terminal"
+  activate
+  do script "$(as_quote "$shell_cmd")"
+  set theWin to front window
+  return id of theWin
+end tell
+APPLESCRIPT
+}
+
+# Terminal.app posiciona por bounds {left, top, right, bottom}.
+terminal_place() {
+  local wid="$1" x="$2" y="$3" w="$4" h="$5" title="$6"
+  osascript >/dev/null <<APPLESCRIPT
+tell application "Terminal"
+  set theWin to window id $wid
+  set bounds of theWin to {$x, $y, $((x + w)), $((y + h))}
+  set custom title of (selected tab of theWin) to "$(as_quote "$title")"
+end tell
+APPLESCRIPT
+}
+
+terminal_close() {
+  local wid="$1"
+  [[ -n "$wid" && "$wid" != "null" ]] || return 0
+  osascript >/dev/null 2>&1 <<APPLESCRIPT || true
+tell application "Terminal"
+  close (every window whose id is $wid)
+end tell
+APPLESCRIPT
+}
+
+# ------------------------------------------------------------- VSCode
+
+code_open() {
+  local cfg="$1" root
+  [[ "$(jq -r '.editor.enabled // true' "$cfg")" == "true" ]] || return 0
+  [[ -x "$CODE_BIN" ]] || die "binario do VSCode nao encontrado em $CODE_BIN (exporte MB_CODE_BIN)"
+  root="$(jq -r '.path' "$cfg")"
+  "$CODE_BIN" "$root" >/dev/null 2>&1 || true
+}
+
+# ------------------------------------------------------------- layout
+
+do_layout() {
+  local cfg="$1" name="$2" state vf sx sy sw sh
+  state="$(state_path "$name")"
+  [[ -f "$state" ]] || echo '{}' > "$state"
+
+  vf="$(osascript -l JavaScript "$SCREEN_JS" "$(jq -r '.display // 0' "$cfg")")"
+  read -r sx sy sw sh <<< "$vf"
+
+  # --- terminais: window id + bounds nativo
+  local n i id fx fy fw fh wid x y w h
+  n="$(jq -r '.terminals | length' "$cfg")"
+  for ((i = 0; i < n; i++)); do
+    id="$(jq -r ".terminals[$i].id" "$cfg")"
+    read -r fx fy fw fh <<< "$(jq -r ".terminals[$i].frac | @tsv" "$cfg" | tr '\t' ' ')"
+    wid="$(jq -r --arg id "$id" '.terminals[$id] // empty' "$state")"
+
+    if ! terminal_window_alive "$wid"; then
+      echo "AVISO $id: janela do Terminal nao encontrada (rode 'mb up $name')" >&2
+      continue
+    fi
+
+    x=$(awk -v a="$sx" -v b="$sw" -v f="$fx" 'BEGIN{printf "%d", a + f*b}')
+    y=$(awk -v a="$sy" -v b="$sh" -v f="$fy" 'BEGIN{printf "%d", a + f*b}')
+    w=$(awk -v b="$sw" -v f="$fw" 'BEGIN{printf "%d", f*b}')
+    h=$(awk -v b="$sh" -v f="$fh" 'BEGIN{printf "%d", f*b}')
+
+    terminal_place "$wid" "$x" "$y" "$w" "$h" "MB:$name:$id"
+    echo "OK    Terminal[$id] -> $x,$y ${w}x${h}"
+  done
+
+  # --- editor: sem AppleScript, vai de Accessibility API casando pelo titulo
+  if [[ "$(jq -r '.editor.enabled // true' "$cfg")" == "true" ]]; then
+    local payload
+    payload="$(jq -c '{
+      display: (.display // 0),
+      retries: 25,
+      waitMs: 400,
+      targets: [{ proc: "Code",
+                  titleContains: (.editor.titleMatch // (.path | split("/") | last)),
+                  frac: .editor.frac }]
+    }' "$cfg")"
+    osascript -l JavaScript "$PLACE_JS" "$payload"
+  fi
+}
+
+# ---------------------------------------------------------------- cmds
+
+cmd_up() {
+  local name="${1:-}" cfg state
+  [[ -n "$name" ]] || die "uso: mb up <workspace>"
+  cfg="$(cfg_path "$name")"
+  state="$(state_path "$name")"
+  [[ -f "$state" ]] || echo '{"terminals":{}}' > "$state"
+
+  echo "==> tmux"
+  tmux_up "$cfg" "$name"
+
+  echo "==> VSCode"
+  code_open "$cfg"
+
+  echo "==> Terminal.app"
+  local id wid tmp
+  while read -r id; do
+    wid="$(jq -r --arg id "$id" '.terminals[$id] // empty' "$state")"
+    if terminal_window_alive "$wid"; then
+      echo "    $id: reusando janela $wid"
+    else
+      wid="$(terminal_open "$name" "$id")"
+      echo "    $id: janela $wid"
+    fi
+    tmp="$(mktemp)"
+    jq --arg id "$id" --argjson wid "$wid" '.terminals[$id] = $wid' "$state" > "$tmp" && mv "$tmp" "$state"
+  done < <(jq -r '.terminals[].id' "$cfg")
+
+  echo "==> layout"
+  do_layout "$cfg" "$name"
+}
+
+cmd_layout() {
+  local name="${1:-}"
+  [[ -n "$name" ]] || die "uso: mb layout <workspace>"
+  do_layout "$(cfg_path "$name")" "$name"
+}
+
+cmd_down() {
+  local name="${1:-}" cfg state id wid
+  [[ -n "$name" ]] || die "uso: mb down <workspace>"
+  cfg="$(cfg_path "$name")"
+  state="$(state_path "$name")"
+
+  while read -r id; do
+    wid="$([[ -f "$state" ]] && jq -r --arg id "$id" '.terminals[$id] // empty' "$state" || echo "")"
+    terminal_close "$wid"
+    tmux kill-session -t "=mb-$name__$id" 2>/dev/null || true
+  done < <(jq -r '.terminals[].id' "$cfg")
+
+  tmux kill-session -t "=mb-$name" 2>/dev/null || true
+  rm -f "$state"
+  echo "workspace '$name' derrubado (a janela do VSCode fica aberta de proposito)"
+}
+
+cmd_ls() {
+  for f in "$WS_DIR"/*.json; do
+    [[ -f "$f" ]] || continue
+    printf '%-12s %s\n' "$(basename "$f" .json)" "$(jq -r '.path' "$f")"
+  done
+}
+
+case "${1:-}" in
+  up)     shift; cmd_up "$@" ;;
+  layout) shift; cmd_layout "$@" ;;
+  down)   shift; cmd_down "$@" ;;
+  ls)     shift; cmd_ls "$@" ;;
+  *)      sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+esac

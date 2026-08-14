@@ -1,0 +1,51 @@
+{
+  "name": "spec",
+  "displayName": "Egeon Spec",
+  "description": "Editor de markdown com review inline e request changes direto na sessão do agente",
+  "publisher": "egeon",
+  "version": "0.1.0",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "main": "./src/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "egeon.spec",
+        "displayName": "Egeon Spec",
+        "selector": [{ "filenamePattern": "*.md" }],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "egeon.openSource",
+        "title": "Egeon: Abrir markdown como texto"
+      },
+      {
+        "command": "egeon.pickTarget",
+        "title": "Egeon: Escolher sessão de agente alvo"
+      }
+    ],
+    "configuration": {
+      "title": "Egeon",
+      "properties": {
+        "egeon.target": {
+          "type": "string",
+          "default": "",
+          "description": "Sessão de agente que recebe os request changes (ex: deck/claude-back). Vazio pergunta na hora."
+        },
+        "egeon.socketPath": {
+          "type": "string",
+          "default": "~/.egeon/sock",
+          "description": "Socket de controle do app egeon."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0"
+  }
+}

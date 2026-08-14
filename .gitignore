@@ -1,0 +1,23 @@
+# Build artifacts
+app/.build/
+app/build/
+extension/node_modules/
+
+# Runtime state — dados de sessão, não fonte.
+# Barra no meio do padrão ancora na raiz, então precisa de **/ para pegar as
+# cópias aninhadas (app/.omc, poc/.omc…).
+.mega-brain/
+.egeon/
+**/.omc/
+**/.claude/
+poc/.state/
+
+# Configuração de workspace escrita pela própria extensão (megabrain.target),
+# específica da máquina
+.vscode/
+
+# Scratch de teste editado à mão durante o desenvolvimento
+docs/_diff-test.md
+
+# macOS
+.DS_Store
