@@ -78,9 +78,11 @@ class NodeView: NSView {
     let statusLabel = NSTextField(labelWithString: "")
     let body = NSView()
     private let grip = NodeResizeGrip()
-    private let closeButton = ToolbarButton(symbols: ["xmark"], tooltip: "Remover nó", size: 22)
-    private let editButton = ToolbarButton(symbols: ["slider.horizontal.3", "pencil"],
-                                           tooltip: "Configurar este nó", size: 22)
+    private let closeButton = ToolbarButton(symbols: ["xmark"], tooltip: "Remover nó", size: 30)
+    // Lápis, e não os controles deslizantes: o botão edita o nó, e ninguém lê
+    // `slider.horizontal.3` como "editar" — lia como "ajustes de mixagem".
+    private let editButton = ToolbarButton(symbols: ["square.and.pencil", "pencil"],
+                                           tooltip: "Configurar este nó", size: 30)
 
     /// A pasta em que este nó abriu, já encurtada para `~`.
     var subtitle: String {
@@ -326,17 +328,17 @@ class NodeView: NSView {
 
     override func layout() {
         super.layout()
-        let botão: CGFloat = 22
+        // Uma linha: à esquerda a coluna do texto (título em cima, pasta embaixo),
+        // à direita a linha dos botões, centrada na altura do cabeçalho inteiro.
+        let botão: CGFloat = 30
         let margem: CGFloat = 12
-        // Os botões ficam na altura do TÍTULO, não no meio do cabeçalho: o
-        // subtítulo é informação, não linha de ação, e centralizar nos dois faria
-        // o "encerrar" parecer que age sobre o caminho.
-        let linha1: CGFloat = 8
-        let controles = botão + (editButton.isHidden ? 0 : botão + 4)
+        let entreBotões: CGFloat = 6
+        let meio = (Self.headerHeight - botão) / 2
+        let controles = botão + (editButton.isHidden ? 0 : botão + entreBotões)
 
-        closeButton.frame = NSRect(x: bounds.width - botão - margem + 4, y: linha1,
+        closeButton.frame = NSRect(x: bounds.width - botão - margem, y: meio,
                                    width: botão, height: botão)
-        editButton.frame = NSRect(x: bounds.width - botão * 2 - margem, y: linha1,
+        editButton.frame = NSRect(x: bounds.width - botão * 2 - entreBotões - margem, y: meio,
                                   width: botão, height: botão)
 
         let disponível = max(0, bounds.width - margem * 2 - controles - 8)
@@ -351,9 +353,11 @@ class NodeView: NSView {
         // título virava "clau…" com 1300px de sobra na linha.
         titleLabel.sizeToFit()
         let larguraTítulo = min(disponível * 0.62, titleLabel.frame.width + 2)
-        titleLabel.frame = NSRect(x: margem, y: linha1 + 1,
+        titleLabel.frame = NSRect(x: margem, y: 7,
                                   width: max(0, larguraTítulo), height: 18)
-        statusLabel.frame = NSRect(x: margem + larguraTítulo + 8, y: linha1 + 4,
+        // O estado acompanha a linha do título, e não o meio: ele fala do que o
+        // agente está fazendo agora, que é o assunto do título.
+        statusLabel.frame = NSRect(x: margem + larguraTítulo + 8, y: 10,
                                    width: max(0, disponível - larguraTítulo - 8), height: 13)
         subtitleLabel.frame = NSRect(x: margem, y: 29,
                                      width: max(0, bounds.width - margem * 2), height: 13)
