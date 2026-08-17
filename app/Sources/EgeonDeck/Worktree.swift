@@ -75,12 +75,33 @@ enum Worktree {
     }
 
     /// Nome livre a partir do atual: `PROJ-1234` → `PROJ-1234-2`, `-3`…
+    ///
+    /// Sempre deriva um nome novo, e é o contrato certo para quem chama: a branch
+    /// em que você está agora está tomada por definição.
     static func availableBranch(basedOn current: String, in path: String) -> String {
-        let existing = (try? run(["branch", "--format=%(refname:short)", "--list"], in: path))?
-            .split(whereSeparator: \.isNewline).map { String($0).trimmed } ?? []
+        let existing = branches(in: path)
         var n = 2
         while existing.contains("\(current)-\(n)") { n += 1 }
         return "\(current)-\(n)"
+    }
+
+    /// O nome pedido, se estiver livre; senão o próximo sufixo.
+    ///
+    /// Existe porque `availableBranch` **sempre** soma sufixo, e usá-la para
+    /// reaproveitar um nome em outro repositório produzia `feat-x` → `feat-x-2` no
+    /// front e `feat-x-2-2` no back. Um assunto tem um nome, e ele só muda onde
+    /// estiver de fato ocupado.
+    static func freeBranch(preferred: String, in path: String) -> String {
+        let existing = branches(in: path)
+        guard existing.contains(preferred) else { return preferred }
+        var n = 2
+        while existing.contains("\(preferred)-\(n)") { n += 1 }
+        return "\(preferred)-\(n)"
+    }
+
+    private static func branches(in path: String) -> [String] {
+        (try? run(["branch", "--format=%(refname:short)", "--list"], in: path))?
+            .split(whereSeparator: \.isNewline).map { String($0).trimmed } ?? []
     }
 
     // MARK: - Criação
@@ -287,6 +308,18 @@ enum Worktree {
         return nil
     }
 
+    /// De qual repositório uma pasta faz parte, sempre pelo checkout principal.
+    ///
+    /// `--show-toplevel` devolve a raiz da worktree LIGADA quando você está dentro
+    /// de uma, e usá-la para criar a próxima aninha worktree dentro de worktree:
+    /// medido em `.worktrees/back/.worktrees/so-o-back/vazamento`. Legal para o
+    /// git, e um desastre em disco — apagar a de fora leva a de dentro, e a de
+    /// fora fica cheia de arquivo que não é dela.
+    static func mainRepo(of path: String) -> String? {
+        guard let status = try? status(of: path) else { return nil }
+        return mainWorktree(of: path) ?? status.repoRoot
+    }
+
     struct Losses {
         let modified: [String]
         let untracked: [String]
@@ -345,15 +378,35 @@ enum Worktree {
         task.currentDirectoryURL = URL(fileURLWithPath: directory)
         task.environment = AppEnvironment.forChildProcess()
 
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = pipe
+        // Arquivo temporário, e não `Pipe`.
+        //
+        // A ponta de ESCRITA de um pipe é herdada por qualquer processo que o app
+        // lance enquanto ela está aberta, e `readDataToEndOfFile` só retorna quando
+        // TODAS as cópias fecham. O script de cópia da worktree roda fora da main
+        // thread por minutos com `node_modules` no meio: herdada por ele, uma
+        // chamada de milissegundos travava até a cópia acabar. Medido — 2min30 de
+        // app congelado num `git rev-parse --show-toplevel`, e ele destravou no
+        // segundo em que a cópia terminou.
+        //
+        // O fd de um arquivo também é herdado, e ali não custa nada: ninguém
+        // depende de EOF para saber que acabou — quem diz isso é o `waitUntilExit`.
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("egeon-git-\(UUID().uuidString)")
+        FileManager.default.createFile(atPath: scratch.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        guard let sink = try? FileHandle(forWritingTo: scratch) else {
+            throw Failure.git(command: arguments.joined(separator: " "),
+                              output: "não consegui abrir \(scratch.path)")
+        }
+        task.standardOutput = sink
+        task.standardError = sink
 
         try task.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
+        try? sink.close()
 
-        let output = String(data: data, encoding: .utf8) ?? ""
+        let output = (try? String(contentsOf: scratch, encoding: .utf8)) ?? ""
         guard task.terminationStatus == 0 else {
             throw Failure.git(command: arguments.joined(separator: " "), output: output.trimmed)
         }

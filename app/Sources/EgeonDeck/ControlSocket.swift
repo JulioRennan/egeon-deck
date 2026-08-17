@@ -171,6 +171,17 @@ final class ControlSocket {
                     json: ["ok": ok, "workspace": name,
                            "known": DispatchQueue.main.sync { AppControl.sessionNames?() ?? [] }])
 
+        case ("GET", _, _) where route.contains("/worktree"):
+            // /worktree?target=ws[/id]&branch=X — worktree da sessão ou de um
+            // terminal só, sem passar pelo diálogo.
+            let query = Self.query(in: route)
+            let payload = DispatchQueue.main.sync {
+                AppControl.makeWorktree?(query["target"] ?? "", query["branch"] ?? "")
+                    ?? ["ok": false, "error": "app sem worktree disponível"]
+            }
+            respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
+                    json: payload)
+
         case ("GET", _, _) where route.contains("/layout"):
             // /layout?mode=canvas|mosaic — troca a visualização da sessão ativa.
             let mode = Self.query(in: route)["mode"] ?? ""

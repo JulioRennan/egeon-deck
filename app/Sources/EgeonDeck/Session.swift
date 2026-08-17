@@ -148,10 +148,62 @@ struct SessionConfig: Codable {
     /// na tela.
     func address(of node: NodeConfig) -> String { "\(name)/\(node.id)" }
 
-    func directory(for node: NodeConfig) -> String {
+    /// Para onde um `cwd` de nó aponta, sem perguntar ao disco.
+    ///
+    /// Três formas são legítimas e cada uma tem seu motivo:
+    ///
+    /// - **relativo** (`packages/api`) é o caso normal, e é o que faz o nó valer em
+    ///   qualquer checkout — é dele que a duplicação em worktree depende
+    /// - **absoluto** (`~/Documents/agrosmart/nexus-backend`) é um repositório
+    ///   vizinho, que não tem equivalente dentro da worktree da sessão
+    /// - **relativo saindo da raiz** (`../nexus-backend`) também aponta para fora, e
+    ///   é onde mora a armadilha: o mesmo texto significa pastas diferentes em
+    ///   checkouts diferentes
+    ///
+    /// `standardized` resolve o `..` de forma lexical, o que é o que se quer aqui:
+    /// o caminho tem de ser previsível a partir do texto, sem depender de symlink.
+    static func resolve(cwd: String, against root: URL) -> String {
+        if cwd.hasPrefix("~") || cwd.hasPrefix("/") {
+            return (cwd as NSString).expandingTildeInPath
+        }
+        return root.appendingPathComponent(cwd).standardized.path
+    }
+
+    func resolvedDirectory(for node: NodeConfig) -> String {
         guard let cwd = node.cwd else { return url.path }
-        let candidate = url.appendingPathComponent(cwd).path
-        return FileManager.default.fileExists(atPath: candidate) ? candidate : url.path
+        return Self.resolve(cwd: cwd, against: url)
+    }
+
+    /// Onde o processo deste nó é lançado.
+    ///
+    /// `cwd` que não resolve cai na raiz da sessão — mas **falando**. Calado, este
+    /// fallback é o pior defeito que este arquivo já teve: o terminal abre na pasta
+    /// errada, fica com a cara do terminal certo, e o agente trabalha no
+    /// repositório vizinho sem ninguém suspeitar. Custou um dia de trabalho, com
+    /// `../nexus-backend` carregado literal para dentro de uma worktree onde `..`
+    /// é outro lugar.
+    func directory(for node: NodeConfig) -> String {
+        guard node.cwd != nil else { return url.path }
+        let candidate = resolvedDirectory(for: node)
+        guard !FileManager.default.fileExists(atPath: candidate) else { return candidate }
+
+        Log.write("sessão \(name): nó \"\(node.id)\" pede cwd \"\(node.cwd ?? "")\", que resolve "
+                  + "em \(candidate) e não existe — vai abrir na raiz \(url.path)",
+                  key: "cwd.\(name).\(node.id)")
+        return url.path
+    }
+
+    /// Nós cujo `cwd` não resolve, com o caminho que cada um tentou.
+    ///
+    /// Serve para dizer na cara, na hora de montar a sessão, em vez de deixar o
+    /// usuário descobrir pelo `pwd` três horas depois.
+    var unresolvedDirectories: [(id: String, tried: String)] {
+        nodes.compactMap { node in
+            guard node.cwd != nil else { return nil }
+            let candidate = resolvedDirectory(for: node)
+            guard !FileManager.default.fileExists(atPath: candidate) else { return nil }
+            return (node.id, candidate)
+        }
     }
 }
 
@@ -172,6 +224,15 @@ enum AppControl {
     /// sem depender de gesto na tela. Nulo de volta significa modo desconhecido ou
     /// nenhuma sessão ativa.
     static var setViewMode: ((String) -> String?)?
+
+    /// Cria worktree e reaponta: `sessão` duplica a sessão inteira levando os
+    /// terminais de repo vizinho junto, `sessão/nó` leva só aquele terminal.
+    ///
+    /// Existe pelo mesmo motivo que `/geometry` e `/layout`: o fluxo passa por
+    /// `NSAlert`, que não é dirigível de fora, e sem isto não haveria como
+    /// verificar que cada terminal foi para a pasta certa — que é justamente o
+    /// defeito que este código conserta. Devolve o que aconteceu, ou o erro.
+    static var makeWorktree: ((_ target: String, _ branch: String) -> [String: Any])?
 
     /// Ligações e teto de revisitas de uma sessão, por nome.
     ///

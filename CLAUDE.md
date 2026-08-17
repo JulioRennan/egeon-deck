@@ -41,6 +41,7 @@ poc/          protótipos descartados
 | `Sidebar.swift` / `Toolbar.swift` | lista de sessões e barra de ferramentas do canvas |
 | `Component.swift` / `Template.swift` | presets de nó e de sessão |
 | `Worktree.swift` | criar worktree do git e abrir sessão nela |
+| `NodeWorktree.swift` | worktree por terminal: o plano de cada nó e a lista do formulário |
 | `Environment.swift` | PATH e env dos processos filhos |
 | `Flavor.swift` | estável vs dev: diretório de config, log, socket, porta |
 | `AgentHooks.swift` | gancho que faz o CLI relatar qual conversa está aberta |
@@ -81,6 +82,36 @@ o `maxVisits`: a rede é parte da montagem.
 `to`. Desenhada arrastando a porta `+` de um card até outro. Não é um cano — o
 agente descobre o endereço com `egeon peers` e decide quando usar. Ida e volta
 são duas arestas. Ver ADR-012.
+
+## Worktree
+
+Uma frente de trabalho raramente é um repositório só: o card do frontend abre no
+repo da sessão, e o do backend abre num repo vizinho. Então a worktree é **por
+sessão e por terminal**.
+
+Duplicar a sessão para worktree abre um formulário que lista **todos os
+terminais** com o repositório de cada um. No topo, a branch da sessão; mudá-la
+re-sugere o nome para as linhas que você não editou à mão. Terminal dentro da
+pasta da sessão segue a worktree dela pelo `cwd` relativo, e não escolhe nada.
+Terminal em repo vizinho vem marcado, com branch própria editável — desmarcado,
+segue abrindo no repositório original.
+
+Botão direito no cabeçalho de um terminal leva **só ele** para uma worktree, fora
+de qualquer duplicação. O card é reapontado, não clonado: id, papel, arestas e
+posição continuam; o processo reinicia, porque não há como trocar o diretório de
+um pty em curso, e a conversa é zerada porque era da pasta antiga.
+
+Dois terminais no mesmo repo vizinho com o mesmo nome de branch dividem uma
+worktree; com nomes diferentes, viram duas. A worktree sai **sempre do checkout
+principal** (`Worktree.mainRepo`), nunca de uma worktree ligada — partir dela
+aninha worktree dentro de worktree, e apagar a de fora leva a de dentro.
+
+O `cwd` de um nó aceita três formas, e todas têm motivo: relativo (o caso normal,
+é o que faz o nó valer em qualquer checkout), absoluto (repo vizinho, que não tem
+equivalente dentro da worktree) e relativo saindo da raiz com `..` — este último
+é onde mora a armadilha, porque o mesmo texto significa pastas diferentes em
+checkouts diferentes. `cwd` que não resolve cai na raiz da sessão **falando**: log
+e banner. Ver ADR-017, que registra o dia que o silêncio custou.
 
 ## Visualização
 
@@ -173,8 +204,8 @@ curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
 curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
-Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/activate` `/open`
-`/view` `/file` `/change` `/message` `/peers` `/status`. As três últimas
+Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/worktree`
+`/activate` `/open` `/view` `/file` `/change` `/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
 conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
 guardas de cadeia. **`/peek` e `/dispatch` são as ferramentas de teste** — dá
@@ -183,6 +214,11 @@ para verificar comportamento de agente ponta a ponta sem tocar na UI.
 `/layout?mode=canvas|mosaic` troca a visualização da sessão ativa, e `/geometry`
 começa dizendo em que modo está: em mosaico o `docFrame` é o do painel e o
 `grabPoint` não arrasta nada.
+
+`/worktree?target=ws[/id]&branch=X` cria worktree da sessão — levando os terminais
+de repo vizinho junto — ou de um terminal só. Existe porque o fluxo passa por
+`NSAlert`, que não é dirigível de fora: sem ela não haveria como verificar que
+cada terminal foi para a pasta certa, que é justamente o defeito do ADR-017.
 
 ## Configuração
 

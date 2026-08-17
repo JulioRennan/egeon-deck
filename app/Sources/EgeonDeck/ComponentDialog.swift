@@ -112,9 +112,7 @@ final class ComponentDialog {
             agent: isAgent ? selectedAgentKey : nil,
             cmd: cmd.isEmpty ? nil : cmd,
             config: isAgent ? selectedConfig : nil,
-            // Absoluto quebraria o componente em worktree: o mesmo preset tem de
-            // valer em qualquer checkout, e é o `cwd` relativo que garante isso.
-            cwd: cwd.isEmpty ? nil : Self.relative(cwd),
+            cwd: cwd.isEmpty ? nil : Self.normalizedFolder(cwd),
             prompt: (isAgent && !prompt.isEmpty) ? prompt : nil)
 
         return Result(component: component, saveAsComponent: saveBox.state == .on)
@@ -409,13 +407,22 @@ final class ComponentDialog {
         configLabel.textColor = hasConfig ? .secondaryLabelColor : .tertiaryLabelColor
     }
 
-    /// Apara `/` inicial e expande `~`, para o campo aceitar o que a pessoa
-    /// digitar sem gravar um caminho absoluto.
-    private static func relative(_ path: String) -> String {
-        var value = path
-        if value.hasPrefix("~") { value = (value as NSString).expandingTildeInPath }
-        while value.hasPrefix("/") { value.removeFirst() }
-        return value
+    /// O que o campo de pasta grava.
+    ///
+    /// Relativo continua relativo — é o que faz o preset valer em qualquer
+    /// checkout, e é dele que a duplicação em worktree depende. Absoluto continua
+    /// absoluto, encurtado para `~`: é o jeito de apontar para um repositório
+    /// vizinho, que não tem equivalente dentro da worktree.
+    ///
+    /// A versão anterior **decapitava a barra** de um caminho absoluto —
+    /// `~/Documents/x` virava `Users/você/Documents/x` — e o resultado nunca
+    /// resolvia contra a raiz da sessão: o terminal abria na raiz, calado. Era o
+    /// mesmo silêncio que fez `../nexus-backend` embaralhar as pastas.
+    private static func normalizedFolder(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        guard path.hasPrefix("/") || path.hasPrefix("~") else { return path }
+        let expanded = (path as NSString).expandingTildeInPath
+        return expanded.hasPrefix(home) ? "~" + expanded.dropFirst(home.count) : expanded
     }
 }
 

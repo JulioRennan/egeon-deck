@@ -92,6 +92,13 @@ class NodeView: NSView {
     /// Pedido de configuração: nome, comando, agente, pasta, papel.
     var onRequestEdit: ((NodeView) -> Void)?
 
+    /// "Leve este terminal para uma worktree nova."
+    ///
+    /// Por nó, e não só por sessão: uma frente de trabalho costuma ser dois
+    /// repositórios, e levar o card do backend para a branch nova não deveria
+    /// exigir duplicar a sessão inteira.
+    var onRequestWorktree: ((NodeView) -> Void)?
+
     /// Arrasto saindo do `+` deste nó, em coordenadas de janela. Quem converte
     /// para o documento e resolve o destino é o canvas.
     var onPortDrag: ((NodeView, NSPoint) -> Void)?
@@ -139,6 +146,41 @@ class NodeView: NSView {
 
     /// Nó com configuração editável (comando, agente, pasta, papel).
     var supportsEditing: Bool { false }
+
+    /// Nó que abre uma pasta, e portanto pode ganhar worktree própria. O nó `web`
+    /// não abre pasta nenhuma.
+    var supportsWorktree: Bool { false }
+
+    /// Botão direito no cabeçalho: o que dá para fazer com este card.
+    ///
+    /// Só no cabeçalho: o corpo é do SwiftTerm e do WKWebView, cada um com o menu
+    /// de contexto dele — roubá-lo tiraria o "colar" do terminal e o "inspecionar"
+    /// do editor.
+    override func rightMouseDown(with event: NSEvent) {
+        let local = convert(event.locationInWindow, from: nil)
+        guard local.y <= Self.headerHeight, supportsEditing || supportsWorktree else {
+            return super.rightMouseDown(with: event)
+        }
+
+        let menu = NSMenu()
+        if supportsEditing {
+            menu.addItem(withTitle: "Configurar \(nodeID)…",
+                         action: #selector(menuConfigure), keyEquivalent: "")
+        }
+        if supportsWorktree {
+            menu.addItem(withTitle: "Nova worktree para este terminal…",
+                         action: #selector(menuWorktree), keyEquivalent: "")
+        }
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Remover \(nodeID)…",
+                     action: #selector(menuClose), keyEquivalent: "")
+        menu.items.forEach { if $0.action != nil { $0.target = self } }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func menuConfigure() { onRequestEdit?(self) }
+    @objc private func menuWorktree() { onRequestWorktree?(self) }
+    @objc private func menuClose() { onRequestClose?(self) }
 
     /// O card manda na própria posição?
     ///
@@ -431,9 +473,24 @@ final class TerminalNode: NodeView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    deinit { Dispatcher.shared.unregister(address: address) }
+    /// `prepareForRemoval` já desfez o registro no Dispatcher?
+    ///
+    /// O deinit não pode desfazer de novo. Entre remover o card e liberar a view,
+    /// um nó NOVO com o MESMO endereço já pode ter se registrado — é exatamente o
+    /// que acontece ao reconfigurar pelo lápis e ao reapontar para uma worktree,
+    /// onde o card é trocado por outro com o mesmo id. Quem chama segura o card
+    /// antigo até o fim da função, então o deinit roda DEPOIS do registro novo e
+    /// apagava justamente ele: medido com `/targets` devolvendo lista vazia depois
+    /// de reapontar dois terminais.
+    private var unregistered = false
+
+    deinit {
+        guard !unregistered else { return }
+        Dispatcher.shared.unregister(address: address)
+    }
 
     override var supportsEditing: Bool { true }
+    override var supportsWorktree: Bool { true }
 
     override var removalWarning: String {
         "O processo do terminal é encerrado junto — o que estiver rodando nele para."
@@ -453,9 +510,38 @@ final class TerminalNode: NodeView {
 
     /// Sem matar o pty na mão, o processo filho sobrevive à view e fica órfão
     /// até o app sair.
+    ///
+    /// E o SIGTERM do `terminate()` não basta: **shell interativo ignora SIGTERM**
+    /// — é o padrão do zsh com um tty. Medido depois de reapontar um terminal para
+    /// outra worktree: 7 processos vivos para 6 nós, e o sobrando era um
+    /// `/bin/zsh -l` filho do app, com a pasta antiga, invisível. O mesmo valia
+    /// para o X do card e para o lápis de reconfigurar.
     override func prepareForRemoval() {
         Dispatcher.shared.unregister(address: address)
-        if term.process.running { term.process.terminate() }
+        unregistered = true
+        guard term.process.running else { return }
+
+        let pid = term.process.shellPid
+        term.process.terminate()
+        guard pid > 0 else { return }
+
+        // Meio segundo é folga para o SIGTERM funcionar em quem o respeita — um
+        // agente CLI, por exemplo, que grava a conversa ao sair.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            guard kill(pid, 0) == 0 else { return }
+
+            // No GRUPO quando o shell é líder dele: o que estiver rodando dentro
+            // morre junto, que é o que "remover o terminal" promete. A guarda não é
+            // decoração — se o pgid não fosse o do shell, ele poderia ser o do
+            // próprio app, e o SIGKILL levaria o Egeon inteiro.
+            if getpgid(pid) == pid {
+                killpg(pid, SIGKILL)
+                Log.write("terminal: pid \(pid) ignorou SIGTERM — SIGKILL no grupo")
+            } else {
+                kill(pid, SIGKILL)
+                Log.write("terminal: pid \(pid) ignorou SIGTERM — SIGKILL no processo")
+            }
+        }
     }
 
     override func layout() {
@@ -613,6 +699,8 @@ final class CanvasContainer: NSView {
     var onNewWorktree: (() -> Void)?
     /// Configurar um nó existente (lápis no cabeçalho).
     var onRequestEditNode: ((NodeView) -> Void)?
+    /// Levar um nó para uma worktree própria (menu do cabeçalho).
+    var onRequestNodeWorktree: ((NodeView) -> Void)?
     /// Formulário para montar um terminal do zero.
     var onConfigureTerminal: (() -> Void)?
     /// Componentes salvos, para o menu da ferramenta de terminal.
@@ -1164,6 +1252,7 @@ final class CanvasContainer: NSView {
         node.onRequestClose = { [weak self] node in self?.onRequestClose?(node) }
         node.onRequestSpace = { [weak self] shift in self?.makeSpace(shift) }
         node.onRequestEdit = { [weak self] node in self?.onRequestEditNode?(node) }
+        node.onRequestWorktree = { [weak self] node in self?.onRequestNodeWorktree?(node) }
         growDocumentIfNeeded()
     }
 

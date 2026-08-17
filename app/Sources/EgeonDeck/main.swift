@@ -72,6 +72,10 @@ EgeonCLI.install()
 
         AppControl.sessionNames = { [weak self] in self?.configs.map(\.name) ?? [] }
         AppControl.canvasGeometry = { [weak self] in self?.canvasGeometry() ?? [:] }
+        AppControl.makeWorktree = { [weak self] target, branch in
+            self?.makeWorktree(target: target, branch: branch)
+                ?? ["ok": false, "error": "app encerrando"]
+        }
         AppControl.setViewMode = { [weak self] raw in
             guard let self, let mode = ViewMode(rawValue: raw),
                   let shell = self.shells[self.activeIndex] else { return nil }
@@ -227,14 +231,17 @@ EgeonCLI.install()
             return
         }
 
-        let suggestedBranch = Worktree.availableBranch(basedOn: status.branch, in: repo.path)
+        // Você pode ter escolhido uma worktree em vez do checkout principal: sair
+        // dela aninharia worktree dentro de worktree.
+        let repoRoot = Worktree.mainRepo(of: repo.path) ?? status.repoRoot
+        let suggestedBranch = Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
         guard let form = askWorktreeForm(status: status,
-                                         repoRoot: status.repoRoot,
+                                         repoRoot: repoRoot,
                                          suggestedBranch: suggestedBranch) else { return }
 
         let created: Worktree.Created
         do {
-            created = try Worktree.create(from: status.repoRoot,
+            created = try Worktree.create(from: repoRoot,
                                           branch: form.branch,
                                           destination: form.destination,
                                           carryDirty: true)
@@ -259,12 +266,7 @@ EgeonCLI.install()
         // A cópia do que o git não versiona roda depois de a sessão existir: com
         // node_modules e Pods no meio, esperar por ela antes de mostrar qualquer
         // coisa pareceria travamento.
-        let shell = shells[configs.count - 1]
-        shell?.showBanner("Copiando o que o git não versiona (.env, node_modules, build…)")
-        Worktree.copyUnversioned(from: status.repoRoot, to: created.path) { summary in
-            shell?.showBanner(summary)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { shell?.showBanner(nil) }
-        }
+        copyUnversioned([(repoRoot, created.path)], into: configs.count - 1)
     }
 
     /// Duplica a sessão numa worktree nova, com os mesmos nós.
@@ -283,26 +285,50 @@ EgeonCLI.install()
             return
         }
 
-        let suggested = Worktree.availableBranch(basedOn: status.branch, in: origin.url.path)
+        // Do checkout principal, mesmo que esta sessão já seja uma worktree:
+        // partir da worktree ligada aninharia uma dentro da outra.
+        let repoRoot = Worktree.mainRepo(of: origin.url.path) ?? status.repoRoot
+        let suggested = Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
         guard let form = askWorktreeForm(status: status,
-                                         repoRoot: status.repoRoot,
+                                         repoRoot: repoRoot,
                                          suggestedBranch: suggested,
                                          inheriting: origin) else { return }
 
+        if let error = duplicate(index, repoRoot: repoRoot, status: status, form: form) {
+            presentError("Não consegui criar a worktree", error)
+        }
+    }
+
+    /// A duplicação em si, sem diálogo.
+    ///
+    /// Separada porque é o que o socket precisa alcançar: um `NSAlert` não é
+    /// dirigível de fora, e sem isto o fluxo inteiro — worktree da sessão, worktree
+    /// de cada terminal, reapontamento dos `cwd` — só poderia ser verificado a
+    /// olho. Devolve o erro em vez de apresentá-lo: quem chamou sabe se há usuário
+    /// olhando.
+    @discardableResult
+    private func duplicate(_ index: Int, repoRoot: String, status: Worktree.Status,
+                           form: WorktreeForm) -> Error? {
+        let origin = configs[index]
         let created: Worktree.Created
         do {
-            created = try Worktree.create(from: status.repoRoot,
+            created = try Worktree.create(from: repoRoot,
                                           branch: form.branch,
                                           destination: form.destination,
                                           carryDirty: true)
         } catch {
-            presentError("Não consegui criar a worktree", error)
-            return
+            return error
         }
 
-        // `cwd` é relativo à raiz da sessão, então os nós valem nos dois casos
-        // sem reescrita: cada terminal e o editor resolvem dentro da worktree.
-        let nodes = Self.relativized(origin.nodes, originRoot: origin.url.path)
+        // As worktrees dos terminais que você marcou, cada uma no repositório
+        // dela. Rodam depois da worktree da sessão porque a falha de uma vizinha
+        // não pode impedir a principal de existir.
+        var extraWorktrees: [(repo: String, path: String)] = []
+        let nodeCwds = NodeWorktreePlanner.materialize(form.nodes) { repo, path in
+            extraWorktrees.append((repo, path))
+        }
+
+        let nodes = Self.repointed(origin.nodes, originRoot: origin.url.path, cwds: nodeCwds)
         let worktreePath = (created.path as NSString).abbreviatingWithTildeInPath
 
         let alvo: Int
@@ -353,35 +379,77 @@ EgeonCLI.install()
 
         schedulePersist()
 
-        let shell = shells[alvo]
-        shell?.showBanner("Copiando o que o git não versiona (.env, node_modules, build…)")
-        Worktree.copyUnversioned(from: status.repoRoot, to: created.path) { summary in
-            shell?.showBanner(summary)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { shell?.showBanner(nil) }
+        copyUnversioned([(repoRoot, created.path)] + extraWorktrees, into: alvo)
+        return nil
+    }
+
+    /// Copia o que o git não versiona para cada worktree criada, uma depois da
+    /// outra.
+    ///
+    /// Em fila e não em paralelo: cada cópia é `node_modules` inteiro, e disparar
+    /// todas juntas faz o disco brigar consigo mesmo — o tempo total piora.
+    private func copyUnversioned(_ pending: [(repo: String, path: String)], into index: Int) {
+        guard let first = pending.first else { shells[index]?.showBanner(nil); return }
+        let rest = Array(pending.dropFirst())
+        let repo = (first.repo as NSString).lastPathComponent
+
+        shells[index]?.showBanner("Copiando o que o git não versiona em \(repo) "
+                                  + "(.env, node_modules, build…)"
+                                  + (rest.isEmpty ? "" : " — e mais \(rest.count)"))
+
+        Worktree.copyUnversioned(from: first.repo, to: first.path) { [weak self] summary in
+            guard let self else { return }
+            self.shells[index]?.showBanner("\(repo): \(summary)")
+            guard !rest.isEmpty else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+                    self?.shells[index]?.showBanner(nil)
+                }
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.copyUnversioned(rest, into: index)
+            }
         }
     }
 
-    /// Converte `cwd` absoluto em relativo à raiz da sessão.
+    /// Prepara os nós da origem para nascerem na worktree: cada um apontando para
+    /// onde deve, e sem a conversa de quem serviu de molde.
     ///
-    /// Um caminho absoluto sobreviveria à duplicação apontando para o checkout de
-    /// origem: o terminal da worktree abriria na pasta errada, e nada avisaria.
-    /// Prepara os nós da sessão de origem para nascerem na worktree: `cwd`
-    /// relativo à raiz nova, e sem a conversa de quem serviu de molde.
-    private static func relativized(_ nodes: [NodeConfig], originRoot: String) -> [NodeConfig] {
+    /// Três destinos, e a regra é sempre "para onde este terminal deve abrir":
+    ///
+    /// - **dentro do repositório da origem** → relativo. É o que faz o nó valer em
+    ///   qualquer checkout, e é o motivo de o `cwd` relativo existir
+    /// - **worktree própria criada** → absoluto, apontando para ela
+    /// - **fora do repositório, sem worktree** → absoluto, apontando para o lugar
+    ///   original. Repo vizinho não tem equivalente dentro da worktree da sessão, e
+    ///   jogar o terminal na raiz dela o transforma em cópia do terminal ao lado
+    ///
+    /// A versão anterior só olhava `cwd` começando com `/` ou `~`, e por isso
+    /// `../nexus-backend` atravessava a duplicação **literal**: na origem `..` era
+    /// a pasta de projetos, e na worktree passou a ser `.worktrees/<repo>/`, que
+    /// não tem backend nenhum. O terminal abria na raiz da worktree em silêncio, e
+    /// o agente do backend trabalhava no frontend.
+    private static func repointed(_ nodes: [NodeConfig], originRoot: String,
+                                  cwds: [String: String]) -> [NodeConfig] {
         var result = nodes.map(\.withoutConversation)
+        let root = URL(fileURLWithPath: originRoot)
+
         for i in result.indices {
-            guard let cwd = result[i].cwd, cwd.hasPrefix("/") || cwd.hasPrefix("~") else { continue }
-            let expanded = (cwd as NSString).expandingTildeInPath
-            if expanded == originRoot {
+            if let novo = cwds[result[i].id] {
+                result[i].cwd = novo
+                continue
+            }
+            guard let cwd = result[i].cwd else { continue }
+
+            let resolved = SessionConfig.resolve(cwd: cwd, against: root)
+            if resolved == originRoot {
                 result[i].cwd = nil
-            } else if expanded.hasPrefix(originRoot + "/") {
-                result[i].cwd = String(expanded.dropFirst(originRoot.count + 1))
+            } else if resolved.hasPrefix(originRoot + "/") {
+                result[i].cwd = String(resolved.dropFirst(originRoot.count + 1))
             } else {
-                // Fora do repositório: não há equivalente na worktree, então cai
-                // na raiz dela em vez de continuar apontando para outro lugar.
-                Log.write("duplicar: nó \"\(result[i].id)\" tinha cwd fora do repositório "
-                          + "(\(cwd)) — passou a usar a raiz da worktree")
-                result[i].cwd = nil
+                result[i].cwd = NodeWorktreePlanner.short(resolved)
+                Log.write("duplicar: nó \"\(result[i].id)\" abre fora do repositório "
+                          + "(\(cwd)) — segue apontando para \(resolved)")
             }
         }
         return result
@@ -401,6 +469,8 @@ EgeonCLI.install()
         let destination: String
         let template: String?
         let target: WorktreeDestination
+        /// O que cada terminal faz. Vazio quando não há sessão de origem.
+        let nodes: [NodeWorktree]
     }
 
     private func askWorktreeForm(status: Worktree.Status,
@@ -416,17 +486,31 @@ EgeonCLI.install()
         // Duplicando há duas saídas; a partir do `+`, sem sessão de origem, só
         // faz sentido abrir uma nova.
         let offersMove = origin != nil
-        // 200 e não 178: com a altura anterior o segundo radio e sua explicação
-        // caíam em cima do rótulo "BRANCH NOVA", que fica em y=95.
-        let height: CGFloat = offersMove ? 200 : 108
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: height))
+        let width: CGFloat = 460
+        let container = FormView(frame: NSRect(x: 0, y: 0, width: width, height: 0))
+        // De cima para baixo: a lista de terminais tem tamanho variável, e contar y
+        // a partir do rodapé em cada linha é como se erra por um pixel a cada
+        // mudança de layout.
+        var y: CGFloat = 0
 
-        func label(_ text: String, y: CGFloat) -> NSTextField {
+        func label(_ text: String) {
             let field = NSTextField(labelWithString: text)
             field.font = .systemFont(ofSize: 10, weight: .semibold)
             field.textColor = .secondaryLabelColor
-            field.frame = NSRect(x: 0, y: y, width: 380, height: 13)
-            return field
+            field.frame = NSRect(x: 0, y: y, width: width, height: 13)
+            container.addSubview(field)
+            y += 17
+        }
+
+        func hint(_ text: String, indent: CGFloat = 18, lines: Int = 1) {
+            let field = NSTextField(labelWithString: text)
+            field.font = .systemFont(ofSize: 10)
+            field.textColor = .secondaryLabelColor
+            field.maximumNumberOfLines = lines
+            field.frame = NSRect(x: indent, y: y, width: width - indent,
+                                 height: CGFloat(lines) * 13)
+            container.addSubview(field)
+            y += CGFloat(lines) * 13 + 5
         }
 
         // Radio e não popup: as duas saídas são diferentes o bastante para
@@ -442,44 +526,66 @@ EgeonCLI.install()
         let radios = RadioGroup([newSessionRadio, moveRadio])
 
         if offersMove {
-            container.addSubview(label("O QUE FAZER", y: 187))
-
-            newSessionRadio.frame = NSRect(x: 0, y: 167, width: 380, height: 18)
+            label("O QUE FAZER")
+            newSessionRadio.frame = NSRect(x: 0, y: y, width: width, height: 18)
             newSessionRadio.state = .on
             container.addSubview(newSessionRadio)
+            y += 20
+            hint("Nada aqui é reiniciado; você troca entre as duas na barra.")
 
-            let newHint = NSTextField(labelWithString:
-                "Nada aqui é reiniciado; você troca entre as duas na barra.")
-            newHint.font = .systemFont(ofSize: 10)
-            newHint.textColor = .secondaryLabelColor
-            newHint.frame = NSRect(x: 18, y: 152, width: 362, height: 14)
-            container.addSubview(newHint)
-
-            moveRadio.frame = NSRect(x: 0, y: 132, width: 380, height: 18)
+            moveRadio.frame = NSRect(x: 0, y: y, width: width, height: 18)
             container.addSubview(moveRadio)
-
-            let moveHint = NSTextField(labelWithString:
-                "Os terminais reiniciam na pasta nova — o que estiver rodando neles para.")
-            moveHint.font = .systemFont(ofSize: 10)
-            moveHint.textColor = .secondaryLabelColor
-            moveHint.maximumNumberOfLines = 2
-            moveHint.frame = NSRect(x: 18, y: 116, width: 362, height: 14)
-            container.addSubview(moveHint)
+            y += 20
+            hint("Os terminais reiniciam na pasta nova — o que estiver rodando neles para.")
+            y += 6
         }
 
-        container.addSubview(label("BRANCH NOVA", y: 95))
-        let branchField = NSTextField(frame: NSRect(x: 0, y: 70, width: 380, height: 22))
+        label("BRANCH DA SESSÃO")
+        let branchField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
         branchField.stringValue = suggestedBranch
         container.addSubview(branchField)
+        y += 28
 
-        container.addSubview(label("PASTA DA WORKTREE", y: 52))
-        let pathField = NSTextField(frame: NSRect(x: 0, y: 27, width: 380, height: 22))
+        label("PASTA DA WORKTREE")
+        let pathField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
         pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot, branch: suggestedBranch)
         pathField.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         container.addSubview(pathField)
+        y += 30
 
-        // Renomear a branch reflete no caminho sugerido, desde que você não tenha
-        // editado o caminho à mão.
+        // Uma linha por terminal, com o repositório de cada um. Existe porque uma
+        // frente de trabalho raramente é um repositório só, e porque foi
+        // justamente essa informação que faltou quando as pastas embaralharam: dá
+        // para ver, antes de criar, onde cada card vai abrir.
+        var rows: [NodeWorktreeRow] = []
+        if let origin {
+            let plans = NodeWorktreePlanner.inspect(origin, sessionRoot: origin.url.path,
+                                                    branch: suggestedBranch)
+            label("TERMINAIS")
+            hint("Marcado, o terminal ganha worktree própria do repositório dele. "
+                 + "Desmarcado, segue abrindo no repositório original.",
+                 indent: 0, lines: 2)
+
+            let listHeight = min(CGFloat(plans.count), 4.5) * NodeWorktreeRow.height
+            let list = FormView(frame: NSRect(x: 0, y: 0, width: width - 2,
+                                              height: CGFloat(plans.count) * NodeWorktreeRow.height))
+            for (index, plan) in plans.enumerated() {
+                let row = NodeWorktreeRow(plan: plan, width: width - 2)
+                row.frame.origin.y = CGFloat(index) * NodeWorktreeRow.height
+                list.addSubview(row)
+                rows.append(row)
+            }
+
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: y, width: width, height: listHeight))
+            scroll.documentView = list
+            scroll.hasVerticalScroller = plans.count > 4
+            scroll.drawsBackground = false
+            container.addSubview(scroll)
+            y += listHeight + 4
+        }
+
+        // Renomear a branch reflete no caminho sugerido e nas linhas dos terminais,
+        // desde que você não os tenha editado à mão.
         var pathTouched = false
         let observer = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: pathField, queue: .main) { _ in
@@ -487,9 +593,12 @@ EgeonCLI.install()
             }
         let branchObserver = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: branchField, queue: .main) { _ in
-                guard !pathTouched else { return }
-                pathField.stringValue = Worktree.suggestedPath(
-                    repoRoot: repoRoot, branch: branchField.stringValue)
+                let branch = branchField.stringValue
+                if !pathTouched {
+                    pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot,
+                                                                   branch: branch)
+                }
+                rows.forEach { $0.suggest(branch: branch) }
             }
         defer {
             NotificationCenter.default.removeObserver(observer)
@@ -498,18 +607,9 @@ EgeonCLI.install()
 
         // Duplicando, os nós vêm da sessão de origem e não há template a escolher
         // — mostrar um seletor aqui só ofereceria uma decisão já tomada.
-        let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 380, height: 22))
+        let picker = NSPopUpButton(frame: NSRect(x: 0, y: y, width: width, height: 22))
         let vazio = "Começar vazia"
-        if let origin {
-            let inherited = NSTextField(labelWithString:
-                "Os \(origin.nodes.count) nós de \"\(origin.name)\" ficam cada um na "
-                + "pasta equivalente dentro da worktree.")
-            inherited.font = .systemFont(ofSize: 11)
-            inherited.textColor = .secondaryLabelColor
-            inherited.maximumNumberOfLines = 2
-            inherited.frame = NSRect(x: 0, y: -2, width: 380, height: 28)
-            container.addSubview(inherited)
-        } else {
+        if origin == nil {
             picker.addItem(withTitle: vazio)
             let templates = TemplateStore.names
             if !templates.isEmpty {
@@ -517,8 +617,10 @@ EgeonCLI.install()
                 picker.addItems(withTitles: templates)
             }
             container.addSubview(picker)
+            y += 22
         }
 
+        container.setFrameSize(NSSize(width: width, height: y))
         alert.accessoryView = container
         alert.window.initialFirstResponder = branchField
 
@@ -535,12 +637,13 @@ EgeonCLI.install()
 
         if origin != nil {
             return WorktreeForm(branch: branch, destination: destination, template: nil,
-                                target: moveRadio.state == .on ? .moveCurrent : .newSession)
+                                target: moveRadio.state == .on ? .moveCurrent : .newSession,
+                                nodes: rows.map(\.resolved))
         }
         let chosen = picker.titleOfSelectedItem
         return WorktreeForm(branch: branch, destination: destination,
                             template: chosen == vazio ? nil : chosen,
-                            target: .newSession)
+                            target: .newSession, nodes: [])
     }
 
     /// Diz exatamente o que vai junto. "Leva tudo" sem detalhar é o tipo de
@@ -1119,6 +1222,17 @@ EgeonCLI.install()
             return shell
         }
 
+        // Pasta de nó que não resolve é dita na hora de montar, e não descoberta
+        // por um `pwd` três horas depois: o terminal abre na raiz da sessão, fica
+        // com a cara do terminal certo, e o agente trabalha no lugar errado.
+        let unresolved = configs[index].unresolvedDirectories
+        if !unresolved.isEmpty {
+            let lista = unresolved.map { "\($0.id) → \($0.tried)" }.joined(separator: ", ")
+            shell.showBanner("Pasta inexistente, abrindo na raiz da sessão: \(lista)")
+            Log.write("sessão \(configs[index].name): \(unresolved.count) nó(s) com cwd que não "
+                      + "resolve — \(lista)")
+        }
+
         let defaults = defaultFrames(for: configs[index])
         for i in configs[index].nodes.indices {
             let node = configs[index].nodes[i]
@@ -1156,6 +1270,9 @@ EgeonCLI.install()
         // canvas ou o mosaico, e daqui não faz diferença qual.
         shell.onRequestClose = { [weak self] node in self?.confirmRemoval(of: node, index: index) }
         shell.onRequestEditNode = { [weak self] node in self?.editNode(node, index: index) }
+        shell.onRequestNodeWorktree = { [weak self] node in
+            self?.nodeWorktree(node, index: index)
+        }
         shell.onModeChanged = { [weak self] mode in self?.recordViewMode(mode, index: index) }
         shell.onMosaicLayoutChanged = { [weak self] layout in
             self?.recordMosaicLayout(layout, index: index)
@@ -1508,6 +1625,145 @@ EgeonCLI.install()
         schedulePersist()
     }
 
+    /// Leva UM terminal para uma worktree nova do repositório em que ele abre.
+    ///
+    /// Existe porque uma frente de trabalho raramente é um repositório só: com o
+    /// frontend na sessão e o backend num repo vizinho, a branch nova precisa dos
+    /// dois — e duplicar a sessão inteira para levar um card é caro demais.
+    ///
+    /// O card é reapontado, não clonado: id, papel, arestas e posição continuam os
+    /// mesmos. O processo reinicia porque não há como trocar o diretório de um pty
+    /// em curso, e a conversa é zerada porque ela é da pasta antiga.
+    private func nodeWorktree(_ node: NodeView, index: Int) {
+        guard index >= 0, index < configs.count,
+              let position = configs[index].nodes.firstIndex(where: { $0.id == node.nodeID })
+        else { return }
+
+        let config = configs[index]
+        let current = config.directory(for: config.nodes[position])
+
+        let status: Worktree.Status
+        // Do checkout principal: partir de uma worktree ligada aninharia worktree
+        // dentro de worktree.
+        guard let repoRoot = Worktree.mainRepo(of: current),
+              let read = try? Worktree.status(of: repoRoot) else {
+            presentError("\"\(node.nodeID)\" não abre num repositório git",
+                         Worktree.Failure.notARepo(current))
+            return
+        }
+        status = read
+
+        let suggested = Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
+        guard let form = NodeWorktreePlanner.ask(nodeID: node.nodeID,
+                                                 repoRoot: repoRoot,
+                                                 currentPath: current,
+                                                 status: status,
+                                                 suggestedBranch: suggested) else { return }
+
+        if let error = repoint(nodeID: node.nodeID, index: index, repoRoot: repoRoot,
+                               branch: form.branch, destination: form.destination) {
+            presentError("Não consegui criar a worktree", error)
+        }
+    }
+
+    /// Cria a worktree e reaponta o nó, sem diálogo. Ver `duplicate` — mesmo
+    /// motivo de existir.
+    @discardableResult
+    private func repoint(nodeID: String, index: Int, repoRoot: String,
+                         branch: String, destination: String) -> Error? {
+        guard index >= 0, index < configs.count, let shell = shells[index],
+              let position = configs[index].nodes.firstIndex(where: { $0.id == nodeID }),
+              let node = shell.nodes.first(where: { $0.nodeID == nodeID })
+        else { return Worktree.Failure.notARepo(nodeID) }
+
+        let created: Worktree.Created
+        do {
+            created = try Worktree.create(from: repoRoot, branch: branch,
+                                          destination: destination, carryDirty: true)
+        } catch {
+            return error
+        }
+
+        // Sem a conversa: ela é da pasta antiga, e retomá-la aqui traria o agente
+        // no meio de um assunto que era de outro checkout.
+        var updated = configs[index].nodes[position].withoutConversation
+        updated.cwd = NodeWorktreePlanner.short(created.path)
+        configs[index].nodes[position] = updated
+
+        let frame = shell.canvasFrame(of: nodeID) ?? node.frame
+        shell.detach(node)
+        shell.attach(makeNode(updated, in: configs[index], frame: frame))
+        schedulePersist()
+
+        Log.write("worktree por terminal: \"\(nodeID)\" de \(configs[index].name) "
+                  + "passou a abrir em \(created.path) (branch \(created.branch))")
+
+        copyUnversioned([(repoRoot, created.path)], into: index)
+        return nil
+    }
+
+    /// Worktree pelo socket, sem diálogo. `ws` duplica a sessão levando os
+    /// terminais de repo vizinho junto; `ws/id` leva só aquele terminal.
+    ///
+    /// Existe para o fluxo poder ser verificado de fora: ele cria worktree em
+    /// repositório de verdade e reaponta o `cwd` de cada nó, e "compilou" não diz
+    /// nada sobre um terminal ter aberto na pasta certa.
+    private func makeWorktree(target: String, branch: String) -> [String: Any] {
+        let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
+        guard let sessionName = parts.first,
+              let index = configs.firstIndex(where: { $0.name == sessionName })
+        else { return ["ok": false, "error": "sessão desconhecida '\(target)'"] }
+
+        let nodeID = parts.count == 2 ? parts[1] : nil
+        let origin = configs[index]
+
+        // Nó: o repositório é o da pasta em que ele abre, que pode ser vizinho.
+        // Sempre pelo checkout principal — partir de uma worktree ligada aninharia
+        // worktree dentro de worktree.
+        if let nodeID {
+            guard let node = origin.nodes.first(where: { $0.id == nodeID })
+            else { return ["ok": false, "error": "nó desconhecido '\(nodeID)'"] }
+            let current = origin.directory(for: node)
+            guard let repoRoot = Worktree.mainRepo(of: current),
+                  let status = try? Worktree.status(of: repoRoot)
+            else { return ["ok": false, "error": "\(current) não é repositório git"] }
+
+            let name = branch.isEmpty
+                ? Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
+                : Worktree.freeBranch(preferred: branch, in: repoRoot)
+            let destination = Worktree.suggestedPath(repoRoot: repoRoot, branch: name)
+            if let error = repoint(nodeID: nodeID, index: index, repoRoot: repoRoot,
+                                   branch: name, destination: destination) {
+                return ["ok": false, "error": "\(error)"]
+            }
+            return ["ok": true, "node": nodeID, "repo": repoRoot,
+                    "branch": name, "path": destination]
+        }
+
+        guard let repoRoot = Worktree.mainRepo(of: origin.url.path),
+              let status = try? Worktree.status(of: origin.url.path)
+        else { return ["ok": false, "error": "\(origin.path) não é repositório git"] }
+
+        let name = branch.isEmpty
+            ? Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
+            : Worktree.freeBranch(preferred: branch, in: repoRoot)
+        // Os terminais de repo vizinho entram marcados, que é o padrão do
+        // formulário — é esse caminho que precisa ser verificado.
+        let plans = NodeWorktreePlanner.inspect(origin, sessionRoot: origin.url.path,
+                                                branch: name)
+        let form = WorktreeForm(
+            branch: name,
+            destination: Worktree.suggestedPath(repoRoot: repoRoot, branch: name),
+            template: nil, target: .newSession, nodes: plans)
+        if let error = duplicate(index, repoRoot: repoRoot, status: status, form: form) {
+            return ["ok": false, "error": "\(error)"]
+        }
+        return ["ok": true, "session": sessionName, "branch": name,
+                "path": form.destination,
+                "nodes": plans.filter(\.enabled).map { ["id": $0.nodeID,
+                                                        "repo": $0.repoName] }]
+    }
+
     /// `sh`, `sh-2`, `sh-3`… O id entra no endereço de dispatch, então precisa
     /// ser único dentro da sessão.
     private func nextID(prefix: String, in config: SessionConfig) -> String {
@@ -1742,6 +1998,15 @@ EgeonCLI.install()
 
         NSApp.mainMenu = main
     }
+}
+
+/// Container de formulário que cresce de cima para baixo.
+///
+/// A lista de terminais do formulário de worktree tem tamanho variável, e contar
+/// y a partir do rodapé em cada linha é como se erra por um pixel a cada mudança
+/// de layout — foi assim que o segundo radio já caiu em cima do rótulo abaixo.
+final class FormView: NSView {
+    override var isFlipped: Bool { true }
 }
 
 /// Raiz: sidebar fixa à esquerda + área de canvas trocável.

@@ -202,6 +202,7 @@ final class MosaicContainer: NSView {
 
     var onRequestClose: ((NodeView) -> Void)?
     var onRequestEditNode: ((NodeView) -> Void)?
+    var onRequestNodeWorktree: ((NodeView) -> Void)?
     /// Divisor arrastado — hora de gravar as proporções.
     var onLayoutChanged: ((MosaicLayout) -> Void)?
 
@@ -307,6 +308,7 @@ final class MosaicContainer: NSView {
         node.onPortRelease = nil
         node.onRequestClose = { [weak self] node in self?.onRequestClose?(node) }
         node.onRequestEdit = { [weak self] node in self?.onRequestEditNode?(node) }
+        node.onRequestWorktree = { [weak self] node in self?.onRequestNodeWorktree?(node) }
         node.applyContentsScale(contentsScale)
     }
 

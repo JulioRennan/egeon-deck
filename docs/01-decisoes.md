@@ -824,13 +824,88 @@ proporção salva é recusada quando alguma fração vem degenerada.
 drop zones, serialização de árvore e reparent no meio da árvore, e o arranjo
 automático já é o que se queria montar à mão em 90% dos casos.
 
+## ADR-017 — Worktree é por terminal, não só por sessão
+
+**O que aconteceu primeiro.** Um dia de trabalho perdido, com o sintoma "os paths
+dos terminais se embaralharam e as sessões também". A suspeita era o flavor dev
+interferindo no estável. **Não era.** O isolamento de app estava completo —
+diretório, socket, log, porta, PATH, ganchos do CLI, `user-data-dir` e
+`extensions-dir` do code-server, store do WebKit por bundle id — e o dev nunca
+escreveu em `~/.egeon`. O que embaralhou foi o fluxo de worktree, que acontece
+igual sem o dev existir.
+
+**A prova.** No `sessions.json` em uso, a sessão `develop-6` — worktree de
+`nexus-web-app` — tinha um nó `nexus-backend` com `cwd: "../nexus-backend"`. Na
+origem, `..` era a pasta de projetos e resolvia no repo do backend. Na worktree,
+`..` passou a ser `.worktrees/nexus-web-app/`, que não tem backend nenhum. Os
+quatro processos daquela sessão estavam **todos** na mesma pasta: o agente do
+backend trabalhando no frontend, sem um erro em lugar nenhum.
+
+**Os quatro defeitos, uma família.**
+
+`relativized` só olhava `cwd` começando com `/` ou `~`, então `../nexus-backend`
+atravessava a duplicação literal — e o comentário da própria função dizia o que
+ela existia para impedir.
+
+`directory(for:)` caía na raiz da sessão **em silêncio** quando o `cwd` não
+resolvia. É este que transforma um caminho errado em "embaralhou" em vez de
+"quebrou", e é o que custou o dia. Agora fala: log com o caminho tentado, e banner
+listando os nós na hora de montar a sessão.
+
+`ComponentDialog.relative` decapitava a barra de um caminho absoluto digitado no
+campo de pasta — `~/Documents/x` virava `Users/você/Documents/x`, que nunca
+resolve. Mesmo silêncio.
+
+`--show-toplevel` devolve a raiz da worktree LIGADA quando você está dentro de
+uma. Usá-la para criar a próxima aninhou worktree dentro de worktree, medido em
+`.worktrees/back/.worktrees/so-o-back/vazamento`. Legal para o git, desastre em
+disco: apagar a de fora leva a de dentro. Agora tudo passa por
+`Worktree.mainRepo`.
+
+**A decisão.** A worktree passa a ser por sessão **e por terminal**. Duplicar
+lista todos os terminais com o repositório de cada um; a branch da sessão fica no
+topo e re-sugere para quem você não editou. Terminal fora do repositório da
+sessão, com a worktree recusada, **segue apontando para o repositório original** —
+o que inverte o comportamento anterior, e por isso está aqui. Jogá-lo na raiz da
+worktree transformava o card do backend numa cópia do card ao lado, que é
+exatamente o estrago descrito acima.
+
+Fora da duplicação, o botão direito no cabeçalho leva um terminal só. Reaponta em
+vez de clonar: id, papel, arestas e posição continuam, o processo reinicia porque
+pty não muda de diretório, e a conversa é zerada porque era da pasta antiga.
+
+**Três defeitos que só a verificação ponta a ponta achou.** Nenhum deles aparece
+em código que compila, e todos são anteriores a esta mudança:
+
+*Shell interativo ignora SIGTERM.* `prepareForRemoval` mandava `terminate()` e
+seguia em frente, e o `/bin/zsh -l` continuava vivo, filho do app, com a pasta
+antiga. Medido: 7 processos para 6 nós depois de um reaponte. Agora escala para
+SIGKILL no grupo — com guarda de `getpgid(pid) == pid`, porque se o pgid não fosse
+o do shell o sinal poderia levar o app inteiro.
+
+*O deinit apagava o registro do sucessor.* Trocar um card por outro com o mesmo id
+— reconfigurar, reapontar — registra o novo antes de o antigo ser liberado, e o
+`deinit` do antigo desfazia o registro do novo. `/targets` ficava vazio e o
+terminal parava de receber dispatch, sem sinal nenhum.
+
+*A ponta de escrita de um `Pipe` é herdada por qualquer processo lançado depois.*
+`Worktree.run` lia com `readDataToEndOfFile`, que só retorna quando todas as
+cópias do fd fecham. O script de cópia da worktree roda minutos fora da main
+thread com `node_modules` no meio; herdada por ele, uma chamada de milissegundos
+travava o app inteiro — 2min30 num `git rev-parse`, destravando no segundo em que
+a cópia terminou. Agora a saída vai para arquivo temporário, cujo fd herdado não
+prende ninguém.
+
 ## Decisões ainda abertas
 
 - **Assinatura de código.** Enquanto for ad-hoc, qualquer coisa que dependa de
   TCC quebra a cada build. Só vira problema de novo se o portal voltar.
-- **Isolar dev de prod por completo.** Diretório, socket, log e porta já são
-  separados por flavor, mas na prática o dev ainda atrapalha as sessões do
-  estável. Enquanto não for resolvido, um dia de trabalho pode ser perdido.
+- **Isolar dev de prod por completo.** Auditado no ADR-017 e o isolamento de app
+  está completo; o incidente que motivou isto era o fluxo de worktree. O que ainda
+  é comum aos dois é o `CLAUDE_CONFIG_DIR` dos agentes (`~/.claude-agro`:
+  conversas, plugins, settings) e, se você apontar as duas para a mesma pasta, o
+  repositório. Nenhum dos dois explicou o sintoma relatado — decidir se vale
+  separar depende de aparecer um sintoma que dependa deles.
 - **Reordenar nó dentro da coluna do mosaico.** Hoje a ordem é a do
   `sessions.json`, e mudá-la é editar o arquivo.
 - **Um code-server para todos os workspaces, ou um por workspace.** Um só é mais
