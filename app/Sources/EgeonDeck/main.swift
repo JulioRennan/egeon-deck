@@ -1594,7 +1594,8 @@ EgeonCLI.install()
                 title: "Novo terminal",
                 confirmLabel: "Criar",
                 agents: agents,
-                initial: Component(name: "", kind: .agent, agent: "claude"))
+                initial: Component(name: "", kind: .agent, agent: "claude"),
+                root: configs[index].url)
             guard let result = dialog.run() else { return }
             if result.saveAsComponent { ComponentStore.put(result.component) }
             place(component: result.component, rect: rect, index: index)
@@ -1624,7 +1625,8 @@ EgeonCLI.install()
             title: "Novo terminal",
             confirmLabel: "Criar",
             agents: agents,
-            initial: Component(name: "", kind: .agent, agent: "claude"))
+            initial: Component(name: "", kind: .agent, agent: "claude"),
+            root: configs[index].url)
         guard let result = dialog.run() else { return }
 
         if result.saveAsComponent { ComponentStore.put(result.component) }
@@ -1665,7 +1667,8 @@ EgeonCLI.install()
             title: "Configurar \(current.id)",
             confirmLabel: "Aplicar",
             agents: agents,
-            initial: ComponentStore.capture(from: current, name: current.component ?? current.id))
+            initial: ComponentStore.capture(from: current, name: current.component ?? current.id),
+            root: configs[index].url)
         guard let result = dialog.run() else { return }
 
         if result.saveAsComponent { ComponentStore.put(result.component) }

@@ -17,6 +17,13 @@ final class ComponentDialog {
     private let confirmLabel: String
     private let initial: Component
 
+    /// Raiz da sessão, quando o formulário é de um nó dela.
+    ///
+    /// Serve ao botão de escolher pasta: é o que permite gravar RELATIVO quando a
+    /// escolha está dentro da sessão. Sem raiz — formulário de componente solto —
+    /// só existe caminho absoluto a gravar.
+    private let root: URL?
+
     /// Ordem estável para o popup de CLI.
     private var agentKeys: [String] { agents.keys.sorted() }
 
@@ -29,11 +36,12 @@ final class ComponentDialog {
     private var lastConfig: String?
 
     init(title: String, confirmLabel: String,
-         agents: [String: AgentProfile], initial: Component) {
+         agents: [String: AgentProfile], initial: Component, root: URL? = nil) {
         self.title = title
         self.confirmLabel = confirmLabel
         self.agents = agents
         self.initial = initial
+        self.root = root
     }
 
     // MARK: - Campos
@@ -43,6 +51,7 @@ final class ComponentDialog {
     private let agentPicker = NSPopUpButton()
     private let cmdField = NSTextField()
     private let cwdField = NSTextField()
+    private let cwdBrowse = NSButton(title: "Escolher…", target: nil, action: nil)
     private let promptField = NSTextView()
     private let saveBox = NSButton(checkboxWithTitle: "Salvar como componente reutilizável",
                                    target: nil, action: nil)
@@ -200,11 +209,22 @@ final class ComponentDialog {
         container.addSubview(cmdField)
 
         container.addSubview(caption("PASTA — relativa à raiz da sessão", y: 182))
-        cwdField.frame = NSRect(x: 0, y: 156, width: width, height: 22)
+        cwdField.frame = NSRect(x: 0, y: 156, width: width - 96, height: 22)
         cwdField.stringValue = initial.cwd ?? ""
         cwdField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         cwdField.placeholderString = "ex: deck-backend — vazio usa a raiz"
         container.addSubview(cwdField)
+
+        // O campo continua editável ao lado do botão: digitar é o jeito de escrever
+        // um caminho que ainda não existe em disco, e o painel não escolhe pasta
+        // inexistente.
+        cwdBrowse.frame = NSRect(x: width - 90, y: 154, width: 90, height: 26)
+        cwdBrowse.bezelStyle = .rounded
+        cwdBrowse.controlSize = .small
+        cwdBrowse.font = .systemFont(ofSize: 11)
+        cwdBrowse.target = self
+        cwdBrowse.action = #selector(browseFolder)
+        container.addSubview(cwdBrowse)
 
         promptLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         promptLabel.textColor = .secondaryLabelColor
@@ -381,6 +401,57 @@ final class ComponentDialog {
         }
         lastConfig = url.path
         reloadConfigPicker(select: url.path)
+    }
+
+    @objc private func browseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Pasta onde este terminal abre"
+        panel.prompt = "Usar esta pasta"
+        panel.directoryURL = browseStart()
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        cwdField.stringValue = Self.stored(folder: url, root: root)
+    }
+
+    /// Onde o painel abre: a pasta que o campo já aponta, e a raiz da sessão
+    /// quando ele está vazio.
+    ///
+    /// Resolve pela MESMA regra do runtime (`SessionConfig.resolve`), senão o
+    /// painel abriria num lugar e o terminal em outro. Caminho que não existe cai
+    /// na raiz: painel apontado para pasta inexistente abre no último lugar que o
+    /// sistema lembra, que não tem relação com esta sessão.
+    private func browseStart() -> URL {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let typed = cwdField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { return root ?? home }
+
+        let resolved = root.map { SessionConfig.resolve(cwd: typed, against: $0) }
+            ?? (typed as NSString).expandingTildeInPath
+        guard FileManager.default.fileExists(atPath: resolved) else { return root ?? home }
+        return URL(fileURLWithPath: resolved)
+    }
+
+    /// O que o botão de escolher pasta grava.
+    ///
+    /// Dentro da raiz da sessão, RELATIVO — é o que faz o nó valer em qualquer
+    /// checkout, e é dele que a duplicação em worktree depende. A própria raiz
+    /// grava vazio, que é como se diz "a raiz" no resto do app. Fora dela,
+    /// absoluto encurtado para `~`: repo vizinho não tem equivalente dentro da
+    /// worktree.
+    ///
+    /// Nunca `..`, mesmo escolhendo uma pasta acima da raiz. O mesmo texto
+    /// significa pastas diferentes em checkouts diferentes, e foi assim que os
+    /// terminais de uma sessão inteira acabaram na mesma pasta (ADR-017).
+    static func stored(folder url: URL, root: URL?) -> String {
+        let path = url.standardized.path
+        guard let root = root?.standardized.path else { return short(path) }
+        if path == root { return "" }
+        if path.hasPrefix(root + "/") { return String(path.dropFirst(root.count + 1)) }
+        return short(path)
     }
 
     /// `/Users/você/.claude-trabalho` → `~/.claude-trabalho`.
