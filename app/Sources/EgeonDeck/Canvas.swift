@@ -83,6 +83,12 @@ class NodeView: NSView {
     // `slider.horizontal.3` como "editar" — lia como "ajustes de mixagem".
     private let editButton = ToolbarButton(symbols: ["square.and.pencil", "pencil"],
                                            tooltip: "Configurar este nó", size: 30)
+    /// Levar só este terminal para uma worktree. Estava no menu do botão direito, e
+    /// menu de contexto é onde funcionalidade vai morrer: quem não sabe que existe
+    /// não clica com o direito para descobrir.
+    private let worktreeButton = ToolbarButton(symbols: ["arrow.triangle.branch"],
+                                               tooltip: "Nova worktree para este terminal…",
+                                               size: 30)
 
     /// A pasta em que este nó abriu, já encurtada para `~`.
     var subtitle: String {
@@ -160,6 +166,7 @@ class NodeView: NSView {
 
         addSubview(body)
         addSubview(grip)
+        addSubview(worktreeButton)
         addSubview(editButton)
         addSubview(closeButton)
 
@@ -176,9 +183,15 @@ class NodeView: NSView {
             guard let self else { return }
             self.onRequestEdit?(self)
         }
+        worktreeButton.onClick = { [weak self] in
+            guard let self else { return }
+            self.onRequestWorktree?(self)
+        }
         // Só nós que têm o que configurar. O editor não tem comando nem papel; o
         // que ele abre vem da pasta da sessão.
         editButton.isHidden = !supportsEditing
+        // Só quem abre pasta pode ganhar worktree. O nó web não abre nenhuma.
+        worktreeButton.isHidden = !supportsWorktree
     }
 
     /// Nó com configuração editável (comando, agente, pasta, papel).
@@ -334,12 +347,17 @@ class NodeView: NSView {
         let margem: CGFloat = 12
         let entreBotões: CGFloat = 6
         let meio = (Self.headerHeight - botão) / 2
-        let controles = botão + (editButton.isHidden ? 0 : botão + entreBotões)
 
-        closeButton.frame = NSRect(x: bounds.width - botão - margem, y: meio,
-                                   width: botão, height: botão)
-        editButton.frame = NSRect(x: bounds.width - botão * 2 - entreBotões - margem, y: meio,
-                                  width: botão, height: botão)
+        // Da direita para a esquerda, e só os visíveis: nó sem worktree e sem
+        // configuração fica com o X encostado na borda, sem buraco no meio.
+        var x = bounds.width - margem
+        var controles: CGFloat = 0
+        for botãoDaVez in [closeButton, editButton, worktreeButton] where !botãoDaVez.isHidden {
+            x -= botão
+            botãoDaVez.frame = NSRect(x: x, y: meio, width: botão, height: botão)
+            x -= entreBotões
+            controles += botão + entreBotões
+        }
 
         let disponível = max(0, bounds.width - margem * 2 - controles - 8)
         // Título toma o que precisa; o estado fica com o resto da linha. Assim

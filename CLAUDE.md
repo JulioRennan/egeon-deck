@@ -101,8 +101,8 @@ repo da sessão com branch própria ganha worktree própria do mesmo repo: é a 
 no front que precisa de um ajuste no back. **Não há campo de pasta** — ela sai da
 branch pela convenção de sempre e aparece como texto, para conferir. Ver ADR-020.
 
-Botão direito no cabeçalho de um terminal leva **só ele** para uma worktree, fora
-de qualquer duplicação. O card é reapontado, não clonado: id, papel, arestas e
+O ícone de ramificação no cabeçalho de um terminal — ou o botão direito nele — leva
+**só ele** para uma worktree, fora de qualquer duplicação. O card é reapontado, não clonado: id, papel, arestas e
 posição continuam; o processo reinicia, porque não há como trocar o diretório de
 um pty em curso, e a conversa é zerada porque era da pasta antiga.
 
