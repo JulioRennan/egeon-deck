@@ -214,6 +214,13 @@ enum AppControl {
     static var activateSession: ((String) -> Bool)?
     static var sessionNames: (() -> [String])?
 
+    /// Remove uma sessão, opcionalmente apagando as worktrees dela.
+    ///
+    /// Existe pelo mesmo motivo que `makeWorktree`: o fluxo passa por `NSAlert`, que
+    /// não é dirigível de fora, e "apaguei todas as worktrees" é exatamente o tipo
+    /// de afirmação que precisa ser conferida em repositório de verdade.
+    static var removeSession: ((_ name: String, _ purge: Bool) -> [String: Any])?
+
     /// Qual sessão é dona de uma pasta.
     ///
     /// A extensão do editor sabe a pasta do workspace e mais nada — quem conhece

@@ -100,6 +100,10 @@ EgeonCLI.install()
         AppControl.sessionOwning = { [weak self] folder in
             self?.sessionOwning(folder: folder)
         }
+        AppControl.removeSession = { [weak self] name, purge in
+            self?.removeSession(named: name, purge: purge)
+                ?? ["ok": false, "error": "app encerrando"]
+        }
         AppControl.activateSession = { [weak self] name in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return false }
@@ -805,9 +809,12 @@ EgeonCLI.install()
         guard index >= 0, index < configs.count else { return }
         let config = configs[index]
         let live = shells[index] != nil
-        // Só worktree ligada: oferecer isso para o checkout principal seria
-        // oferecer apagar o repositório.
-        let isWorktree = config.exists && Worktree.isLinkedWorktree(config.url.path)
+        // TODAS as worktrees da sessão, e não só a pasta dela: desde o worktree por
+        // terminal (ADR-017), uma sessão pode ter aberto worktree em três
+        // repositórios diferentes. Apagar só a da sessão deixava as outras no disco
+        // e registradas no git, sem nada na tela que lembrasse delas.
+        let involved = worktrees(of: config)
+        let deletable = involved.filter { $0.usedBy == nil }
 
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -820,25 +827,42 @@ EgeonCLI.install()
         alert.buttons.first?.hasDestructiveAction = true
 
         var checkbox: NSButton?
-        if isWorktree {
-            let box = NSButton(checkboxWithTitle: "Também apagar a worktree do disco",
-                               target: nil, action: nil)
+        if !deletable.isEmpty {
+            let box = NSButton(
+                checkboxWithTitle: deletable.count == 1
+                    ? "Também apagar a worktree do disco"
+                    : "Também apagar as \(deletable.count) worktrees do disco",
+                target: nil, action: nil)
             box.state = .off
-            let hint = NSTextField(labelWithString:
-                "\(config.path)\nDesmarcado, a pasta fica onde está e você pode reabri-la depois.")
+
+            var linhas = involved.map { wt -> String in
+                let quem = wt.owners.joined(separator: ", ")
+                guard let usedBy = wt.usedBy else {
+                    return "\(wt.repo) · \(wt.branch ?? "?") · \(quem)"
+                }
+                return "\(wt.repo) · \(wt.branch ?? "?") · MANTIDA, é a sessão \"\(usedBy)\""
+            }
+            linhas.append("Desmarcado, as pastas ficam onde estão e você pode reabri-las.")
+
+            let hint = NSTextField(labelWithString: linhas.joined(separator: "\n"))
             hint.font = .systemFont(ofSize: 10)
             hint.textColor = .secondaryLabelColor
-            hint.maximumNumberOfLines = 2
+            hint.maximumNumberOfLines = linhas.count
 
-            let container = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 52))
-            box.frame = NSRect(x: 0, y: 30, width: 360, height: 18)
-            hint.frame = NSRect(x: 18, y: 0, width: 342, height: 28)
+            let altura = CGFloat(linhas.count) * 14 + 4
+            let container = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: altura + 22))
+            box.frame = NSRect(x: 0, y: altura, width: 420, height: 18)
+            hint.frame = NSRect(x: 18, y: 0, width: 402, height: altura)
             container.addSubview(box)
             container.addSubview(hint)
             alert.accessoryView = container
             checkbox = box
+        } else if involved.isEmpty {
+            alert.informativeText += " Nenhuma pasta é tocada."
         } else {
-            alert.informativeText += " A pasta \(config.path) não é tocada."
+            // Tudo o que ela usa é pasta de outra sessão: apagar levaria trabalho
+            // de quem não foi consultado.
+            alert.informativeText += " As worktrees dela são de outras sessões e ficam."
         }
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -847,42 +871,143 @@ EgeonCLI.install()
             removeSession(index)
             return
         }
-        guard confirmWorktreeLosses(config) else { return }
+        guard confirmWorktreeLosses(deletable) else { return }
 
         // Apagar antes de tirar a sessão da lista: se o git recusar, você fica com
         // a sessão e com a pasta, em vez de perder a sessão e ficar com a pasta.
-        do {
-            try Worktree.remove(config.url.path)
-        } catch {
-            presentError("A sessão não foi removida", error)
+        var falhas: [String] = []
+        var removidas: [String] = []
+        for wt in deletable {
+            do {
+                try Worktree.remove(wt.path)
+                removidas.append("\(wt.repo)/\(wt.branch ?? "?")")
+            } catch {
+                falhas.append("\(wt.repo) · \(wt.branch ?? "?") — \(error)")
+            }
+        }
+
+        guard falhas.isEmpty else {
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = "A sessão não foi removida"
+            alert.informativeText = (removidas.isEmpty
+                ? "" : "Já apagadas: \(removidas.joined(separator: ", ")).\n\n")
+                + "Não consegui apagar:\n" + falhas.joined(separator: "\n")
+            alert.runModal()
             return
         }
         removeSession(index)
     }
 
+    /// Remoção sem diálogo, para o socket. Mesmas regras do formulário: só apaga
+    /// worktree ligada, e nunca a que é pasta de outra sessão.
+    private func removeSession(named name: String, purge: Bool) -> [String: Any] {
+        guard let index = configs.firstIndex(where: { $0.name == name })
+        else { return ["ok": false, "error": "sessão desconhecida '\(name)'"] }
+
+        let involved = worktrees(of: configs[index])
+        var removidas: [String] = []
+        var falhas: [String] = []
+
+        if purge {
+            for wt in involved where wt.usedBy == nil {
+                do {
+                    try Worktree.remove(wt.path)
+                    removidas.append(wt.path)
+                } catch {
+                    falhas.append("\(wt.path): \(error)")
+                }
+            }
+            guard falhas.isEmpty else {
+                return ["ok": false, "error": "worktree não removida",
+                        "removed": removidas, "failed": falhas]
+            }
+        }
+
+        removeSession(index)
+        return ["ok": true, "session": name, "removed": removidas,
+                "kept": involved.filter { $0.usedBy != nil }
+                    .map { ["path": $0.path, "usedBy": $0.usedBy ?? ""] },
+                "worktrees": involved.map { ["path": $0.path, "repo": $0.repo,
+                                             "branch": $0.branch ?? "",
+                                             "owners": $0.owners] }]
+    }
+
+    /// Uma worktree que esta sessão usa.
+    private struct SessionWorktree {
+        let path: String
+        let repo: String
+        let branch: String?
+        /// Quem dentro da sessão abre nela: "sessão", ou os ids dos nós.
+        let owners: [String]
+        /// Outra sessão que abre esta MESMA pasta. Apagar levaria o trabalho dela,
+        /// e ela continuaria na lista apontando para o vazio.
+        let usedBy: String?
+    }
+
+    /// Toda worktree ligada que a sessão usa: a pasta dela e a de cada nó que abre
+    /// fora dela.
+    ///
+    /// Nó dentro da pasta da sessão não entra: é a mesma worktree, e apagá-la duas
+    /// vezes daria erro na segunda. Só worktree LIGADA — oferecer apagar o checkout
+    /// principal seria oferecer apagar o repositório.
+    private func worktrees(of config: SessionConfig) -> [SessionWorktree] {
+        var owners: [String: [String]] = [:]
+        let raiz = config.url.path
+
+        if config.exists, Worktree.isLinkedWorktree(raiz) { owners[raiz] = ["sessão"] }
+
+        for node in config.nodes where node.type != .web {
+            let path = config.resolvedDirectory(for: node)
+            guard path != raiz, !path.hasPrefix(raiz + "/"),
+                  FileManager.default.fileExists(atPath: path),
+                  Worktree.isLinkedWorktree(path)
+            else { continue }
+            owners[path, default: []].append(node.id)
+        }
+
+        return owners.keys.sorted().map { path in
+            SessionWorktree(
+                path: path,
+                repo: ((Worktree.mainRepo(of: path) ?? path) as NSString).lastPathComponent,
+                branch: Worktree.branchOf(path),
+                owners: owners[path] ?? [],
+                usedBy: configs.first { $0.name != config.name && $0.url.path == path }?.name)
+        }
+    }
+
     /// Segundo passo, só quando há trabalho a perder. `worktree remove` precisa de
     /// `--force` aqui — a worktree nasce suja de propósito — e forçar sem mostrar
     /// o que morre seria apagar às escuras.
-    private func confirmWorktreeLosses(_ config: SessionConfig) -> Bool {
-        guard let losses = try? Worktree.losses(in: config.url.path) else { return true }
-        guard !losses.isEmpty else { return true }
-
+    ///
+    /// Uma seção por worktree: com três repositórios envolvidos, somar os números
+    /// num total só não diria em qual deles está o trabalho que você não quer
+    /// perder.
+    private func confirmWorktreeLosses(_ worktrees: [SessionWorktree]) -> Bool {
         var linhas: [String] = []
-        if !losses.modified.isEmpty {
-            linhas.append("\(losses.modified.count) arquivo(s) com mudanças não commitadas:")
-            linhas.append(contentsOf: losses.modified.prefix(6).map { "   \($0)" })
-            if losses.modified.count > 6 {
-                linhas.append("   … e outros \(losses.modified.count - 6)")
+
+        for wt in worktrees {
+            guard let losses = try? Worktree.losses(in: wt.path), !losses.isEmpty else { continue }
+            if !linhas.isEmpty { linhas.append("") }
+            linhas.append("\(wt.repo) · \(wt.branch ?? "?")")
+
+            if !losses.modified.isEmpty {
+                linhas.append("\(losses.modified.count) arquivo(s) com mudanças não commitadas:")
+                linhas.append(contentsOf: losses.modified.prefix(6).map { "   \($0)" })
+                if losses.modified.count > 6 {
+                    linhas.append("   … e outros \(losses.modified.count - 6)")
+                }
+            }
+            if !losses.untracked.isEmpty {
+                linhas.append("\(losses.untracked.count) arquivo(s) novo(s), nunca commitados.")
+            }
+            if losses.unpushedCommits > 0 {
+                linhas.append("\(losses.unpushedCommits) commit(s) ainda não enviados — esses "
+                              + "sobrevivem na branch \(wt.branch ?? "?"), que não é apagada.")
             }
         }
-        if !losses.untracked.isEmpty {
-            linhas.append("\(losses.untracked.count) arquivo(s) novo(s), nunca commitados.")
-        }
-        if losses.unpushedCommits > 0 {
-            linhas.append("\(losses.unpushedCommits) commit(s) ainda não enviados — esses "
-                          + "sobrevivem na branch \(Worktree.branchOf(config.url.path) ?? "?"), "
-                          + "que não é apagada.")
-        }
+
+        guard !linhas.isEmpty else { return true }
 
         let alert = NSAlert()
         alert.alertStyle = .critical

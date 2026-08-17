@@ -1059,6 +1059,40 @@ Quatro cenários rodados contra repositórios de verdade: padrão (sessão + viz
 branch por terminal (um nó de dentro em worktree própria do mesmo repo), branch
 vazia (fica onde está) e terminal solto.
 
+## ADR-021 — Remover a sessão oferece apagar TODAS as worktrees dela
+
+**O defeito.** A remoção chamava `Worktree.remove` uma vez, no caminho da sessão.
+Desde o worktree por terminal (ADR-017) uma sessão pode ter aberto worktree em três
+repositórios, e as outras duas ficavam no disco e registradas no git, sem nada na
+tela que lembrasse delas. Pior: a caixinha só aparecia quando a **pasta da sessão**
+era worktree — terminal que ganhou worktree pelo botão direito, numa sessão que é o
+checkout principal, não era nem mencionado.
+
+**A decisão.** O diálogo levanta toda worktree **ligada** que a sessão usa — a dela
+e a de cada nó que abre fora dela — e lista, por linha, repositório · branch · quem
+usa. Uma caixinha só, para todas. Nó dentro da pasta da sessão não entra: é a mesma
+worktree, e removê-la duas vezes erraria na segunda. Checkout principal nunca entra:
+oferecer apagá-lo seria oferecer apagar o repositório.
+
+**Worktree que é pasta de outra sessão fica.** Apagá-la levaria trabalho de quem não
+foi consultado, e a outra sessão continuaria na lista apontando para o vazio. Ela
+aparece na lista marcada como MANTIDA, com o nome da sessão dona — dizer por que
+algo não vai ser apagado importa tanto quanto dizer o que vai.
+
+O aviso de perda passou a ter uma seção por worktree. Com três repositórios
+envolvidos, somar os números num total só não diria em qual deles está o trabalho
+que você não quer perder. E se alguma remoção falhar, a sessão **não** sai da lista:
+o diálogo diz o que já foi apagado e o que resistiu, em vez de deixar você sem a
+sessão e com a pasta.
+
+**Verificação.** `GET /remove?target=ws[&worktrees=1]` faz a remoção sem diálogo —
+mesma razão de `/worktree` existir. Sem `worktrees=1` nada em disco é tocado; é
+`worktree remove --force` do outro lado, e o padrão de uma rota destrutiva tem de
+ser o inofensivo. Rodado contra repositórios de verdade: sessão com três worktrees
+em dois repos (a dela, uma de nó no mesmo repo, uma em repo vizinho) — as três
+identificadas, as duas dela apagadas do registro do git e do disco, e a
+compartilhada com outra sessão preservada.
+
 ## Decisões ainda abertas
 
 - **Assinatura de código.** Enquanto for ad-hoc, qualquer coisa que dependa de

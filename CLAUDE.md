@@ -106,6 +106,12 @@ de qualquer duplicação. O card é reapontado, não clonado: id, papel, arestas
 posição continuam; o processo reinicia, porque não há como trocar o diretório de
 um pty em curso, e a conversa é zerada porque era da pasta antiga.
 
+Remover a sessão oferece apagar **todas** as worktrees dela — a da sessão e a de
+cada terminal que abre fora dela —, numa caixinha só, listando repositório · branch
+· quem usa. Worktree que é pasta de outra sessão fica, marcada como MANTIDA: apagar
+levaria trabalho de quem não foi consultado. Falha em qualquer uma e a sessão não
+sai da lista. Ver ADR-021.
+
 Dois terminais no mesmo repo vizinho com o mesmo nome de branch dividem uma
 worktree; com nomes diferentes, viram duas. A worktree sai **sempre do checkout
 principal** (`Worktree.mainRepo`), nunca de uma worktree ligada — partir dela
@@ -218,7 +224,7 @@ curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
 curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
-Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/worktree`
+Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/worktree` `/remove`
 `/activate` `/open` `/view` `/file` `/change` `/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
 conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
@@ -245,6 +251,10 @@ mesmo que digitar nas linhas do formulário (ADR-020). Existe porque o fluxo pas
 cada terminal foi para a pasta certa, que é justamente o defeito do ADR-017. A
 resposta traz `path` e `reused`, e o `path` é o da worktree que de fato ficou —
 com branch que já existia, ela pode não ser a que o app sugeriu (ADR-018).
+
+`/remove?target=ws[&worktrees=1]` remove a sessão, e só com `worktrees=1` apaga as
+worktrees dela do disco — o padrão é não apagar, porque do outro lado é `worktree
+remove --force`. Responde o que apagou, o que manteve e por quê (ADR-021).
 
 ## Configuração
 

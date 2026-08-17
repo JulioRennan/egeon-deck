@@ -212,6 +212,18 @@ final class ControlSocket {
             respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
                     json: payload)
 
+        case ("GET", _, _) where route.contains("/remove"):
+            // /remove?target=ws[&worktrees=1] — remove a sessão, e só com
+            // `worktrees=1` apaga as worktrees dela do disco. O padrão é não
+            // apagar: é `worktree remove --force` do outro lado.
+            let query = Self.query(in: route)
+            let payload = DispatchQueue.main.sync {
+                AppControl.removeSession?(query["target"] ?? "", query["worktrees"] == "1")
+                    ?? ["ok": false, "error": "app sem remoção disponível"]
+            }
+            respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
+                    json: payload)
+
         case ("GET", _, _) where route.contains("/layout"):
             // /layout?mode=canvas|mosaic — troca a visualização da sessão ativa.
             let mode = Self.query(in: route)["mode"] ?? ""
