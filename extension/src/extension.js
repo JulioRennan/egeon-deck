@@ -23,33 +23,95 @@ function socketPath() {
   return socket.resolveSocketPath(config().get('socketPath'));
 }
 
-/// Pergunta o alvo uma vez e guarda. Os endereços vêm do próprio app, então a
-/// lista nunca fica desatualizada em relação aos workspaces abertos.
-async function resolveTarget({ interactive = true } = {}) {
-  const configured = (config().get('target') || '').trim();
-  if (configured) return configured;
-  if (!interactive) return '';
+const OUTRA_SESSAO = 'outra sessão…';
 
-  let targets = [];
+/// Pergunta o alvo uma vez e guarda — mas confere a cada envio se ele ainda
+/// existe, e sugere só terminais vivos da sessão desta pasta.
+///
+/// O alvo mora no settings do workspace, e nó apagado ou renomeado deixava ali
+/// um endereço morto: o app respondia "alvo desconhecido" e a extensão insistia
+/// no mesmo valor, então TODO clique em "Request changes" falhava igual, para
+/// sempre.
+///
+/// `force` ignora o que está gravado e pergunta de novo — é o que faz a troca de
+/// alvo estar sempre a um clique, sem precisar da paleta de comandos.
+async function resolveTarget({ folder, interactive = true, force = false } = {}) {
+  const configured = force ? '' : (config().get('target') || '').trim();
+
+  let listing = null;
   try {
-    targets = await socket.listTargets(socketPath());
+    listing = await socket.listTargets(socketPath(), folder);
   } catch (error) {
-    vscode.window.showErrorMessage(`egeon: ${error.message}`);
-    return '';
-  }
-  if (!targets.length) {
-    vscode.window.showErrorMessage('egeon: nenhuma sessão de agente registrada no app.');
-    return '';
+    // App fora do ar ou socket errado: não há como saber se o alvo vale. Segue
+    // com o que está gravado e deixa o dispatch dar o erro de verdade, que é
+    // mais específico do que qualquer chute daqui.
+    if (configured) return { target: configured };
+    if (interactive) vscode.window.showErrorMessage(`egeon: ${error.message}`);
+    return { target: '', detail: error.message };
   }
 
-  const picked = await vscode.window.showQuickPick(targets, {
-    title: 'egeon — para qual sessão vão os comentários?',
-    placeHolder: 'ex: deck/claude-back'
-  });
-  if (!picked) return '';
+  // Confere contra a lista INTEIRA, não contra a da sessão: escolher um terminal
+  // de outra sessão é legítimo, e apagar essa escolha a cada envio seria desfazer
+  // na surdina o que o usuário pediu. O escopo da sessão vale para SUGERIR.
+  if (configured && listing.all.includes(configured)) return { target: configured };
 
-  await config().update('target', picked, vscode.ConfigurationTarget.Workspace);
-  return picked;
+  if (configured) {
+    // Limpar é o que faz o próximo clique perguntar em vez de repetir a falha.
+    await config().update('target', '', vscode.ConfigurationTarget.Workspace);
+    const detail = `alvo '${configured}' não existe mais; ativos: `
+      + (listing.all.length ? listing.all.join(', ') : 'nenhum');
+    if (!interactive) return { target: '', detail };
+    vscode.window.showWarningMessage(`egeon: ${detail}`);
+  }
+
+  if (!interactive) return { target: '', detail: 'nenhum alvo configurado' };
+  return pickTarget(listing);
+}
+
+/// Mostra a escolha e grava. Primeira lista é a da sessão desta pasta; as outras
+/// ficam atrás de um segundo passo, para estarem ao alcance sem poluir o caso
+/// normal.
+async function pickTarget(listing) {
+  const dentro = listing.targets;
+  const fora = listing.all.filter((address) => !dentro.includes(address));
+
+  if (!dentro.length && !fora.length) {
+    const detail = 'nenhum terminal ativo no app.';
+    vscode.window.showErrorMessage(`egeon: ${detail}`);
+    return { target: '', detail };
+  }
+
+  let escolha;
+  if (!listing.scoped) {
+    // App sem escopo por pasta: lista global, e nada a prometer sobre sessão.
+    escolha = await vscode.window.showQuickPick(listing.all, {
+      title: 'egeon — para qual terminal vão os comentários?',
+      placeHolder: 'ex: deck/claude-back'
+    });
+  } else if (dentro.length) {
+    escolha = await vscode.window.showQuickPick(fora.length ? [...dentro, OUTRA_SESSAO] : dentro, {
+      title: `egeon — terminais de ${listing.session}`,
+      placeHolder: 'quem recebe os comentários deste arquivo'
+    });
+  } else {
+    // Pasta que não é de nenhuma sessão, ou sessão sem terminal de pé: melhor
+    // oferecer o resto dizendo por quê do que dar um beco sem saída.
+    escolha = await vscode.window.showQuickPick(fora, {
+      title: listing.session
+        ? `egeon — ${listing.session} não tem terminal ativo; outras sessões`
+        : 'egeon — esta pasta não é de nenhuma sessão; terminais ativos'
+    });
+  }
+
+  if (escolha === OUTRA_SESSAO) {
+    escolha = await vscode.window.showQuickPick(fora, {
+      title: 'egeon — terminais de outras sessões'
+    });
+  }
+  if (!escolha) return { target: '', detail: 'nenhum alvo escolhido' };
+
+  await config().update('target', escolha, vscode.ConfigurationTarget.Workspace);
+  return { target: escolha };
 }
 
 /// Envia os comentários pendentes como UM prompt na sessão viva do agente.
@@ -65,8 +127,9 @@ async function sendRequestChanges(documentUri, { interactive = true } = {}) {
     return { ok: false, detail: 'nenhum comentário pendente' };
   }
 
-  const target = await resolveTarget({ interactive });
-  if (!target) return { ok: false, detail: 'nenhum alvo escolhido' };
+  const resolved = await resolveTarget({ folder: root, interactive });
+  const target = resolved.target;
+  if (!target) return { ok: false, detail: resolved.detail || 'nenhum alvo escolhido' };
 
   const payload = review.buildDispatchPayload({
     target,
@@ -77,6 +140,12 @@ async function sendRequestChanges(documentUri, { interactive = true } = {}) {
   const response = await socket.dispatch(socketPath(), payload);
   if (response.status !== 200 || (response.body && response.body.ok === false)) {
     const detail = (response.body && response.body.error) || `HTTP ${response.status}`;
+    // O alvo pode morrer entre a conferência e o envio, ou a conferência pode
+    // nem ter rodado (app fora do ar na hora). Limpar aqui também é o que
+    // impede o endereço morto de ficar preso no settings.
+    if (/alvo desconhecido/.test(detail)) {
+      await config().update('target', '', vscode.ConfigurationTarget.Workspace);
+    }
     return { ok: false, detail };
   }
 
@@ -236,6 +305,17 @@ class SpecEditorProvider {
           break;
         }
 
+        case 'pickTarget': {
+          const { target, detail } = await resolveTarget({ folder: root, force: true });
+          panel.webview.postMessage({
+            type: 'status',
+            text: target ? `alvo: ${target}` : `alvo mantido: ${detail}`,
+            tone: target ? 'ok' : ''
+          });
+          push();
+          break;
+        }
+
         case 'openSource':
           await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default');
           break;
@@ -264,6 +344,7 @@ class SpecEditorProvider {
 <body>
   <header id="bar">
     <span id="file"></span>
+    <button id="target" type="button" title="trocar a sessão que recebe">alvo…</button>
     <span id="status"></span>
     <button id="request" type="button">Request changes</button>
     <button id="source" type="button">Ver fonte</button>
@@ -368,8 +449,12 @@ function activate(context) {
       if (uri) await vscode.commands.executeCommand('vscode.openWith', uri, 'default');
     }),
     vscode.commands.registerCommand('egeon.pickTarget', async () => {
-      await config().update('target', '', vscode.ConfigurationTarget.Workspace);
-      const target = await resolveTarget();
+      const active = vscode.window.activeTextEditor;
+      const folders = vscode.workspace.workspaceFolders || [];
+      const folder = active
+        ? workspaceRootFor(active.document.uri)
+        : (folders.length ? folders[0].uri.fsPath : undefined);
+      const { target } = await resolveTarget({ folder, force: true });
       if (target) vscode.window.showInformationMessage(`egeon: alvo agora é ${target}`);
     })
   );

@@ -213,6 +213,13 @@ struct SessionConfig: Codable {
 enum AppControl {
     static var activateSession: ((String) -> Bool)?
     static var sessionNames: (() -> [String])?
+
+    /// Qual sessão é dona de uma pasta.
+    ///
+    /// A extensão do editor sabe a pasta do workspace e mais nada — quem conhece
+    /// a topologia é o app. Sem isto, a única lista que ela conseguia pedir era a
+    /// global, e o editor de um projeto sugeria terminal de outro.
+    static var sessionOwning: ((String) -> String?)?
     /// Geometria dos nós do canvas ativo, já em coordenadas de tela com origem
     /// no topo — as mesmas do CGEvent. Serve para dirigir e verificar gestos de
     /// fora sem depender de estimar pixel em captura de tela.

@@ -215,6 +215,14 @@ para verificar comportamento de agente ponta a ponta sem tocar na UI.
 começa dizendo em que modo está: em mosaico o `docFrame` é o do painel e o
 `grabPoint` não arrasta nada.
 
+`/targets` lista só terminais **de pé** — nó com processo morto continua no canvas
+mas não é destino. Com `?folder=<path>` responde `{targets, all, session}`: quem é
+da sessão dona daquela pasta, quem existe no app inteiro, e qual sessão casou. É
+como a extensão do editor sabe o que sugerir sem oferecer terminal de outro
+projeto; a pasta vira sessão pelas pastas que os nós de editor abriram, e só
+depois por prefixo do caminho da sessão (o mais longo ganha, senão worktree perde
+para o checkout principal).
+
 `/worktree?target=ws[/id]&branch=X` cria worktree da sessão — levando os terminais
 de repo vizinho junto — ou de um terminal só. Existe porque o fluxo passa por
 `NSAlert`, que não é dirigível de fora: sem ela não haveria como verificar que

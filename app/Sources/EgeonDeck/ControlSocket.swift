@@ -90,9 +90,27 @@ final class ControlSocket {
         let method = parts.first ?? ""
         let route = parts.count > 1 ? parts[1] : ""
 
-        switch (method, route.hasSuffix("/targets"), route.hasSuffix("/dispatch")) {
+        // Rota sem a query. `/targets?folder=…` não termina em "/targets", e o
+        // pedido cairia direto no 404.
+        let bare = route.split(separator: "?").first.map(String.init) ?? route
+
+        switch (method, bare.hasSuffix("/targets"), bare.hasSuffix("/dispatch")) {
         case ("GET", true, _):
-            let payload = ["targets": DispatchQueue.main.sync { Dispatcher.shared.addresses }]
+            // `folder` é como a extensão do editor pergunta "quem posso acionar
+            // DAQUI": sem ele a lista é global, e o editor de um projeto
+            // oferecia terminal de outro, que não tem nada a ver com o arquivo
+            // aberto. `all` acompanha para quem escolhe de propósito atravessar
+            // sessão continuar podendo.
+            let folder = Self.query(in: route)["folder"] ?? ""
+            let payload = DispatchQueue.main.sync { () -> [String: Any] in
+                let all = Dispatcher.shared.activeAddresses
+                guard !folder.isEmpty else { return ["targets": all, "all": all] }
+                let session = AppControl.sessionOwning?(folder) ?? ""
+                return ["targets": session.isEmpty
+                            ? [] : all.filter { $0.hasPrefix(session + "/") },
+                        "all": all,
+                        "session": session]
+            }
             respond(fd, status: "200 OK", json: payload)
 
         case ("POST", _, _) where route.contains("/session"):

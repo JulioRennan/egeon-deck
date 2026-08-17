@@ -668,6 +668,13 @@ final class Dispatcher {
 
     var addresses: [String] { sessions.keys.sorted() }
 
+    /// Endereços de pé. O terminal cujo processo morreu continua registrado,
+    /// porque o card continua na tela e você pode reviver — mas oferecê-lo como
+    /// destino é oferecer um buraco: a fila enche e ninguém lê.
+    var activeAddresses: [String] {
+        sessions.filter { $0.value.activity != .dead }.keys.sorted()
+    }
+
     func session(_ address: String) -> Session? { sessions[address] }
 
     /// De qual terminal partiu a conexão aberta em `fd`, se de algum.

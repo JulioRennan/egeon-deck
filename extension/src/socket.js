@@ -55,9 +55,32 @@ function request(socketPath, { method = 'GET', route, body }) {
   });
 }
 
-async function listTargets(socketPath) {
+/// `folder` faz o app responder só pelos terminais da sessão dona daquela pasta.
+/// `all` vem junto: quem escolhe atravessar sessão de propósito continua podendo,
+/// e é por ela que se confere se um alvo gravado ainda existe.
+///
+/// `scoped: false` é app mais antigo que a rota com escopo — ele responde 404 a
+/// `/targets?folder=`, e sem esse degrau a extensão nova concluiria "nenhum
+/// terminal ativo" contra um app cheio de terminais vivos.
+async function listTargets(socketPath, folder) {
+  if (folder) {
+    const scoped = await request(socketPath, {
+      route: `/targets?folder=${encodeURIComponent(folder)}`
+    });
+    if (scoped.body && Array.isArray(scoped.body.targets)) {
+      const targets = scoped.body.targets;
+      return {
+        scoped: true,
+        targets,
+        all: Array.isArray(scoped.body.all) ? scoped.body.all : targets,
+        session: typeof scoped.body.session === 'string' ? scoped.body.session : ''
+      };
+    }
+  }
+
   const { body } = await request(socketPath, { route: '/targets' });
-  return Array.isArray(body.targets) ? body.targets : [];
+  const targets = Array.isArray(body.targets) ? body.targets : [];
+  return { scoped: false, targets, all: targets, session: '' };
 }
 
 async function dispatch(socketPath, payload) {

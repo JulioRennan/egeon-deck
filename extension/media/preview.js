@@ -6,6 +6,7 @@ const els = {
   doc: document.getElementById('doc'),
   threads: document.getElementById('threads'),
   file: document.getElementById('file'),
+  target: document.getElementById('target'),
   status: document.getElementById('status'),
   request: document.getElementById('request'),
   source: document.getElementById('source'),
@@ -42,6 +43,7 @@ window.addEventListener('message', (event) => {
       html: message.html || ''
     };
     els.file.textContent = message.file || '';
+    els.target.textContent = message.target || 'escolher alvo';
     els.doc.innerHTML = state.html;
     markBlocks();
     renderThreads();
@@ -361,5 +363,6 @@ els.doc.addEventListener('dblclick', (event) => {
 
 els.request.addEventListener('click', () => vscode.postMessage({ type: 'requestChanges' }));
 els.source.addEventListener('click', () => vscode.postMessage({ type: 'openSource' }));
+els.target.addEventListener('click', () => vscode.postMessage({ type: 'pickTarget' }));
 
 vscode.postMessage({ type: 'ready' });

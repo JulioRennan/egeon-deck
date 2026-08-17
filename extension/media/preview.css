@@ -52,6 +52,17 @@ button:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); 
   background: var(--vscode-button-secondaryBackground);
 }
 
+/* Endereço é texto técnico, lido de relance ao lado do nome do arquivo:
+   monospace, e discreto — indicador que aceita clique, não ação principal. */
+#target {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+  padding: 3px 8px;
+  color: var(--vscode-badge-foreground);
+  background: var(--vscode-badge-background, rgba(255, 255, 255, .12));
+}
+#target:hover { outline: 1px solid var(--vscode-focusBorder); }
+
 /* --------------------------------------------------------------- markdown */
 
 #doc {

@@ -97,6 +97,9 @@ EgeonCLI.install()
         AppControl.recordSession = { [weak self] target, id in
             self?.recordSession(target: target, id: id)
         }
+        AppControl.sessionOwning = { [weak self] folder in
+            self?.sessionOwning(folder: folder)
+        }
         AppControl.activateSession = { [weak self] name in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return false }
@@ -1165,6 +1168,27 @@ EgeonCLI.install()
         configs[index].nodes[position].sessionStarted = true
         schedulePersist()
         Log.write("conversa[\(target)]: \(anterior) → \(id)")
+    }
+
+    /// Qual sessão é dona de uma pasta.
+    ///
+    /// Primeiro pelas pastas que os nós de editor de fato abriram, que é resposta
+    /// exata. Só depois pelo caminho da sessão, e aí o mais específico ganha:
+    /// duas sessões podem apontar para o mesmo repositório em worktrees
+    /// diferentes, e a worktree é sempre o caminho mais longo — comparar pela
+    /// primeira que casa daria a resposta do checkout principal.
+    private func sessionOwning(folder raw: String) -> String? {
+        let folder = URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
+            .standardized.path
+        for config in configs {
+            for node in config.nodes where node.type == .editor {
+                if config.directory(for: node) == folder { return config.name }
+            }
+        }
+        return configs
+            .filter { folder == $0.url.path || folder.hasPrefix($0.url.path + "/") }
+            .max { $0.url.path.count < $1.url.path.count }?
+            .name
     }
 
     private func makeNode(_ raw: NodeConfig, in config: SessionConfig, frame: NSRect) -> NodeView {
