@@ -91,10 +91,15 @@ sessão e por terminal**.
 
 Duplicar a sessão para worktree abre um formulário que lista **todos os
 terminais** com o repositório de cada um. No topo, a branch da sessão; mudá-la
-re-sugere o nome para as linhas que você não editou à mão. Terminal dentro da
-pasta da sessão segue a worktree dela pelo `cwd` relativo, e não escolhe nada.
-Terminal em repo vizinho vem marcado, com branch própria editável — desmarcado,
-segue abrindo no repositório original.
+re-sugere o nome para as linhas que você não editou à mão.
+
+Na linha de cada terminal só existe **a branch**, e é ela que decide: igual à da
+sessão, ele vai junto pelo `cwd` relativo; outra branch, ele ganha worktree própria
+no repositório dele; em branco, fica no repositório original. Vale para shell,
+agente e editor sem distinção — quem abre pasta está na lista. Terminal dentro do
+repo da sessão com branch própria ganha worktree própria do mesmo repo: é a tarefa
+no front que precisa de um ajuste no back. **Não há campo de pasta** — ela sai da
+branch pela convenção de sempre e aparece como texto, para conferir. Ver ADR-020.
 
 Botão direito no cabeçalho de um terminal leva **só ele** para uma worktree, fora
 de qualquer duplicação. O card é reapontado, não clonado: id, papel, arestas e
@@ -233,7 +238,9 @@ depois por prefixo do caminho da sessão (o mais longo ganha, senão worktree pe
 para o checkout principal). Ver ADR-019.
 
 `/worktree?target=ws[/id]&branch=X` abre worktree da sessão — levando os terminais
-de repo vizinho junto — ou de um terminal só. Existe porque o fluxo passa por
+junto — ou de um terminal só. `&nodes=back:fix/api,sub:spike` customiza a branch de
+terminais específicos, e `back:` sem nome deixa aquele terminal onde está; é o
+mesmo que digitar nas linhas do formulário (ADR-020). Existe porque o fluxo passa por
 `NSAlert`, que não é dirigível de fora: sem ela não haveria como verificar que
 cada terminal foi para a pasta certa, que é justamente o defeito do ADR-017. A
 resposta traz `path` e `reused`, e o `path` é o da worktree que de fato ficou —

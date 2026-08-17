@@ -239,7 +239,8 @@ enum AppControl {
     /// `NSAlert`, que não é dirigível de fora, e sem isto não haveria como
     /// verificar que cada terminal foi para a pasta certa — que é justamente o
     /// defeito que este código conserta. Devolve o que aconteceu, ou o erro.
-    static var makeWorktree: ((_ target: String, _ branch: String) -> [String: Any])?
+    static var makeWorktree: ((_ target: String, _ branch: String,
+                              _ nodeBranches: [String: String]) -> [String: Any])?
 
     /// Ligações e teto de revisitas de uma sessão, por nome.
     ///

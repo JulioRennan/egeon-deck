@@ -16,18 +16,25 @@ struct NodeWorktree {
 
     /// A pasta está dentro da pasta da sessão?
     ///
-    /// Quem está dentro não escolhe nada: o `cwd` relativo já o leva para a pasta
-    /// equivalente da worktree, e é justamente isso que o `cwd` relativo existe
-    /// para fazer.
+    /// Quem está dentro e fica na MESMA branch não precisa de worktree própria: o
+    /// `cwd` relativo já o leva para a pasta equivalente da worktree da sessão, e é
+    /// justamente isso que o `cwd` relativo existe para fazer.
     ///
     /// Por contenção de caminho, e não por identidade de repositório: é essa a
     /// regra que `repointed` de fato aplica, e duas worktrees do MESMO repo são
     /// pastas diferentes — dizer "segue a sessão" ali esconderia a escolha.
-    let followsSession: Bool
+    let insideSession: Bool
 
     /// Criar worktree própria para este terminal?
+    ///
+    /// Derivado da branch, não escolhido em caixinha: o que decide é o nome que
+    /// você escreveu na linha. Ver `decided(sessionBranch:)`.
     var enabled: Bool
-    /// Branch da worktree deste terminal. Nasce igual à da sessão.
+    /// Branch deste terminal. Nasce igual à da sessão.
+    ///
+    /// Igual à da sessão significa "vai junto com ela". Diferente significa
+    /// worktree própria, no repositório deste terminal. Vazia significa "não me
+    /// leve" — o terminal fica apontando para o repositório original.
     var branch: String
     /// Você editou a branch deste terminal à mão?
     ///
@@ -41,6 +48,19 @@ struct NodeWorktree {
     var destination: String? {
         guard let repoRoot, enabled else { return nil }
         return Worktree.suggestedPath(repoRoot: repoRoot, branch: branch)
+    }
+
+    /// O plano deste terminal depois de saber a branch da sessão.
+    ///
+    /// Uma regra só, e é a branch que a diz: repositório outro, ou branch outra,
+    /// pede worktree própria. Dentro da sessão e na mesma branch, ir junto é o
+    /// suficiente — criar uma segunda worktree ali seriam duas pastas para a mesma
+    /// branch do mesmo repo, e o git recusa a segunda.
+    func decided(sessionBranch: String) -> NodeWorktree {
+        var copy = self
+        copy.enabled = repoRoot != nil && !branch.isEmpty
+            && (!insideSession || branch != sessionBranch)
+        return copy
     }
 }
 
@@ -72,9 +92,10 @@ enum NodeWorktreePlanner {
                 nodeID: node.id,
                 currentPath: path,
                 repoRoot: root,
-                followsSession: inside,
-                // Repo vizinho vem marcado: é o caso em que a worktree é quase
-                // sempre o que se quer, e desmarcar é um clique.
+                insideSession: inside,
+                // Todo terminal com repositório vai: repo vizinho ganha worktree
+                // própria, e quem está dentro da sessão vai junto com ela. Nenhum
+                // fica atrás por ser shell ou por ser agente.
                 enabled: !inside && root != nil,
                 branch: branch)
         }
@@ -136,9 +157,13 @@ enum NodeWorktreePlanner {
 
     // MARK: - Worktree de um terminal só
 
+    /// A pasta não está aqui: ela é derivada da branch, sempre pela mesma
+    /// convenção (`Worktree.suggestedPath`), e branch que já está aberta em
+    /// worktree usa aquela pasta. Editá-la era escolha sem consequência boa — dava
+    /// para apontar a worktree para qualquer lugar do disco e ninguém precisava
+    /// disso.
     struct SingleForm {
         let branch: String
-        let destination: String
     }
 
     /// Pergunta a branch e a pasta da worktree de UM terminal.
@@ -189,13 +214,15 @@ enum NodeWorktreePlanner {
         container.addSubview(verdict)
         y += 30
 
-        label("PASTA DA WORKTREE")
-        let pathField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
-        pathField.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        container.addSubview(pathField)
-        y += 22
+        // Onde vai nascer, para conferir — não para editar.
+        let pasta = NSTextField(labelWithString: "")
+        pasta.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        pasta.textColor = .secondaryLabelColor
+        pasta.lineBreakMode = .byTruncatingMiddle
+        pasta.frame = NSRect(x: 0, y: y, width: width, height: 14)
+        container.addSubview(pasta)
+        y += 18
 
-        var pathTouched = false
         // Lido uma vez: um `git worktree list` por tecla digitada seria três
         // processos por caractere na thread que segura o modal.
         let branches = Worktree.index(of: repoRoot)
@@ -208,33 +235,19 @@ enum NodeWorktreePlanner {
             verdict.textColor = plan.isFresh ? .secondaryLabelColor : .systemOrange
 
             if case .alreadyCheckedOut(let existing) = plan {
-                // A pasta não é escolha: ela já existe, com trabalho dentro.
-                pathField.stringValue = short(existing)
-                pathField.isEditable = false
-                pathField.textColor = .secondaryLabelColor
+                pasta.stringValue = short(existing)
             } else {
-                pathField.isEditable = true
-                pathField.textColor = .labelColor
-                if !pathTouched {
-                    pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot,
-                                                                   branch: branch)
-                }
+                pasta.stringValue = branch.isEmpty ? ""
+                    : short(Worktree.suggestedPath(repoRoot: repoRoot, branch: branch))
             }
         }
         refresh()
 
-        let pathObserver = NotificationCenter.default.addObserver(
-            forName: NSControl.textDidChangeNotification, object: pathField, queue: .main) { _ in
-                pathTouched = true
-            }
         let branchObserver = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: branchField, queue: .main) { _ in
                 refresh()
             }
-        defer {
-            NotificationCenter.default.removeObserver(pathObserver)
-            NotificationCenter.default.removeObserver(branchObserver)
-        }
+        defer { NotificationCenter.default.removeObserver(branchObserver) }
 
         container.setFrameSize(NSSize(width: width, height: y))
         alert.accessoryView = container
@@ -242,23 +255,25 @@ enum NodeWorktreePlanner {
 
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         let branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let destination = (pathField.stringValue
-            .trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
-        guard !branch.isEmpty, !destination.isEmpty else { return nil }
-        return SingleForm(branch: branch, destination: destination)
+        guard !branch.isEmpty else { return nil }
+        return SingleForm(branch: branch)
     }
 }
 
 // MARK: - A lista de terminais no formulário de worktree
 
-/// Uma linha por terminal: quem é, em que repositório está, e com que branch a
-/// worktree dele nasce.
+/// Uma linha por terminal: quem é, em que repositório está, e em que branch ele
+/// vai abrir.
+///
+/// A branch é o único controle da linha, e não havia como não ser: com uma
+/// caixinha "criar worktree própria" ao lado, o mesmo estado tinha duas
+/// representações — marcado com a branch da sessão não quer dizer nada, e
+/// desmarcado com outra branch escrita mente sobre o que vai acontecer.
 final class NodeWorktreeRow: NSView {
     let plan: NodeWorktree
     /// Você mexeu na branch desta linha — a sugestão da sessão não a reescreve mais.
     private(set) var touched = false
 
-    private let toggle = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let branchField = NSTextField()
     private let title = NSTextField(labelWithString: "")
     private let detail = NSTextField(labelWithString: "")
@@ -266,13 +281,16 @@ final class NodeWorktreeRow: NSView {
     /// As branches do repositório DESTE terminal — cada linha pode estar em um
     /// repositório diferente, e é o que torna a resposta por linha diferente.
     private let branches: Worktree.BranchIndex?
+    /// A branch da sessão, para saber se esta linha diverge dela.
+    private var sessionBranch: String
 
     static let height: CGFloat = 40
 
-    init(plan: NodeWorktree, width: CGFloat) {
+    init(plan: NodeWorktree, width: CGFloat, sessionBranch: String,
+         branches: Worktree.BranchIndex?) {
         self.plan = plan
-        self.branches = (plan.followsSession || plan.repoRoot == nil)
-            ? nil : plan.repoRoot.map(Worktree.index(of:))
+        self.sessionBranch = sessionBranch
+        self.branches = branches
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.height))
 
         title.stringValue = plan.nodeID
@@ -284,24 +302,16 @@ final class NodeWorktreeRow: NSView {
         detail.lineBreakMode = .byTruncatingMiddle
         addSubview(detail)
 
-        toggle.target = self
-        toggle.action = #selector(toggled)
-        addSubview(toggle)
-
         branchField.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         branchField.stringValue = plan.branch
+        branchField.placeholderString = "não levar"
         addSubview(branchField)
 
-        // Quem está dentro do repo da sessão não tem escolha a fazer, e quem não
-        // está em git nenhum não tem worktree para criar. Os dois aparecem na
-        // lista de propósito: é a chance de ver onde cada terminal abre, que é
+        // Pasta que não está em git nenhum não tem worktree para criar. A linha
+        // aparece de propósito: é a chance de ver onde aquele terminal abre, que é
         // exatamente a informação que faltava quando as pastas embaralharam.
-        if plan.followsSession {
-            toggle.isEnabled = false
-            branchField.isHidden = true
-            detail.stringValue = "\(plan.repoName) · segue a worktree da sessão"
-        } else if plan.repoRoot == nil {
-            toggle.isEnabled = false
+        if plan.repoRoot == nil {
+            branchField.isEditable = false
             branchField.isHidden = true
             detail.stringValue = FileManager.default.fileExists(atPath: plan.currentPath)
                 ? "\(NodeWorktreePlanner.short(plan.currentPath)) · não é repositório git"
@@ -309,10 +319,8 @@ final class NodeWorktreeRow: NSView {
             detail.textColor = FileManager.default.fileExists(atPath: plan.currentPath)
                 ? .secondaryLabelColor : .systemOrange
         } else {
-            toggle.state = plan.enabled ? .on : .off
             describePlan()
         }
-        toggle.state = plan.followsSession ? .on : toggle.state
 
         observer = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: branchField,
@@ -322,13 +330,26 @@ final class NodeWorktreeRow: NSView {
             }
     }
 
-    /// O que vai acontecer com a branch escrita nesta linha: criar, abrir na que
-    /// já existe, ou usar a worktree que já a tem aberta. Ver ADR-018.
+    /// O que vai acontecer com a branch escrita nesta linha: ir junto com a sessão,
+    /// abrir worktree própria — criando a branch, entrando na que já existe, ou
+    /// usando a worktree que já a tem aberta (ADR-018) — ou ficar onde está.
     private func describePlan() {
         guard let branches else { return }
         let branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !branch.isEmpty else {
+            detail.stringValue = "\(plan.repoName) · fica no repositório original"
+            detail.textColor = .systemOrange
+            return
+        }
+        guard resolved.enabled else {
+            detail.stringValue = "\(plan.repoName) · vai junto com a sessão"
+            detail.textColor = .secondaryLabelColor
+            return
+        }
+
         let verdict = branches.plan(for: branch)
-        detail.stringValue = "\(plan.repoName) · \(verdict.short)"
+        detail.stringValue = "\(plan.repoName) · worktree própria · \(verdict.short)"
         detail.textColor = verdict.isFresh ? .secondaryLabelColor : .systemOrange
     }
 
@@ -338,33 +359,35 @@ final class NodeWorktreeRow: NSView {
 
     override var isFlipped: Bool { true }
 
-    @objc private func toggled() {}
-
     override func layout() {
         super.layout()
-        let branchWidth: CGFloat = 150
-        toggle.frame = NSRect(x: 0, y: 11, width: 18, height: 18)
-        let textWidth = max(0, bounds.width - 22 - branchWidth - 10)
-        title.frame = NSRect(x: 22, y: 4, width: textWidth, height: 14)
-        detail.frame = NSRect(x: 22, y: 20, width: textWidth, height: 13)
+        let branchWidth: CGFloat = 170
+        let textWidth = max(0, bounds.width - branchWidth - 10)
+        title.frame = NSRect(x: 0, y: 4, width: textWidth, height: 14)
+        detail.frame = NSRect(x: 0, y: 20, width: textWidth, height: 13)
         branchField.frame = NSRect(x: bounds.width - branchWidth, y: 9,
                                    width: branchWidth, height: 22)
     }
 
     /// A branch da sessão mudou. Reescreve só quem você não customizou.
     func suggest(branch: String) {
-        guard !touched, !branchField.isHidden else { return }
+        sessionBranch = branch
+        guard !touched, !branchField.isHidden else {
+            // Linha customizada não muda de texto, mas muda de significado: a
+            // branch dela pode ter deixado de divergir da sessão.
+            describePlan()
+            return
+        }
         branchField.stringValue = branch
         // Escrever no campo por código não dispara `textDidChange`.
         describePlan()
     }
 
-    /// O plano desta linha depois do que você escolheu.
+    /// O plano desta linha depois do que você escreveu.
     var resolved: NodeWorktree {
         var copy = plan
-        copy.enabled = toggle.isEnabled && toggle.state == .on && !plan.followsSession
         copy.branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.touched = touched
-        return copy
+        return copy.decided(sessionBranch: sessionBranch)
     }
 }

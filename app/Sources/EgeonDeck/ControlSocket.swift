@@ -192,9 +192,21 @@ final class ControlSocket {
         case ("GET", _, _) where route.contains("/worktree"):
             // /worktree?target=ws[/id]&branch=X — worktree da sessão ou de um
             // terminal só, sem passar pelo diálogo.
+            //
+            // `&nodes=back:fix/api,sub:spike` customiza a branch de terminais
+            // específicos, que é o que as linhas do formulário fazem. Sem isso não
+            // havia como verificar esse caminho de fora: as linhas moram num
+            // `NSAlert`.
             let query = Self.query(in: route)
+            var nodeBranches: [String: String] = [:]
+            for par in (query["nodes"] ?? "").split(separator: ",") {
+                let campos = par.split(separator: ":", maxSplits: 1).map(String.init)
+                guard let id = campos.first, !id.isEmpty else { continue }
+                nodeBranches[id] = campos.count == 2 ? campos[1] : ""
+            }
             let payload = DispatchQueue.main.sync {
-                AppControl.makeWorktree?(query["target"] ?? "", query["branch"] ?? "")
+                AppControl.makeWorktree?(query["target"] ?? "", query["branch"] ?? "",
+                                         nodeBranches)
                     ?? ["ok": false, "error": "app sem worktree disponível"]
             }
             respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",

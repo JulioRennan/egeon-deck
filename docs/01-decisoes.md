@@ -1009,6 +1009,56 @@ ativo" contra um app cheio de terminais vivos. `listTargets` cai para a lista
 global nesse caso e devolve `scoped: false`, e o título da escolha para de
 prometer um escopo que não existe.
 
+## ADR-020 — No formulário de worktree, a branch por terminal é o único controle
+
+**Revisa a UI do ADR-017**, não a decisão dele: worktree continua sendo por sessão
+e por terminal. O que muda é o que o formulário pergunta.
+
+**O que estava errado.** Cada linha de terminal tinha uma caixinha "criar worktree
+própria" ao lado do campo de branch, e o formulário — o da sessão e o de um
+terminal só — tinha um campo de **pasta da worktree** editável. Três problemas:
+
+1. **Estado com duas representações.** Marcado com a branch da sessão escrita não
+   quer dizer nada; desmarcado com outra branch escrita mente sobre o que vai
+   acontecer. Duas caixas para uma decisão só.
+2. **Terminal dentro da sessão não podia divergir.** A caixinha vinha desabilitada
+   e o campo de branch escondido, com "segue a worktree da sessão". Mas divergir é
+   um caso real e frequente: a tarefa é no front, e no meio dela aparece um ajuste
+   pequeno no back — que quer branch própria, não a da sessão.
+3. **A pasta era escolha sem consequência boa.** Dava para apontar a worktree para
+   qualquer lugar do disco, e ninguém precisa disso: a convenção
+   (`<pai do repo>/.worktrees/<repo>/<branch>`) é o que torna a pasta previsível e
+   fácil de apagar. Pior, com a branch já aberta em outra worktree o campo virava
+   somente-leitura — então metade das vezes ele não era escolha nenhuma.
+
+**A decisão.** Uma linha por terminal, e nela só a branch:
+
+| o que você escreve | o que acontece |
+|---|---|
+| a branch da sessão | vai junto com ela, pelo `cwd` relativo |
+| outra branch | worktree própria, no repositório **daquele** terminal |
+| nada | fica no repositório original |
+
+Vale igual para shell, agente e editor — quem abre pasta entra na lista, e nenhum
+fica atrás por causa do tipo. `web` continua fora: não abre pasta nenhuma.
+
+Terminal **dentro** do repo da sessão com outra branch ganha worktree própria do
+mesmo repo. É o caso do "ajuste no back" quando back e front moram no mesmo
+checkout, e o git aceita: duas worktrees do mesmo repositório em branches
+diferentes. Na mesma branch ele não pode ganhar pasta própria — aí seriam duas
+worktrees para a mesma branch, e o git recusa a segunda.
+
+O campo de pasta saiu dos dois formulários. Continua **visível**, como texto: é
+informação de conferência, e some junto com a chance de errar. Com a branch já
+aberta em worktree, mostra aquela pasta — que é o que o ADR-018 já dizia.
+
+**Verificação.** `/worktree` ganhou `&nodes=back:fix/api,sub:spike`, que é o mesmo
+que digitar nas linhas. Sem isso o caminho novo não teria como ser verificado de
+fora — as linhas moram num `NSAlert`, e é a mesma razão pela qual a rota existe.
+Quatro cenários rodados contra repositórios de verdade: padrão (sessão + vizinho),
+branch por terminal (um nó de dentro em worktree própria do mesmo repo), branch
+vazia (fica onde está) e terminal solto.
+
 ## Decisões ainda abertas
 
 - **Assinatura de código.** Enquanto for ad-hoc, qualquer coisa que dependa de

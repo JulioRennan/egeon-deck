@@ -72,8 +72,8 @@ EgeonCLI.install()
 
         AppControl.sessionNames = { [weak self] in self?.configs.map(\.name) ?? [] }
         AppControl.canvasGeometry = { [weak self] in self?.canvasGeometry() ?? [:] }
-        AppControl.makeWorktree = { [weak self] target, branch in
-            self?.makeWorktree(target: target, branch: branch)
+        AppControl.makeWorktree = { [weak self] target, branch, nodeBranches in
+            self?.makeWorktree(target: target, branch: branch, nodeBranches: nodeBranches)
                 ?? ["ok": false, "error": "app encerrando"]
         }
         AppControl.setViewMode = { [weak self] raw in
@@ -244,10 +244,11 @@ EgeonCLI.install()
 
         let created: Worktree.Created
         do {
-            created = try Worktree.create(from: repoRoot,
-                                          branch: form.branch,
-                                          destination: form.destination,
-                                          carryDirty: true)
+            created = try Worktree.create(
+                from: repoRoot,
+                branch: form.branch,
+                destination: Worktree.suggestedPath(repoRoot: repoRoot, branch: form.branch),
+                carryDirty: true)
         } catch {
             presentError("Não consegui criar a worktree", error)
             return
@@ -320,10 +321,11 @@ EgeonCLI.install()
         let origin = configs[index]
         let created: Worktree.Created
         do {
-            created = try Worktree.create(from: repoRoot,
-                                          branch: form.branch,
-                                          destination: form.destination,
-                                          carryDirty: true)
+            created = try Worktree.create(
+                from: repoRoot,
+                branch: form.branch,
+                destination: Worktree.suggestedPath(repoRoot: repoRoot, branch: form.branch),
+                carryDirty: true)
         } catch {
             return error
         }
@@ -477,7 +479,6 @@ EgeonCLI.install()
 
     private struct WorktreeForm {
         let branch: String
-        let destination: String
         let template: String?
         let target: WorktreeDestination
         /// O que cada terminal faz. Vazio quando não há sessão de origem.
@@ -569,17 +570,22 @@ EgeonCLI.install()
         container.addSubview(verdict)
         y += 43
 
-        label("PASTA DA WORKTREE")
-        let pathField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
-        pathField.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        container.addSubview(pathField)
-        y += 30
+        // Onde a worktree nasce, para conferir — não para editar. A pasta é derivada
+        // da branch pela mesma convenção de sempre, e apontá-la para outro lugar
+        // não resolvia problema nenhum: era escolha a mais num formulário que já
+        // pede as que importam.
+        let pasta = NSTextField(labelWithString: "")
+        pasta.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        pasta.textColor = .secondaryLabelColor
+        pasta.lineBreakMode = .byTruncatingMiddle
+        pasta.frame = NSRect(x: 0, y: y, width: width, height: 14)
+        container.addSubview(pasta)
+        y += 22
 
         // Lido uma vez, e não por tecla: `git worktree list` + `branch` +
         // `for-each-ref` a cada caractere seriam três processos por tecla na
         // thread que está segurando o modal.
         let branches = Worktree.index(of: repoRoot)
-        var pathTouched = false
 
         func refreshVerdict() {
             let branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -589,10 +595,7 @@ EgeonCLI.install()
             verdict.textColor = plan.isFresh ? .secondaryLabelColor : .systemOrange
 
             if case .alreadyCheckedOut(let existing) = plan {
-                // A pasta não é escolha: ela já existe, com trabalho dentro.
-                pathField.stringValue = NodeWorktreePlanner.short(existing)
-                pathField.isEditable = false
-                pathField.textColor = .secondaryLabelColor
+                pasta.stringValue = NodeWorktreePlanner.short(existing)
                 // Reaproveitar worktree torna fácil cair na pasta de uma sessão
                 // que já está aberta — dois code-servers vigiando os mesmos
                 // arquivos, e dois agentes editando sem saber um do outro. Não é
@@ -601,12 +604,9 @@ EgeonCLI.install()
                     verdict.stringValue += " Cuidado: essa pasta já é a sessão \"\(aberta.name)\"."
                 }
             } else {
-                pathField.isEditable = true
-                pathField.textColor = .labelColor
-                if !pathTouched {
-                    pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot,
-                                                                   branch: branch)
-                }
+                pasta.stringValue = branch.isEmpty ? ""
+                    : NodeWorktreePlanner.short(Worktree.suggestedPath(repoRoot: repoRoot,
+                                                                      branch: branch))
             }
         }
         refreshVerdict()
@@ -620,15 +620,24 @@ EgeonCLI.install()
             let plans = NodeWorktreePlanner.inspect(origin, sessionRoot: origin.url.path,
                                                     branch: suggestedBranch)
             label("TERMINAIS")
-            hint("Marcado, o terminal ganha worktree própria do repositório dele. "
-                 + "Desmarcado, segue abrindo no repositório original.",
+            hint("Todos vão. Na mesma branch da sessão, junto com ela; com outra branch, "
+                 + "em worktree própria do repositório dele. Em branco, fica onde está.",
                  indent: 0, lines: 2)
+
+            // Um índice por repositório, e não por linha: vários terminais no mesmo
+            // repo dariam três processos de git cada um, na thread do modal.
+            var indexes: [String: Worktree.BranchIndex] = [:]
+            for repo in Set(plans.compactMap(\.repoRoot)) {
+                indexes[repo] = repo == repoRoot ? branches : Worktree.index(of: repo)
+            }
 
             let listHeight = min(CGFloat(plans.count), 4.5) * NodeWorktreeRow.height
             let list = FormView(frame: NSRect(x: 0, y: 0, width: width - 2,
                                               height: CGFloat(plans.count) * NodeWorktreeRow.height))
             for (index, plan) in plans.enumerated() {
-                let row = NodeWorktreeRow(plan: plan, width: width - 2)
+                let row = NodeWorktreeRow(plan: plan, width: width - 2,
+                                          sessionBranch: suggestedBranch,
+                                          branches: plan.repoRoot.flatMap { indexes[$0] })
                 row.frame.origin.y = CGFloat(index) * NodeWorktreeRow.height
                 list.addSubview(row)
                 rows.append(row)
@@ -642,21 +651,16 @@ EgeonCLI.install()
             y += listHeight + 4
         }
 
-        // Renomear a branch reflete no veredito, no caminho sugerido e nas linhas
-        // dos terminais, desde que você não os tenha editado à mão.
-        let observer = NotificationCenter.default.addObserver(
-            forName: NSControl.textDidChangeNotification, object: pathField, queue: .main) { _ in
-                pathTouched = true
-            }
+        // Renomear a branch reflete no veredito, na pasta e nas linhas dos
+        // terminais, desde que você não as tenha editado à mão.
         let branchObserver = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: branchField, queue: .main) { _ in
                 refreshVerdict()
-                rows.forEach { $0.suggest(branch: branchField.stringValue) }
+                let branch = branchField.stringValue
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                rows.forEach { $0.suggest(branch: branch) }
             }
-        defer {
-            NotificationCenter.default.removeObserver(observer)
-            NotificationCenter.default.removeObserver(branchObserver)
-        }
+        defer { NotificationCenter.default.removeObserver(branchObserver) }
 
         // Duplicando, os nós vêm da sessão de origem e não há template a escolher
         // — mostrar um seletor aqui só ofereceria uma decisão já tomada.
@@ -684,17 +688,15 @@ EgeonCLI.install()
         guard response == .alertFirstButtonReturn else { return nil }
 
         let branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let destination = (pathField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                           as NSString).expandingTildeInPath
-        guard !branch.isEmpty, !destination.isEmpty else { return nil }
+        guard !branch.isEmpty else { return nil }
 
         if origin != nil {
-            return WorktreeForm(branch: branch, destination: destination, template: nil,
+            return WorktreeForm(branch: branch, template: nil,
                                 target: moveRadio.state == .on ? .moveCurrent : .newSession,
                                 nodes: rows.map(\.resolved))
         }
         let chosen = picker.titleOfSelectedItem
-        return WorktreeForm(branch: branch, destination: destination,
+        return WorktreeForm(branch: branch,
                             template: chosen == vazio ? nil : chosen,
                             target: .newSession, nodes: [])
     }
@@ -1743,9 +1745,9 @@ EgeonCLI.install()
                                                  status: status,
                                                  suggestedBranch: suggested) else { return }
 
-        if case .failure(let error) = repoint(nodeID: node.nodeID, index: index,
-                                             repoRoot: repoRoot, branch: form.branch,
-                                             destination: form.destination) {
+        if case .failure(let error) = repoint(
+            nodeID: node.nodeID, index: index, repoRoot: repoRoot, branch: form.branch,
+            destination: Worktree.suggestedPath(repoRoot: repoRoot, branch: form.branch)) {
             presentError("Não consegui abrir a worktree", error)
         }
     }
@@ -1798,7 +1800,13 @@ EgeonCLI.install()
     /// Existe para o fluxo poder ser verificado de fora: ele cria worktree em
     /// repositório de verdade e reaponta o `cwd` de cada nó, e "compilou" não diz
     /// nada sobre um terminal ter aberto na pasta certa.
-    private func makeWorktree(target: String, branch: String) -> [String: Any] {
+    ///
+    /// `nodes` customiza a branch por terminal — `back:fix/api,sub:spike` —, que é
+    /// a mesma coisa que se digita nas linhas do formulário. Sem ela, todos herdam a
+    /// branch da sessão, que é o padrão do formulário. Branch vazia (`back:`) é o
+    /// "não me leve": o terminal fica no repositório original.
+    private func makeWorktree(target: String, branch: String,
+                              nodeBranches: [String: String] = [:]) -> [String: Any] {
         let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
         guard let sessionName = parts.first,
               let index = configs.firstIndex(where: { $0.name == sessionName })
@@ -1842,23 +1850,31 @@ EgeonCLI.install()
         let name = branch.isEmpty
             ? Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
             : branch
-        // Os terminais de repo vizinho entram marcados, que é o padrão do
-        // formulário — é esse caminho que precisa ser verificado.
+        // Cada terminal herda a branch da sessão, e `nodes` sobrescreve quem foi
+        // pedido — é o mesmo que digitar na linha dele. A decisão de quem ganha
+        // worktree própria sai daí, e não de uma marcação separada.
         let plans = NodeWorktreePlanner.inspect(origin, sessionRoot: origin.url.path,
                                                 branch: name)
-        let form = WorktreeForm(
-            branch: name,
-            destination: Worktree.suggestedPath(repoRoot: repoRoot, branch: name),
-            template: nil, target: .newSession, nodes: plans)
+            .map { plan -> NodeWorktree in
+                var copy = plan
+                if let custom = nodeBranches[plan.nodeID] {
+                    copy.branch = custom
+                    copy.touched = true
+                }
+                return copy.decided(sessionBranch: name)
+            }
+        let form = WorktreeForm(branch: name, template: nil,
+                                target: .newSession, nodes: plans)
         if let error = duplicate(index, repoRoot: repoRoot, status: status, form: form) {
             return ["ok": false, "error": "\(error)"]
         }
-        // A pasta vem da sessão que acabou de nascer, e não de `form.destination`:
+        // A pasta vem da sessão que acabou de nascer, e não do caminho sugerido:
         // com branch que já existe a worktree pode ser outra, e é justamente isso
         // que quem chamou precisa poder conferir.
         return ["ok": true, "session": sessionName, "branch": name,
                 "newSession": configs.last?.name ?? "",
-                "path": configs.last?.url.path ?? form.destination,
+                "path": configs.last?.url.path
+                    ?? Worktree.suggestedPath(repoRoot: repoRoot, branch: name),
                 "nodes": plans.filter(\.enabled).map { ["id": $0.nodeID,
                                                         "repo": $0.repoName] }]
     }
