@@ -16,6 +16,13 @@ struct Template: Codable {
     /// diálogo, o que é o caminho para a segunda worktree.
     var basePath: String?
 
+    /// Em que modo a sessão abre, e com que proporções se for mosaico. Faz parte
+    /// da montagem tanto quanto a posição dos nós: um preset de "editor mais
+    /// quatro agentes" nasce torto se abrir no canvas quando foi desenhado em
+    /// mosaico.
+    var view: ViewMode?
+    var mosaic: MosaicLayout?
+
     /// Instancia os nós para uma sessão nova.
     ///
     /// A url dos nós web é reduzida à origem ao salvar, então aqui não há rota
@@ -85,7 +92,8 @@ enum TemplateStore {
             if nodes[i].type == .web { nodes[i].url = nodes[i].url.flatMap(baseURL(of:)) }
             nodes[i] = nodes[i].withoutConversation
         }
-        return Template(nodes: nodes, basePath: session.path)
+        return Template(nodes: nodes, basePath: session.path,
+                        view: session.view, mosaic: session.mosaic)
     }
 
     /// `http://localhost:3000/farms/123` → `http://localhost:3000`.

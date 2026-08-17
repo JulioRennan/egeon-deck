@@ -29,6 +29,8 @@ poc/          protótipos descartados
 | `main.swift` | `AppDelegate`, menu, ciclo de vida, criação/edição de sessão, worktree, laço de UI |
 | `Session.swift` | modelos `SessionConfig` / `NodeConfig`, persistência, `AppControl` |
 | `Canvas.swift` | `NodeView` (card base), `TerminalNode`, `CanvasContainer` (pan/zoom/grid), `MBTerminalView` |
+| `SessionShell.swift` | a sessão na tela: barra superior de visualização e o dono dos nós |
+| `Mosaic.swift` | o modo mosaico — `ViewMode`, `MosaicLayout` e o split view com mínimo por painel |
 | `Dispatcher.swift` | `Session` (alvo endereçável) e `Dispatcher` — fila, injeção, ociosidade, estado, cadeia |
 | `Attention.swift` | `Activity`, `Spinner`, `AttentionSound` — vocabulário de "carregando / precisa de você" |
 | `Edge.swift` | `EdgeConfig`, traçado das ligações (`EdgeCurve`, `EdgeLayerView`) e a porta `+` do card |
@@ -79,6 +81,34 @@ o `maxVisits`: a rede é parte da montagem.
 `to`. Desenhada arrastando a porta `+` de um card até outro. Não é um cano — o
 agente descobre o endereço com `egeon peers` e decide quando usar. Ida e volta
 são duas arestas. Ver ADR-012.
+
+## Visualização
+
+Duas maneiras de olhar a mesma sessão, na barra de cima (⌥⌘1 / ⌥⌘2):
+
+**Canvas** — a bancada livre: posição, tamanho, zoom, arestas desenhadas.
+**Mosaico** — os mesmos nós dividindo a janela inteira, sem sobreposição e sem
+zoom. Colunas na ordem editor · terminais · web, cada uma empilhada, divisores
+arrastáveis. Coluna sem nó não aparece; dentro dela a ordem é a do
+`sessions.json`.
+
+**Não são duas cópias do nó.** Em qualquer modo o card é o MESMO `NodeView`, e o
+que muda é quem lhe dá o frame. Reparentar uma view não toca no processo — o pty
+segue ligado ao SwiftTerm e o WKWebView não recarrega —, então dá para trocar de
+modo com cinco agentes trabalhando. É por isso que o dono dos nós é o
+`SessionShell` e não o canvas: com dois containers disputando o mesmo card, a
+lista tem de viver acima dos dois.
+
+O que o mosaico desliga no card, por `NodeView.isFreeform`: arrasto pelo
+cabeçalho, alça de resize e porta de aresta. Ali quem dá a posição é o split view,
+e o arrasto chamaria `onRequestSpace`, que desloca o mundo do canvas.
+
+Modo e proporções são **por sessão**, gravados no `sessions.json` (`view`,
+`mosaic`) e copiados por template e por duplicação em worktree. A geometria dos
+nós no arquivo continua sendo sempre a do canvas: `syncFrames` não roda em
+mosaico, senão a montagem inteira seria regravada com o tamanho dos painéis.
+
+Ver ADR-016.
 
 ## Ligações entre agentes
 
@@ -143,12 +173,16 @@ curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
 curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
-Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/activate` `/open` `/view`
-`/file` `/change` `/message` `/peers` `/status`. As três últimas respondem sobre
-**quem perguntou**, resolvido pelo processo do outro lado da conexão — uma
-chamada sua pelo terminal não é terminal nenhum, e entrega sem as guardas de
-cadeia. **`/peek` e `/dispatch` são as ferramentas de teste** — dá para
-verificar comportamento de agente ponta a ponta sem tocar na UI.
+Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/activate` `/open`
+`/view` `/file` `/change` `/message` `/peers` `/status`. As três últimas
+respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
+conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
+guardas de cadeia. **`/peek` e `/dispatch` são as ferramentas de teste** — dá
+para verificar comportamento de agente ponta a ponta sem tocar na UI.
+
+`/layout?mode=canvas|mosaic` troca a visualização da sessão ativa, e `/geometry`
+começa dizendo em que modo está: em mosaico o `docFrame` é o do painel e o
+`grabPoint` não arrasta nada.
 
 ## Configuração
 

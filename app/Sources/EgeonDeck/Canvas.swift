@@ -140,6 +140,24 @@ class NodeView: NSView {
     /// Nó com configuração editável (comando, agente, pasta, papel).
     var supportsEditing: Bool { false }
 
+    /// O card manda na própria posição?
+    ///
+    /// No canvas sim. No mosaico não: quem dá o frame é o split view, e arrastar o
+    /// cabeçalho lá chamaria `onRequestSpace` — que desloca o mundo do canvas e
+    /// regrava o `sessions.json` com coordenadas que não são de lá. A alça de
+    /// resize e a porta de aresta desaparecem pelo mesmo motivo: brigariam com o
+    /// divisor no quadro seguinte.
+    var isFreeform = true {
+        didSet {
+            guard isFreeform != oldValue else { return }
+            grip.isHidden = !isFreeform
+            freeformDidChange()
+        }
+    }
+
+    /// Gancho para a subclasse esconder o que só serve no canvas.
+    func freeformDidChange() {}
+
     private var isAlerting = false
 
     /// Acende o card enquanto alguém espera você.
@@ -285,6 +303,7 @@ class NodeView: NSView {
 
     // Arrastar pelo cabeçalho move o nó no espaço do canvas.
     override func mouseDown(with event: NSEvent) {
+        guard isFreeform else { return super.mouseDown(with: event) }
         let p = convert(event.locationInWindow, from: nil)
         guard p.y <= Self.headerHeight else { return super.mouseDown(with: event) }
         let inDoc = superview!.convert(event.locationInWindow, from: nil)
@@ -419,6 +438,10 @@ final class TerminalNode: NodeView {
     override var removalWarning: String {
         "O processo do terminal é encerrado junto — o que estiver rodando nele para."
     }
+
+    /// A porta de aresta só existe no canvas: a ligação é desenhada arrastando de
+    /// um card até outro, e no mosaico não há espaço livre onde soltar.
+    override func freeformDidChange() { port.isHidden = !isFreeform }
 
     override func sessionRenamed(to session: String) {
         let updated = "\(session)/\(nodeID)"
@@ -565,7 +588,6 @@ final class CanvasContainer: NSView {
 
     let scroll = NSScrollView()
     let doc = CanvasDocument(frame: NSRect(x: 0, y: 0, width: 6000, height: 4000))
-    let banner = NSTextField(labelWithString: "")
     let edgeLayer = EdgeLayerView()
 
     let toolbar = CanvasToolbar()
@@ -600,6 +622,14 @@ final class CanvasContainer: NSView {
     var onRemoveEdge: ((EdgeConfig) -> Void)?
     /// Clique na pastilha de limite da aresta.
     var onEditEdgeLimit: ((EdgeConfig) -> Void)?
+    /// Aviso a mostrar. O banner mora acima do canvas, e não aqui, porque em modo
+    /// mosaico este container está fora da hierarquia — o aviso não apareceria.
+    var onBanner: ((String?) -> Void)?
+    /// Todos os nós da sessão, inclusive os que estão no mosaico agora.
+    ///
+    /// `spawnRect` precisa deles: com o mosaico ativo, `doc.subviews` está vazio e
+    /// todo nó novo nasceria exatamente no mesmo canto.
+    var placedNodes: (() -> [NodeView])?
 
     /// Ligações da sessão. Só terminal liga: editor e web não têm quem receba
     /// prompt.
@@ -654,15 +684,6 @@ final class CanvasContainer: NSView {
         scroll.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 1)
         scroll.drawsBackground = true
         addSubview(scroll)
-
-        banner.font = .systemFont(ofSize: 12, weight: .medium)
-        banner.textColor = .black
-        banner.wantsLayer = true
-        banner.layer?.backgroundColor = NSColor.systemOrange.cgColor
-        banner.layer?.cornerRadius = 6
-        banner.alignment = .center
-        banner.isHidden = true
-        addSubview(banner)
 
         // Ordem importa: o overlay tapa o scroll para capturar o clique de
         // criação (senão o terminal engoliria), e a barra vem por cima dele
@@ -960,7 +981,6 @@ final class CanvasContainer: NSView {
         super.layout()
         scroll.frame = bounds
         overlay.frame = bounds
-        banner.frame = NSRect(x: bounds.midX - 380, y: bounds.maxY - 52, width: 760, height: 30)
 
         let size = toolbar.fittingSize
         toolbar.frame = NSRect(x: (bounds.width - size.width) / 2,
@@ -968,11 +988,7 @@ final class CanvasContainer: NSView {
                                width: size.width, height: size.height)
     }
 
-    func showBanner(_ text: String?) {
-        guard let text else { banner.isHidden = true; return }
-        banner.stringValue = text
-        banner.isHidden = false
-    }
+    func showBanner(_ text: String?) { onBanner?(text) }
 
     /// Pan e zoom passam os dois por aqui: o bounds do clip view muda nos dois
     /// casos, inclusive na pinça do trackpad.
@@ -1117,6 +1133,8 @@ final class CanvasContainer: NSView {
 
     func add(_ node: NodeView) {
         doc.addSubview(node)
+        // O nó pode estar voltando do mosaico, onde perdeu a alça e a porta.
+        node.isFreeform = true
         // Sem forçar o layout, o terminal nasce com frame zero e só descobre o
         // tamanho real na primeira interação — até lá o pty roda numa tela de
         // dimensão degenerada e o buffer sai vazio.
@@ -1231,10 +1249,11 @@ final class CanvasContainer: NSView {
     /// quando um nó nasce sem alguém ter desenhado onde.
     func spawnRect(size: NSSize) -> NSRect {
         let visible = scroll.contentView.bounds
+        let taken = placedNodes?() ?? nodes
         var origin = NSPoint(x: visible.minX + 40, y: visible.minY + 40)
         // Empilha em diagonal enquanto o lugar estiver ocupado, senão nós novos
         // nascem exatamente em cima uns dos outros.
-        while nodes.contains(where: { abs($0.frame.minX - origin.x) < 8 && abs($0.frame.minY - origin.y) < 8 }) {
+        while taken.contains(where: { abs($0.frame.minX - origin.x) < 8 && abs($0.frame.minY - origin.y) < 8 }) {
             origin.x += 32
             origin.y += 32
         }

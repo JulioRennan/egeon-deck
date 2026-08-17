@@ -149,7 +149,9 @@ final class ToolbarButton: NSView {
         }
     }
 
-    private static func symbol(_ names: [String]) -> NSImage? {
+    /// Primeiro nome que existe nesta versão do SF Symbols. Usado também pela
+    /// barra superior, que tem os mesmos candidatos a resolver.
+    static func symbol(_ names: [String]) -> NSImage? {
         for name in names {
             if let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) {
                 return image

@@ -171,6 +171,13 @@ final class ControlSocket {
                     json: ["ok": ok, "workspace": name,
                            "known": DispatchQueue.main.sync { AppControl.sessionNames?() ?? [] }])
 
+        case ("GET", _, _) where route.contains("/layout"):
+            // /layout?mode=canvas|mosaic — troca a visualização da sessão ativa.
+            let mode = Self.query(in: route)["mode"] ?? ""
+            let applied = DispatchQueue.main.sync { AppControl.setViewMode?(mode) }
+            respond(fd, status: applied == nil ? "404 Not Found" : "200 OK",
+                    json: ["ok": applied != nil, "mode": applied ?? mode])
+
         case ("GET", _, _) where route.contains("/open"):
             // /open?target=ws/id&folder=<path> — troca a pasta do editor.
             let query = Self.query(in: route)

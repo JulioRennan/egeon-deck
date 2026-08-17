@@ -773,10 +773,66 @@ conversas de volta.
 Script novo que mexa em bundle precisa encerrar primeiro, e encerrar todos os que
 rodam daquele flavor — o de `build/` e o instalado são o mesmo app.
 
+## ADR-016 — Mosaico é outra vista dos mesmos nós, não outro conjunto de nós
+
+**Contexto.** O canvas é bom para montar e para enxergar a rede de agentes, e
+ruim para trabalhar horas dentro de um editor: sobra grid onde deveria haver
+código, e todo redimensionamento é manual. A pergunta era um segundo modo de
+apresentação — VSCode à esquerda, terminais empilhados à direita, enchendo a
+janela.
+
+**Decisão.** Uma barra superior alterna entre `canvas` e `mosaic`. Nos dois modos
+o card é o **mesmo `NodeView`**; o que muda é quem lhe dá o frame. A troca é um
+`removeFromSuperview` seguido de `addSubview` no outro container.
+
+**Por quê assim.** Porque reparentar uma view não toca no processo: o pty segue
+ligado ao SwiftTerm e o WKWebView não recarrega. Medido ponta a ponta — um `echo`
+disparado em mosaico e outro em canvas aparecem no MESMO scrollback do `/peek`, e
+o editor registra uma única carga no log depois de quatro trocas de modo. A
+alternativa óbvia — reconstruir os nós no layout novo — mataria todo agente em
+andamento a cada clique, que é exatamente o que o ADR-010 já cobra caro no
+rebuild.
+
+**O que precisou sair do canvas.** O dono dos nós. Ele era `doc.subviews`, e com
+dois containers disputando o mesmo card a sessão passava a parecer vazia para
+todo mundo que contava nós pelo canvas: spinner do cabeçalho, `/geometry`,
+persistência. A lista subiu para o `SessionShell`, que é também quem carrega a
+barra e o banner.
+
+**As quatro armadilhas, todas de geometria.**
+
+`syncFrames` grava no `sessions.json` o que está na tela. Em mosaico o frame do
+card é o do painel, e deixá-lo rodar achataria a montagem inteira do canvas — na
+volta, cada nó nasceria do tamanho da coluna em que estava. Roda só em canvas, e
+o shell guarda um retrato dos frames para restaurar.
+
+Arrasto de cabeçalho e alça de resize chamam `onRequestSpace` e `onFrameChanged`,
+que deslocam o mundo do canvas e persistem. Desligados por `isFreeform`, junto da
+porta de aresta — não há espaço livre onde soltar uma ligação no mosaico.
+
+`applyContentsScale` precisa ser refeito na entrada: o card chega com a escala do
+último zoom do canvas, e sem reajustar o code-server aparece embaçado.
+
+E o `NSSplitView`: painel nasce com frame zero, e o `adjustSubviews` distribui em
+proporção ao tamanho anterior — de zero não sai proporção nenhuma. A primeira
+versão deu **0pt de largura à coluna do editor** e 1350pt de janela vazios. Por
+isso a distribuição inicial é escrita frame a frame (`MosaicSplit.spread`), e a
+proporção salva é recusada quando alguma fração vem degenerada.
+
+**Escopo.** Layout automático por tipo de nó — editor · terminais · web, ordem do
+`sessions.json` dentro da coluna. Árvore de splits arrastável foi adiada: exige
+drop zones, serialização de árvore e reparent no meio da árvore, e o arranjo
+automático já é o que se queria montar à mão em 90% dos casos.
+
 ## Decisões ainda abertas
 
 - **Assinatura de código.** Enquanto for ad-hoc, qualquer coisa que dependa de
   TCC quebra a cada build. Só vira problema de novo se o portal voltar.
+- **Isolar dev de prod por completo.** Diretório, socket, log e porta já são
+  separados por flavor, mas na prática o dev ainda atrapalha as sessões do
+  estável. Enquanto não for resolvido, um dia de trabalho pode ser perdido.
+- **Reordenar nó dentro da coluna do mosaico.** Hoje a ordem é a do
+  `sessions.json`, e mudá-la é editar o arquivo.
 - **Um code-server para todos os workspaces, ou um por workspace.** Um só é mais
   leve; um por workspace isola travamento e facilita perfis distintos.
 - **Zoom no nó de editor.** WKWebView sob transform fica borrado. Alternativa

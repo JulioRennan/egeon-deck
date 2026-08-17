@@ -118,6 +118,18 @@ struct SessionConfig: Codable {
     /// legítimo. O que precisa de teto é a volta.
     var maxVisits: Int?
 
+    /// De que jeito esta sessão estava sendo olhada. Ausente = canvas.
+    ///
+    /// Por sessão e não global: uma frente com um editor e quatro agentes pede
+    /// mosaico, e a do lado, com dois terminais soltos e as arestas à vista, pede
+    /// canvas.
+    var view: ViewMode?
+
+    /// Proporções dos divisores do mosaico, quando você já arrastou algum.
+    var mosaic: MosaicLayout?
+
+    var viewMode: ViewMode { view ?? .canvas }
+
     var edgeList: [EdgeConfig] { edges ?? [] }
     /// Folgado o bastante para uma orquestração de três nós passar sem esbarrar
     /// nele — o corte que você sente no dia a dia deve vir da aresta.
@@ -153,6 +165,13 @@ enum AppControl {
     /// no topo — as mesmas do CGEvent. Serve para dirigir e verificar gestos de
     /// fora sem depender de estimar pixel em captura de tela.
     static var canvasGeometry: (() -> [String: Any])?
+
+    /// Troca a visualização da sessão ativa — canvas ou mosaico.
+    ///
+    /// Existe pelo mesmo motivo que `/geometry`: dirigir e verificar o app de fora
+    /// sem depender de gesto na tela. Nulo de volta significa modo desconhecido ou
+    /// nenhuma sessão ativa.
+    static var setViewMode: ((String) -> String?)?
 
     /// Ligações e teto de revisitas de uma sessão, por nome.
     ///

@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var configs: [SessionConfig] = []
     var agents: [String: AgentProfile] = [:]
     /// Criados sob demanda e mantidos vivos: trocar de aba não mata terminal.
-    var canvases: [Int: CanvasContainer] = [:]
+    var shells: [Int: SessionShell] = [:]
     var activeIndex = -1
 
     let control = ControlSocket()
@@ -40,7 +40,7 @@ EgeonCLI.install()
 
         buildMenu()
 
-        let screen = NSScreen.screens.first ?? NSScreen.main!
+        let screen = Self.startupScreen()
         window = NSWindow(
             contentRect: screen.visibleFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -72,6 +72,12 @@ EgeonCLI.install()
 
         AppControl.sessionNames = { [weak self] in self?.configs.map(\.name) ?? [] }
         AppControl.canvasGeometry = { [weak self] in self?.canvasGeometry() ?? [:] }
+        AppControl.setViewMode = { [weak self] raw in
+            guard let self, let mode = ViewMode(rawValue: raw),
+                  let shell = self.shells[self.activeIndex] else { return nil }
+            shell.show(mode)
+            return mode.rawValue
+        }
         AppControl.sessionEdges = { [weak self] name in
             self?.configs.first { $0.name == name }?.edgeList ?? []
         }
@@ -112,16 +118,32 @@ EgeonCLI.install()
         // sessões inativas, cujo canvas nem existe na hierarquia de views.
         badgeTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.canvases[self.activeIndex]?.refreshBadges()
+            self.shells[self.activeIndex]?.refreshBadges()
             self.root.sidebar.showActivity(Dispatcher.shared.activitySummary())
         }
+    }
+
+    /// Em qual tela a janela nasce.
+    ///
+    /// O dev vai para a tela mais à esquerda, e o estável fica na principal. Os
+    /// dois abrem maximizados, então sem isso o rebuild joga o dev em cima do
+    /// estável — que é onde os agentes de verdade estão trabalhando.
+    ///
+    /// Mais à esquerda pelo `minX` do frame, e não `screens.first`: a primeira da
+    /// lista é a que tem a barra de menu, que pode ser qualquer uma.
+    private static func startupScreen() -> NSScreen {
+        let screens = NSScreen.screens
+        guard Flavor.current.isDev,
+              let leftmost = screens.min(by: { $0.frame.minX < $1.frame.minX })
+        else { return screens.first ?? NSScreen.main! }
+        return leftmost
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         // O debounce pode estar pendente; um arrasto feito segundos antes de
         // sair não pode se perder.
         persistTimer?.invalidate()
-        for index in canvases.keys { syncFrames(index: index) }
+        for index in shells.keys { syncFrames(index: index) }
         SessionStore.save(configs)
 
         control.stop()
@@ -134,9 +156,9 @@ EgeonCLI.install()
 
     private func activate(_ index: Int) {
         guard index >= 0, index < configs.count, index != activeIndex else { return }
-        let canvas = canvases[index] ?? build(index)
+        let shell = shells[index] ?? build(index)
         activeIndex = index
-        root.show(canvas)
+        root.show(shell)
         root.sidebar.select(index)
         root.sidebar.markLive(index)
         window.title = "\(Flavor.current.displayName) — \(configs[index].name)"
@@ -160,11 +182,16 @@ EgeonCLI.install()
         guard let (name, template) = askSessionNameAndTemplate(
             suggested: folder.lastPathComponent) else { return }
 
+        let preset = template.flatMap { TemplateStore.template(named: $0) }
         var config = SessionConfig(
             name: SessionStore.availableName(basedOn: name, taken: configs.map(\.name)),
             path: (folder.path as NSString).abbreviatingWithTildeInPath,
-            nodes: template.flatMap { TemplateStore.template(named: $0)?.instantiate() } ?? [],
+            nodes: preset?.instantiate() ?? [],
             template: template)
+
+        // O modo vem do preset: um template desenhado em mosaico abre em mosaico.
+        config.view = preset?.view
+        config.mosaic = preset?.mosaic
 
         // Frames vindos do template já servem; sem template a sessão nasce vazia
         // e você monta pela barra.
@@ -232,11 +259,11 @@ EgeonCLI.install()
         // A cópia do que o git não versiona roda depois de a sessão existir: com
         // node_modules e Pods no meio, esperar por ela antes de mostrar qualquer
         // coisa pareceria travamento.
-        let canvas = canvases[configs.count - 1]
-        canvas?.showBanner("Copiando o que o git não versiona (.env, node_modules, build…)")
+        let shell = shells[configs.count - 1]
+        shell?.showBanner("Copiando o que o git não versiona (.env, node_modules, build…)")
         Worktree.copyUnversioned(from: status.repoRoot, to: created.path) { summary in
-            canvas?.showBanner(summary)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { canvas?.showBanner(nil) }
+            shell?.showBanner(summary)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { shell?.showBanner(nil) }
         }
     }
 
@@ -285,6 +312,8 @@ EgeonCLI.install()
             // nós. A aresta guarda id de nó, e a duplicação preserva os ids, então
             // a rede da worktree nasce igual à da origem — quem podia acionar
             // quem continua podendo, no checkout novo.
+            // O modo e as proporções vêm junto pelo mesmo motivo que as arestas:
+            // é montagem, não estado de conversa.
             let config = SessionConfig(
                 name: SessionStore.availableName(basedOn: Worktree.sanitize(created.branch),
                                                  taken: configs.map(\.name)),
@@ -292,7 +321,9 @@ EgeonCLI.install()
                 nodes: nodes,
                 template: origin.template,
                 edges: origin.edges,
-                maxVisits: origin.maxVisits)
+                maxVisits: origin.maxVisits,
+                view: origin.view,
+                mosaic: origin.mosaic)
             configs.append(config)
             alvo = configs.count - 1
             root.sidebar.reload(configs)
@@ -308,9 +339,9 @@ EgeonCLI.install()
             // O canvas inteiro é remontado: um pty não muda de diretório depois
             // de aberto, e reconstruir reaproveita o mesmo caminho de sempre em
             // vez de um segundo, quase igual, só para esta situação.
-            if let canvas = canvases[index] {
-                canvas.nodes.forEach { $0.prepareForRemoval() }
-                canvases[index] = nil
+            if let shell = shells[index] {
+                shell.nodes.forEach { $0.prepareForRemoval() }
+                shells[index] = nil
                 if index == activeIndex { root.show(NSView()) }
             }
             activeIndex = -1
@@ -322,11 +353,11 @@ EgeonCLI.install()
 
         schedulePersist()
 
-        let canvas = canvases[alvo]
-        canvas?.showBanner("Copiando o que o git não versiona (.env, node_modules, build…)")
+        let shell = shells[alvo]
+        shell?.showBanner("Copiando o que o git não versiona (.env, node_modules, build…)")
         Worktree.copyUnversioned(from: status.repoRoot, to: created.path) { summary in
-            canvas?.showBanner(summary)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { canvas?.showBanner(nil) }
+            shell?.showBanner(summary)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { shell?.showBanner(nil) }
         }
     }
 
@@ -597,7 +628,7 @@ EgeonCLI.install()
         let name = SessionStore.availableName(basedOn: typed, taken: taken)
 
         configs[index].name = name
-        canvases[index]?.nodes.forEach { $0.sessionRenamed(to: name) }
+        shells[index]?.nodes.forEach { $0.sessionRenamed(to: name) }
         root.sidebar.reload(configs)
         root.sidebar.select(activeIndex)
         markLiveSessions()
@@ -609,7 +640,7 @@ EgeonCLI.install()
     private func confirmRemoveSession(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
         let config = configs[index]
-        let live = canvases[index] != nil
+        let live = shells[index] != nil
         // Só worktree ligada: oferecer isso para o checkout principal seria
         // oferecer apagar o repositório.
         let isWorktree = config.exists && Worktree.isLinkedWorktree(config.url.path)
@@ -702,24 +733,24 @@ EgeonCLI.install()
     private func removeSession(_ index: Int) {
         let name = configs[index].name
 
-        // Solta os processos antes de perder a referência ao canvas.
-        if let canvas = canvases[index] {
-            canvas.nodes.forEach { $0.prepareForRemoval() }
+        // Solta os processos antes de perder a referência à sessão na tela.
+        if let shell = shells[index] {
+            shell.nodes.forEach { $0.prepareForRemoval() }
             if index == activeIndex { root.show(NSView()) }
         }
 
-        // Os canvases são indexados por posição, e remover do meio desloca todo
-        // mundo à direita — reindexar aqui evita canvas apontando para a sessão
-        // errada.
+        // As sessões na tela são indexadas por posição, e remover do meio desloca
+        // todo mundo à direita — reindexar aqui evita uma delas apontando para a
+        // sessão errada.
         configs.remove(at: index)
-        var reindexed: [Int: CanvasContainer] = [:]
-        for (key, canvas) in canvases where key != index {
-            reindexed[key > index ? key - 1 : key] = canvas
+        var reindexed: [Int: SessionShell] = [:]
+        for (key, shell) in shells where key != index {
+            reindexed[key > index ? key - 1 : key] = shell
         }
-        canvases = reindexed
+        shells = reindexed
 
         // wire() capturou o índice antigo por valor; religa com o novo.
-        for (key, canvas) in canvases { wire(canvas, index: key) }
+        for (key, shell) in shells { wire(shell, index: key) }
 
         activeIndex = -1
         root.sidebar.reload(configs)
@@ -731,7 +762,7 @@ EgeonCLI.install()
     }
 
     private func markLiveSessions() {
-        root.sidebar.markLive(indices: Set(canvases.keys))
+        root.sidebar.markLive(indices: Set(shells.keys))
     }
 
     // MARK: - Templates
@@ -783,7 +814,7 @@ EgeonCLI.install()
         configs[activeIndex].template = name
         // A sessão passa a ter origem: o botão de atualizar aparece agora, sem
         // esperar o próximo arranque.
-        canvases[activeIndex]?.originTemplate = name
+        shells[activeIndex]?.canvas.originTemplate = name
         schedulePersist()
     }
 
@@ -1077,15 +1108,15 @@ EgeonCLI.install()
         }
     }
 
-    private func build(_ index: Int) -> CanvasContainer {
-        let canvas = CanvasContainer(frame: root.contentFrame)
-        canvases[index] = canvas
-        wire(canvas, index: index)
+    private func build(_ index: Int) -> SessionShell {
+        let shell = SessionShell(frame: root.contentFrame, mode: configs[index].viewMode)
+        shells[index] = shell
+        wire(shell, index: index)
 
         guard configs[index].exists else {
-            canvas.showBanner("Caminho não existe: \(configs[index].path) — edite \(Flavor.current.config("sessions.json").path)")
+            shell.showBanner("Caminho não existe: \(configs[index].path) — edite \(Flavor.current.config("sessions.json").path)")
             Log.write("sessão \(configs[index].name): caminho inexistente \(configs[index].path)")
-            return canvas
+            return shell
         }
 
         let defaults = defaultFrames(for: configs[index])
@@ -1107,45 +1138,74 @@ EgeonCLI.install()
             }
 
             configs[index].nodes[i].setFrame(frame)
-            canvas.add(makeNode(node, in: configs[index], frame: frame))
+            shell.attach(makeNode(node, in: configs[index], frame: frame))
         }
         schedulePersist()
 
         DispatchQueue.main.async {
-            canvas.scroll.contentView.scroll(to: NSPoint(x: 20, y: 20))
-            canvas.scroll.reflectScrolledClipView(canvas.scroll.contentView)
+            shell.canvas.scroll.contentView.scroll(to: NSPoint(x: 20, y: 20))
+            shell.canvas.scroll.reflectScrolledClipView(shell.canvas.scroll.contentView)
         }
-        return canvas
+        return shell
     }
 
     // MARK: - Barra de ações
 
-    private func wire(_ canvas: CanvasContainer, index: Int) {
+    private func wire(_ shell: SessionShell, index: Int) {
+        // Fechar e configurar nó chegam pelo shell: quem os disparou pode ser o
+        // canvas ou o mosaico, e daqui não faz diferença qual.
+        shell.onRequestClose = { [weak self] node in self?.confirmRemoval(of: node, index: index) }
+        shell.onRequestEditNode = { [weak self] node in self?.editNode(node, index: index) }
+        shell.onModeChanged = { [weak self] mode in self?.recordViewMode(mode, index: index) }
+        shell.onMosaicLayoutChanged = { [weak self] layout in
+            self?.recordMosaicLayout(layout, index: index)
+        }
+        shell.mosaicLayout = configs[index].mosaic
+
+        let canvas = shell.canvas
         canvas.onPlace = { [weak self] tool, rect in self?.place(tool, rect: rect, index: index) }
         canvas.onLayoutChanged = { [weak self] in
             self?.syncFrames(index: index)
             self?.schedulePersist()
         }
-        canvas.onRequestClose = { [weak self] node in self?.confirmRemoval(of: node, index: index) }
         canvas.onSaveTemplate = { [weak self] in self?.saveCurrentAsTemplate() }
         canvas.onUpdateTemplate = { [weak self] in self?.updateOriginTemplate(index) }
         canvas.originTemplate = configs[index].template
         canvas.onNewWorktree = { [weak self] in self?.duplicateSessionAsWorktree(index) }
         canvas.componentNames = { ComponentStore.names }
         canvas.onConfigureTerminal = { [weak self] in self?.configureNewTerminal(index: index) }
-        canvas.onRequestEditNode = { [weak self] node in
-            self?.editNode(node, index: index)
-        }
         canvas.onCreateEdge = { [weak self] edge in self?.addEdge(edge, index: index) }
         canvas.onRemoveEdge = { [weak self] edge in self?.removeEdge(edge, index: index) }
         canvas.onEditEdgeLimit = { [weak self] edge in self?.editEdgeLimit(edge, index: index) }
         canvas.edges = configs[index].edgeList
     }
 
+    // MARK: - Visualização
+
+    private func recordViewMode(_ mode: ViewMode, index: Int) {
+        guard index >= 0, index < configs.count else { return }
+        configs[index].view = mode
+        schedulePersist()
+        Log.write("sessão \(configs[index].name): visualização \(mode.rawValue)")
+    }
+
+    private func recordMosaicLayout(_ layout: MosaicLayout, index: Int) {
+        guard index >= 0, index < configs.count, configs[index].mosaic != layout else { return }
+        configs[index].mosaic = layout
+        // De volta para o shell também: ele repassa a proporção na hora de montar
+        // o mosaico, e sem isto ida e volta ao canvas ressuscitaria a do arranque
+        // — o arrasto só sobreviveria depois de fechar o app.
+        shells[index]?.mosaicLayout = layout
+        schedulePersist()
+    }
+
+    @objc func showCanvasView() { shells[activeIndex]?.show(.canvas) }
+    @objc func showMosaicView() { shells[activeIndex]?.show(.mosaic) }
+
     // MARK: - Ligações entre terminais
 
     private func addEdge(_ edge: EdgeConfig, index: Int) {
-        guard index >= 0, index < configs.count, let canvas = canvases[index] else { return }
+        guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
         var edges = configs[index].edgeList
         guard !edges.contains(edge) else { return }
         edges.append(edge)
@@ -1205,7 +1265,7 @@ EgeonCLI.install()
     /// cara porque "vazio" e "zero" são coisas opostas aqui, e errar entre os
     /// dois é a diferença entre liberar e travar.
     private func editEdgeLimit(_ edge: EdgeConfig, index: Int) {
-        guard index >= 0, index < configs.count, let canvas = canvases[index] else { return }
+        guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
         let current = configs[index].edgeList.first { $0 == edge }?.maxSends
 
         let alert = NSAlert()
@@ -1240,7 +1300,7 @@ EgeonCLI.install()
     }
 
     private func removeEdge(_ edge: EdgeConfig, index: Int) {
-        guard index >= 0, index < configs.count, let canvas = canvases[index] else { return }
+        guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
         var edges = configs[index].edgeList
         edges.removeAll { $0 == edge }
         configs[index].edges = edges
@@ -1271,7 +1331,7 @@ EgeonCLI.install()
     /// sessions.json — então passa por confirmação, com o aviso que o próprio
     /// tipo de nó dá sobre o que se perde.
     private func confirmRemoval(of node: NodeView, index: Int) {
-        guard index >= 0, index < configs.count, let canvas = canvases[index] else { return }
+        guard index >= 0, index < configs.count, let shell = shells[index] else { return }
 
         let name = node.nodeID.isEmpty ? "este nó" : "\"\(node.nodeID)\""
         let alert = NSAlert()
@@ -1285,18 +1345,18 @@ EgeonCLI.install()
         // Folha na janela em vez de modal solto: o canvas fica visível atrás, e
         // dá pra conferir qual nó está sendo apagado.
         guard let window else {
-            if alert.runModal() == .alertFirstButtonReturn { remove(node, index: index, from: canvas) }
+            if alert.runModal() == .alertFirstButtonReturn { remove(node, index: index, from: shell) }
             return
         }
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            self?.remove(node, index: index, from: canvas)
+            self?.remove(node, index: index, from: shell)
         }
     }
 
-    private func remove(_ node: NodeView, index: Int, from canvas: CanvasContainer) {
+    private func remove(_ node: NodeView, index: Int, from shell: SessionShell) {
         let id = node.nodeID
-        canvas.remove(node)
+        shell.detach(node)
         if !id.isEmpty {
             configs[index].nodes.removeAll { $0.id == id }
             // Aresta apontando para nó que não existe mais viraria alvo morto no
@@ -1306,7 +1366,7 @@ EgeonCLI.install()
                 configs[index].edges = configs[index].edgeList.filter {
                     $0.from != id && $0.to != id
                 }
-                canvas.edges = configs[index].edgeList
+                shell.canvas.edges = configs[index].edgeList
                 Log.write("sessão \(configs[index].name): \(orphans.count) ligação(ões) "
                           + "removida(s) junto com \"\(id)\"")
             }
@@ -1318,13 +1378,13 @@ EgeonCLI.install()
     /// Cria um nó onde a ferramenta foi solta e grava no sessions.json.
     private func place(_ tool: CanvasTool, rect: NSRect, index: Int) {
         guard let kind = tool.nodeKind, index >= 0, index < configs.count,
-              let canvas = canvases[index] else { return }
+              let shell = shells[index] else { return }
 
         if kind == .shell {
             // Componente escolhido no menu pula o formulário: ele já traz tipo,
             // agente, comando, pasta e papel — perguntar de novo seria repetir
             // uma decisão já tomada.
-            if let name = canvas.pendingComponent,
+            if let name = shell.canvas.pendingComponent,
                let component = ComponentStore.component(named: name) {
                 place(component: component, rect: rect, index: index)
                 return
@@ -1352,7 +1412,7 @@ EgeonCLI.install()
         }
 
         configs[index].nodes.append(node)
-        canvas.add(makeNode(node, in: configs[index], frame: rect))
+        shell.attach(makeNode(node, in: configs[index], frame: rect))
         Log.write("sessão \(configs[index].name): nó \(kind.rawValue) \"\(node.id)\" criado")
         schedulePersist()
     }
@@ -1361,7 +1421,7 @@ EgeonCLI.install()
 
     /// Abre o formulário e cria o terminal no primeiro lugar livre do canvas.
     private func configureNewTerminal(index: Int) {
-        guard index >= 0, index < configs.count, let canvas = canvases[index] else { return }
+        guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
 
         let dialog = ComponentDialog(
             title: "Novo terminal",
@@ -1379,7 +1439,7 @@ EgeonCLI.install()
     /// Materializa um componente como nó. O id vem do nome, então o endereço de
     /// dispatch fica legível: `deck/revisor`.
     private func place(component: Component, rect: NSRect, index: Int) {
-        guard index >= 0, index < configs.count, let canvas = canvases[index] else { return }
+        guard index >= 0, index < configs.count, let shell = shells[index] else { return }
 
         let id = nextID(prefix: ComponentStore.identifier(from: component.name),
                         in: configs[index])
@@ -1387,7 +1447,7 @@ EgeonCLI.install()
         node.setFrame(rect)
 
         configs[index].nodes.append(node)
-        canvas.add(makeNode(node, in: configs[index], frame: rect))
+        shell.attach(makeNode(node, in: configs[index], frame: rect))
         Log.write("sessão \(configs[index].name): \(node.type.rawValue) \"\(id)\" criado"
                   + (component.prompt == nil ? "" : " com papel"))
         schedulePersist()
@@ -1399,7 +1459,7 @@ EgeonCLI.install()
     /// mudá-los exige um processo novo — não há como reconfigurar um pty em
     /// andamento. O diálogo avisa antes.
     private func editNode(_ node: NodeView, index: Int) {
-        guard index >= 0, index < configs.count, let canvas = canvases[index],
+        guard index >= 0, index < configs.count, let shell = shells[index],
               let position = configs[index].nodes.firstIndex(where: { $0.id == node.nodeID })
         else { return }
 
@@ -1419,8 +1479,11 @@ EgeonCLI.install()
             ? current.id
             : nextID(prefix: renamed, in: configs[index])
 
+        // Em modo mosaico o frame da view é o do painel, e gravá-lo destruiria a
+        // posição que o nó tem no canvas. Quem sabe qual é ela é o shell.
+        let canvasFrame = shell.canvasFrame(of: current.id) ?? node.frame
         var updated = ComponentStore.instantiate(component, id: newID)
-        updated.setFrame(node.frame)
+        updated.setFrame(canvasFrame)
 
         let sameProcess = updated.type == current.type
             && updated.agent == current.agent
@@ -1438,8 +1501,8 @@ EgeonCLI.install()
 
         // Troca o nó por um novo: o antigo é encerrado explicitamente para o pty
         // não ficar órfão.
-        canvas.remove(node)
-        canvas.add(makeNode(updated, in: configs[index], frame: node.frame))
+        shell.detach(node)
+        shell.attach(makeNode(updated, in: configs[index], frame: canvasFrame))
         Log.write("sessão \(configs[index].name): nó \"\(current.id)\" reconfigurado"
                   + (newID == current.id ? "" : " e renomeado para \"\(newID)\""))
         schedulePersist()
@@ -1459,10 +1522,15 @@ EgeonCLI.install()
 
     /// Lê de volta o que está na tela. A view é a verdade sobre posição: o
     /// usuário acabou de arrastar.
+    ///
+    /// Só em modo canvas. No mosaico o frame do card é o do painel do split view,
+    /// e gravá-lo aqui achataria a montagem do canvas inteira — na volta, todo nó
+    /// nasceria do tamanho da coluna em que estava.
     private func syncFrames(index: Int) {
-        guard index >= 0, index < configs.count, let canvas = canvases[index] else { return }
+        guard index >= 0, index < configs.count, let shell = shells[index],
+              shell.mode == .canvas else { return }
         var byID: [String: NSRect] = [:]
-        for node in canvas.nodes where !node.nodeID.isEmpty { byID[node.nodeID] = node.frame }
+        for node in shell.nodes where !node.nodeID.isEmpty { byID[node.nodeID] = node.frame }
         for i in configs[index].nodes.indices {
             if let rect = byID[configs[index].nodes[i].id] {
                 configs[index].nodes[i].setFrame(rect)
@@ -1497,7 +1565,8 @@ EgeonCLI.install()
     /// CGEvent. Estimar isso a partir de uma captura de tela erra, sobretudo com
     /// zoom aplicado: 26pt de cabeçalho viram 11pt a 43%.
     private func canvasGeometry() -> [String: Any] {
-        guard let canvas = canvases[activeIndex], let window else { return [:] }
+        guard let shell = shells[activeIndex], let window else { return [:] }
+        let canvas = shell.canvas
         let screenHeight = (window.screen ?? NSScreen.main)?.frame.height ?? 0
 
         /// AppKit mede a tela de baixo para cima; o CGEvent, de cima para baixo.
@@ -1515,7 +1584,7 @@ EgeonCLI.install()
         }
 
         var nodes: [[String: Any]] = []
-        for node in canvas.nodes {
+        for node in shell.nodes {
             let header = NSRect(x: 0, y: 0, width: node.bounds.width, height: NodeView.headerHeight)
             let headerScreen = onScreen(node, header)
             // Ponto de arrasto: dentro do cabeçalho, à esquerda do rótulo e longe
@@ -1534,13 +1603,18 @@ EgeonCLI.install()
             ])
         }
 
+        // `mode` na frente porque muda o sentido do resto: em mosaico o `docFrame`
+        // é o do painel, `grabPoint` não arrasta nada e não há zoom.
         return [
             "session": activeIndex < configs.count ? configs[activeIndex].name : "?",
-            "magnification": Double((canvas.scroll.magnification * 1000).rounded()) / 1000,
+            "mode": shell.mode.rawValue,
+            "magnification": shell.mode == .canvas
+                ? Double((canvas.scroll.magnification * 1000).rounded()) / 1000 : 1,
             "docSize": ["w": Int(canvas.doc.frame.width), "h": Int(canvas.doc.frame.height)],
             "scrollOrigin": ["x": Int(canvas.scroll.contentView.bounds.origin.x),
                              "y": Int(canvas.scroll.contentView.bounds.origin.y)],
-            "canvasOnScreen": toTopLeft(onScreen(canvas, canvas.bounds)),
+            "canvasOnScreen": toTopLeft(onScreen(shell.visibleContent,
+                                                 shell.visibleContent.bounds)),
             "nodes": nodes
         ]
     }
@@ -1549,7 +1623,7 @@ EgeonCLI.install()
 
     @objc func nextSession() { activate((activeIndex + 1) % max(1, configs.count)) }
 
-    private var activeCanvas: CanvasContainer? { canvases[activeIndex] }
+    private var activeCanvas: CanvasContainer? { shells[activeIndex]?.canvas }
 
     @objc func zoomIn() { activeCanvas?.stepZoom(1) }
     @objc func zoomOut() { activeCanvas?.stepZoom(-1) }
@@ -1560,14 +1634,25 @@ EgeonCLI.install()
     /// Desabilitar devolve a tecla a quem tem o foco — ⌘1…⌘4 focam grupos de
     /// editor no workbench, e ⌘=/⌘− dão zoom no código.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        // Os itens de visualização carregam o estado: a marca diz em que modo a
+        // sessão ativa está, sem precisar olhar a barra.
+        if menuItem.action == #selector(showCanvasView) || menuItem.action == #selector(showMosaicView) {
+            guard let mode = shells[activeIndex]?.mode else { return false }
+            let wants: ViewMode = menuItem.action == #selector(showCanvasView) ? .canvas : .mosaic
+            menuItem.state = mode == wants ? .on : .off
+            return true
+        }
+
         let canvasOnly: Set<Selector> = [
             #selector(pickCursorTool), #selector(pickTerminalTool),
             #selector(pickEditorTool), #selector(pickWebTool),
             #selector(zoomIn), #selector(zoomOut), #selector(zoomReset)
         ]
         guard let action = menuItem.action, canvasOnly.contains(action) else { return true }
-        guard let canvas = activeCanvas else { return false }
-        return !canvas.focusIsInsideNode
+        guard let shell = shells[activeIndex] else { return false }
+        // Ferramenta e zoom só existem no canvas; no mosaico o item some do
+        // caminho e a tecla volta para quem tem o foco.
+        return shell.mode == .canvas && !shell.canvas.focusIsInsideNode
     }
 
     @objc func pickCursorTool() { activeCanvas?.tool = .cursor }
@@ -1632,6 +1717,13 @@ EgeonCLI.install()
         // funcionam sem monitor de evento: ⌘V/⌘T/⌘W, ⌘+/⌘−/⌘0.
         let canvasItem = NSMenuItem()
         let canvasMenu = NSMenu(title: "Canvas")
+        // ⌥⌘1/⌥⌘2 e não ⌘1/⌘2: estes últimos já são as ferramentas, e o workbench
+        // do code-server usa ⌘1…⌘4 para focar grupos de editor.
+        canvasMenu.addItem(withTitle: "Ver no canvas", action: #selector(showCanvasView),
+                           keyEquivalent: "1").keyEquivalentModifierMask = [.command, .option]
+        canvasMenu.addItem(withTitle: "Ver em mosaico", action: #selector(showMosaicView),
+                           keyEquivalent: "2").keyEquivalentModifierMask = [.command, .option]
+        canvasMenu.addItem(.separator())
         // Números, não letras. ⌘V/⌘T/⌘E/⌘W parecem naturais para as ferramentas,
         // mas um key equivalent de menu é consultado ANTES do responder chain:
         // ⌘V deixaria de colar em todo o app, e ⌘W, ⌘E e ⌘T são fechar aba e
