@@ -50,15 +50,21 @@ enum Worktree {
                       untracked: untracked)
     }
 
-    /// Onde a worktree nasce: `<pai do repo>/.worktrees/<repo>/<branch>`.
+    /// Onde a worktree nasce: `<pai do repo>/worktrees/<repo>/<branch>`.
     ///
-    /// Fora do diretório de projetos para não misturar com repositórios de
-    /// verdade, e fora do diretório do app porque worktree é artefato de git — se
-    /// o app sumir, o trabalho não deve ficar órfão dentro da config dele.
+    /// Fora do repositório para não misturar com repositórios de verdade, e fora do
+    /// diretório do app porque worktree é artefato de git — se o app sumir, o
+    /// trabalho não deve ficar órfão dentro da config dele.
+    ///
+    /// Sem ponto no nome. Ele já custou: o Finder esconde pasta que começa com
+    /// ponto, e worktree é pasta que se abre à mão — a de esconder era a única
+    /// coisa que o ponto fazia, porque agrupar por repositório é o que mantém o
+    /// caminho previsível e fácil de apagar. Worktree criada antes disto continua
+    /// onde está e funcionando: o git guarda caminho absoluto.
     static func suggestedPath(repoRoot: String, branch: String) -> String {
         let repo = URL(fileURLWithPath: repoRoot)
         return repo.deletingLastPathComponent()
-            .appendingPathComponent(".worktrees")
+            .appendingPathComponent("worktrees")
             .appendingPathComponent(repo.lastPathComponent)
             .appendingPathComponent(sanitize(branch))
             .path

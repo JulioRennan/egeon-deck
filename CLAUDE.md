@@ -112,6 +112,10 @@ cada terminal que abre fora dela —, numa caixinha só, listando repositório �
 levaria trabalho de quem não foi consultado. Falha em qualquer uma e a sessão não
 sai da lista. Ver ADR-021.
 
+A worktree nasce em `<pai do repo>/worktrees/<repo>/<branch>` — fora do
+repositório, agrupada por repositório, e **sem ponto no nome**: o Finder esconde
+pasta que começa com ponto, e esta é pasta que se abre à mão (ADR-022).
+
 Dois terminais no mesmo repo vizinho com o mesmo nome de branch dividem uma
 worktree; com nomes diferentes, viram duas. A worktree sai **sempre do checkout
 principal** (`Worktree.mainRepo`), nunca de uma worktree ligada — partir dela

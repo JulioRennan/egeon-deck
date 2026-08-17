@@ -443,7 +443,7 @@ EgeonCLI.install()
     ///
     /// A versão anterior só olhava `cwd` começando com `/` ou `~`, e por isso
     /// `../nexus-backend` atravessava a duplicação **literal**: na origem `..` era
-    /// a pasta de projetos, e na worktree passou a ser `.worktrees/<repo>/`, que
+    /// a pasta de projetos, e na worktree passou a ser `worktrees/<repo>/`, que
     /// não tem backend nenhum. O terminal abria na raiz da worktree em silêncio, e
     /// o agente do backend trabalhava no frontend.
     private static func repointed(_ nodes: [NodeConfig], originRoot: String,

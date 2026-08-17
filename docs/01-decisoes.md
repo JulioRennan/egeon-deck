@@ -1027,7 +1027,7 @@ terminal só — tinha um campo de **pasta da worktree** editável. Três proble
    pequeno no back — que quer branch própria, não a da sessão.
 3. **A pasta era escolha sem consequência boa.** Dava para apontar a worktree para
    qualquer lugar do disco, e ninguém precisa disso: a convenção
-   (`<pai do repo>/.worktrees/<repo>/<branch>`) é o que torna a pasta previsível e
+   (`<pai do repo>/worktrees/<repo>/<branch>`) é o que torna a pasta previsível e
    fácil de apagar. Pior, com a branch já aberta em outra worktree o campo virava
    somente-leitura — então metade das vezes ele não era escolha nenhuma.
 
@@ -1092,6 +1092,32 @@ ser o inofensivo. Rodado contra repositórios de verdade: sessão com três work
 em dois repos (a dela, uma de nó no mesmo repo, uma em repo vizinho) — as três
 identificadas, as duas dela apagadas do registro do git e do disco, e a
 compartilhada com outra sessão preservada.
+
+## ADR-022 — A pasta das worktrees não começa com ponto
+
+`<pai do repo>/.worktrees/<repo>/<branch>` virou `<pai do repo>/worktrees/…`.
+
+O ponto fazia uma coisa só: esconder a pasta do Finder. E worktree é pasta que se
+abre à mão — para arrastar arquivo, olhar build, conferir o que ficou. Esconder o
+que se precisa abrir troca um problema pequeno (uma pasta a mais na lista) por um
+chato (`⌘⇧.` toda vez, ou `defaults write` mostrando todo arquivo oculto do sistema).
+
+As três coisas que o ADR-017 queria continuam: fora do repositório, agrupada por
+repositório, previsível. É o agrupamento que faz a pasta ser fácil de achar e de
+apagar, não o ponto.
+
+**Descartado — `~/worktrees/<repo>/<branch>`,** raiz única no home, que é o que
+gerenciadores de worktree usam. Junta grupos de projeto que não têm nada em comum, e
+manda a worktree para outro volume quando o repositório está em disco externo.
+
+**Descartado — `<repo>-<branch>` irmão do repositório**, o padrão dos scripts
+caseiros: uma pasta por branch no meio dos repositórios de verdade, que é exatamente
+o que se queria evitar.
+
+Worktree criada antes disto continua onde está e funcionando — o git guarda caminho
+absoluto, e a sessão guarda o `cwd`. Por um tempo as duas pastas coexistem; mover as
+antigas é `git worktree move` mais reescrita de `cwd`, e não vale automatizar por
+enquanto.
 
 ## Decisões ainda abertas
 
