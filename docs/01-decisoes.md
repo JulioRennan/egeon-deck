@@ -757,6 +757,26 @@ tratá-lo — e **mata o code-server do outro app**.
 O socket dentro do `report-session.sh`, senão o agente do dev reportaria a conversa
 dele para o estável, corrompendo o `sessions.json` em uso.
 
+### O que NÃO se separa: a config de cada CLI
+
+**Descartado — derivar `CLAUDE_CONFIG_DIR` por flavor** (`~/.claude-agro` →
+`~/.claude-agro-egeon-dev`, com symlink para plugins e cópia de settings). Foi
+implementado e funcionou — conversa do dev isolada, plugins compartilhados, medido
+por `CLAUDE_CONFIG_DIR` do processo e pela contagem de conversas do estável — e foi
+**removido de propósito**.
+
+O Egeon Deck é um gerenciador de terminais com IA. A config de cada CLI é do
+usuário, é análoga entre as instâncias, e duplicá-la põe o app no negócio de
+gerenciar o Claude Code — que não é o dele. O preço concreto ficou claro na hora:
+o Claude Code guarda a credencial no Keychain com um item **por pasta de config**
+(`Claude Code-credentials-<hash>`), então cada pasta derivada nasce deslogada e
+cobra um `/login`. Duplicar config para ganhar isolamento que ninguém pediu é
+trocar um problema teórico por um atrito real a cada pasta nova.
+
+A fronteira, então: o app separa **o que é dele** — `~/.egeon` e `~/.egeon-dev`,
+com sessions, agents, templates, components, web-profiles, socket, log e porta,
+cada um gerenciado pela instância que o criou. O que é da CLI fica como está.
+
 O ícone, dessaturado no dev. Sem isso você fala com o app errado.
 
 ### Encerrar antes de tocar no bundle
@@ -900,12 +920,10 @@ prende ninguém.
 
 - **Assinatura de código.** Enquanto for ad-hoc, qualquer coisa que dependa de
   TCC quebra a cada build. Só vira problema de novo se o portal voltar.
-- **Isolar dev de prod por completo.** Auditado no ADR-017 e o isolamento de app
-  está completo; o incidente que motivou isto era o fluxo de worktree. O que ainda
-  é comum aos dois é o `CLAUDE_CONFIG_DIR` dos agentes (`~/.claude-agro`:
-  conversas, plugins, settings) e, se você apontar as duas para a mesma pasta, o
-  repositório. Nenhum dos dois explicou o sintoma relatado — decidir se vale
-  separar depende de aparecer um sintoma que dependa deles.
+- **Duas sessões na mesma pasta de projeto.** Vale entre flavors e entre duas
+  sessões do mesmo flavor: dois checkouts do mesmo lugar, dois code-servers vigiando
+  os mesmos arquivos. O worktree por terminal (ADR-017) é a saída para quem quer
+  separar; não há guarda impedindo, nem aviso.
 - **Reordenar nó dentro da coluna do mosaico.** Hoje a ordem é a do
   `sessions.json`, e mudá-la é editar o arquivo.
 - **Um code-server para todos os workspaces, ou um por workspace.** Um só é mais
