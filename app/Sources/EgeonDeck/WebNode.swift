@@ -95,8 +95,14 @@ final class WebNode: NodeView {
         self.profileName = profile ?? WebProfileStore.defaultName
         self.currentURL = url ?? Self.homeURL
 
-        super.init(frame: frame, title: "◍ \(title)", accent: NSColor.systemBlue,
+        super.init(frame: frame,
+                   title: "◍ " + String(address.split(separator: "/").last ?? ""),
+                   accent: NSColor.systemBlue,
                    nodeID: String(address.split(separator: "/").last ?? ""))
+        // A URL já está na barra do corpo; o subtítulo diz o que ela não diz —
+        // com qual perfil de navegação esta página está logada.
+        subtitle = "perfil: \(profileName)"
+        titleLabel.toolTip = address
 
         bar.wantsLayer = true
         bar.layer?.backgroundColor = NSColor(calibratedWhite: 0.15, alpha: 1).cgColor
@@ -148,7 +154,7 @@ final class WebNode: NodeView {
     /// Só o rótulo: o nó web não está em índice nenhum, e a página segue carregada.
     override func sessionRenamed(to session: String) {
         address = "\(session)/\(nodeID)"
-        titleLabel.stringValue = "◍ \(address)"
+        titleLabel.toolTip = address
     }
 
     override func layout() {

@@ -214,6 +214,12 @@ enum AppControl {
     static var activateSession: ((String) -> Bool)?
     static var sessionNames: (() -> [String])?
 
+    /// PNG do card de um nó — cabeçalho, borda e corpo, como está na tela.
+    ///
+    /// Mudança que é só desenho não tem log nem DOM para conferir: ou se olha a
+    /// imagem, ou se acredita. Devolve o caminho do arquivo, ou o erro.
+    static var cardSnapshot: ((_ target: String, _ file: URL) -> String)?
+
     /// Remove uma sessão, opcionalmente apagando as worktrees dela.
     ///
     /// Existe pelo mesmo motivo que `makeWorktree`: o fluxo passa por `NSAlert`, que

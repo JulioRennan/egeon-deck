@@ -303,18 +303,31 @@ final class ControlSocket {
             respond(fd, status: "200 OK", json: ["target": target, "probe": result ?? "timeout"])
 
         case ("GET", _, _) where route.contains("/shot"):
-            // /shot?target=ws/id — PNG do editor em disco. Log e DOM podem
-            // mentir sobre "apareceu"; imagem não.
-            let target = Self.target(in: route)
+            // /shot?target=ws/id — PNG em disco. Log e DOM podem mentir sobre
+            // "apareceu"; imagem não.
+            //
+            // `&card=1` fotografa o CARD inteiro, com cabeçalho e borda, em vez do
+            // conteúdo do editor — é a única forma de conferir de fora uma mudança
+            // que é só desenho, como o cabeçalho de duas linhas.
+            let query = Self.query(in: route)
+            let target = query["target"] ?? ""
             let file = URL(fileURLWithPath: NSString(string: Flavor.current.config("shots").path)
                 .expandingTildeInPath)
                 .appendingPathComponent(target.replacingOccurrences(of: "/", with: "_") + ".png")
-            let result = awaitMain(timeout: 20) { done in
-                guard let node = EditorRegistry.node(target) else {
-                    done("erro: editor desconhecido '\(target)'")
-                    return
+            let card = query["card"] == "1" || EditorRegistry.node(target) == nil
+            let result: String?
+            if card {
+                result = DispatchQueue.main.sync {
+                    AppControl.cardSnapshot?(target, file) ?? "erro: app sem canvas"
                 }
-                node.snapshot(to: file, completion: done)
+            } else {
+                result = awaitMain(timeout: 20) { done in
+                    guard let node = EditorRegistry.node(target) else {
+                        done("erro: editor desconhecido '\(target)'")
+                        return
+                    }
+                    node.snapshot(to: file, completion: done)
+                }
             }
             respond(fd, status: "200 OK", json: ["target": target, "path": result ?? "timeout"])
 

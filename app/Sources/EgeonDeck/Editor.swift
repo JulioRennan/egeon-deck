@@ -51,8 +51,12 @@ final class EditorNode: NodeView {
         config.websiteDataStore = .default()
         self.webView = WKWebView(frame: .zero, configuration: config)
 
-        super.init(frame: frame, title: "◧ \(title)", accent: NSColor.systemOrange,
+        super.init(frame: frame,
+                   title: "◧ " + String(address.split(separator: "/").last ?? ""),
+                   accent: NSColor.systemOrange,
                    nodeID: String(address.split(separator: "/").last ?? ""))
+        subtitle = NodeWorktreePlanner.short(folder)
+        titleLabel.toolTip = address
 
         webView.setValue(false, forKey: "drawsBackground")
         body.addSubview(webView)
@@ -79,7 +83,7 @@ final class EditorNode: NodeView {
         EditorRegistry.unregister(address)
         address = "\(session)/\(nodeID)"
         EditorRegistry.register(self)
-        titleLabel.stringValue = "◧ \(address)"
+        titleLabel.toolTip = address
     }
 
     /// O endereço sai do índice, senão `/probe` e `/shot` continuariam achando
@@ -104,6 +108,7 @@ final class EditorNode: NodeView {
     func open(folder path: String) {
         let url = CodeServer.shared.url(forFolder: path)
         Log.write("editor[\(address)]: carregando \(url.absoluteString)")
+        subtitle = NodeWorktreePlanner.short(path)
         status.isHidden = true
         webView.load(URLRequest(url: url))
     }

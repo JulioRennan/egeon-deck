@@ -54,7 +54,10 @@ final class NodeResizeGrip: NSView {
 
 /// Todo nó do canvas é um card: cabeçalho (área de arrasto) + corpo.
 class NodeView: NSView {
-    static let headerHeight: CGFloat = 26
+    /// Duas linhas: nome em cima, caminho embaixo. O cabeçalho de uma linha só
+    /// cabia o endereço inteiro em 11pt e nada mais — para saber em que pasta o
+    /// terminal abriu era preciso rodar `pwd` nele.
+    static let headerHeight: CGFloat = 46
     static let minSize = NSSize(width: 280, height: 180)
     static let gripSize: CGFloat = 16
 
@@ -67,11 +70,27 @@ class NodeView: NSView {
     let accent: NSColor
 
     let titleLabel = NSTextField(labelWithString: "")
+    /// Segunda linha: a pasta em que o nó abriu, ou o endereço da página.
+    let subtitleLabel = NSTextField(labelWithString: "")
+    /// Canto direito da primeira linha: o que está acontecendo agora — spinner,
+    /// aviso, fila. Fora do título porque o título é identidade e não muda; isto
+    /// pisca a cada quadro.
+    let statusLabel = NSTextField(labelWithString: "")
     let body = NSView()
     private let grip = NodeResizeGrip()
-    private let closeButton = ToolbarButton(symbols: ["xmark"], tooltip: "Remover nó", size: 18)
+    private let closeButton = ToolbarButton(symbols: ["xmark"], tooltip: "Remover nó", size: 22)
     private let editButton = ToolbarButton(symbols: ["slider.horizontal.3", "pencil"],
-                                           tooltip: "Configurar este nó", size: 18)
+                                           tooltip: "Configurar este nó", size: 22)
+
+    /// A pasta em que este nó abriu, já encurtada para `~`.
+    var subtitle: String {
+        get { subtitleLabel.stringValue }
+        set {
+            guard subtitleLabel.stringValue != newValue else { return }
+            subtitleLabel.stringValue = newValue
+            subtitleLabel.toolTip = newValue
+        }
+    }
 
     /// Disparado ao soltar um arrasto ou um resize. É o gancho de persistência:
     /// só no fim do gesto, para não reescrever o JSON a cada pixel.
@@ -117,10 +136,26 @@ class NodeView: NSView {
         layer?.borderColor = accent.withAlphaComponent(0.55).cgColor
         layer?.masksToBounds = true
 
-        titleLabel.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         titleLabel.textColor = accent
         titleLabel.stringValue = title
+        titleLabel.lineBreakMode = .byTruncatingTail
         addSubview(titleLabel)
+
+        // Caminho trunca no MEIO: o começo diz o projeto e o fim diz a pasta, e
+        // são as duas pontas que identificam onde o terminal está. Cortar o fim
+        // deixaria três cards com o mesmo texto visível.
+        subtitleLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        subtitleLabel.textColor = NSColor(calibratedWhite: 0.58, alpha: 1)
+        subtitleLabel.lineBreakMode = .byTruncatingMiddle
+        addSubview(subtitleLabel)
+
+        statusLabel.font = .systemFont(ofSize: 10, weight: .medium)
+        statusLabel.textColor = NSColor(calibratedWhite: 0.62, alpha: 1)
+        statusLabel.alignment = .right
+        statusLabel.lineBreakMode = .byTruncatingHead
+        addSubview(statusLabel)
+
         addSubview(body)
         addSubview(grip)
         addSubview(editButton)
@@ -291,16 +326,38 @@ class NodeView: NSView {
 
     override func layout() {
         super.layout()
-        let closeSize: CGFloat = 18
-        let controls = closeSize + (editButton.isHidden ? 0 : closeSize + 2)
-        titleLabel.frame = NSRect(x: 10, y: 6,
-                                  width: max(0, bounds.width - 20 - controls - 6), height: 15)
-        closeButton.frame = NSRect(x: bounds.width - closeSize - 5,
-                                   y: (Self.headerHeight - closeSize) / 2,
-                                   width: closeSize, height: closeSize)
-        editButton.frame = NSRect(x: bounds.width - closeSize * 2 - 7,
-                                  y: (Self.headerHeight - closeSize) / 2,
-                                  width: closeSize, height: closeSize)
+        let botão: CGFloat = 22
+        let margem: CGFloat = 12
+        // Os botões ficam na altura do TÍTULO, não no meio do cabeçalho: o
+        // subtítulo é informação, não linha de ação, e centralizar nos dois faria
+        // o "encerrar" parecer que age sobre o caminho.
+        let linha1: CGFloat = 8
+        let controles = botão + (editButton.isHidden ? 0 : botão + 4)
+
+        closeButton.frame = NSRect(x: bounds.width - botão - margem + 4, y: linha1,
+                                   width: botão, height: botão)
+        editButton.frame = NSRect(x: bounds.width - botão * 2 - margem, y: linha1,
+                                  width: botão, height: botão)
+
+        let disponível = max(0, bounds.width - margem * 2 - controles - 8)
+        // Título toma o que precisa; o estado fica com o resto da linha. Assim
+        // "front" não perde letra para caber "trabalhando · 2 na fila".
+        //
+        // Medido pela CÉLULA do rótulo. As duas alternativas erram:
+        // `intrinsicContentSize` depende do frame atual, e como é esta linha que
+        // define o frame, cada passada encolhia sobre a anterior; medir a string
+        // com a fonte declarada erra por pouco, porque o `✦` do símbolo cai numa
+        // fonte de fallback mais larga do que a que se mediu. Nos dois casos o
+        // título virava "clau…" com 1300px de sobra na linha.
+        titleLabel.sizeToFit()
+        let larguraTítulo = min(disponível * 0.62, titleLabel.frame.width + 2)
+        titleLabel.frame = NSRect(x: margem, y: linha1 + 1,
+                                  width: max(0, larguraTítulo), height: 18)
+        statusLabel.frame = NSRect(x: margem + larguraTítulo + 8, y: linha1 + 4,
+                                   width: max(0, disponível - larguraTítulo - 8), height: 13)
+        subtitleLabel.frame = NSRect(x: margem, y: 29,
+                                     width: max(0, bounds.width - margem * 2), height: 13)
+
         body.frame = NSRect(x: 1, y: Self.headerHeight,
                             width: bounds.width - 2,
                             height: max(0, bounds.height - Self.headerHeight - 1))
@@ -411,15 +468,18 @@ final class TerminalNode: NodeView {
          command: String, profile: AgentProfile?, config: String? = nil,
          prompt: String? = nil) {
         self.address = address
-        // O cabeçalho carrega o endereço de dispatch e o que está rodando. Como o
-        // id do nó vem do nome do componente, `deck/revisor · Claude Code` já
-        // diz o nome, o alvo e o agente numa linha.
-        self.baseTitle = title + (profile.map { " · \($0.displayName)" } ?? "")
+        // Só o nome do terminal no título. O endereço inteiro cabia numa linha de
+        // 11pt e não sobrava nada; agora a sessão é a mesma para todos os cards da
+        // tela, então repeti-la em cada um custa espaço e não informa. O endereço
+        // completo e o CLI ficam no tooltip, para quem precisa despachar.
+        self.baseTitle = String(address.split(separator: "/").last ?? "")
         self.symbol = profile == nil ? "▸" : "✦"
         super.init(frame: frame,
                    title: "\(self.symbol) \(self.baseTitle)",
                    accent: profile == nil ? .systemTeal : .systemPurple,
                    nodeID: String(address.split(separator: "/").last ?? ""))
+        subtitle = NodeWorktreePlanner.short(cwd)
+        titleLabel.toolTip = address + (profile.map { " · \($0.displayName)" } ?? "")
         body.addSubview(term)
 
         // Depois do corpo, para ficar na frente do SwiftTerm — ele consome o
@@ -504,7 +564,9 @@ final class TerminalNode: NodeView {
         let updated = "\(session)/\(nodeID)"
         Dispatcher.shared.rekey(from: address, to: updated)
         address = updated
-        baseTitle = updated
+        // O título é o nome do terminal e não muda com a sessão; o tooltip carrega
+        // o endereço, e esse muda.
+        titleLabel.toolTip = updated
         refreshBadge()
     }
 
@@ -570,14 +632,21 @@ final class TerminalNode: NodeView {
         if let label = activity.label { parts.append(label) }
         if pending > 0 { parts.append("\(pending) na fila") }
 
-        let suffix = parts.isEmpty ? "" : "   •  " + parts.joined(separator: "  •  ")
-        let text = "\(symbol) \(baseTitle)\(suffix)"
-        // O rótulo só é tocado quando o texto muda de fato: o spinner troca a
+        let text = "\(symbol) \(baseTitle)"
+        let status = parts.joined(separator: "  ·  ")
+        // Os rótulos só são tocados quando o texto muda de fato: o spinner troca a
         // cada quadro, o resto quase nunca, e reatribuir string igual marca
         // needsDisplay à toa em todos os nós parados.
-        if titleLabel.stringValue != text { titleLabel.stringValue = text }
+        if titleLabel.stringValue != text {
+            titleLabel.stringValue = text
+            // A largura do título sai do texto; sem isto, renomear o nó deixaria a
+            // reserva do nome anterior.
+            needsLayout = true
+        }
+        if statusLabel.stringValue != status { statusLabel.stringValue = status }
 
         titleLabel.textColor = activity.color ?? accent
+        statusLabel.textColor = activity.color ?? NSColor(calibratedWhite: 0.62, alpha: 1)
         setAlert(activity.needsAttention)
     }
 

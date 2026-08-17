@@ -100,6 +100,9 @@ EgeonCLI.install()
         AppControl.sessionOwning = { [weak self] folder in
             self?.sessionOwning(folder: folder)
         }
+        AppControl.cardSnapshot = { [weak self] target, file in
+            self?.cardSnapshot(target: target, file: file) ?? "erro: app encerrando"
+        }
         AppControl.removeSession = { [weak self] name, purge in
             self?.removeSession(named: name, purge: purge)
                 ?? ["ok": false, "error": "app encerrando"]
@@ -897,6 +900,37 @@ EgeonCLI.install()
             return
         }
         removeSession(index)
+    }
+
+    /// PNG do card de um nó, direto do AppKit.
+    ///
+    /// `cacheDisplay` desenha a árvore de views num bitmap sem depender da tela —
+    /// funciona com a janela atrás de outra, o que o `screencapture` não faz. O
+    /// corpo de um `WKWebView` sai em branco por esse caminho (ele pinta fora da
+    /// árvore), e para o conteúdo do editor existe o `/shot` normal.
+    private func cardSnapshot(target: String, file: URL) -> String {
+        let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let index = configs.firstIndex(where: { $0.name == parts[0] }),
+              let node = shells[index]?.nodes.first(where: { $0.nodeID == parts[1] })
+        else { return "erro: nó desconhecido '\(target)'" }
+
+        guard let rep = node.bitmapImageRepForCachingDisplay(in: node.bounds) else {
+            return "erro: não consegui alocar o bitmap"
+        }
+        node.cacheDisplay(in: node.bounds, to: rep)
+
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            return "erro: falha ao converter em PNG"
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try png.write(to: file)
+        } catch {
+            return "erro: \(error)"
+        }
+        return file.path
     }
 
     /// Remoção sem diálogo, para o socket. Mesmas regras do formulário: só apaga
