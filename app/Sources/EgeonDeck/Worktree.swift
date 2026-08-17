@@ -17,7 +17,6 @@ enum Worktree {
 
     enum Failure: Error, CustomStringConvertible {
         case notARepo(String)
-        case branchInUse(String, at: String)
         case destinationExists(String)
         case git(command: String, output: String)
 
@@ -25,11 +24,8 @@ enum Worktree {
             switch self {
             case .notARepo(let path):
                 return "\(path) não é um repositório git."
-            case .branchInUse(let branch, let at):
-                return "A branch \"\(branch)\" já está em uso na worktree \(at). "
-                    + "O git não permite a mesma branch em dois lugares — escolha outro nome."
             case .destinationExists(let path):
-                return "Já existe algo em \(path)."
+                return "Já existe algo em \(path) — apague a pasta ou escolha outro caminho."
             case .git(let command, let output):
                 return "git \(command) falhou:\n\(output)"
             }
@@ -85,23 +81,91 @@ enum Worktree {
         return "\(current)-\(n)"
     }
 
-    /// O nome pedido, se estiver livre; senão o próximo sufixo.
-    ///
-    /// Existe porque `availableBranch` **sempre** soma sufixo, e usá-la para
-    /// reaproveitar um nome em outro repositório produzia `feat-x` → `feat-x-2` no
-    /// front e `feat-x-2-2` no back. Um assunto tem um nome, e ele só muda onde
-    /// estiver de fato ocupado.
-    static func freeBranch(preferred: String, in path: String) -> String {
-        let existing = branches(in: path)
-        guard existing.contains(preferred) else { return preferred }
-        var n = 2
-        while existing.contains("\(preferred)-\(n)") { n += 1 }
-        return "\(preferred)-\(n)"
-    }
-
     private static func branches(in path: String) -> [String] {
         (try? run(["branch", "--format=%(refname:short)", "--list"], in: path))?
             .split(whereSeparator: \.isNewline).map { String($0).trimmed } ?? []
+    }
+
+    // MARK: - O que vai acontecer com o nome que você escreveu
+
+    /// O destino de um nome de branch, antes de mexer em disco.
+    enum BranchPlan {
+        /// Não existe em lugar nenhum: nasce do HEAD do repositório de origem.
+        case new
+        /// Já existe local e está livre: a worktree abre nela, no commit dela.
+        case existingLocal
+        /// Só existe no remoto. A local nasce seguindo essa ref.
+        case remote(String)
+        /// Já está aberta numa worktree. Não há o que criar — é aquela pasta.
+        case alreadyCheckedOut(String)
+    }
+
+    /// Retrato das branches do repositório, lido de uma vez.
+    ///
+    /// O formulário precisa dizer, a cada tecla, o que vai acontecer com o nome
+    /// digitado. Perguntar ao git por caractere são três processos por tecla na
+    /// thread que está segurando um modal.
+    struct BranchIndex {
+        let local: Set<String>
+        /// branch → ref remota (`origin/x`) de quem ainda não existe local.
+        let remote: [String: String]
+        /// branch → pasta da worktree que já a tem aberta.
+        let checkedOut: [String: String]
+
+        func plan(for branch: String) -> BranchPlan {
+            if let path = checkedOut[branch] { return .alreadyCheckedOut(path) }
+            if local.contains(branch) { return .existingLocal }
+            if let ref = remote[branch] { return .remote(ref) }
+            return .new
+        }
+    }
+
+    static func index(of repo: String) -> BranchIndex {
+        var checkedOut: [String: String] = [:]
+        var stale = false
+
+        func readWorktrees() {
+            checkedOut = [:]
+            let listing = (try? run(["worktree", "list", "--porcelain"], in: repo)) ?? ""
+            var path: String?
+            for line in listing.split(whereSeparator: \.isNewline) {
+                if line.hasPrefix("worktree ") {
+                    path = String(line.dropFirst("worktree ".count))
+                } else if line.hasPrefix("branch refs/heads/"), let path {
+                    let branch = String(line.dropFirst("branch refs/heads/".count))
+                    if FileManager.default.fileExists(atPath: path) {
+                        checkedOut[branch] = path
+                    } else {
+                        stale = true
+                    }
+                }
+            }
+        }
+
+        readWorktrees()
+        // Pasta apagada à mão deixa o registro do git para trás, e reaproveitá-lo
+        // mandaria a sessão para um caminho que não existe. `prune` é idempotente.
+        if stale {
+            _ = try? run(["worktree", "prune"], in: repo)
+            readWorktrees()
+        }
+
+        var remote: [String: String] = [:]
+        let refs = (try? run(["for-each-ref", "--format=%(refname:short)", "refs/remotes"],
+                             in: repo)) ?? ""
+        for ref in refs.split(whereSeparator: \.isNewline).map({ String($0).trimmed }) {
+            guard let slash = ref.firstIndex(of: "/") else { continue }
+            let name = String(ref[ref.index(after: slash)...])
+            // `origin/HEAD` é ponteiro para a branch padrão, não uma branch.
+            guard name != "HEAD" else { continue }
+            // `origin` ganha de outro remoto com o mesmo nome: é o que se quer
+            // sem perguntar, e perguntar aqui seria um diálogo por tecla digitada.
+            if remote[name] == nil || ref.hasPrefix("origin/") { remote[name] = ref }
+        }
+
+        return BranchIndex(local: Set(branches(in: repo)),
+                           remote: remote,
+                           checkedOut: checkedOut)
     }
 
     // MARK: - Criação
@@ -112,25 +176,51 @@ enum Worktree {
         /// Se as modificações em arquivos rastreados vieram junto, para relatar
         /// sem inventar.
         let carriedTrackedChanges: Bool
+        /// A worktree já existia e foi reaproveitada — nada foi criado em disco.
+        let reused: Bool
     }
 
-    /// Cria a worktree em `destination`, numa branch nova apontando para o HEAD
-    /// atual do repositório de origem.
+    /// Abre a worktree de `branch` em `destination` — criando-a, ou devolvendo a
+    /// que já existe.
     ///
-    /// Branch nova, e não a mesma: o git recusa a mesma branch em duas
-    /// worktrees, por design — dois checkouts movendo o mesmo ponteiro se
-    /// atropelariam.
+    /// Quatro caminhos, e o nome que você escreveu decide qual:
+    ///
+    /// - branch que não existe → nasce do HEAD da origem
+    /// - branch que existe local e está livre → a worktree abre **nela**, no
+    ///   commit dela
+    /// - branch que só existe no remoto → nasce local seguindo a ref remota
+    /// - branch já aberta em outra worktree → é aquela pasta, e nada é criado
+    ///
+    /// Os três últimos faltavam. O app só sabia criar branch nova, e da recusa do
+    /// git em ter a mesma branch em dois lugares concluía "escolha outro nome" —
+    /// quando "já está aberta ali" é justamente a resposta útil. Sessão na
+    /// `develop` não tinha como ir para uma `AGROS-3323` que já existia: o nome
+    /// digitado era silenciosamente trocado por `AGROS-3323-2`, uma branch que
+    /// ninguém pediu, sem o trabalho que estava na de verdade.
     static func create(from repoPath: String,
                        branch: String,
                        destination: String,
                        carryDirty: Bool) throws -> Created {
         let status = try status(of: repoPath)
+        let plan = index(of: repoPath).plan(for: branch)
+
+        let add: [String]
+        switch plan {
+        case .alreadyCheckedOut(let existing):
+            Log.write("worktree: \(branch) já está aberta em \(existing) — reaproveitando "
+                      + "em vez de criar")
+            return Created(path: existing, branch: branch,
+                           carriedTrackedChanges: false, reused: true)
+        case .new:
+            add = ["worktree", "add", "-b", branch, destination, "HEAD"]
+        case .existingLocal:
+            add = ["worktree", "add", destination, branch]
+        case .remote(let ref):
+            add = ["worktree", "add", "--track", "-b", branch, destination, ref]
+        }
 
         guard !FileManager.default.fileExists(atPath: destination) else {
             throw Failure.destinationExists(destination)
-        }
-        if let inUse = try worktreeUsing(branch: branch, in: repoPath) {
-            throw Failure.branchInUse(branch, at: inUse)
         }
 
         // Feito ANTES de criar a worktree e sem tocar no working tree de origem:
@@ -145,18 +235,31 @@ enum Worktree {
             atPath: (destination as NSString).deletingLastPathComponent,
             withIntermediateDirectories: true)
 
-        _ = try run(["worktree", "add", "-b", branch, destination, "HEAD"], in: repoPath)
+        _ = try run(add, in: repoPath)
 
+        // Branch nova sai do HEAD com árvore limpa, e ali o stash não tem com o
+        // que conflitar. Branch que já existe tem histórico próprio: aplicar em
+        // cima dela pode conflitar, e resolver conflito numa pasta que acabou de
+        // nascer não é o que ninguém pediu. O objeto do stash fica criado e o log
+        // diz como aplicá-lo à mão — nada se perde por não ter vindo junto.
         if !stash.isEmpty {
-            _ = try run(["stash", "apply", stash], in: destination)
+            if case .new = plan {
+                _ = try run(["stash", "apply", stash], in: destination)
+            } else {
+                Log.write("worktree: \(destination) abriu em \(branch), que tem histórico "
+                          + "próprio — as mudanças não commitadas de \(status.branch) NÃO "
+                          + "vieram. Para levá-las: cd \(destination) && git stash apply \(stash)")
+                stash = ""
+            }
         }
 
-        Log.write("worktree: \(destination) criada na branch \(branch)"
+        Log.write("worktree: \(destination) aberta na branch \(branch)"
                   + (stash.isEmpty ? "" : ", com as mudanças não commitadas"))
 
         return Created(path: destination,
                        branch: branch,
-                       carriedTrackedChanges: !stash.isEmpty)
+                       carriedTrackedChanges: !stash.isEmpty,
+                       reused: false)
     }
 
     // MARK: - O que o git não versiona
@@ -254,21 +357,6 @@ enum Worktree {
                            ?? "cópia concluída")
             }
         }
-    }
-
-    /// Qual worktree já usa essa branch, se alguma. Antecipa o `fatal:` do git
-    /// com uma mensagem que diz o que fazer.
-    private static func worktreeUsing(branch: String, in path: String) throws -> String? {
-        let listing = try run(["worktree", "list", "--porcelain"], in: path)
-        var current: String?
-        for line in listing.split(whereSeparator: \.isNewline) {
-            if line.hasPrefix("worktree ") {
-                current = String(line.dropFirst("worktree ".count))
-            } else if line == "branch refs/heads/\(branch)" {
-                return current
-            }
-        }
-        return nil
     }
 
     // MARK: - Remoção
@@ -411,6 +499,50 @@ enum Worktree {
             throw Failure.git(command: arguments.joined(separator: " "), output: output.trimmed)
         }
         return output
+    }
+}
+
+// MARK: - Dizer antes de fazer
+
+/// O que o formulário mostra embaixo do campo de branch, a cada tecla.
+///
+/// Existe porque as quatro saídas são diferentes o bastante para mudar o que o
+/// botão "Criar" faz — de "nasce do commit atual" a "não cria nada, usa aquela
+/// pasta". Descobrir isso depois, no log, é a definição do defeito que esta
+/// mudança conserta.
+extension Worktree.BranchPlan {
+    /// A branch nasce agora, e portanto sai do HEAD da origem.
+    var isFresh: Bool {
+        if case .new = self { return true }
+        return false
+    }
+
+    /// Uma linha, para a lista de terminais do formulário de duplicação.
+    var short: String {
+        switch self {
+        case .new: return "branch nova"
+        case .existingLocal: return "abre na branch que já existe"
+        case .remote(let ref): return "nasce seguindo \(ref)"
+        case .alreadyCheckedOut(let path):
+            return "já aberta em \(NodeWorktreePlanner.short(path))"
+        }
+    }
+
+    func summary(comingFrom current: String, dirty: Bool) -> String {
+        switch self {
+        case .new:
+            return "Branch nova · sai de \(current), no commit atual."
+                + (dirty ? " As mudanças não commitadas vão junto." : "")
+        case .existingLocal:
+            return "Esta branch já existe · a worktree abre nela, no commit dela."
+                + (dirty ? " As mudanças não commitadas de \(current) ficam onde estão." : "")
+        case .remote(let ref):
+            return "Só existe em \(ref) · a branch local nasce seguindo o remoto."
+                + (dirty ? " As mudanças não commitadas de \(current) ficam onde estão." : "")
+        case .alreadyCheckedOut(let path):
+            return "Já está aberta em \(NodeWorktreePlanner.short(path)) · nada é criado, "
+                + "e é essa pasta que vai ser usada."
+        }
     }
 }
 

@@ -269,7 +269,12 @@ EgeonCLI.install()
         // A cópia do que o git não versiona roda depois de a sessão existir: com
         // node_modules e Pods no meio, esperar por ela antes de mostrar qualquer
         // coisa pareceria travamento.
-        copyUnversioned([(repoRoot, created.path)], into: configs.count - 1)
+        //
+        // Worktree reaproveitada não é copiada: ela já tem o `.env` e as
+        // dependências dela, e passar por cima seria estragar o que se pediu para
+        // reusar.
+        copyUnversioned(created.reused ? [] : [(repoRoot, created.path)],
+                        into: configs.count - 1)
     }
 
     /// Duplica a sessão numa worktree nova, com os mesmos nós.
@@ -382,7 +387,10 @@ EgeonCLI.install()
 
         schedulePersist()
 
-        copyUnversioned([(repoRoot, created.path)] + extraWorktrees, into: alvo)
+        // Worktree reaproveitada fica de fora da cópia: ela já tem `.env` e
+        // dependências, e passar por cima estragaria o que se pediu para reusar.
+        copyUnversioned((created.reused ? [] : [(repoRoot, created.path)]) + extraWorktrees,
+                        into: alvo)
         return nil
     }
 
@@ -481,9 +489,10 @@ EgeonCLI.install()
                                  suggestedBranch: String,
                                  inheriting origin: SessionConfig? = nil) -> WorktreeForm? {
         let alert = NSAlert()
-        alert.messageText = "Nova worktree de \((repoRoot as NSString).lastPathComponent)"
+        alert.messageText = "Worktree de \((repoRoot as NSString).lastPathComponent)"
         alert.informativeText = worktreeSummary(status: status)
-        alert.addButton(withTitle: "Criar")
+        // "Abrir" e não "Criar": a branch pode já existir, e aí não se cria nada.
+        alert.addButton(withTitle: "Abrir")
         alert.addButton(withTitle: "Cancelar")
 
         // Duplicando há duas saídas; a partir do `+`, sem sessão de origem, só
@@ -547,14 +556,60 @@ EgeonCLI.install()
         let branchField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
         branchField.stringValue = suggestedBranch
         container.addSubview(branchField)
-        y += 28
+        y += 25
+
+        // O que vai acontecer com o nome que está escrito agora: criar branch,
+        // abrir na que já existe, seguir uma remota, ou usar a worktree que já a
+        // tem aberta. Sem esta linha as quatro são visualmente idênticas, e a
+        // diferença entre elas é o que o botão faz. Ver ADR-018.
+        let verdict = NSTextField(labelWithString: "")
+        verdict.font = .systemFont(ofSize: 10)
+        verdict.maximumNumberOfLines = 3
+        verdict.frame = NSRect(x: 0, y: y, width: width, height: 39)
+        container.addSubview(verdict)
+        y += 43
 
         label("PASTA DA WORKTREE")
         let pathField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
-        pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot, branch: suggestedBranch)
         pathField.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         container.addSubview(pathField)
         y += 30
+
+        // Lido uma vez, e não por tecla: `git worktree list` + `branch` +
+        // `for-each-ref` a cada caractere seriam três processos por tecla na
+        // thread que está segurando o modal.
+        let branches = Worktree.index(of: repoRoot)
+        var pathTouched = false
+
+        func refreshVerdict() {
+            let branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let plan = branches.plan(for: branch)
+            verdict.stringValue = plan.summary(comingFrom: status.branch,
+                                               dirty: status.hasDirtyTracked)
+            verdict.textColor = plan.isFresh ? .secondaryLabelColor : .systemOrange
+
+            if case .alreadyCheckedOut(let existing) = plan {
+                // A pasta não é escolha: ela já existe, com trabalho dentro.
+                pathField.stringValue = NodeWorktreePlanner.short(existing)
+                pathField.isEditable = false
+                pathField.textColor = .secondaryLabelColor
+                // Reaproveitar worktree torna fácil cair na pasta de uma sessão
+                // que já está aberta — dois code-servers vigiando os mesmos
+                // arquivos, e dois agentes editando sem saber um do outro. Não é
+                // proibido; é o tipo de coisa que tem de ser dita antes.
+                if let aberta = configs.first(where: { $0.url.path == existing }) {
+                    verdict.stringValue += " Cuidado: essa pasta já é a sessão \"\(aberta.name)\"."
+                }
+            } else {
+                pathField.isEditable = true
+                pathField.textColor = .labelColor
+                if !pathTouched {
+                    pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot,
+                                                                   branch: branch)
+                }
+            }
+        }
+        refreshVerdict()
 
         // Uma linha por terminal, com o repositório de cada um. Existe porque uma
         // frente de trabalho raramente é um repositório só, e porque foi
@@ -587,21 +642,16 @@ EgeonCLI.install()
             y += listHeight + 4
         }
 
-        // Renomear a branch reflete no caminho sugerido e nas linhas dos terminais,
-        // desde que você não os tenha editado à mão.
-        var pathTouched = false
+        // Renomear a branch reflete no veredito, no caminho sugerido e nas linhas
+        // dos terminais, desde que você não os tenha editado à mão.
         let observer = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: pathField, queue: .main) { _ in
                 pathTouched = true
             }
         let branchObserver = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: branchField, queue: .main) { _ in
-                let branch = branchField.stringValue
-                if !pathTouched {
-                    pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot,
-                                                                   branch: branch)
-                }
-                rows.forEach { $0.suggest(branch: branch) }
+                refreshVerdict()
+                rows.forEach { $0.suggest(branch: branchField.stringValue) }
             }
         defer {
             NotificationCenter.default.removeObserver(observer)
@@ -651,16 +701,22 @@ EgeonCLI.install()
 
     /// Diz exatamente o que vai junto. "Leva tudo" sem detalhar é o tipo de
     /// promessa que só se descobre quebrada depois.
+    ///
+    /// De onde a worktree sai e o que acontece com as mudanças não commitadas
+    /// NÃO estão aqui: dependem da branch que você digitar, e ficam na linha que
+    /// acompanha o campo dela. Repetir aqui seria contradizê-la na metade dos
+    /// casos.
     private func worktreeSummary(status: Worktree.Status) -> String {
-        var linhas = ["Sai de \(status.branch), no commit atual."]
-        if status.hasDirtyTracked {
-            linhas.append("As mudanças não commitadas vão junto — e continuam também no original.")
-        }
+        var linhas: [String] = []
         if !status.untracked.isEmpty {
             linhas.append("\(status.untracked.count) arquivo(s) novo(s) vão junto.")
         }
-        linhas.append("O que o .gitignore esconde (.env, node_modules, build…) é copiado depois, "
-                      + "por \(Flavor.current.config("worktree-copy.sh").path).")
+        // "Quando ela nasce" porque a worktree pode ser uma que já existe, e ali
+        // nada é copiado: sobrescrever o .env de uma pasta com trabalho dentro
+        // seria estragar o que se pediu para reaproveitar.
+        linhas.append("Quando a worktree nasce, o que o .gitignore esconde (.env, node_modules, "
+                      + "build…) é copiado depois, por "
+                      + "\(Flavor.current.config("worktree-copy.sh").path).")
         return linhas.joined(separator: "\n")
     }
 
@@ -1684,28 +1740,34 @@ EgeonCLI.install()
                                                  status: status,
                                                  suggestedBranch: suggested) else { return }
 
-        if let error = repoint(nodeID: node.nodeID, index: index, repoRoot: repoRoot,
-                               branch: form.branch, destination: form.destination) {
-            presentError("Não consegui criar a worktree", error)
+        if case .failure(let error) = repoint(nodeID: node.nodeID, index: index,
+                                             repoRoot: repoRoot, branch: form.branch,
+                                             destination: form.destination) {
+            presentError("Não consegui abrir a worktree", error)
         }
     }
 
-    /// Cria a worktree e reaponta o nó, sem diálogo. Ver `duplicate` — mesmo
+    /// Abre a worktree e reaponta o nó, sem diálogo. Ver `duplicate` — mesmo
     /// motivo de existir.
+    ///
+    /// Devolve o que aconteceu, e não só se deu certo: com branch que já existe o
+    /// nó pode ter ido para uma worktree que o app não escolheu, e quem chamou
+    /// pelo socket precisa poder verificar onde o terminal foi parar.
     @discardableResult
     private func repoint(nodeID: String, index: Int, repoRoot: String,
-                         branch: String, destination: String) -> Error? {
+                         branch: String,
+                         destination: String) -> Result<Worktree.Created, Error> {
         guard index >= 0, index < configs.count, let shell = shells[index],
               let position = configs[index].nodes.firstIndex(where: { $0.id == nodeID }),
               let node = shell.nodes.first(where: { $0.nodeID == nodeID })
-        else { return Worktree.Failure.notARepo(nodeID) }
+        else { return .failure(Worktree.Failure.notARepo(nodeID)) }
 
         let created: Worktree.Created
         do {
             created = try Worktree.create(from: repoRoot, branch: branch,
                                           destination: destination, carryDirty: true)
         } catch {
-            return error
+            return .failure(error)
         }
 
         // Sem a conversa: ela é da pasta antiga, e retomá-la aqui traria o agente
@@ -1720,10 +1782,11 @@ EgeonCLI.install()
         schedulePersist()
 
         Log.write("worktree por terminal: \"\(nodeID)\" de \(configs[index].name) "
-                  + "passou a abrir em \(created.path) (branch \(created.branch))")
+                  + "passou a abrir em \(created.path) (branch \(created.branch))"
+                  + (created.reused ? " — worktree que já existia" : ""))
 
-        copyUnversioned([(repoRoot, created.path)], into: index)
-        return nil
+        copyUnversioned(created.reused ? [] : [(repoRoot, created.path)], into: index)
+        return .success(created)
     }
 
     /// Worktree pelo socket, sem diálogo. `ws` duplica a sessão levando os
@@ -1752,16 +1815,21 @@ EgeonCLI.install()
                   let status = try? Worktree.status(of: repoRoot)
             else { return ["ok": false, "error": "\(current) não é repositório git"] }
 
+            // O nome pedido vai como veio: se a branch já existe, é nela que o
+            // terminal abre. Só o nome vazio é sugerido pelo app. Ver ADR-018.
             let name = branch.isEmpty
                 ? Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
-                : Worktree.freeBranch(preferred: branch, in: repoRoot)
+                : branch
             let destination = Worktree.suggestedPath(repoRoot: repoRoot, branch: name)
-            if let error = repoint(nodeID: nodeID, index: index, repoRoot: repoRoot,
-                                   branch: name, destination: destination) {
+            switch repoint(nodeID: nodeID, index: index, repoRoot: repoRoot,
+                           branch: name, destination: destination) {
+            case .failure(let error):
                 return ["ok": false, "error": "\(error)"]
+            case .success(let created):
+                return ["ok": true, "node": nodeID, "repo": repoRoot,
+                        "branch": name, "path": created.path,
+                        "reused": created.reused]
             }
-            return ["ok": true, "node": nodeID, "repo": repoRoot,
-                    "branch": name, "path": destination]
         }
 
         guard let repoRoot = Worktree.mainRepo(of: origin.url.path),
@@ -1770,7 +1838,7 @@ EgeonCLI.install()
 
         let name = branch.isEmpty
             ? Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
-            : Worktree.freeBranch(preferred: branch, in: repoRoot)
+            : branch
         // Os terminais de repo vizinho entram marcados, que é o padrão do
         // formulário — é esse caminho que precisa ser verificado.
         let plans = NodeWorktreePlanner.inspect(origin, sessionRoot: origin.url.path,
@@ -1782,8 +1850,12 @@ EgeonCLI.install()
         if let error = duplicate(index, repoRoot: repoRoot, status: status, form: form) {
             return ["ok": false, "error": "\(error)"]
         }
+        // A pasta vem da sessão que acabou de nascer, e não de `form.destination`:
+        // com branch que já existe a worktree pode ser outra, e é justamente isso
+        // que quem chamou precisa poder conferir.
         return ["ok": true, "session": sessionName, "branch": name,
-                "path": form.destination,
+                "newSession": configs.last?.name ?? "",
+                "path": configs.last?.url.path ?? form.destination,
                 "nodes": plans.filter(\.enabled).map { ["id": $0.nodeID,
                                                         "repo": $0.repoName] }]
     }

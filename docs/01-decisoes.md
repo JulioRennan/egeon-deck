@@ -916,6 +916,99 @@ travava o app inteiro — 2min30 num `git rev-parse`, destravando no segundo em 
 a cópia terminou. Agora a saída vai para arquivo temporário, cujo fd herdado não
 prende ninguém.
 
+## ADR-018 — A worktree abre na branch que você escreveu, mesmo que ela já exista
+
+**O sintoma.** Sessão na `develop`, tarefa numa `AGROS-3323` que já existia e
+tinha trabalho dentro. Pedir worktree para `AGROS-3323` produzia uma worktree na
+branch `AGROS-3323-2` — nova, vazia, saída do HEAD da `develop`, sem uma linha do
+que estava na branch de verdade. Sem erro, e o nome trocado só aparecia no log.
+
+**Por que fazia isso.** `freeBranch` existia para não colidir: nome ocupado ganhava
+sufixo. E `Worktree.create` só sabia um caminho — `worktree add -b <nova> <pasta>
+HEAD` —, então "a branch já existe" era sempre um problema a contornar, nunca uma
+resposta. A recusa do git em ter a mesma branch em duas worktrees virava
+`branchInUse` com o texto "escolha outro nome", quando "ela já está aberta ali, e
+é essa pasta que você quer" é justamente o que se precisava ouvir.
+
+**A decisão.** O nome pedido vai como veio, e é ele que decide o caminho:
+
+| o nome | o que acontece |
+|---|---|
+| não existe | nasce do HEAD da origem — o comportamento antigo |
+| existe local, livre | a worktree abre **nela**, no commit dela |
+| só existe no remoto | a local nasce seguindo `origin/x` |
+| já aberta em outra worktree | nada é criado; é aquela pasta |
+
+O último caso deixa de ser erro e passa a ser reaproveitamento (`Created.reused`).
+`freeBranch` sumiu — sufixo automático é a forma de o app entregar algo que
+ninguém pediu.
+
+**O que muda de junto.** Worktree reaproveitada não recebe a cópia do que o
+`.gitignore` esconde: passar `.env` e `node_modules` por cima de uma pasta com
+trabalho dentro é estragar o que se pediu para reusar. E o stash das mudanças não
+commitadas só é aplicado quando a branch nasce agora: em branch com histórico
+próprio ele pode conflitar, e resolver conflito numa pasta recém-aberta não era o
+pedido — o objeto do stash fica criado e o log diz o comando para aplicá-lo à mão.
+
+**Dizer antes de fazer.** Como as quatro saídas mudam o que o botão faz, o
+formulário ganhou uma linha embaixo do campo de branch que se atualiza a cada
+tecla: qual dos quatro casos é, de onde a worktree sai, e o que acontece com as
+mudanças não commitadas. Laranja quando não é branch nova. Com a branch já aberta
+em algum lugar, o campo da pasta vira leitura — ela não é escolha — e, se aquela
+pasta já for uma sessão do app, a linha avisa pelo nome: dois code-servers na
+mesma pasta e dois agentes editando sem saber um do outro continuam permitidos,
+mas não em silêncio. O botão passou de "Criar" para "Abrir" pelo mesmo motivo.
+
+O `git worktree list` + `branch` + `for-each-ref` é lido **uma vez** por
+formulário, em `Worktree.index`: perguntar por tecla digitada seriam três
+processos por caractere na thread que segura o modal. O índice também roda
+`worktree prune` quando encontra registro cuja pasta foi apagada à mão —
+reaproveitar um desses mandaria a sessão para um caminho que não existe.
+
+**Verificação.** Pelo socket, que é o único jeito de exercitar um fluxo que passa
+por `NSAlert`: `/worktree?target=…&branch=…` devolve `path` e `reused`, e a pasta
+vem da sessão que nasceu, não do que o formulário sugeriu — com branch existente
+as duas divergem, e é essa divergência que precisa ser conferível.
+
+## ADR-019 — O editor pergunta quem pode acionar a partir da pasta dele
+
+**Dois defeitos no mesmo botão.** O "Request changes" da extensão resolvia o alvo
+uma vez e gravava no settings do workspace. Nó apagado ou renomeado deixava ali um
+endereço morto, e o app respondia "alvo desconhecido" — para sempre, porque a
+extensão insistia no mesmo valor gravado. A única saída era o comando de escolher
+alvo, que nem aparece na preview. E a lista oferecida na primeira vez era global:
+o editor de um projeto oferecia terminal de outro, que não tem nada a ver com o
+arquivo aberto.
+
+**A decisão.** `GET /targets?folder=<pasta>` responde os terminais da sessão dona
+daquela pasta, com a lista inteira em `all` ao lado. O filtro é do **app** de
+propósito: a extensão só conhece a pasta do workspace, e com worktree o nome da
+sessão não sai do nome da pasta. Quem casa as duas é o `AppDelegate`
+(`AppControl.sessionOwning`) — primeiro pelas pastas que os nós de editor de fato
+abriram, que é resposta exata, e só depois por prefixo do caminho da sessão, onde
+o mais longo ganha: senão a worktree perde para o checkout principal.
+
+Conferir usa a lista inteira; sugerir usa a da sessão. Atravessar sessão é
+legítimo, e apagar essa escolha a cada envio seria desfazer na surdina o que o
+usuário pediu — as outras ficam atrás de um "outra sessão…" na escolha. Alvo que
+sumiu do `all` é limpo do settings, e o próximo clique pergunta em vez de repetir
+a falha; o app rejeitando na entrega limpa também, porque o nó pode morrer entre a
+conferência e o envio.
+
+A troca de alvo passou a ser um badge com o endereço na barra da preview — antes
+só a paleta de comandos fazia isso, e ela não aparece para quem está lendo o
+documento renderizado.
+
+`/targets` também deixou de listar terminal morto: o card continua na tela e pode
+reviver, mas oferecê-lo como destino é oferecer um buraco — a fila enche e ninguém
+lê.
+
+**O degrau para o app velho.** Bundle anterior a esta rota responde 404 a
+`/targets?folder=`, e sem tratamento a extensão nova concluiria "nenhum terminal
+ativo" contra um app cheio de terminais vivos. `listTargets` cai para a lista
+global nesse caso e devolve `scoped: false`, e o título da escolha para de
+prometer um escopo que não existe.
+
 ## Decisões ainda abertas
 
 - **Assinatura de código.** Enquanto for ad-hoc, qualquer coisa que dependa de
@@ -923,7 +1016,9 @@ prende ninguém.
 - **Duas sessões na mesma pasta de projeto.** Vale entre flavors e entre duas
   sessões do mesmo flavor: dois checkouts do mesmo lugar, dois code-servers vigiando
   os mesmos arquivos. O worktree por terminal (ADR-017) é a saída para quem quer
-  separar; não há guarda impedindo, nem aviso.
+  separar; não há guarda impedindo. Aviso só no formulário de worktree, quando a
+  branch pedida já está aberta numa pasta que é sessão (ADR-018) — abrir a mesma
+  pasta por outro caminho segue silencioso.
 - **Reordenar nó dentro da coluna do mosaico.** Hoje a ordem é a do
   `sessions.json`, e mudá-la é editar o arquivo.
 - **Um code-server para todos os workspaces, ou um por workspace.** Um só é mais

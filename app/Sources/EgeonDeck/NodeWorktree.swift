@@ -106,18 +106,18 @@ enum NodeWorktreePlanner {
             }
 
             do {
-                let branch = Worktree.freeBranch(preferred: plan.branch, in: repoRoot)
-                if branch != plan.branch {
-                    Log.write("worktree por terminal: branch \"\(plan.branch)\" já existe em "
-                              + "\(plan.repoName) — usando \"\(branch)\"")
-                }
-                let path = Worktree.suggestedPath(repoRoot: repoRoot, branch: branch)
-                let result = try Worktree.create(from: repoRoot, branch: branch,
-                                                 destination: path, carryDirty: true)
+                // O nome que você escreveu, sem sufixo somado por baixo: se a
+                // branch já existe, é nela que o terminal abre. Ver ADR-018.
+                let result = try Worktree.create(from: repoRoot, branch: plan.branch,
+                                                 destination: destination, carryDirty: true)
                 created[destination] = result.path
                 cwdByNode[plan.nodeID] = short(result.path)
-                onCreate(repoRoot, result.path)
-                Log.write("worktree por terminal: \"\(plan.nodeID)\" → \(result.path)")
+                // Worktree reaproveitada tem trabalho dentro. Copiar `.env` e
+                // `node_modules` por cima do que já está lá é sobrescrever
+                // configuração de alguém que não pediu nada.
+                if !result.reused { onCreate(repoRoot, result.path) }
+                Log.write("worktree por terminal: \"\(plan.nodeID)\" → \(result.path)"
+                          + (result.reused ? " (worktree que já existia)" : ""))
             } catch {
                 Log.write("worktree por terminal: \"\(plan.nodeID)\" falhou em "
                           + "\(plan.repoName) — \(error). Segue apontando para \(repoRoot)")
@@ -151,13 +151,13 @@ enum NodeWorktreePlanner {
         let repo = (repoRoot as NSString).lastPathComponent
 
         let alert = NSAlert()
-        alert.messageText = "Nova worktree para \"\(nodeID)\""
-        alert.informativeText = "O terminal passa a abrir na worktree nova de \(repo), "
+        alert.messageText = "Worktree para \"\(nodeID)\""
+        alert.informativeText = "O terminal passa a abrir na worktree de \(repo), "
             + "e sai de \(short(currentPath)).\n\n"
-            + "Sai de \(status.branch), no commit atual. O processo reinicia — não há como "
-            + "trocar o diretório de um pty em curso — e a conversa do agente começa do zero. "
-            + "Id, papel, arestas e posição no canvas continuam os mesmos."
-        alert.addButton(withTitle: "Criar")
+            + "O processo reinicia — não há como trocar o diretório de um pty em curso — e a "
+            + "conversa do agente começa do zero. Id, papel, arestas e posição no canvas "
+            + "continuam os mesmos."
+        alert.addButton(withTitle: "Abrir")
         alert.addButton(withTitle: "Cancelar")
 
         let width: CGFloat = 420
@@ -173,30 +173,63 @@ enum NodeWorktreePlanner {
             y += 17
         }
 
-        label("BRANCH NOVA")
+        label("BRANCH")
         let branchField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
         branchField.stringValue = suggestedBranch
         container.addSubview(branchField)
+        y += 25
+
+        // O que vai acontecer com o nome que está escrito agora. Ver ADR-018: a
+        // mesma caixa serve para criar branch e para ir para uma que já existe, e
+        // sem esta linha as duas são visualmente idênticas.
+        let verdict = NSTextField(labelWithString: "")
+        verdict.font = .systemFont(ofSize: 10)
+        verdict.maximumNumberOfLines = 2
+        verdict.frame = NSRect(x: 0, y: y, width: width, height: 26)
+        container.addSubview(verdict)
         y += 30
 
         label("PASTA DA WORKTREE")
         let pathField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
-        pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot,
-                                                       branch: suggestedBranch)
         pathField.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         container.addSubview(pathField)
         y += 22
 
         var pathTouched = false
+        // Lido uma vez: um `git worktree list` por tecla digitada seria três
+        // processos por caractere na thread que segura o modal.
+        let branches = Worktree.index(of: repoRoot)
+
+        func refresh() {
+            let branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let plan = branches.plan(for: branch)
+            verdict.stringValue = plan.summary(comingFrom: status.branch,
+                                               dirty: status.hasDirtyTracked)
+            verdict.textColor = plan.isFresh ? .secondaryLabelColor : .systemOrange
+
+            if case .alreadyCheckedOut(let existing) = plan {
+                // A pasta não é escolha: ela já existe, com trabalho dentro.
+                pathField.stringValue = short(existing)
+                pathField.isEditable = false
+                pathField.textColor = .secondaryLabelColor
+            } else {
+                pathField.isEditable = true
+                pathField.textColor = .labelColor
+                if !pathTouched {
+                    pathField.stringValue = Worktree.suggestedPath(repoRoot: repoRoot,
+                                                                   branch: branch)
+                }
+            }
+        }
+        refresh()
+
         let pathObserver = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: pathField, queue: .main) { _ in
                 pathTouched = true
             }
         let branchObserver = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: branchField, queue: .main) { _ in
-                guard !pathTouched else { return }
-                pathField.stringValue = Worktree.suggestedPath(
-                    repoRoot: repoRoot, branch: branchField.stringValue)
+                refresh()
             }
         defer {
             NotificationCenter.default.removeObserver(pathObserver)
@@ -230,11 +263,16 @@ final class NodeWorktreeRow: NSView {
     private let title = NSTextField(labelWithString: "")
     private let detail = NSTextField(labelWithString: "")
     private var observer: NSObjectProtocol?
+    /// As branches do repositório DESTE terminal — cada linha pode estar em um
+    /// repositório diferente, e é o que torna a resposta por linha diferente.
+    private let branches: Worktree.BranchIndex?
 
     static let height: CGFloat = 40
 
     init(plan: NodeWorktree, width: CGFloat) {
         self.plan = plan
+        self.branches = (plan.followsSession || plan.repoRoot == nil)
+            ? nil : plan.repoRoot.map(Worktree.index(of:))
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.height))
 
         title.stringValue = plan.nodeID
@@ -272,13 +310,26 @@ final class NodeWorktreeRow: NSView {
                 ? .secondaryLabelColor : .systemOrange
         } else {
             toggle.state = plan.enabled ? .on : .off
-            detail.stringValue = "\(plan.repoName) · worktree própria"
+            describePlan()
         }
         toggle.state = plan.followsSession ? .on : toggle.state
 
         observer = NotificationCenter.default.addObserver(
             forName: NSControl.textDidChangeNotification, object: branchField,
-            queue: .main) { [weak self] _ in self?.touched = true }
+            queue: .main) { [weak self] _ in
+                self?.touched = true
+                self?.describePlan()
+            }
+    }
+
+    /// O que vai acontecer com a branch escrita nesta linha: criar, abrir na que
+    /// já existe, ou usar a worktree que já a tem aberta. Ver ADR-018.
+    private func describePlan() {
+        guard let branches else { return }
+        let branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let verdict = branches.plan(for: branch)
+        detail.stringValue = "\(plan.repoName) · \(verdict.short)"
+        detail.textColor = verdict.isFresh ? .secondaryLabelColor : .systemOrange
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -304,6 +355,8 @@ final class NodeWorktreeRow: NSView {
     func suggest(branch: String) {
         guard !touched, !branchField.isHidden else { return }
         branchField.stringValue = branch
+        // Escrever no campo por código não dispara `textDidChange`.
+        describePlan()
     }
 
     /// O plano desta linha depois do que você escolheu.

@@ -113,6 +113,15 @@ equivalente dentro da worktree) e relativo saindo da raiz com `..` — este últ
 checkouts diferentes. `cwd` que não resolve cai na raiz da sessão **falando**: log
 e banner. Ver ADR-017, que registra o dia que o silêncio custou.
 
+O nome de branch que você escreve vale como escrito, e é ele que decide o que
+acontece: branch que não existe nasce do HEAD da origem; branch que já existe
+local abre **nela**, no commit dela; branch que só existe no remoto nasce
+seguindo a ref; branch já aberta em outra worktree não cria nada — é aquela
+pasta. Worktree reaproveitada não recebe a cópia do `.gitignore` (`.env`,
+`node_modules`), e o stash das mudanças não commitadas só vai junto quando a
+branch nasce agora. O formulário diz qual dos quatro casos é, a cada tecla. Ver
+ADR-018.
+
 ## Visualização
 
 Duas maneiras de olhar a mesma sessão, na barra de cima (⌥⌘1 / ⌥⌘2):
@@ -221,12 +230,14 @@ da sessão dona daquela pasta, quem existe no app inteiro, e qual sessão casou.
 como a extensão do editor sabe o que sugerir sem oferecer terminal de outro
 projeto; a pasta vira sessão pelas pastas que os nós de editor abriram, e só
 depois por prefixo do caminho da sessão (o mais longo ganha, senão worktree perde
-para o checkout principal).
+para o checkout principal). Ver ADR-019.
 
-`/worktree?target=ws[/id]&branch=X` cria worktree da sessão — levando os terminais
+`/worktree?target=ws[/id]&branch=X` abre worktree da sessão — levando os terminais
 de repo vizinho junto — ou de um terminal só. Existe porque o fluxo passa por
 `NSAlert`, que não é dirigível de fora: sem ela não haveria como verificar que
-cada terminal foi para a pasta certa, que é justamente o defeito do ADR-017.
+cada terminal foi para a pasta certa, que é justamente o defeito do ADR-017. A
+resposta traz `path` e `reused`, e o `path` é o da worktree que de fato ficou —
+com branch que já existia, ela pode não ser a que o app sugeriu (ADR-018).
 
 ## Configuração
 
