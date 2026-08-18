@@ -149,6 +149,13 @@ final class ToolbarButton: NSView {
         }
     }
 
+    /// Troca o ícone. Serve a botão que é um interruptor e diz na cara qual é o
+    /// próximo estado — recolher ou abrir.
+    func setSymbols(_ names: [String], tooltip: String) {
+        icon.image = Self.symbol(names)
+        self.toolTip = tooltip
+    }
+
     /// Primeiro nome que existe nesta versão do SF Symbols. Usado também pela
     /// barra superior, que tem os mesmos candidatos a resolver.
     static func symbol(_ names: [String]) -> NSImage? {

@@ -173,17 +173,26 @@ Ver ADR-016.
 
 ## As barras
 
-A barra de sessões **flutua sobre o conteúdo**, em vidro (`NSGlassEffectView`,
-macOS 26). A barra do canvas e o banner de aviso usam o mesmo `GlassPanel`. A barra
-de visualização, no topo, segue opaca e encostada.
+A barra de sessões é de vidro (`NSGlassEffectView`, macOS 26), e onde ela pousa
+depende do modo: **no canvas flutua** sobre o grid, **no mosaico fica ao lado** do
+container. A bancada do canvas tem sobra de espaço e a barra por cima dele é o efeito
+desejado; no mosaico os cards dividem a janela inteira, e sobreposição ali é terminal
+coberto. A barra do canvas e o banner de aviso usam o mesmo `GlassPanel`. A barra de
+visualização, no topo, segue opaca e encostada.
 
-O conteúdo cede à esquerda só a largura do **trilho recolhido** — o que se abre além
-dele passa por cima. Reservar a barra aberta devolveria a coluna fixa; não reservar
-nada faria o painel esquerdo do mosaico nascer debaixo dela, e mosaico é o modo onde
-nada fica coberto.
+No canvas o conteúdo cede sempre só a largura do **trilho** (52pt, 70 com as
+margens) — o que se abre além disso passa por cima. No mosaico ele cede a largura de
+verdade, e recolher devolve 180pt aos cards.
 
-Recolher é automático **pelo modo**, que é por sessão: mosaico recolhe, canvas não.
-Abre no hover com 0,18s de atraso, e ⌥⌘S fixa aberta. No trilho as **bolinhas
+Recolher é **só sua escolha**: `⌘/` ou o botão no cabeçalho da barra. Nem o modo nem o
+mouse passando por cima mexem nisso — barra fechada só abre por clique ou tecla, e
+continua fechada até você dizer o contrário.
+
+⌘/ é cedido quando o cursor está **dentro do editor** — lá a tecla comenta linha, e
+key equivalent de menu é consultado antes do responder chain. No terminal ela não tem
+dono, e ali a barra responde.
+
+No trilho o `+` sai (menu saindo de uma faixa de 52pt cai sobre os cards) e as **bolinhas
 continuam** — os três avisos em 10pt sob a pastilha, mais o aro da pastilha, onde
 laranja de "te espera" vence o verde de "está de pé". O que a largura tira é o nome,
 que vira a inicial: sessão inativa não desenha nada na tela, e essa linha é a única
@@ -297,8 +306,9 @@ começa dizendo em que modo está: em mosaico o `docFrame` é o do painel e o
 painel — o mesmo que arrastar um cabeçalho sobre o outro, e a única forma de
 verificar isso de fora, porque evento de mouse sintético depende de permissão de
 Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003).
-`/sidebar?pin=0|1` existe pelo mesmo motivo: a barra de sessões abre no hover, e sem
-esta rota não há como conferir de fora o que ela faz por cima de um card.
+`/sidebar?collapsed=0|1|toggle` existe pelo mesmo motivo: recolher é tecla de menu e
+clique, e nenhum dos dois é dirigível de fora. `toggle` é exatamente o que o ⌘/ e o
+botão fazem.
 
 `/targets` lista só terminais **de pé** — nó com processo morto continua no canvas
 mas não é destino. Com `?folder=<path>` responde `{targets, all, session}`: quem é

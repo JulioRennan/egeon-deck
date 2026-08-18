@@ -286,6 +286,13 @@ final class Sidebar: NSView {
             rows.forEach { $0.isCompact = isCompact }
             title.isHidden = isCompact
             emptyLabel.isHidden = isCompact || !rows.isEmpty
+            // O + sai do trilho: criar sessão abre um menu, e menu saindo de uma
+            // faixa de 52pt cai por cima dos cards. Você abre a barra e cria.
+            addButton.isHidden = isCompact
+            collapseButton.setSymbols(
+                isCompact ? ["sidebar.trailing", "chevron.right"]
+                          : ["sidebar.leading", "chevron.left"],
+                tooltip: isCompact ? "Abrir a barra (⌘/)" : "Recolher a barra (⌘/)")
             needsLayout = true
         }
     }
@@ -293,9 +300,15 @@ final class Sidebar: NSView {
     private var rows: [SidebarRow] = []
     private let title = NSTextField(labelWithString: "SESSÕES")
     private let addButton = ToolbarButton(symbols: ["plus"], tooltip: "Nova sessão", size: 22)
+    /// Recolher e abrir. Existe além do ⌘/ porque atalho não se descobre olhando
+    /// a tela, e uma barra que recolhe sem dizer como voltar é uma barra que
+    /// alguém vai achar que quebrou.
+    private let collapseButton = ToolbarButton(symbols: ["sidebar.leading", "chevron.left"],
+                                               tooltip: "Recolher a barra (⌘/)", size: 22)
     private let emptyLabel = NSTextField(labelWithString: "")
 
     var onSelect: ((Int) -> Void)?
+    var onToggleCollapse: (() -> Void)?
     var onCreate: (() -> Void)?
     var onCreateFromWorktree: (() -> Void)?
     var onRename: ((Int) -> Void)?
@@ -318,6 +331,9 @@ final class Sidebar: NSView {
         // sessão nova na lista), então elas pertencem ao mesmo botão.
         addButton.onClick = { [weak self] in self?.showCreateMenu() }
         addSubview(addButton)
+
+        collapseButton.onClick = { [weak self] in self?.onToggleCollapse?() }
+        addSubview(collapseButton)
 
         emptyLabel.font = .systemFont(ofSize: 11)
         emptyLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.45)
@@ -354,11 +370,12 @@ final class Sidebar: NSView {
     override func layout() {
         super.layout()
         if isCompact {
-            addButton.frame = NSRect(x: ((bounds.width - 22) / 2).rounded(), y: 8,
-                                     width: 22, height: 22)
+            collapseButton.frame = NSRect(x: ((bounds.width - 22) / 2).rounded(), y: 8,
+                                          width: 22, height: 22)
         } else {
-            title.frame = NSRect(x: 16, y: 12, width: bounds.width - 56, height: 14)
-            addButton.frame = NSRect(x: bounds.width - 34, y: 8, width: 22, height: 22)
+            title.frame = NSRect(x: 16, y: 12, width: bounds.width - 84, height: 14)
+            addButton.frame = NSRect(x: bounds.width - 60, y: 8, width: 22, height: 22)
+            collapseButton.frame = NSRect(x: bounds.width - 32, y: 8, width: 22, height: 22)
         }
         emptyLabel.frame = NSRect(x: 16, y: Self.headerHeight + 8,
                                   width: bounds.width - 32, height: 56)

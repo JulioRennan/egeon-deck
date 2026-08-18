@@ -271,11 +271,19 @@ final class ControlSocket {
                     json: ["ok": applied != nil, "mode": applied ?? mode])
 
         case ("GET", _, _) where route.contains("/sidebar"):
-            // /sidebar?pin=0|1 — fixa a barra de sessões aberta, ou solta.
-            let pin = Self.query(in: route)["pin"] == "1"
-            let state = DispatchQueue.main.sync { AppControl.pinSidebar?(pin) }
+            // /sidebar?collapsed=0|1|toggle — recolhe a barra de sessões, abre,
+            // ou alterna.
+            //
+            // `toggle` existe para cobrir exatamente o que o ⌘/ e o botão da barra
+            // fazem: nem a tecla de menu nem o clique são dirigíveis de fora sem
+            // permissão de Acessibilidade (ADR-003).
+            let raw = Self.query(in: route)["collapsed"] ?? ""
+            let state = DispatchQueue.main.sync { () -> Bool? in
+                raw == "toggle" ? AppControl.toggleSidebar?()
+                                : AppControl.collapseSidebar?(raw == "1")
+            }
             respond(fd, status: state == nil ? "404 Not Found" : "200 OK",
-                    json: ["ok": state != nil, "pinned": state ?? false])
+                    json: ["ok": state != nil, "collapsed": state ?? false])
 
         case ("GET", _, _) where route.contains("/open"):
             // /open?target=ws/id&folder=<path> — troca a pasta do editor.

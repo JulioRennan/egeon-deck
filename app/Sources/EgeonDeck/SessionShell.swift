@@ -334,6 +334,19 @@ final class SessionShell: NSView {
     /// número plausível e errado.
     var visibleContent: NSView { mode == .canvas ? canvas : (mosaic ?? canvas) }
 
+    /// O foco está dentro de um EDITOR.
+    ///
+    /// Mora aqui, e não no canvas, porque em mosaico o canvas está fora da
+    /// hierarquia e `window` é nulo lá — a resposta sairia sempre falsa.
+    var focusIsInsideEditor: Bool {
+        var view = window?.firstResponder as? NSView
+        while let current = view {
+            if current is EditorNode { return true }
+            view = current.superview
+        }
+        return false
+    }
+
     var terminals: [TerminalNode] { nodes.compactMap { $0 as? TerminalNode } }
 
     func refreshBadges() { terminals.forEach { $0.refreshBadge() } }

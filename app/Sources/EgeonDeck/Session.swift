@@ -254,14 +254,17 @@ enum AppControl {
     /// nenhuma sessão ativa.
     static var setViewMode: ((String) -> String?)?
 
-    /// Manter a barra de sessões aberta, ou devolvê-la ao automático.
+    /// Recolher a barra de sessões ao trilho, ou abrir.
     ///
-    /// Existe pelo mesmo motivo que `/mosaic?swap=`: a barra abre no hover, e
-    /// evento de mouse sintético depende de permissão de Acessibilidade, que a
-    /// assinatura ad-hoc perde a cada build (ADR-003). Sem esta rota não há como
-    /// conferir de fora o que a barra flutuante faz por cima de um card.
-    /// Devolve o estado que ficou.
-    static var pinSidebar: ((Bool) -> Bool)?
+    /// Existe pelo mesmo motivo que `/mosaic?swap=`: recolher é tecla de menu e
+    /// clique, e nenhum dos dois é dirigível de fora sem permissão de
+    /// Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003). Sem
+    /// esta rota não há como conferir de fora o que a barra faz por cima de um
+    /// card. Devolve se ficou recolhida.
+    static var collapseSidebar: ((Bool) -> Bool)?
+
+    /// O mesmo que o ⌘/ e o botão da barra fazem. Devolve se ficou recolhida.
+    static var toggleSidebar: (() -> Bool)?
 
     /// Cria worktree e reaponta: `sessão` duplica a sessão inteira levando os
     /// terminais de repo vizinho junto, `sessão/nó` leva só aquele terminal.

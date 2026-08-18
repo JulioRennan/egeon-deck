@@ -1418,21 +1418,43 @@ continua em 14.
 AppKit tira a sombra do canal alfa da camada — que aqui está vazio. Sem o
 `shadowPath`, a barra fica sem sombra e volta a parecer mais um nó pousado no grid.
 
-**O que o conteúdo cede.** Só a largura do TRILHO recolhido (52pt, mais margens:
-70 no total). Reservar os 232 da barra aberta devolveria a coluna fixa que se quis
-tirar; não reservar nada faria o painel esquerdo do mosaico nascer debaixo da barra
-— e mosaico é, por definição, o modo onde nada fica coberto. O que se abre além do
-trilho flutua, e no canvas isso é o efeito desejado.
+**Onde a barra pousa depende do modo.** No canvas ela FLUTUA: o conteúdo cede só a
+largura do trilho (52pt, 70 com as margens) e o resto passa por cima do grid — a
+bancada tem sobra de espaço, e reservar os 232 devolveria a coluna fixa que se quis
+tirar. No mosaico ela fica AO LADO do container, que cede a largura de verdade:
+ali os cards dividem a janela inteira, e sobreposição significa terminal coberto.
+Recolher, no mosaico, devolve 180pt aos cards.
+
+Foi flutuante nos dois modos por algumas horas, com a barra recolhida no mosaico para
+não cobrir nada. Não se sustentou: abrir a barra em mosaico é justamente quando você
+quer ver a lista, e ali ela caía em cima do painel que você estava lendo.
 
 **O topo desvia dos botões da janela.** A barra começa em y=44. Com
 `fullSizeContentView` os semáforos moram no canto superior esquerdo, e vidro por
 baixo deles fica ilegível. Antes disso quem desviava era o cabeçalho de 66pt da
 própria barra, que agora pode ser curto porque a barra não passa mais por ali.
 
-**Recolher.** Automático pelo MODO, que é por sessão: mosaico recolhe, canvas não.
-Abre no hover com 0,18s de atraso — sem o atraso, passar o mouse a caminho do
-primeiro card escancara a barra em cima do terminal. ⌥⌘S fixa aberta e vence o
-automático.
+**Recolher é só a sua escolha.** ⌘/ ou o botão no cabeçalho da barra, e nada mais:
+nem o modo, nem o mouse. Barra fechada só abre por clique ou tecla.
+
+**Descartado: abrir no hover.** Chegou a existir, com 0,18s de atraso para não
+escancarar a barra quando o mouse só passava a caminho de um card. Duas coisas
+mataram: com a barra ao lado no mosaico, a razão de ser dela — não cobrir nada —
+deixou de existir; e barra que se abre sozinha é barra que se abre na hora errada,
+porque o caminho até o card mais à esquerda passa exatamente por cima dela. Junto com
+o hover saíram o `NSTrackingArea` refeito a cada layout, o timer, e a distinção entre
+estado pegajoso e estado na tela — três coisas que só existiam para o gesto.
+
+**Botão além da tecla.** Atalho não se descobre olhando a tela, e barra que recolhe
+sem dizer como voltar é barra que alguém vai achar que quebrou. O ícone é o
+`sidebar.leading`/`trailing` do sistema, que é o idioma que o Finder e o Xcode já usam.
+
+**⌘/ é cedido dentro do editor.** No workbench a tecla comenta linha, e key
+equivalent de menu é consultado ANTES do responder chain: habilitado com o cursor lá
+dentro, ⌘/ deixaria de comentar. `SessionShell.focusIsInsideEditor` decide — e mora no
+shell, não no canvas, porque em mosaico o canvas está fora da hierarquia e `window`
+seria nulo, respondendo sempre falso. No terminal a tecla não tem dono, e ali a barra
+continua respondendo, que é o caso comum: o foco vive num terminal.
 
 **No trilho as bolinhas continuam.** É o ponto que quase se perdeu: uma sessão
 inativa não desenha nada na tela, e a linha da barra é a única pista que ela tem
@@ -1441,12 +1463,16 @@ o que a largura tira é o NOME — que vira a inicial numa pastilha de 26pt. O a
 pastilha carrega o resto: laranja de "te espera" vence o verde de "está de pé",
 porque um pede coisa e o outro só informa.
 
-**Verificação.** `/sidebar?pin=0|1` existe pelo mesmo motivo que
-`/mosaic?swap=` (ADR-023): a barra abre no hover, e evento de mouse sintético exige
-permissão de Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003).
+**Verificação.** `/sidebar?collapsed=0|1|auto|toggle` existe pelo mesmo motivo que
+`/mosaic?swap=` (ADR-023): a barra recolhe por tecla de menu, clique e hover, e
+nenhum dos três é dirigível de fora — evento sintético exige permissão de
+Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003). `toggle` cobre
+exatamente o caminho do ⌘/ e do botão.
 Com ela, screenshot de tela real no dev mostrou o que precisava ser respondido: o
 vidro **amostra o `WKWebView`** — a barra fixada por cima do card do code-server
 mostra o conteúdo dele desfocado, sem buraco preto, que era o risco real de
 composição fora do processo. Verificado também o trilho com terminal em trabalho
-(spinner sob a pastilha, aro verde) e o mosaico sem card coberto. O hover em si não
-foi verificado de fora, por falta do gesto.
+(spinner sob a pastilha, aro verde), três `toggle` seguidos alternando, e — por número,
+não por screenshot, porque o app estava em uso — o card mais à esquerda andando
+exatamente 180pt no mosaico ao recolher, e 0pt no canvas, que é a diferença entre
+ceder espaço e flutuar.
