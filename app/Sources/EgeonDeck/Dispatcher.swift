@@ -179,6 +179,18 @@ final class Session {
     /// Entrada é o sinal exato — um agente parado só volta a ter o que fazer se
     /// alguém lhe der.
     private var attentionHeld = false
+    /// Este terminal já falou por gancho?
+    ///
+    /// A partir do primeiro relato o silêncio para de anunciar. A camada do
+    /// silêncio era rede para o marcador que não chegava, e era ela que acendia
+    /// o aviso em qualquer rajada de dois segundos — um `npm test`, um
+    /// `/resume`, a TUI se redesenhando (ADR-024).
+    private var sawHook = false
+    /// Acionou um vizinho neste turno.
+    ///
+    /// Fim de turno de quem passou o bastão não é assunto seu: o trabalho
+    /// continua no card do outro. Cai com entrada nova, como o aviso.
+    fileprivate var handedOff = false
 
     private(set) var activity: Activity = .starting
 
@@ -341,6 +353,13 @@ final class Session {
             return
         }
 
+        // Terminal que fala por gancho: quem anuncia é o `Stop`, e a tela só
+        // serve para dizer se a parada foi pergunta ou fim. Ler marcador aqui
+        // seria reler o marcador do turno PASSADO — ele continua na tela
+        // enquanto o agente pensa no próximo, e a pausa de quem está pensando é
+        // silêncio igual ao de quem parou.
+        guard !sawHook else { hold(.ready); return }
+
         let lines = screen()
         let verdict = self.verdict(from: lines)
         switch verdict.outcome {
@@ -360,6 +379,7 @@ final class Session {
     /// anterior está resolvido. Vem de você digitando ou de uma entrega nossa.
     fileprivate func inputArrived() {
         attentionHeld = false
+        handedOff = false
     }
 
     /// Você digitou aqui. Além de resolver o aviso, isto encerra a cadeia: o que
@@ -367,6 +387,49 @@ final class Session {
     fileprivate func userTyped() {
         inputArrived()
         chain = []
+    }
+
+    /// O CLI relatou por gancho o que acabou de acontecer aqui.
+    ///
+    /// Dois eventos, e são exatamente os dois avisos que valem: `stop` (gancho
+    /// `Stop` — o turno acabou) e `ask` (gancho `Notification` — o CLI está
+    /// pedindo permissão). O segundo é o caso que marcador nenhum alcança: o
+    /// diálogo de permissão é desenhado pelo programa, não é mensagem do modelo
+    /// (ADR-024).
+    func hookReported(_ event: String) {
+        sawHook = true
+        switch event {
+        case "stop":
+            // O gancho diz QUANDO; o marcador na tela diz QUAL dos dois é.
+            let asked = verdict(from: screen()).outcome == .asked
+            attend(asked ? .asking : .waiting, via: "gancho Stop", stop: hookToken(event))
+        case "prompt":
+            // O relato de conversa (`UserPromptSubmit`) não é aviso nenhum: vale
+            // só por provar que o gancho chega neste terminal, e é o que
+            // autoriza as camadas de adivinhação a calarem já no primeiro turno.
+            break
+        case "ask":
+            // `Notification` são dois avisos num: o pedido de permissão e o
+            // "você sumiu há 60s". O primeiro nasce no meio do trabalho — o
+            // diálogo acabou de ser desenhado, então saiu byte agora há pouco. O
+            // segundo só existe porque faz tempo que não sai nada, e não traz
+            // notícia nenhuma: o fim do turno já veio pelo `Stop`, e ali já se
+            // decidiu se valia te chamar. Sem este corte, toda cadeia silenciada
+            // voltaria a apitar um minuto depois.
+            guard Date().timeIntervalSince(lastOutput) < Self.permissionWindow else { return }
+            attend(.asking, via: "gancho Notification", stop: hookToken(event))
+        default:
+            Log.write("atenção[\(address)]: gancho com evento desconhecido '\(event)'")
+        }
+    }
+
+    /// Até quando, depois do último byte, um `Notification` ainda é permissão.
+    private static let permissionWindow: TimeInterval = 10
+
+    /// Identifica uma parada relatada por gancho. O instante entra porque dois
+    /// turnos seguidos produzem o mesmo evento e são paradas distintas.
+    private func hookToken(_ event: String) -> String {
+        String(format: "gancho:%@@%.2f", event, Date().timeIntervalSinceReferenceDate)
     }
 
     /// Identifica uma parada sem marcador pelo instante do último byte.
@@ -386,6 +449,17 @@ final class Session {
     /// continua visível enquanto o agente pensa no turno atual, então só vale um
     /// marcador DIFERENTE do que estava lá quando a rajada abriu.
     private func liveCheck(_ now: Date) {
+        // Com gancho, esta camada só faz mal. Ela existia para não esperar o
+        // silêncio, e o `Stop` chega antes dele de qualquer jeito — mas a
+        // assinatura do marcador é heurística sobre a tela, e ela muda sozinha
+        // no instante da ENTREGA: o texto colado empurra o marcador do turno
+        // passado tela acima, as linhas em volta trocam, e o app conclui que o
+        // agente acabou de terminar algo que nem começou. Era o "qualquer
+        // interação acende a bolinha" (ADR-024).
+        guard !sawHook else {
+            hold(.working)
+            return
+        }
         guard marker != nil else {
             hold(.working)
             return
@@ -430,6 +504,14 @@ final class Session {
     /// pareceria uma parada diferente. O latch só cai com saída sustentada, que
     /// é o que separa "assentando" de "novo turno".
     private func attend(_ next: Activity, via: String, stop: String) {
+        // Fim de turno de quem acabou de acionar um vizinho não te chama: o
+        // trabalho seguiu para o card do outro, e avisar aqui é te puxar para o
+        // meio de uma conversa entre agentes. Pergunta é o contrário — permissão
+        // não se delega, e é por ela que o vizinho precisa de você (ADR-024).
+        if next == .waiting, handedOff {
+            hold(.ready)
+            return
+        }
         activity = next
         let isNewStop = !attentionHeld && stop != announced
         attentionHeld = true
@@ -445,9 +527,13 @@ final class Session {
         lastBurst = burst
         burstStart = nil
 
-        AttentionSound.play(attention.sound, volume: attention.volume)
+        // Só a pergunta toca. "Terminou" fica no cabeçalho, e você lê quando
+        // olhar: som para os dois é o que transformava o aviso em ruído.
+        if next.needsAttention {
+            AttentionSound.play(attention.sound, volume: attention.volume)
+        }
         Log.write(String(format: "atenção[%@]: %@ — por %@, rajada de %.1fs", address,
-                         next == .asking ? "te perguntou algo" : "parou e espera você",
+                         next == .asking ? "precisa de você" : "terminou",
                          via, burst))
     }
 
@@ -476,10 +562,6 @@ final class Session {
             $0.contains(marker.done) || $0.contains(marker.ask)
         }) else { return nil }
         return lines[max(0, last - 3)...last].joined(separator: "\n")
-    }
-
-    private func readScreen() -> Verdict {
-        verdict(from: peek(lines: 24))
     }
 
     private func verdict(from lines: [String]) -> Verdict {
@@ -807,6 +889,8 @@ final class Dispatcher {
         }
 
         session.enqueue(prompt, mode: request.inject, chain: chain)
+        // Passou o bastão: o fim de turno DELE não te chama mais.
+        origin.handedOff = true
         let budget = edge.maxSends.map { "envio \(sends)/\($0)" } ?? "visita \(visits)/\(ceiling)"
         Log.write("cadeia[\(sender) → \(session.address)]: \(budget) "
                   + "— \(chain.joined(separator: " → "))")
@@ -871,7 +955,8 @@ final class Dispatcher {
             var entry = out[name] ?? ActivitySummary()
             switch session.activity {
             case .starting, .working: entry.working += 1
-            case .waiting, .asking:   entry.attention += 1
+            case .asking:             entry.attention += 1
+            case .waiting:            entry.done += 1
             case .ready, .dead:       break
             }
             out[name] = entry

@@ -1,14 +1,22 @@
 import Foundation
 
-/// Faz o CLI do agente avisar qual conversa está aberta.
+/// Faz o CLI do agente contar ao app o que acabou de acontecer no terminal.
 ///
-/// Sem isso o app só conhece a conversa que ele mesmo criou: um `/resume`,
-/// `/clear` ou fork feito por você dentro da TUI é invisível, e o arranque
-/// seguinte retoma a conversa antiga, desfazendo sua escolha.
+/// Três ganchos, e cada um responde uma pergunta que de fora não tem resposta:
 ///
-/// O gancho é `UserPromptSubmit`, e não `SessionStart`, de propósito: dispara a
-/// cada prompt, então o app se corrige sozinho no turno seguinte mesmo que uma
-/// transição escape. Custa um curl em socket local por prompt.
+/// - `UserPromptSubmit` — qual conversa está aberta. Sem isso o app só conhece a
+///   que ele mesmo criou: um `/resume`, `/clear` ou fork feito por você dentro
+///   da TUI é invisível, e o arranque seguinte retoma a conversa antiga,
+///   desfazendo sua escolha (ADR-014).
+/// - `Stop` — o turno acabou. É o instante exato, sem depender de o pty se calar
+///   nem de o modelo lembrar de escrever o marcador.
+/// - `Notification` — o CLI está pedindo permissão. Este é o caso que marcador
+///   nenhum alcança: o diálogo é desenhado pelo programa, não é mensagem do
+///   modelo (ADR-024).
+///
+/// O `UserPromptSubmit` é a cada prompt de propósito, e não `SessionStart`: o
+/// app se corrige sozinho no turno seguinte mesmo que uma transição escape.
+/// Custa um curl em socket local por prompt.
 ///
 /// O arquivo de settings é nosso e vai por `--settings`. Nada é escrito no
 /// `~/.claude/settings.json` do usuário — a config dele não é lugar para o app
@@ -16,7 +24,7 @@ import Foundation
 enum AgentHooks {
     static var directory: URL { Flavor.current.configDirectory }
     static var settingsFile: URL { directory.appendingPathComponent("claude-hooks.json") }
-    static var script: URL { directory.appendingPathComponent("report-session.sh") }
+    static var script: URL { directory.appendingPathComponent("agent-hook.sh") }
 
     /// Variável de ambiente que diz ao script de qual terminal ele está falando.
     static let targetVariable = "EGEON_TARGET"
@@ -26,6 +34,10 @@ enum AgentHooks {
     static func install() {
         let fm = FileManager.default
         try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Nome anterior, de quando o gancho só relatava a conversa. Ninguém mais
+        // aponta para ele, e deixá-lo no diretório é convidar a editar o arquivo
+        // errado.
+        try? fm.removeItem(at: directory.appendingPathComponent("report-session.sh"))
 
         do {
             try scriptBody.write(to: script, atomically: true, encoding: .utf8)
@@ -36,36 +48,53 @@ enum AgentHooks {
         }
     }
 
-    /// Três regras do `UserPromptSubmit` que este script tem de respeitar, e as
-    /// três mordem se ignoradas:
+    /// Um script para os três ganchos, com o evento em `$1`: ler o
+    /// `hook_event_name` do payload custaria mais um processo de python em algo
+    /// que roda a cada prompt.
     ///
-    /// - o **stdout entra no contexto do prompt**. Uma linha solta aqui vira texto
-    ///   que o agente lê em toda mensagem sua
-    /// - **exit 2 apaga o prompt** que você acabou de escrever. Sair diferente de
-    ///   zero por qualquer motivo é inaceitável num gancho que só reporta
-    /// - o hook **roda síncrono e bloqueia** o prompt. Com o app fora do ar, um
+    /// Três regras destes ganchos, e as três mordem se ignoradas:
+    ///
+    /// - o **stdout do `UserPromptSubmit` entra no contexto do prompt**. Uma
+    ///   linha solta aqui vira texto que o agente lê em toda mensagem sua
+    /// - **exit 2 apaga o prompt** no `UserPromptSubmit` e **impede o agente de
+    ///   parar** no `Stop`. Sair diferente de zero por qualquer motivo é
+    ///   inaceitável num gancho que só relata
+    /// - o gancho **roda síncrono e segura a TUI**. Com o app fora do ar, um
     ///   curl sem `--max-time` deixaria você esperando
     private static var scriptBody: String {
         """
         #!/usr/bin/env bash
-        # Egeon Deck — avisa ao app qual conversa este terminal está usando.
+        # Egeon Deck — conta ao app o que acabou de acontecer neste terminal.
         #
-        # Gancho UserPromptSubmit do Claude Code. NÃO escreva em stdout: ali o texto
-        # entra no contexto do prompt. E sempre saia com 0: exit 2 apaga o prompt do
-        # usuário, e qualquer outro código mostra um aviso na tela dele.
+        # Ganchos do Claude Code. NÃO escreva em stdout: no UserPromptSubmit o
+        # texto entra no contexto do prompt. E sempre saia com 0: exit 2 apaga o
+        # prompt do usuário, e no Stop impede o agente de parar.
         set -u
 
+        event="${1:-}"
+        # Drenado mesmo quando não é lido: stdin fechado sem leitura devolve
+        # SIGPIPE para quem escreveu.
         payload=$(cat)
         [ -n "${EGEON_TARGET:-}" ] || exit 0
 
-        id=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
-          'import sys,json;print(json.load(sys.stdin).get("session_id",""))' 2>/dev/null)
-        [ -n "$id" ] || exit 0
-
-        # --max-time porque o hook bloqueia o prompt: app fora do ar não pode te
+        # --max-time porque o gancho bloqueia a TUI: app fora do ar não pode te
         # fazer esperar. Saída descartada pelo motivo acima.
-        curl -s -o /dev/null --max-time 1 --unix-socket "\(ControlSocket.path)" \\
-          -X POST "http://eg/session?target=$EGEON_TARGET&id=$id" 2>/dev/null
+        post() {
+            curl -s -o /dev/null --max-time 1 --unix-socket "\(ControlSocket.path)" \\
+              -X POST "http://eg$1" 2>/dev/null
+        }
+
+        case "$event" in
+          prompt)
+            id=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
+              'import sys,json;print(json.load(sys.stdin).get("session_id",""))' 2>/dev/null)
+            [ -n "$id" ] || exit 0
+            post "/session?target=$EGEON_TARGET&id=$id"
+            ;;
+          stop|ask)
+            post "/activity?target=$EGEON_TARGET&event=$event"
+            ;;
+        esac
 
         exit 0
         """
@@ -76,18 +105,23 @@ enum AgentHooks {
         {
           "hooks": {
             "UserPromptSubmit": [
-              {
-                "hooks": [
-                  {
-                    "type": "command",
-                    "command": "\(script.path)",
-                    "timeout": 5
-                  }
-                ]
-              }
+              { "hooks": [{ "type": "command", "command": "\(command("prompt"))", "timeout": 5 }] }
+            ],
+            "Stop": [
+              { "hooks": [{ "type": "command", "command": "\(command("stop"))", "timeout": 5 }] }
+            ],
+            "Notification": [
+              { "hooks": [{ "type": "command", "command": "\(command("ask"))", "timeout": 5 }] }
             ]
           }
         }
         """
+    }
+
+    /// A linha de comando é interpretada por um shell e o caminho carrega o nome
+    /// da pasta do usuário: as aspas não são zelo, são o que faz o gancho
+    /// sobreviver a um home com espaço no nome.
+    private static func command(_ event: String) -> String {
+        "\\\"\(script.path)\\\" \(event)"
     }
 }

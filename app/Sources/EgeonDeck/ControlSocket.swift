@@ -124,7 +124,29 @@ final class ControlSocket {
                         json: ["ok": false, "error": "target e id são obrigatórios"])
                 return
             }
-            DispatchQueue.main.sync { AppControl.recordSession?(target, id) }
+            DispatchQueue.main.sync {
+                AppControl.recordSession?(target, id)
+                // Relatar a conversa também prova que o gancho chega aqui — e é
+                // isso que faz o terminal parar de depender de adivinhação sobre
+                // a tela já no primeiro turno (ADR-024).
+                Dispatcher.shared.session(target)?.hookReported("prompt")
+            }
+            respond(fd, status: "200 OK", json: ["ok": true])
+
+        case ("POST", _, _) where route.contains("/activity"):
+            // /activity?target=sessão/id&event=stop|ask — o CLI relatando que o
+            // turno acabou (gancho `Stop`) ou que está pedindo permissão (gancho
+            // `Notification`). São os dois únicos avisos que chamam você, e vêm
+            // do programa em vez de saírem de heurística sobre o pty (ADR-024).
+            let query = Self.query(in: route)
+            let target = query["target"] ?? ""
+            let event = query["event"] ?? ""
+            guard !target.isEmpty, !event.isEmpty else {
+                respond(fd, status: "400 Bad Request",
+                        json: ["ok": false, "error": "target e event são obrigatórios"])
+                return
+            }
+            DispatchQueue.main.sync { Dispatcher.shared.session(target)?.hookReported(event) }
             respond(fd, status: "200 OK", json: ["ok": true])
 
         case ("POST", _, _) where route.contains("/message"):

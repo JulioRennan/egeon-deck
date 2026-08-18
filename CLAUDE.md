@@ -215,10 +215,23 @@ alvo. Nada disso pergunta à TUI se ela está pronta — ver ADR-007/008.
 ## Estado do terminal
 
 `Activity`: `starting` → `working` → `waiting` / `asking` → `ready` / `dead`.
-Deduzido só do fluxo de bytes do pty e do marcador `[[ED:ok]]` / `[[ED:ask]]` que
-o agente escreve por instrução de system prompt. Aparece no cabeçalho do nó
-(spinner, aviso, borda laranja) e na barra lateral. Detalhes e o porquê de cada
-camada: ADR-011.
+
+Quem diz que o turno acabou é o **CLI, por gancho**: `Stop` ("acabei") e
+`Notification` ("estou pedindo permissão") chegam pela rota `/activity`. O
+marcador `[[ED:ok]]` / `[[ED:ask]]` não saiu, mas mudou de papel — o gancho diz
+**quando**, a tela diz **qual dos dois**. Terminal sem gancho (shell, outro CLI)
+continua no silêncio do pty, como antes; a partir do primeiro gancho recebido, as
+camadas que adivinhavam pela tela calam, porque eram elas que acendiam o aviso a
+cada entrega.
+
+Os dois avisos não pesam igual. `asking` é o que interrompe: borda laranja, `●` na
+barra lateral e som. `waiting` é `✓ terminou` no cabeçalho, sem borda e sem som —
+você lê quando olhar.
+
+E **fim de turno de quem acabou de acionar um vizinho não avisa nada**: o trabalho
+seguiu para o outro card, e te chamar ali é te puxar para o meio de uma conversa
+entre agentes. Pergunta avisa sempre, inclusive no meio de uma cadeia — permissão
+não se delega. Detalhes: ADR-011 e ADR-024.
 
 ## Socket de controle
 
@@ -234,7 +247,7 @@ curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
 Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/mosaic` `/worktree` `/remove`
-`/activate` `/open` `/view` `/file` `/change` `/message` `/peers` `/status`. As três últimas
+`/activate` `/open` `/view` `/file` `/change` `/activity` `/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
 conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
 guardas de cadeia. **`/peek` e `/dispatch` são as ferramentas de teste** — dá
@@ -275,7 +288,7 @@ Tudo em `~/.egeon/`, e todo arquivo é feito para ser editado à mão:
 `web-profiles.json`. Log em `~/egeon.log` (zerado a cada arranque).
 
 O app também escreve ali o que os processos filhos precisam: `bin/egeon`,
-`report-session.sh` e `claude-hooks.json`. São gerados a cada arranque — apagar
+`agent-hook.sh` e `claude-hooks.json`. São gerados a cada arranque — apagar
 não quebra nada.
 
 ## Flavors

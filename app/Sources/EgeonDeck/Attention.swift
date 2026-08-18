@@ -20,16 +20,18 @@ enum Activity: Equatable {
     /// Processo encerrado.
     case dead
 
-    /// Estados que chamam o usuário.
-    var needsAttention: Bool { self == .waiting || self == .asking }
+    /// Estados que INTERROMPEM: borda laranja e som. Só a pergunta entra aqui.
+    /// "Terminou" você lê quando olhar; tratar os dois como o mesmo alarme é o
+    /// que fazia o aviso virar barulho de fundo (ADR-024).
+    var needsAttention: Bool { self == .asking }
 
     /// Sufixo do cabeçalho do nó. `nil` quando não vale ocupar a linha.
     var label: String? {
         switch self {
         case .starting: return "\(Spinner.current) subindo"
         case .working:  return "\(Spinner.current) trabalhando"
-        case .waiting:  return "● precisa de você"
-        case .asking:   return "● te perguntou algo"
+        case .waiting:  return "✓ terminou"
+        case .asking:   return "● precisa de você"
         case .dead:     return "✕ processo encerrado"
         case .ready:    return nil
         }
@@ -38,9 +40,9 @@ enum Activity: Equatable {
     /// Cor do rótulo. `nil` = mantém o acento do tipo de nó.
     var color: NSColor? {
         switch self {
-        case .waiting, .asking: return .systemOrange
-        case .dead:             return .systemRed
-        default:                return nil
+        case .asking:  return .systemOrange
+        case .dead:    return .systemRed
+        default:       return nil
         }
     }
 }
@@ -50,8 +52,9 @@ enum Activity: Equatable {
 struct ActivitySummary: Equatable {
     var working = 0
     var attention = 0
+    var done = 0
 
-    var isQuiet: Bool { working == 0 && attention == 0 }
+    var isQuiet: Bool { working == 0 && attention == 0 && done == 0 }
 }
 
 // MARK: - Carregando

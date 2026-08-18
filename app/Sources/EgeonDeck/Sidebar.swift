@@ -80,6 +80,9 @@ final class SidebarRow: NSView {
         if summary.attention > 0 {
             text = summary.attention > 1 ? "● \(summary.attention)" : "●"
             color = .systemOrange
+        } else if summary.done > 0 {
+            text = summary.done > 1 ? "✓ \(summary.done)" : "✓"
+            color = NSColor(calibratedWhite: 1, alpha: 0.45)
         } else if summary.working > 0 {
             text = String(Spinner.current)
             color = NSColor(calibratedWhite: 1, alpha: 0.45)

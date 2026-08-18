@@ -1164,6 +1164,145 @@ tamanhos diferentes: `slots` gravado, geometria dos três cards casando com ele,
 contador de trocas parado quando ninguém mexe (o eco do `publish` de volta pelo
 `sessions.json` não remonta nada).
 
+## ADR-024 — O aviso nasce de gancho do CLI, e cadeia entre agentes não te chama
+
+**Decisão:** os dois avisos vêm dos ganchos `Stop` e `Notification` do CLI, pela
+rota `/activity`. A leitura de tela deixa de ser gatilho e vira qualificador. Fim
+de turno de um terminal que acabou de acionar um vizinho não avisa nada.
+
+### O problema
+
+O [ADR-011](#adr-011--precisa-de-você-vem-de-um-marcador-que-nós-pedimos-não-da-tela)
+montou três camadas sobre a tela e o pty, e as duas de cima acendiam sozinhas.
+
+A **camada 3** (silêncio depois de uma rajada de `minWorkMs`) não distingue
+trabalho de qualquer outra coisa que escreva por dois segundos: um `npm test`
+rodando dentro do agente, um `/resume`, a TUI se redesenhando. Tudo virava
+"precisa de você".
+
+A **camada 1** (marcador ao vivo) era pior, porque acendia no instante da
+ENTREGA. Medido:
+
+```
+10:47:15 dispatch[nitidez/claude]: entregue (0 restando)
+10:47:16 atenção[nitidez/claude]: terminou — por marcador ao vivo, rajada de 1.5s
+```
+
+Um segundo depois de o turno COMEÇAR, o app anunciou que ele tinha acabado. A
+assinatura do marcador é o marcador mais as três linhas acima dele, e o texto
+colado empurra o marcador do turno passado tela acima: as linhas em volta trocam,
+a assinatura muda, e a defesa contra "marcador velho" — que era justamente essa
+assinatura — desmonta sozinha sem o agente ter escrito nada.
+
+E as duas paradas tinham o mesmo peso: borda laranja e som tanto para "terminei"
+quanto para "dependo de você". Aviso que dispara o dia inteiro para as duas
+coisas deixa de ser aviso.
+
+### A rota: quem sabe o que aconteceu é o programa
+
+O mesmo movimento do ADR-011, levado até o fim. Lá se parou de adivinhar o
+*desenho* do CLI e se passou a pedir um sinal ao **modelo**; aqui se para de
+adivinhar o *ritmo* dele e se passa a perguntar ao **programa**. O canal já
+existia inteiro — o `claude-hooks.json` que vai por `--settings` e o
+`EGEON_TARGET` no ambiente —, faltava usar mais dois eventos:
+
+| gancho | quando dispara | vira |
+|---|---|---|
+| `Stop` | o turno acabou | `/activity?event=stop` |
+| `Notification` | o CLI está pedindo permissão | `/activity?event=ask` |
+
+O `Notification` fecha o buraco que o marcador nunca alcançou e que a camada 2
+(`attention.patterns`) cobria com regex mantida à mão: o diálogo de permissão é
+desenhado pelo programa, não é mensagem do modelo, e por isso nenhum marcador
+chega lá. Agora chega, e sem casar pixel nenhum.
+
+**O marcador não sai — muda de papel.** Ele era o gatilho; passa a ser o
+qualificador. O gancho diz **quando** o turno acabou; a tela, lida naquele
+instante, diz **qual dos dois** foi: `[[ED:ask]]` visível é pergunta, o resto é
+fim de tarefa.
+
+A partir do primeiro gancho recebido — e o `UserPromptSubmit`, que já existia por
+outro motivo, entrega isso logo no primeiro prompt —, as camadas que liam a tela
+**calam**. Não é redundância barata: elas erravam para mais, e o custo de um
+falso positivo aqui é o mesmo do alarme de carro.
+
+Terminal que nunca falou por gancho — shell, outro CLI, `cmd` trocado — continua
+exatamente como antes. É o único jeito de não ficar cego onde o canal não existe.
+
+### `Notification` são dois avisos num, e só um interessa
+
+Ele dispara para permissão **e** para "você sumiu há 60s". O segundo não traz
+notícia nenhuma: o fim do turno já veio pelo `Stop` e ali já se decidiu se valia
+chamar. Sem separar, toda cadeia silenciada voltava a apitar um minuto depois.
+
+A separação não olha o texto da mensagem — isso seria casar string do CLI, que é
+o que estes ADRs vêm evitando. Olha o relógio do pty: o pedido de permissão nasce
+no meio do trabalho, e o diálogo acabou de ser desenhado, então saiu byte agora há
+pouco; o aviso de ociosidade existe *porque* faz tempo que não sai nada. Dez
+segundos separam os dois com folga de seis vezes.
+
+### As duas paradas não pesam igual
+
+`asking` interrompe: borda laranja, `●` na barra lateral, som. `waiting` é
+`✓ terminou` no cabeçalho, sem borda e sem som — você lê quando olhar, e
+"terminou" não é urgente por definição: se fosse, alguém estaria esperando.
+
+### Cadeia entre agentes não te chama
+
+Um agente falando com outro é conversa entre eles. Se A aciona B e B responde a
+A, nada disso é assunto seu — mas se B para porque precisa de uma permissão, é.
+
+A regra não lê o que o agente escreveu. Ler texto de agente para decidir foi
+descartado pelo [ADR-012](#adr-012--agente-aciona-agente-por-aresta-desenhada-nunca-por-encaminhamento)
+e pelas guardas de cadeia, pelo mesmo motivo: é o próprio agente que escreve, e
+guarda pendurada em texto dele não é guarda. O que o app usa é um fato que ele
+mesmo observou — **este terminal acionou um vizinho neste turno?** O `egeon send`
+passa pelo `Dispatcher`, então a resposta é dele, não de ninguém mais.
+
+- **pergunta** → avisa sempre, cadeia ou não. Permissão não se delega, e é
+  justamente por ela que o vizinho precisa de você.
+- **fim de turno** → avisa **só se o terminal não acionou ninguém**. Acionou,
+  passou o bastão: o trabalho continua no card do outro.
+
+A tentação era usar a cadeia que o pedido já carrega — "veio de agente, então
+cala". Erra o caso mais comum: em `A→B→A`, o A que fecha o trabalho está atendendo
+uma mensagem de agente, e é exatamente o momento em que você quer saber. Quem
+acerta os dois é o handoff, porque ele pergunta pela SAÍDA, não pela entrada.
+
+Um terminal que recebe de outro, termina e não responde a ninguém avisa — é ponta
+de linha, e cadeia que morre em silêncio é pior que aviso a mais.
+
+### Verificado
+
+Dois agentes ligados nos dois sentidos, no flavor dev. `A` recebeu um pedido meu,
+consultou `B`, `B` respondeu, `A` fechou:
+
+```
+10:50:14 dispatch[nitidez/claude]: entregue        ← e nenhum aviso durante 15s
+10:50:30 cadeia[nitidez/claude → nitidez/claude-2]: envio 1/2
+                                                   ← A terminou aqui, e calou
+10:50:43 cadeia[nitidez/claude-2 → nitidez/claude]: envio 1/2
+                                                   ← B terminou aqui, e calou
+10:50:47 atenção[nitidez/claude]: terminou — por gancho Stop, rajada de 4.1s
+```
+
+Um aviso para a tarefa inteira, no fim dela. E com `B` parando para perguntar em
+vez de responder:
+
+```
+10:51:25 cadeia[nitidez/claude → nitidez/claude-2]: envio 1/2   ← A calou
+10:51:40 atenção[nitidez/claude-2]: precisa de você — por gancho Stop
+```
+
+O falso positivo da entrega não aparece mais em nenhum dos dois.
+
+### O que se perde
+
+Gancho que não chega ao app custa o aviso daquele turno, porque a rede de
+silêncio está desligada em quem já falou por gancho. É risco aceito e não cego: o
+`sawHook` só liga quando um gancho de fato chegou, então o canal está provado
+antes de as outras camadas calarem, e o `UserPromptSubmit` reprova a cada prompt.
+
 ## Decisões ainda abertas
 
 - **Assinatura de código.** Enquanto for ad-hoc, qualquer coisa que dependa de
