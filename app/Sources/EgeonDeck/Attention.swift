@@ -57,8 +57,6 @@ struct ActivitySummary: Equatable {
     var working = 0
     var attention = 0
     var done = 0
-
-    var isQuiet: Bool { working == 0 && attention == 0 && done == 0 }
 }
 
 // MARK: - Carregando

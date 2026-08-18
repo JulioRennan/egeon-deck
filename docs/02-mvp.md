@@ -119,13 +119,14 @@ Cada terminal tem um estado, deduzido do pty ([ADR-011](01-decisoes.md#adr-011--
 | `starting` | `⠹ subindo` | processo subiu, ainda no `warmupMs` ou sem primeiro byte |
 | `working` | `⠹ trabalhando` | saiu byte agora há pouco |
 | `ready` | *(nada)* | parado, sem ter feito nada que valha aviso |
-| `waiting` | `● precisa de você` | trabalhou e parou |
-| `asking` | `● te perguntou algo` | parou, e o marcador (ou um `pattern`) diz que é pergunta |
+| `waiting` | `● terminou` (verde) | o turno acabou e ninguém está esperando você |
+| `asking` | `● precisa de você` (laranja) | parou dependendo de você: marcador, `pattern` ou pedido de permissão |
 | `dead` | `✕ processo encerrado` | o processo saiu |
 
-`waiting` e `asking` acendem a borda do card de laranja, somam na contagem da
-barra lateral e tocam o som — uma vez, na entrada. Só terminal `agent` chama;
-`shell` mostra o spinner e nada mais.
+Só `asking` interrompe: borda do card laranja e som, uma vez por parada. `waiting`
+fica no cabeçalho e na barra lateral, em verde, sem som — e some quando você entra
+ou sai da sessão. Só terminal `agent` chama; `shell` mostra o spinner e nada mais.
+Ver ADR-024.
 
 ### O protocolo de marcador
 

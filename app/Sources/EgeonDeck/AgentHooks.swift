@@ -100,20 +100,18 @@ enum AgentHooks {
         """
     }
 
-    /// `ccrRecap` desliga o resumo de "você voltou depois de um tempo fora".
+    /// Só os ganchos. Nada de chave interna do CLI aqui dentro.
     ///
-    /// Ele quebra o protocolo de marcador por construção: é texto do MODELO, então
-    /// leva marcador, mas não é resposta a ninguém — e como o resumo termina
-    /// dizendo qual é o próximo passo, o marcador que sai costuma ser `[[ED:ask]]`.
-    ///
-    /// Medido: o recap **não dispara gancho nenhum**, nem `UserPromptSubmit` nem
-    /// `Stop`. Ou seja, ele só suja a TELA. Quem de fato segura é o `speaksHooks`
-    /// do Dispatcher, que tira a tela da jogada em quem tem gancho; esta chave é
-    /// interna do CLI e pode sumir num release, então é higiene, não garantia.
+    /// Cheguei a pôr `"ccrRecap": false` para desligar o resumo de "você voltou
+    /// depois de um tempo fora", que escreve marcador na tela sem ser resposta a
+    /// ninguém. Saiu por duas razões: o recap **não dispara gancho nenhum**
+    /// (medido), então quem tem gancho já está protegido pelo `speaksHooks` do
+    /// Dispatcher; e chave não documentada num arquivo que sobe em TODO terminal
+    /// de agente é risco sem contrapartida — o que este arquivo quebrar, quebra
+    /// tudo de uma vez.
     private static var settingsBody: String {
         """
         {
-          "ccrRecap": false,
           "hooks": {
             "UserPromptSubmit": [
               { "hooks": [{ "type": "command", "command": "\(command("prompt"))", "timeout": 5 }] }

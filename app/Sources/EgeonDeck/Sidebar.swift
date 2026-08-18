@@ -58,21 +58,24 @@ final class SidebarRow: NSView {
 
     override var isFlipped: Bool { true }
 
-    /// Cabe `⠙9 ●9 ●9`: os três avisos convivem, e o pior caso é a sessão que
-    /// tem nó em cada estado.
-    private static let statusWidth: CGFloat = 66
+    /// Largura que o badge de fato ocupa, medida do conteúdo.
+    ///
+    /// Reservar o pior caso — `⠙9 ●9 ●9`, três avisos com contagem — custaria
+    /// 66pt em TODA linha, e a barra tem 220: um terço do nome da sessão pago
+    /// para um caso que quase nunca acontece. O comum é uma bolinha só.
+    private var badgeWidth: CGFloat = 0
 
     override func layout() {
         super.layout()
         dot.frame = NSRect(x: 12, y: bounds.midY - 3, width: 6, height: 6)
-        let textWidth = bounds.width - 40 - Self.statusWidth
+        let textWidth = bounds.width - 40 - badgeWidth
         nameLabel.frame = NSRect(x: 28, y: 8, width: textWidth, height: 17)
         pathLabel.frame = NSRect(x: 28, y: 26, width: textWidth, height: 13)
         // 4 da borda da linha, que é onde o `+` do cabeçalho termina: encostado
         // no limite útil da direita e alinhado com o que já estava lá.
-        statusLabel.frame = NSRect(x: bounds.width - Self.statusWidth - 4,
+        statusLabel.frame = NSRect(x: bounds.width - badgeWidth - 4,
                                    y: bounds.midY - 9,
-                                   width: Self.statusWidth, height: 18)
+                                   width: badgeWidth, height: 18)
     }
 
     /// A sessão que precisa de você quase nunca é a que está na tela: o canvas
@@ -118,6 +121,14 @@ final class SidebarRow: NSView {
         add("●", summary.done, .systemGreen)
 
         statusLabel.attributedStringValue = badge
+
+        // O nome da sessão fica com o que sobra, então a caixa acompanha o
+        // conteúdo em vez de reservar o pior caso.
+        let width = badge.length == 0 ? 0 : ceil(badge.size().width) + 2
+        if width != badgeWidth {
+            badgeWidth = width
+            needsLayout = true
+        }
     }
 
     /// Última combinação desenhada, para não remontar o rótulo à toa.

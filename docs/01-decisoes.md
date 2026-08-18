@@ -754,7 +754,7 @@ caminho e seria o pior: o segundo a subir encontra a porta tomada, conclui que �
 um órfão da execução anterior — que é o caso comum, e há código dedicado a
 tratá-lo — e **mata o code-server do outro app**.
 
-O socket dentro do `report-session.sh`, senão o agente do dev reportaria a conversa
+O socket dentro do `agent-hook.sh`, senão o agente do dev reportaria a conversa
 dele para o estável, corrompendo o `sessions.json` em uso.
 
 ### O que NÃO se separa: a config de cada CLI
@@ -1252,9 +1252,12 @@ jeito novo de PERDER aviso de verdade: um `UserPromptSubmit` que se perdesse
 deixava o `Stop` seguinte mudo, e mudo é o defeito caro. Trocada pelo `speaksHooks`
 desde o arranque, que ataca o lugar certo.
 
-Sobra `"ccrRecap": false` no settings que o app escreve, para o recap nem existir
-nos terminais que o app dirige. A chave é interna do CLI e pode sumir num release,
-então é higiene e não garantia — a garantia é a tela não mandar em quem tem gancho.
+Cheguei a pôr `"ccrRecap": false` no settings que o app escreve, para o recap nem
+existir nos terminais que o app dirige. Saiu de novo, e o motivo vale registrar: a
+medição acima já diz que quem tem gancho está protegido, então a chave não comprava
+nada — e é chave não documentada num arquivo que sobe em TODO terminal de agente.
+O que esse arquivo quebrar, quebra tudo de uma vez. Risco sem contrapartida não
+entra.
 
 ### `Notification` são dois avisos num, e só um interessa
 
@@ -1362,10 +1365,14 @@ O falso positivo da entrega não aparece mais em nenhum dos dois.
 
 ### O que se perde
 
-Gancho que não chega ao app custa o aviso daquele turno, porque a rede de
-silêncio está desligada em quem já falou por gancho. É risco aceito e não cego: o
-`sawHook` só liga quando um gancho de fato chegou, então o canal está provado
-antes de as outras camadas calarem, e o `UserPromptSubmit` reprova a cada prompt.
+Gancho que não chega ao app custa o aviso daquele turno, porque a rede da tela
+está desligada em quem leva gancho. É o preço de não ter os dois: enquanto a tela
+valia como rede, ela acendia sozinha — e alarme que dispara sem motivo custa mais
+que aviso que falta, porque o primeiro te ensina a ignorar todos.
+
+O `~/egeon.log` registra cada gancho recebido (`gancho[endereço]: prompt|stop|ask`),
+então "o CLI parou de relatar" é uma pergunta com resposta em vez de um silêncio
+inexplicável.
 
 ## Decisões ainda abertas
 
