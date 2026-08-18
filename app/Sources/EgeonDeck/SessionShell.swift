@@ -17,15 +17,15 @@ final class ModeButton: NSView {
     init(mode: ViewMode) {
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = 7
 
         icon.image = ToolbarButton.symbol(mode.symbols)
         icon.imageScaling = .scaleProportionallyUpOrDown
-        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
         addSubview(icon)
 
         label.stringValue = mode.label
-        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.font = .systemFont(ofSize: 12, weight: .semibold)
         addSubview(label)
 
         toolTip = mode.tooltip
@@ -36,15 +36,17 @@ final class ModeButton: NSView {
 
     override var isFlipped: Bool { true }
 
+    static let height: CGFloat = 28
+
     override var fittingSize: NSSize {
-        NSSize(width: 14 + 16 + 5 + label.intrinsicContentSize.width, height: 24)
+        NSSize(width: 22 + 16 + 6 + label.intrinsicContentSize.width, height: Self.height)
     }
 
     override func layout() {
         super.layout()
-        icon.frame = NSRect(x: 7, y: (bounds.height - 14) / 2, width: 16, height: 14)
-        label.frame = NSRect(x: 28, y: (bounds.height - 14) / 2,
-                             width: max(0, bounds.width - 33), height: 14)
+        icon.frame = NSRect(x: 11, y: (bounds.height - 15) / 2, width: 16, height: 15)
+        label.frame = NSRect(x: 33, y: (bounds.height - 15) / 2,
+                             width: max(0, bounds.width - 39), height: 15)
     }
 
     override func updateTrackingAreas() {
@@ -62,16 +64,19 @@ final class ModeButton: NSView {
     override func mouseDown(with event: NSEvent) { onClick?() }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
 
+    /// Selecionado é preenchimento CHEIO, e não texto colorido: dentro da pílula os
+    /// dois botões dividem o mesmo fundo, e só a cor da letra deixava "em qual eu
+    /// estou" a cargo de comparar dois tons de cinza.
     private func restyle() {
         if isSelected {
-            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor
-            icon.contentTintColor = .controlAccentColor
-            label.textColor = .controlAccentColor
+            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor
+            icon.contentTintColor = .white
+            label.textColor = .white
         } else {
             layer?.backgroundColor = hovering
-                ? NSColor(calibratedWhite: 1, alpha: 0.07).cgColor
+                ? NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
                 : NSColor.clear.cgColor
-            let alpha: CGFloat = hovering ? 0.9 : 0.55
+            let alpha: CGFloat = hovering ? 0.95 : 0.6
             icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: alpha)
             label.textColor = NSColor(calibratedWhite: 1, alpha: alpha)
         }
@@ -84,28 +89,61 @@ final class ModeButton: NSView {
 /// você está FAZENDO: ferramenta armada, zoom, template. Esta trata de onde os
 /// nós aparecem, e por isso é a única que continua na tela nos dois modos.
 final class ViewToolbar: NSView {
-    static let height: CGFloat = 34
+    static let height: CGFloat = 46
 
     var onSelect: ((ViewMode) -> Void)?
 
     private var buttons: [ViewMode: ModeButton] = [:]
+    /// Fundo da dupla de modos. Um trilho atrás dos dois, como abas: sem ele os
+    /// botões flutuam no meio da barra e não se leem como um par de estados
+    /// mutuamente exclusivos.
+    private let pill = NSView()
     private let hint = NSTextField(labelWithString: "")
+    private let title = NSTextField(labelWithString: "")
+    private let subtitle = NSTextField(labelWithString: "")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.11, alpha: 1).cgColor
+        layer?.backgroundColor = NSColor(calibratedWhite: 0.085, alpha: 1).cgColor
+
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = 9
+        pill.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.06).cgColor
+        addSubview(pill)
 
         for mode in [ViewMode.canvas, .mosaic] {
             let button = ModeButton(mode: mode)
             button.onClick = { [weak self] in self?.onSelect?(mode) }
-            addSubview(button)
+            pill.addSubview(button)
             buttons[mode] = button
         }
 
+        // Qual sessão está na tela. Repetido da barra lateral de propósito: lá é
+        // uma lista e o que diz a ativa é um realce; aqui é afirmação.
+        title.font = .systemFont(ofSize: 13, weight: .semibold)
+        title.textColor = NSColor(calibratedWhite: 1, alpha: 0.92)
+        title.lineBreakMode = .byTruncatingTail
+        addSubview(title)
+
+        subtitle.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        subtitle.textColor = NSColor(calibratedWhite: 1, alpha: 0.4)
+        subtitle.lineBreakMode = .byTruncatingMiddle
+        addSubview(subtitle)
+
         hint.font = .systemFont(ofSize: 10)
         hint.textColor = NSColor(calibratedWhite: 1, alpha: 0.35)
+        hint.alignment = .right
+        hint.lineBreakMode = .byTruncatingTail
         addSubview(hint)
+    }
+
+    /// Que sessão a barra está anunciando.
+    func setSession(name: String, path: String) {
+        title.stringValue = name
+        subtitle.stringValue = path
+        subtitle.toolTip = path
+        needsLayout = true
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -116,15 +154,36 @@ final class ViewToolbar: NSView {
 
     override func layout() {
         super.layout()
-        var x: CGFloat = 8
+        let margem: CGFloat = 16
+        let padding: CGFloat = 3
+
+        // A pílula primeiro: ela manda no centro, e os dois lados se acomodam ao
+        // que sobrar. Centrada na JANELA e não no espaço livre — se dependesse do
+        // texto da esquerda, ela andaria a cada troca de sessão.
+        var largura = padding
+        for mode in [ViewMode.canvas, .mosaic] {
+            largura += (buttons[mode]?.fittingSize.width ?? 0) + padding
+        }
+        let altura = ModeButton.height + padding * 2
+        pill.frame = NSRect(x: ((bounds.width - largura) / 2).rounded(),
+                            y: ((bounds.height - altura) / 2).rounded(),
+                            width: largura, height: altura)
+
+        var x = padding
         for mode in [ViewMode.canvas, .mosaic] {
             guard let button = buttons[mode] else { continue }
             let width = button.fittingSize.width
-            button.frame = NSRect(x: x, y: (bounds.height - 24) / 2, width: width, height: 24)
-            x += width + 4
+            button.frame = NSRect(x: x, y: padding, width: width, height: ModeButton.height)
+            x += width + padding
         }
-        hint.frame = NSRect(x: x + 10, y: (bounds.height - 13) / 2,
-                            width: max(0, bounds.width - x - 20), height: 13)
+
+        let esquerda = max(0, pill.frame.minX - margem * 2)
+        title.frame = NSRect(x: margem, y: 8, width: esquerda, height: 16)
+        subtitle.frame = NSRect(x: margem, y: 25, width: esquerda, height: 13)
+
+        let direita = max(0, bounds.width - pill.frame.maxX - margem * 2)
+        hint.frame = NSRect(x: pill.frame.maxX + margem, y: (bounds.height - 13) / 2,
+                            width: direita, height: 13)
     }
 
     /// Fio embaixo em vez de sombra: a barra é fixa e encostada no conteúdo, e
@@ -180,6 +239,9 @@ final class SessionShell: NSView {
     /// `sessions.json`, que é gravado a partir do que está na tela, levaria a
     /// pilha junto.
     private var canvasFrames: [String: NSRect] = [:]
+
+    /// Que sessão a barra de cima anuncia.
+    func setSession(name: String, path: String) { bar.setSession(name: name, path: path) }
 
     /// Troca dois cards de painel no mosaico, por id. Nada acontece no canvas —
     /// lá a posição é livre e não há painel para trocar.

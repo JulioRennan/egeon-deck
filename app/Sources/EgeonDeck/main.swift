@@ -46,7 +46,11 @@ EgeonCLI.install()
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.setFrame(screen.visibleFrame, display: false)
-        window.title = Flavor.current.displayName
+        // Sem texto na barra de título: quem diz a sessão é a barra do app, logo
+        // abaixo, e o nome do flavor repetido ali só empilhava rótulo. O dev
+        // continua reconhecível pelo ícone no Dock.
+        window.title = ""
+        window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 1)
 
@@ -185,7 +189,6 @@ EgeonCLI.install()
         root.show(shell)
         root.sidebar.select(index)
         root.sidebar.markLive(index)
-        window.title = "\(Flavor.current.displayName) — \(configs[index].name)"
         Log.write("sessão ativa: \(configs[index].name)")
     }
 
@@ -813,7 +816,6 @@ EgeonCLI.install()
         root.sidebar.reload(configs)
         root.sidebar.select(activeIndex)
         markLiveSessions()
-        if index == activeIndex { window.title = "\(Flavor.current.displayName) — \(name)" }
         Log.write("sessão \"\(current)\" renomeada para \"\(name)\"")
         schedulePersist()
     }
@@ -919,11 +921,19 @@ EgeonCLI.install()
     /// corpo de um `WKWebView` sai em branco por esse caminho (ele pinta fora da
     /// árvore), e para o conteúdo do editor existe o `/shot` normal.
     private func cardSnapshot(target: String, file: URL) -> String {
-        let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
-        guard parts.count == 2,
-              let index = configs.firstIndex(where: { $0.name == parts[0] }),
-              let node = shells[index]?.nodes.first(where: { $0.nodeID == parts[1] })
-        else { return "erro: nó desconhecido '\(target)'" }
+        // `window` fotografa a janela inteira — barra, sidebar e conteúdo. É o que
+        // permite conferir de fora uma mudança de barra, que não tem card nenhum.
+        let alvo: NSView?
+        if target == "window" {
+            alvo = window.contentView
+        } else {
+            let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
+            alvo = parts.count == 2
+                ? configs.firstIndex(where: { $0.name == parts[0] })
+                    .flatMap { shells[$0]?.nodes.first { $0.nodeID == parts[1] } }
+                : nil
+        }
+        guard let node = alvo else { return "erro: nó desconhecido '\(target)'" }
 
         guard let rep = node.bitmapImageRepForCachingDisplay(in: node.bounds) else {
             return "erro: não consegui alocar o bitmap"
@@ -1091,7 +1101,6 @@ EgeonCLI.install()
         schedulePersist()
 
         if !configs.isEmpty { activate(min(index, configs.count - 1)) }
-        else { window.title = "Egeon Deck" }
     }
 
     private func markLiveSessions() {
@@ -1529,6 +1538,7 @@ EgeonCLI.install()
             self?.recordMosaicLayout(layout, index: index)
         }
         shell.mosaicLayout = configs[index].mosaic
+        shell.setSession(name: configs[index].name, path: configs[index].path)
 
         let canvas = shell.canvas
         canvas.onPlace = { [weak self] tool, rect in self?.place(tool, rect: rect, index: index) }
