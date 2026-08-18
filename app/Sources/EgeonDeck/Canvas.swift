@@ -491,9 +491,32 @@ class NodeView: NSView {
 final class MBTerminalView: LocalProcessTerminalView {
     var onOutput: (() -> Void)?
 
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        registerForDraggedTypes(TerminalDrop.types)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
     override func dataReceived(slice: ArraySlice<UInt8>) {
         super.dataReceived(slice: slice)
         onOutput?()
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        TerminalDrop.accepts(sender.draggingPasteboard) ? .copy : []
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let texto = TerminalDrop.text(from: sender.draggingPasteboard) else { return false }
+        // Só o caminho, e o Enter é seu: arrastar um arquivo é entregá-lo, e não
+        // mandar o agente sair trabalhando com o que ele achar do assunto.
+        send(txt: texto)
+        // Sem isto o texto entra aqui e o teclado continua no card de onde você
+        // veio — a frase que acompanha o arquivo iria para o terminal errado.
+        window?.makeFirstResponder(self)
+        Log.write("drop: caminho injetado no terminal: \(texto.trimmingCharacters(in: .whitespaces))")
+        return true
     }
 }
 

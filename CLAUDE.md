@@ -40,6 +40,7 @@ poc/          protótipos descartados
 | `WebNode.swift` | nó de navegador, com perfil de navegação isolado |
 | `Sidebar.swift` / `Toolbar.swift` | lista de sessões e barra de ferramentas do canvas |
 | `Glass.swift` | `GlassPanel` — o vidro das barras flutuantes, e o interruptor dele |
+| `Drop.swift` | arrastar arquivo para o terminal: o que o arrasto trouxe, virado em caminho |
 | `Component.swift` / `Template.swift` | presets de nó e de sessão |
 | `Worktree.swift` | criar worktree do git e abrir sessão nela |
 | `NodeWorktree.swift` | worktree por terminal: o plano de cada nó e a lista do formulário |

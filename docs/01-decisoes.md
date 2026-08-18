@@ -1493,3 +1493,56 @@ ceder espaço e flutuar. A moldura cinza foi diagnosticada e conferida por AMOST
 PIXEL no bitmap de `/shot?target=window`: o que era (27,27,27) em volta do vidro virou
 o azulado do canvas, e a coluna vertical mostra a barra de cima até y=46, canvas de 46
 a 54, e o painel a partir de 54.
+
+---
+
+## ADR-026 — Arrastar arquivo para o terminal injeta o caminho, e não a imagem
+
+**Decisão:** o `MBTerminalView` passa a ser destino de arrasto. Soltar arquivos
+sobre um terminal escreve os **caminhos** na caixa de input dele, sem Enter.
+Imagem arrastada de dentro do navegador — que vem como PNG ou TIFF cru, sem
+arquivo do lado de cá — é gravada num rascunho em `$TMPDIR/egeon-drop/` e o que
+entra é o caminho dela.
+
+**O que estava quebrado.** O SwiftTerm não implementa `NSDraggingDestination` em
+nenhuma das views do `Mac/` — nenhum `registerForDraggedTypes`, nenhum
+`performDragOperation`. O arrasto era engolido pela janela sem sinal nenhum, e a
+única forma de dar uma imagem a um agente era descobrir o caminho dela à mão e
+digitar.
+
+**Por que o caminho e não o clipboard.** O CLI tem um caminho pronto e melhor em
+fidelidade: `readClipboardImage` nativo, ligado ao ctrl+v (`chat:imagePaste`), que
+anexa a imagem como bloco de imagem de verdade em vez de gastar uma chamada de
+`Read`. Bastaria o drop escrever o PNG no `NSPasteboard` e mandar `0x16`. Foi
+descartado por dois motivos: sobrescreve o clipboard do usuário — que não é do app
+para gastar — e vale só em terminal com IA, enquanto metade dos cards aqui é shell
+comum, onde o que serve é justamente o caminho. Uma regra que vale nos dois tipos
+de terminal ganha da que vale em um.
+
+**Sem Enter, e o foco vai junto.** Arrastar é entregar o arquivo, não mandar o
+agente trabalhar: quem submete é você, depois de escrever a frase que acompanha.
+Por isso o texto termina em espaço, e por isso o drop toma o first responder — sem
+isso o caminho cai neste card e o teclado continua no card de onde você veio, com
+a frase indo para o terminal errado.
+
+**Aspas só quando precisam.** Citar sempre seria mais simples, mas do outro lado
+nem sempre há shell: no terminal com IA o caminho é lido por um modelo, e `'…'` em
+volta é ruído que não protege nada. Caminho sem espaço nem caractere de shell vai
+cru; o resto vira `'…'` com `'` interno virando `'\''`.
+
+**Rascunho fora de `~/.egeon`.** A pasta de configuração é feita para ser aberta e
+editada à mão — todo arquivo dela é seu. PNG despejado ali só atrapalha quem for
+ler, então a imagem sem arquivo vai para o temporário do sistema, em pasta por
+flavor. O nome leva milissegundos e não segundos: duas imagens arrastadas em
+seguida ganhariam o mesmo nome, e a segunda apagaria a primeira antes de o agente
+ter lido qualquer uma.
+
+**Verificação.** A metade que dá para dirigir de fora foi verificada por um
+harness que usa o MESMO `Drop.swift` contra um `NSPasteboard` real: arquivo
+simples sai cru; caminho com espaço e apóstrofo sai citado e foi conferido por
+`eval` num shell de verdade, que resolveu o arquivo certo; dois arquivos saem
+separados por espaço; TIFF cru virou PNG em disco com magic `89504e470d0a1a0a`;
+texto puro é recusado por `accepts`. O gesto em si não é dirigível de fora —
+evento sintético exige Acessibilidade, que a assinatura ad-hoc perde a cada build
+(ADR-003) —, então o drop registra no log o caminho que injetou, e é ali que o
+arrasto de verdade se confere.
