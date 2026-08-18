@@ -143,9 +143,14 @@ Duas maneiras de olhar a mesma sessão, na barra de cima (⌥⌘1 / ⌥⌘2):
 
 **Canvas** — a bancada livre: posição, tamanho, zoom, arestas desenhadas.
 **Mosaico** — os mesmos nós dividindo a janela inteira, sem sobreposição e sem
-zoom. Colunas na ordem editor · terminais · web, cada uma empilhada, divisores
-arrastáveis. Coluna sem nó não aparece; dentro dela a ordem é a do
-`sessions.json`.
+zoom. Colunas empilhadas, divisores arrastáveis, coluna sem nó não aparece.
+
+No mosaico o arranjo é seu: **arraste o cabeçalho de um card sobre outro e os dois
+trocam de painel**, em qualquer direção, inclusive entre colunas. O painel que vai
+receber acende antes de você soltar. Quem nunca arrastou nada vê o arranjo por tipo
+— editor · terminais · web, na ordem do `sessions.json` —, e é dele que o resto
+parte. O que você montou vive em `mosaic.slots`, ids de nó por coluna; nó criado
+depois entra na coluna de quem é do mesmo tipo, sem desfazer o resto. Ver ADR-023.
 
 **Não são duas cópias do nó.** Em qualquer modo o card é o MESMO `NodeView`, e o
 que muda é quem lhe dá o frame. Reparentar uma view não toca no processo — o pty
@@ -228,7 +233,7 @@ curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
 curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
-Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/worktree` `/remove`
+Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/mosaic` `/worktree` `/remove`
 `/activate` `/open` `/view` `/file` `/change` `/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
 conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
@@ -237,7 +242,10 @@ para verificar comportamento de agente ponta a ponta sem tocar na UI.
 
 `/layout?mode=canvas|mosaic` troca a visualização da sessão ativa, e `/geometry`
 começa dizendo em que modo está: em mosaico o `docFrame` é o do painel e o
-`grabPoint` não arrasta nada.
+`grabPoint` não arrasta nada. `/mosaic?target=ws&swap=id1,id2` troca dois cards de
+painel — o mesmo que arrastar um cabeçalho sobre o outro, e a única forma de
+verificar isso de fora, porque evento de mouse sintético depende de permissão de
+Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003).
 
 `/targets` lista só terminais **de pé** — nó com processo morto continua no canvas
 mas não é destino. Com `?folder=<path>` responde `{targets, all, session}`: quem é

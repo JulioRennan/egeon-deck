@@ -126,12 +126,20 @@ class NodeView: NSView {
     /// exigir duplicar a sessão inteira.
     var onRequestWorktree: ((NodeView) -> Void)?
 
+    /// Arrasto pelo cabeçalho quando o card NÃO manda na própria posição — isto é,
+    /// no mosaico. Em coordenadas de janela; quem resolve sobre qual painel o
+    /// cursor está é o container, que é quem conhece o arranjo.
+    var onHeaderDrag: ((NodeView, NSPoint) -> Void)?
+    var onHeaderRelease: ((NodeView, NSPoint) -> Void)?
+
     /// Arrasto saindo do `+` deste nó, em coordenadas de janela. Quem converte
     /// para o documento e resolve o destino é o canvas.
     var onPortDrag: ((NodeView, NSPoint) -> Void)?
     var onPortRelease: ((NodeView, NSPoint) -> Void)?
 
     private var dragOffset: CGPoint?
+    /// Arrasto de troca em curso (mosaico).
+    private var swapping = false
 
     init(frame: NSRect, title: String, accent: NSColor, nodeID: String = "") {
         self.nodeID = nodeID
@@ -422,16 +430,26 @@ class NodeView: NSView {
         onFrameChanging?()
     }
 
-    // Arrastar pelo cabeçalho move o nó no espaço do canvas.
+    // Arrastar pelo cabeçalho move o nó no espaço do canvas. No mosaico, onde
+    // quem dá o frame é o split view, o mesmo gesto troca este card de lugar com
+    // aquele sob o cursor.
     override func mouseDown(with event: NSEvent) {
-        guard isFreeform else { return super.mouseDown(with: event) }
         let p = convert(event.locationInWindow, from: nil)
         guard p.y <= Self.headerHeight else { return super.mouseDown(with: event) }
+
+        guard isFreeform else {
+            swapping = true
+            return
+        }
         let inDoc = superview!.convert(event.locationInWindow, from: nil)
         dragOffset = CGPoint(x: inDoc.x - frame.minX, y: inDoc.y - frame.minY)
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if swapping {
+            onHeaderDrag?(self, event.locationInWindow)
+            return
+        }
         guard let off = dragOffset, let doc = superview else { return }
         let inDoc = doc.convert(event.locationInWindow, from: nil)
         let desired = NSPoint(x: (inDoc.x - off.x).rounded(), y: (inDoc.y - off.y).rounded())
@@ -455,6 +473,11 @@ class NodeView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if swapping {
+            swapping = false
+            onHeaderRelease?(self, event.locationInWindow)
+            return
+        }
         guard dragOffset != nil else { return }
         dragOffset = nil
         onFrameChanged?(self)

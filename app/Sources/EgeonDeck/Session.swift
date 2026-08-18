@@ -214,6 +214,15 @@ enum AppControl {
     static var activateSession: ((String) -> Bool)?
     static var sessionNames: (() -> [String])?
 
+    /// Troca dois cards de painel no mosaico da sessão ativa.
+    ///
+    /// O gesto de arrastar o cabeçalho não é dirigível de fora — evento de mouse
+    /// sintético exige permissão de Acessibilidade, que a assinatura ad-hoc perde a
+    /// cada build (ADR-003). O que precisa ser verificado é o arranjo: quem foi para
+    /// qual painel, e se aquilo sobreviveu ao `sessions.json`.
+    static var swapMosaic: ((_ session: String, _ first: String, _ second: String)
+                            -> [String: Any])?
+
     /// PNG do card de um nó — cabeçalho, borda e corpo, como está na tela.
     ///
     /// Mudança que é só desenho não tem log nem DOM para conferir: ou se olha a

@@ -1119,6 +1119,51 @@ absoluto, e a sessão guarda o `cwd`. Por um tempo as duas pastas coexistem; mov
 antigas é `git worktree move` mais reescrita de `cwd`, e não vale automatizar por
 enquanto.
 
+## ADR-023 — No mosaico, o arranjo é arrastado, não derivado do tipo
+
+**Revisa o ADR-016.** O mosaico continua sendo outra vista dos mesmos nós; o que
+muda é quem decide onde cada um fica.
+
+**O que estava errado.** A coluna de um card saía do tipo dele — editor à esquerda,
+terminais no meio, web na ponta — e a ordem dentro da coluna era a do
+`sessions.json`. Reordenar era editar o arquivo à mão. Para uma bancada de trabalho
+isso é o avesso do útil: quem está lendo o diff quer o editor grande à esquerda, e
+quinze minutos depois quer o agente que está falando naquele lugar. Trocar dois
+cards de lugar não deveria passar por um editor de texto.
+
+**A decisão.** Arrastar o cabeçalho de um card sobre outro troca os dois de painel,
+em qualquer direção, inclusive entre colunas. O painel que vai receber acende antes
+de soltar — sem isso o gesto é cego, e você descobre com quem trocou depois de já
+ter trocado.
+
+O arranjo passa a viver em `mosaic.slots`, ids de nó por coluna. Nulo, ou com id que
+não está mais na sessão, cai na regra de tipo — que segue sendo o arranjo de quem
+nunca arrastou nada. Cobertura parcial é o caso normal, não exceção: você cria um
+terminal depois de ter arrumado a tela, e ele entra na coluna de quem é do mesmo
+tipo sem desfazer o resto.
+
+**Troca, e não inserção.** Os dois cards existem e os dois painéis existem, então
+trocar preserva a contagem de painéis por coluna — e com ela as proporções que você
+já arrastou. Inserir mudaria o número de linhas de duas colunas ao mesmo tempo e
+jogaria fora os dois conjuntos de frações, o que faz a tela dar um pulo a cada
+reordenação. O mínimo de largura de uma coluna passou a ser o MAIOR entre os nós
+dela: depois de uma troca o editor pode ser o segundo card, e abaixo de 520pt o
+workbench perde o explorer.
+
+**Resize.** O divisor desenha 8pt para ler como espaço entre os cards, e a mão erra
+isso. A área efetiva de arrasto sai 6pt para cada lado
+(`splitView(_:effectiveRect:forDrawnRect:ofDividerAt:)`), então o cursor aparece
+antes de você acertar o fio — e o corpo do card não perde nada, porque esses 6pt
+são de margem.
+
+**Verificação.** O gesto de mouse não é dirigível de fora: evento sintético exige
+permissão de Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003).
+Então `/mosaic?target=ws&swap=id1,id2` faz a troca por id, que é o que tem risco —
+arranjo, mínimos e persistência. Verificado no dev com troca entre colunas de
+tamanhos diferentes: `slots` gravado, geometria dos três cards casando com ele, e o
+contador de trocas parado quando ninguém mexe (o eco do `publish` de volta pelo
+`sessions.json` não remonta nada).
+
 ## Decisões ainda abertas
 
 - **Assinatura de código.** Enquanto for ad-hoc, qualquer coisa que dependa de

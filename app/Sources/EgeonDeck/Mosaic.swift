@@ -43,6 +43,14 @@ struct MosaicLayout: Codable, Equatable {
     var columns: [Double]?
     /// Altura de cada linha, coluna por coluna.
     var rows: [[Double]]?
+    /// Quem está em qual painel: ids de nó, por coluna.
+    ///
+    /// Existe porque o arranjo deixou de ser derivado do tipo do nó. Derivado, não
+    /// havia como trocar dois cards de lugar — a única ordem possível era
+    /// editores, terminais, web, e dentro da coluna a do `sessions.json`. Nulo, ou
+    /// com id que não está mais na sessão, cai de volta na regra de tipo, que
+    /// continua sendo o arranjo de quem nunca arrastou nada.
+    var slots: [[String]]?
 }
 
 // MARK: - Split view com divisor arrastável e mínimo por painel
@@ -173,11 +181,41 @@ final class MosaicSplit: NSSplitView, NSSplitViewDelegate {
         return offset(frame) + extent(frame) - minimum(at: next) - dividerThickness
     }
 
+    /// Alvo de arrasto maior do que a linha desenhada.
+    ///
+    /// O divisor desenha 8pt para ler como espaço entre os cards; a mão erra isso.
+    /// A área efetiva sai 6pt para cada lado, então o cursor de resize aparece
+    /// antes de você acertar o fio — e o corpo do card não perde nada, porque
+    /// esses 6pt são de margem.
+    func splitView(_ splitView: NSSplitView, effectiveRect proposedEffectiveRect: NSRect,
+                   forDrawnRect drawnRect: NSRect, ofDividerAt dividerIndex: Int) -> NSRect {
+        isVertical ? drawnRect.insetBy(dx: -6, dy: 0) : drawnRect.insetBy(dx: 0, dy: -6)
+    }
+
     /// Painel sumido não é o que se quer aqui: o card guarda um processo vivo, e
     /// colapsá-lo por arrasto o esconderia sem dizer para onde foi.
     func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool { false }
 
     func splitViewDidResizeSubviews(_ notification: Notification) { onResized?() }
+}
+
+/// Moldura que marca o painel que vai receber o card arrastado.
+///
+/// Só desenho, e sem receber mouse: ela vive por cima dos cards durante o gesto, e
+/// engolir o clique faria o próprio arrasto parar no meio.
+final class MosaicDropHint: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.borderWidth = 2
+        layer?.borderColor = NSColor.systemTeal.cgColor
+        layer?.backgroundColor = NSColor.systemTeal.withAlphaComponent(0.12).cgColor
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: - Mosaico
@@ -213,14 +251,30 @@ final class MosaicContainer: NSView {
             // para cá, e remontar por causa disso desfaria o arrasto no quadro
             // seguinte.
             guard layoutRatios != oldValue, layoutRatios != lastPublished else { return }
+            let arranjoNovo = layoutRatios?.slots
             hasAppliedRatios = false
-            needsLayout = true
+            // Arranjo diferente exige remontar as colunas; proporção diferente é só
+            // redistribuir o que já está montado.
+            if arranjoNovo != arrangement {
+                arrangement = arranjoNovo
+                rebuild()
+            } else {
+                needsLayout = true
+            }
         }
     }
 
     private let columns = MosaicSplit(vertical: true)
     private var rows: [MosaicSplit] = []
     private var nodes: [NodeView] = []
+
+    /// Quem está em qual painel, por id. Nulo é "nunca arrastei nada" — aí vale a
+    /// regra de tipo.
+    private var arrangement: [[String]]?
+
+    /// Moldura sobre o painel que vai receber o card arrastado. Sem ela o gesto é
+    /// cego: você solta e descobre depois com quem trocou.
+    private let dropHint = MosaicDropHint()
 
     /// As frações salvas já foram reproduzidas nesta montagem?
     ///
@@ -268,7 +322,10 @@ final class MosaicContainer: NSView {
             }
             rows.append(row)
             columns.addSubview(row)
-            widths.append(Self.minimumWidths[Self.column(of: group[0])])
+            // O maior mínimo da coluna, e não o do primeiro: depois de uma troca,
+            // o editor pode ser o segundo card da coluna, e o mínimo dele é o que
+            // manda — abaixo de 520pt o workbench perde o explorer.
+            widths.append(group.map { Self.minimumWidths[Self.column(of: $0)] }.max() ?? 320)
         }
         columns.minimums = widths
 
@@ -277,11 +334,51 @@ final class MosaicContainer: NSView {
         needsLayout = true
     }
 
-    /// Os nós por coluna, na ordem em que as colunas aparecem. Coluna vazia é
-    /// omitida — uma sessão sem editor não abre um vão à esquerda.
+    /// Os nós por coluna, na ordem em que as colunas aparecem.
+    ///
+    /// O arranjo que você arrastou tem prioridade; o que ele não cobrir entra pela
+    /// regra de tipo. Cobrir parcialmente é o caso normal, não exceção: você cria
+    /// um terminal depois de já ter arrumado a tela, e ele precisa aparecer em
+    /// algum lugar sem desfazer o resto.
     private func grouped() -> [[NodeView]] {
+        guard let arranged = arrangement else { return Self.byType(nodes) }
+
+        let porID = Dictionary(nodes.map { ($0.nodeID, $0) }) { primeiro, _ in primeiro }
+        var usados = Set<String>()
+        var colunas: [[NodeView]] = []
+        for coluna in arranged {
+            let grupo = coluna.compactMap { id -> NodeView? in
+                guard let node = porID[id], !usados.contains(id) else { return nil }
+                usados.insert(id)
+                return node
+            }
+            // Coluna que ficou vazia desaparece: nó removido não deixa vão.
+            if !grupo.isEmpty { colunas.append(grupo) }
+        }
+
+        let novos = nodes.filter { !usados.contains($0.nodeID) }
+        guard !novos.isEmpty else { return colunas }
+        guard !colunas.isEmpty else { return Self.byType(novos) }
+
+        // Nó novo procura a coluna de quem é do mesmo tipo; sem ela, abre coluna
+        // própria na ponta.
+        for node in novos {
+            if let alvo = colunas.firstIndex(where: {
+                Self.column(of: $0[0]) == Self.column(of: node)
+            }) {
+                colunas[alvo].append(node)
+            } else {
+                colunas.append([node])
+            }
+        }
+        return colunas
+    }
+
+    /// O arranjo de quem nunca arrastou nada: editores, terminais, web — e dentro
+    /// da coluna, a ordem do `sessions.json`.
+    private static func byType(_ list: [NodeView]) -> [[NodeView]] {
         var byColumn: [Int: [NodeView]] = [:]
-        for node in nodes { byColumn[Self.column(of: node), default: []].append(node) }
+        for node in list { byColumn[column(of: node), default: []].append(node) }
         return byColumn.keys.sorted().compactMap { byColumn[$0] }
     }
 
@@ -309,7 +406,71 @@ final class MosaicContainer: NSView {
         node.onRequestClose = { [weak self] node in self?.onRequestClose?(node) }
         node.onRequestEdit = { [weak self] node in self?.onRequestEditNode?(node) }
         node.onRequestWorktree = { [weak self] node in self?.onRequestNodeWorktree?(node) }
+        node.onHeaderDrag = { [weak self] node, point in self?.dragging(node, to: point) }
+        node.onHeaderRelease = { [weak self] node, point in self?.drop(node, at: point) }
         node.applyContentsScale(contentsScale)
+    }
+
+    // MARK: Trocar de lugar
+
+    /// O card sob um ponto da janela, tirando o que está sendo arrastado.
+    private func node(under point: NSPoint, excluding dragged: NodeView) -> NodeView? {
+        let local = convert(point, from: nil)
+        return nodes.first { node in
+            node !== dragged && node.superview != nil
+                && convert(node.bounds, from: node).contains(local)
+        }
+    }
+
+    private func dragging(_ node: NodeView, to point: NSPoint) {
+        guard let alvo = self.node(under: point, excluding: node) else {
+            dropHint.removeFromSuperview()
+            return
+        }
+        if dropHint.superview == nil { addSubview(dropHint, positioned: .above, relativeTo: nil) }
+        dropHint.frame = convert(alvo.bounds, from: alvo)
+    }
+
+    private func drop(_ node: NodeView, at point: NSPoint) {
+        dropHint.removeFromSuperview()
+        guard let alvo = self.node(under: point, excluding: node) else { return }
+        swap(node.nodeID, alvo.nodeID)
+    }
+
+    /// Troca dois cards de painel, por id.
+    ///
+    /// Troca, e não inserção: os dois cards existem e os dois painéis existem, então
+    /// trocar preserva a contagem de painéis por coluna — e com ela as proporções
+    /// que você já arrastou. Inserir mudaria o número de linhas de duas colunas ao
+    /// mesmo tempo e jogaria fora os dois conjuntos de frações.
+    @discardableResult
+    func swap(_ primeiro: String, _ segundo: String) -> Bool {
+        var arranjo = arrangement ?? Self.byType(nodes).map { $0.map(\.nodeID) }
+        guard primeiro != segundo,
+              let de = Self.position(of: primeiro, in: arranjo),
+              let para = Self.position(of: segundo, in: arranjo) else { return false }
+
+        arranjo[de.coluna][de.linha] = segundo
+        arranjo[para.coluna][para.linha] = primeiro
+        arrangement = arranjo
+        rebuild()
+        Log.write("mosaico: \"\(primeiro)\" e \"\(segundo)\" trocaram de lugar")
+
+        // Publicar depois de aplicar as proporções, senão `publish` sai sem
+        // frações — ele desiste enquanto o layout não rodou.
+        DispatchQueue.main.async { [weak self] in
+            self?.layoutSubtreeIfNeeded()
+            self?.publish()
+        }
+        return true
+    }
+
+    private static func position(of id: String,
+                                 in arranjo: [[String]]) -> (coluna: Int, linha: Int)? {
+        for (coluna, lista) in arranjo.enumerated() {
+            if let linha = lista.firstIndex(of: id) { return (coluna, linha) }
+        }
+        return nil
     }
 
     // MARK: Layout
@@ -362,7 +523,9 @@ final class MosaicContainer: NSView {
 
     private func publish() {
         guard hasAppliedRatios, columns.bounds.width > 0 else { return }
-        let layout = MosaicLayout(columns: columns.fractions, rows: rows.map { $0.fractions })
+        let layout = MosaicLayout(columns: columns.fractions,
+                                  rows: rows.map { $0.fractions },
+                                  slots: grouped().map { $0.map(\.nodeID) })
         // O resize da janela também dispara o aviso do split view, e sem esta
         // guarda o `sessions.json` seria reescrito a cada pixel de arrasto da
         // borda.

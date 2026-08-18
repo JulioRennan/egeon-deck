@@ -212,6 +212,23 @@ final class ControlSocket {
             respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
                     json: payload)
 
+        case ("GET", _, _) where route.contains("/mosaic"):
+            // /mosaic?target=ws&swap=id1,id2 — troca dois cards de painel, o mesmo
+            // que arrastar o cabeçalho de um sobre o outro.
+            let query = Self.query(in: route)
+            let pares = (query["swap"] ?? "").split(separator: ",").map(String.init)
+            guard pares.count == 2 else {
+                respond(fd, status: "400 Bad Request",
+                        json: ["ok": false, "error": "use swap=id1,id2"])
+                return
+            }
+            let payload = DispatchQueue.main.sync {
+                AppControl.swapMosaic?(query["target"] ?? "", pares[0], pares[1])
+                    ?? ["ok": false, "error": "app sem mosaico disponível"]
+            }
+            respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
+                    json: payload)
+
         case ("GET", _, _) where route.contains("/remove"):
             // /remove?target=ws[&worktrees=1] — remove a sessão, e só com
             // `worktrees=1` apaga as worktrees dela do disco. O padrão é não

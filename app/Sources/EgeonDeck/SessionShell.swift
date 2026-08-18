@@ -181,6 +181,13 @@ final class SessionShell: NSView {
     /// pilha junto.
     private var canvasFrames: [String: NSRect] = [:]
 
+    /// Troca dois cards de painel no mosaico, por id. Nada acontece no canvas —
+    /// lá a posição é livre e não há painel para trocar.
+    @discardableResult
+    func swapInMosaic(_ primeiro: String, _ segundo: String) -> Bool {
+        mosaic?.swap(primeiro, segundo) ?? false
+    }
+
     /// Proporções salvas do mosaico. Repassadas na hora de montá-lo.
     var mosaicLayout: MosaicLayout? {
         didSet { mosaic?.layoutRatios = mosaicLayout }

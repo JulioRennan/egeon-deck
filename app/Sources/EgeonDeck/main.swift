@@ -100,6 +100,16 @@ EgeonCLI.install()
         AppControl.sessionOwning = { [weak self] folder in
             self?.sessionOwning(folder: folder)
         }
+        AppControl.swapMosaic = { [weak self] session, first, second in
+            guard let self,
+                  let index = self.configs.firstIndex(where: { $0.name == session })
+            else { return ["ok": false, "error": "sessão desconhecida '\(session)'"] }
+            guard self.shells[index]?.swapInMosaic(first, second) == true else {
+                return ["ok": false,
+                        "error": "não trocou — nó desconhecido, ou a sessão não está em mosaico"]
+            }
+            return ["ok": true, "session": session, "swapped": [first, second]]
+        }
         AppControl.cardSnapshot = { [weak self] target, file in
             self?.cardSnapshot(target: target, file: file) ?? "erro: app encerrando"
         }
