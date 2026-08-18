@@ -1221,13 +1221,40 @@ qualificador. O gancho diz **quando** o turno acabou; a tela, lida naquele
 instante, diz **qual dos dois** foi: `[[ED:ask]]` visível é pergunta, o resto é
 fim de tarefa.
 
-A partir do primeiro gancho recebido — e o `UserPromptSubmit`, que já existia por
-outro motivo, entrega isso logo no primeiro prompt —, as camadas que liam a tela
-**calam**. Não é redundância barata: elas erravam para mais, e o custo de um
+Em quem tem gancho, as camadas que liam a tela **calam** — e calam desde o
+arranque, não a partir do primeiro relato. Quem monta a linha de comando é o app:
+ele já sabe quem leva `--settings`, e descobrir isso empiricamente custava uma
+janela. Entre a subida e o primeiro prompt a tela ainda mandava, e é exatamente
+ali que mora a conversa RETOMADA, com o fim do turno anterior redesenhado.
+
+Não é redundância barata que se perde: elas erravam para mais, e o custo de um
 falso positivo aqui é o mesmo do alarme de carro.
 
-Terminal que nunca falou por gancho — shell, outro CLI, `cmd` trocado — continua
-exatamente como antes. É o único jeito de não ficar cego onde o canal não existe.
+Terminal que não leva gancho — shell, outro CLI, `cmd` trocado por outro programa
+— continua exatamente como antes. É o único jeito de não ficar cego onde o canal
+não existe.
+
+### O recap, e por que a tela não serve nem como rede
+
+O CLI gera um resumo quando você volta depois de um tempo fora. É texto do
+**modelo**, então obedece o protocolo e escreve marcador; e como o resumo termina
+dizendo qual é o próximo passo, o marcador que sai costuma ser `[[ED:ask]]`. Um
+terminal livre passava a dizer "precisa de você".
+
+Medido com `/recap` num terminal do dev: o recap aparece na tela com marcador e
+**não dispara gancho nenhum** — nem `UserPromptSubmit`, nem `Stop`. Isso fecha a
+questão de onde ele pode fazer estrago: só na tela.
+
+Foi por isso que a primeira tentativa de defesa saiu do código. Era uma trava no
+`Stop` — "turno que não responde a prompt nenhum é texto que o agente gerou
+sozinho, ignore" — e protegia de um caminho que o recap não usa, enquanto criava um
+jeito novo de PERDER aviso de verdade: um `UserPromptSubmit` que se perdesse
+deixava o `Stop` seguinte mudo, e mudo é o defeito caro. Trocada pelo `speaksHooks`
+desde o arranque, que ataca o lugar certo.
+
+Sobra `"ccrRecap": false` no settings que o app escreve, para o recap nem existir
+nos terminais que o app dirige. A chave é interna do CLI e pode sumir num release,
+então é higiene e não garantia — a garantia é a tela não mandar em quem tem gancho.
 
 ### `Notification` são dois avisos num, e só um interessa
 
@@ -1250,9 +1277,39 @@ na tela.
 
 ### As duas paradas não pesam igual
 
-`asking` interrompe: borda laranja, `●` na barra lateral, som. `waiting` é
-`✓ terminou` no cabeçalho, sem borda e sem som — você lê quando olhar, e
-"terminou" não é urgente por definição: se fosse, alguém estaria esperando.
+`asking` interrompe: borda laranja, `●` laranja na barra lateral, som. `waiting`
+é `● terminou` em verde, sem borda e sem som — você lê quando olhar, e "terminou"
+não é urgente por definição: se fosse, alguém estaria esperando.
+
+A mesma bolinha nos dois, separada pela cor. Glifo diferente (`✓` para um, `●`
+para outro) obriga a ler o cabeçalho; a cor se reconhece de longe, que é
+justamente quando o aviso serve — com o zoom afastado ou pelo canto do olho.
+
+Isso pediu uma correção na barra lateral, que comparava só o TEXTO antes de
+redesenhar, para não repintar a cada quadro do spinner. Com a mesma bolinha em
+dois estados, `●` laranja e `●` verde viraram a mesma string: a sessão que
+terminasse e depois passasse a perguntar ficaria verde para sempre.
+
+### Os três avisos convivem
+
+Uma sessão tem vários nós, e é normal ter um rodando, um te esperando e um que já
+acabou. A barra lateral mostrava só o mais urgente — e como a laranja ganhava
+sempre, o que ficava escondido era justamente se ainda há trabalho em curso.
+
+Agora os três aparecem juntos, encostados na direita da linha, em ordem FIXA:
+spinner, laranja, verde. Ordenar por urgência faria a bolinha trocar de lugar
+conforme a sessão anda, e badge que se move é badge que se procura em vez de se
+reconhecer.
+
+### O verde some ao entrar ou sair da sessão
+
+"Terminou" não pede nada de você: chegar na sessão já é ter visto, e sair dela
+também — ela estava na sua frente. Então trocar de sessão apaga o verde das duas
+pontas, a que você abre e a que você deixa.
+
+O laranja não cai assim, e é a diferença que importa: ele espera que você olhe o
+TERMINAL. Passar pela sessão não é ler a pergunta que ele te fez, e apagar o aviso
+sem que você a tenha lido é perder o pedido.
 
 ### Cadeia entre agentes não te chama
 

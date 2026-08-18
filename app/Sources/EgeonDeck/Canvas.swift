@@ -509,9 +509,12 @@ final class TerminalNode: NodeView {
 
     /// `profile == nil` → terminal comum. Com perfil, é um "terminal com IA":
     /// mesma mecânica de pty, o que muda é saber injetar prompt e medir ociosidade.
+    /// `hooked` diz se esta linha de comando leva o `--settings` com os nossos
+    /// ganchos. Vem de quem montou a linha, e não de adivinhação aqui dentro:
+    /// `cmd` trocado à mão pode ter trocado de programa, e aí não há gancho.
     init(frame: NSRect, address: String, title: String, cwd: String,
          command: String, profile: AgentProfile?, config: String? = nil,
-         prompt: String? = nil) {
+         prompt: String? = nil, hooked: Bool = false) {
         self.address = address
         // Só o nome do terminal no título. O endereço inteiro cabia numa linha de
         // 11pt e não sobrava nada; agora a sessão é a mesma para todos os cards da
@@ -565,7 +568,8 @@ final class TerminalNode: NodeView {
         let line = "cd \(shellQuote(cwd)); clear; \(command)"
         term.startProcess(executable: "/bin/zsh", args: ["-lc", line], environment: env, execName: nil)
 
-        Dispatcher.shared.register(Session(address: address, profile: profile, view: term))
+        Dispatcher.shared.register(Session(address: address, profile: profile,
+                                           view: term, hooked: hooked))
 
         // O papel do terminal entra na fila em vez de ser escrito no pty agora: a
         // TUI acabou de ser lançada e ainda não tem quem leia stdin. O Dispatcher

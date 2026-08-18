@@ -220,14 +220,27 @@ Quem diz que o turno acabou é o **CLI, por gancho**: `Stop` ("acabei") e
 `Notification` ("estou pedindo permissão") chegam pela rota `/activity`. O
 marcador `[[ED:ok]]` / `[[ED:ask]]` não saiu, mas mudou de papel — o gancho diz
 **quando**, a tela diz **qual dos dois**. Terminal sem gancho (shell, outro CLI)
-continua no silêncio do pty, como antes; a partir do primeiro gancho recebido, as
-camadas que adivinhavam pela tela calam, porque eram elas que acendiam o aviso a
-cada entrega.
+continua no silêncio do pty, como antes. Quem tem gancho **não é julgado pela tela
+em momento nenhum** — nem no arranque: quem monta a linha de comando é o app,
+então ele já sabe quem leva `--settings`, e não precisa descobrir no primeiro
+relato. A tela mente de dois jeitos, e os dois foram medidos: o texto colado
+empurra o marcador do turno passado e a assinatura muda sozinha; e o **recap** do
+CLI escreve marcador sem disparar gancho nenhum, então há marcador na tela que não
+corresponde a turno de ninguém.
 
 Os dois avisos não pesam igual, e a mesma bolinha separa os dois pela cor —
 glifos diferentes obrigam a ler o cabeçalho, a cor se reconhece de longe. `asking`
 é o que interrompe: `●` laranja, borda do card laranja e som. `waiting` é
 `● terminou` em verde, sem borda e sem som — você lê quando olhar.
+
+Na barra lateral os três convivem, encostados na direita da linha e sempre na
+mesma ordem: spinner do que está rodando, `●` laranja do que te espera, `●` verde
+do que acabou, com a contagem quando é mais de um. Uma sessão tem vários nós e os
+três são fatos independentes; escolher um para mostrar escondia os outros dois.
+
+O verde some quando você **entra na sessão ou sai dela** — é aviso que não pede
+nada, e chegar ali já é ter visto. O laranja não some assim: ele espera que você
+olhe o TERMINAL, e passar pela sessão não é ler a pergunta que ele te fez.
 
 E **fim de turno de quem acabou de acionar um vizinho não avisa nada**: o trabalho
 seguiu para o outro card, e te chamar ali é te puxar para o meio de uma conversa

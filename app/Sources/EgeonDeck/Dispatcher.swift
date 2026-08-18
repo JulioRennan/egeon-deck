@@ -179,18 +179,30 @@ final class Session {
     /// Entrada é o sinal exato — um agente parado só volta a ter o que fazer se
     /// alguém lhe der.
     private var attentionHeld = false
-    /// Este terminal já falou por gancho?
+    /// Este terminal foi lançado com os nossos ganchos?
     ///
-    /// A partir do primeiro relato o silêncio para de anunciar. A camada do
-    /// silêncio era rede para o marcador que não chegava, e era ela que acendia
-    /// o aviso em qualquer rajada de dois segundos — um `npm test`, um
-    /// `/resume`, a TUI se redesenhando (ADR-024).
-    private var sawHook = false
+    /// Sabido no arranque, e não descoberto no primeiro relato: quem monta a
+    /// linha de comando é o app, então ele já sabe. Descobrir custava uma janela
+    /// — entre a subida e o primeiro prompt, a tela ainda mandava, e ali mora a
+    /// conversa RETOMADA, com o fim do turno anterior redesenhado. Se o que
+    /// estava lá era um recap do CLI, o arranque acendia laranja por uma
+    /// pergunta que nunca existiu (ADR-024).
+    ///
+    /// Continua virando `true` com qualquer gancho que chegue: nó cujo `cmd` foi
+    /// trocado por um wrapper que ainda leva o `--settings` não perde nada.
+    private var speaksHooks: Bool
     /// Acionou um vizinho neste turno.
     ///
     /// Fim de turno de quem passou o bastão não é assunto seu: o trabalho
     /// continua no card do outro. Cai com entrada nova, como o aviso.
     fileprivate var handedOff = false
+    /// Você já viu que este terminal terminou.
+    ///
+    /// Vale só para o "terminou": abrir a sessão basta para dar por visto algo
+    /// que não pede nada de você. A PERGUNTA não cai assim — ela espera que você
+    /// olhe o terminal, e passar os olhos pela sessão não é ler o que ele
+    /// perguntou. Cai com byte novo, junto do `acknowledged`.
+    private var doneSeen = false
 
     private(set) var activity: Activity = .starting
 
@@ -201,10 +213,11 @@ final class Session {
     var pending: Int { queue.count }
     var displayName: String { profile?.displayName ?? "shell" }
 
-    init(address: String, profile: AgentProfile?, view: MBTerminalView) {
+    init(address: String, profile: AgentProfile?, view: MBTerminalView, hooked: Bool) {
         self.address = address
         self.profile = profile
         self.view = view
+        self.speaksHooks = hooked
 
         let config = profile?.attentionConfig ?? AttentionConfig()
         self.attention = config
@@ -233,6 +246,7 @@ final class Session {
             self.sawOutput = true
             // Byte novo é assunto novo: o que você já tinha visto não vale mais.
             self.acknowledged = false
+            self.doneSeen = false
         }
 
     }
@@ -316,7 +330,16 @@ final class Session {
             // nada, e dura mais que o `minWorkMs`. Sem descartar, todo arranque
             // do app — e toda sessão materializada — avisa que "terminou".
             let warmedUpAt = startedAt.addingTimeInterval(warmupWindow)
-            lastBurst = start < warmedUpAt ? 0 : lastOutput.timeIntervalSince(start)
+            if start < warmedUpAt {
+                lastBurst = 0
+                // A conversa retomada redesenha o fim do turno anterior, marcador
+                // incluído. Dar por anunciado o que já estava ali é o que impede
+                // o arranque do app de tocar por uma pergunta que você já viu — o
+                // card continua dizendo o estado, só não chama.
+                announced = markerSignature(peek(lines: 24))
+            } else {
+                lastBurst = lastOutput.timeIntervalSince(start)
+            }
             burstStart = nil
         }
 
@@ -357,8 +380,10 @@ final class Session {
         // serve para dizer se a parada foi pergunta ou fim. Ler marcador aqui
         // seria reler o marcador do turno PASSADO — ele continua na tela
         // enquanto o agente pensa no próximo, e a pausa de quem está pensando é
-        // silêncio igual ao de quem parou.
-        guard !sawHook else { hold(.ready); return }
+        // silêncio igual ao de quem parou. Pior: o recap do CLI escreve marcador
+        // na tela sem disparar gancho nenhum, então ali existe marcador que não
+        // corresponde a turno de ninguém.
+        guard !speaksHooks else { hold(.ready); return }
 
         let lines = screen()
         let verdict = self.verdict(from: lines)
@@ -373,6 +398,14 @@ final class Session {
             guard lastBurst >= attention.minWork else { hold(.ready); return }
             attend(.waiting, via: verdict.via, stop: stopToken())
         }
+    }
+
+    /// Você abriu a sessão deste terminal. Só apaga o "terminou".
+    fileprivate func markDoneSeen() {
+        doneSeen = true
+        guard activity == .waiting else { return }
+        attentionHeld = false
+        activity = .ready
     }
 
     /// Entrada nova neste terminal: o agente ganhou o que fazer, então o aviso
@@ -397,16 +430,19 @@ final class Session {
     /// diálogo de permissão é desenhado pelo programa, não é mensagem do modelo
     /// (ADR-024).
     func hookReported(_ event: String) {
-        sawHook = true
+        // Dois por turno, e é o que responde "o CLI está mesmo relatando?" e em
+        // que ordem — a pergunta que o recap obrigou a fazer.
+        Log.write("gancho[\(address)]: \(event)")
+        speaksHooks = true
         switch event {
         case "stop":
             // O gancho diz QUANDO; o marcador na tela diz QUAL dos dois é.
             let asked = verdict(from: screen()).outcome == .asked
             attend(asked ? .asking : .waiting, via: "gancho Stop", stop: hookToken(event))
         case "prompt":
-            // O relato de conversa (`UserPromptSubmit`) não é aviso nenhum: vale
-            // só por provar que o gancho chega neste terminal, e é o que
-            // autoriza as camadas de adivinhação a calarem já no primeiro turno.
+            // O relato de conversa (`UserPromptSubmit`) não é aviso nenhum: ele
+            // diz qual conversa está aberta (ADR-014), e de quebra confirma que
+            // o gancho chega neste terminal.
             break
         case "ask":
             // `Notification` são dois avisos num: o pedido de permissão e o
@@ -457,7 +493,7 @@ final class Session {
         // passado tela acima, as linhas em volta trocam, e o app conclui que o
         // agente acabou de terminar algo que nem começou. Era o "qualquer
         // interação acende a bolinha" (ADR-024).
-        guard !sawHook else {
+        guard !speaksHooks else {
             hold(.working)
             return
         }
@@ -509,7 +545,7 @@ final class Session {
         // trabalho seguiu para o card do outro, e avisar aqui é te puxar para o
         // meio de uma conversa entre agentes. Pergunta é o contrário — permissão
         // não se delega, e é por ela que o vizinho precisa de você (ADR-024).
-        if next == .waiting, handedOff {
+        if next == .waiting, handedOff || doneSeen {
             hold(.ready)
             return
         }
@@ -759,6 +795,17 @@ final class Dispatcher {
     }
 
     func session(_ address: String) -> Session? { sessions[address] }
+
+    /// Você abriu esta sessão: o "terminou" dos terminais dela já foi visto.
+    ///
+    /// Só o verde. O laranja continua esperando que você olhe o TERMINAL —
+    /// trocar de sessão não é ler a pergunta que ele te fez.
+    func sessionOpened(_ name: String) {
+        let prefix = name + "/"
+        for (address, session) in sessions where address.hasPrefix(prefix) {
+            session.markDoneSeen()
+        }
+    }
 
     /// De qual terminal partiu a conexão aberta em `fd`, se de algum.
     ///

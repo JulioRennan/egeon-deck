@@ -185,10 +185,19 @@ EgeonCLI.install()
     private func activate(_ index: Int) {
         guard index >= 0, index < configs.count, index != activeIndex else { return }
         let shell = shells[index] ?? build(index)
+        let previous = activeIndex
         activeIndex = index
         root.show(shell)
         root.sidebar.select(index)
         root.sidebar.markLive(index)
+        // Trocar de sessão dá por visto o "terminou" das DUAS: a que você abre,
+        // porque chegou nela, e a que você deixa, porque estava na sua frente. É
+        // aviso que não pede nada de você — manter o verde aceso depois disso é
+        // pedir que você o apague à mão.
+        if previous >= 0, previous < configs.count {
+            Dispatcher.shared.sessionOpened(configs[previous].name)
+        }
+        Dispatcher.shared.sessionOpened(configs[index].name)
         Log.write("sessão ativa: \(configs[index].name)")
     }
 
@@ -1306,24 +1315,26 @@ EgeonCLI.install()
     private static func launchPlan(for node: NodeConfig,
                                    profile: AgentProfile?,
                                    catalog: String?) -> (command: String,
-                                                         promptToInject: String?) {
+                                                         promptToInject: String?,
+                                                         hooked: Bool) {
         let base = node.cmd
             ?? profile.map { $0.command.joined(separator: " ") }
             ?? "exec /bin/zsh -l"
 
         guard node.type == .agent, let profile,
               let text = profile.systemPromptText(role: node.prompt, catalog: catalog)
-        else { return (base, nil) }
+        else { return (base, nil, false) }
 
         if let arguments = profile.systemPromptArguments(for: text), profile.runsOwnBinary(base) {
             var extras = arguments
             // O gancho de relato entra junto: é o que faz o app saber quando VOCÊ
-            // troca de conversa dentro da TUI.
-            if let report = profile.reportArguments(hookFile: AgentHooks.settingsFile.path) {
-                extras += report
-            }
+            // troca de conversa dentro da TUI, e é por ele que chegam o fim de
+            // turno e o pedido de permissão (ADR-024).
+            let report = profile.reportArguments(hookFile: AgentHooks.settingsFile.path)
+            if let report { extras += report }
             let flags = " " + extras.map(AppEnvironment.shellQuote).joined(separator: " ")
-            return (sessionCommand(base: base, flags: flags, node: node, profile: profile), nil)
+            return (sessionCommand(base: base, flags: flags, node: node, profile: profile),
+                    nil, report != nil)
         }
 
         // CLI sem flag de system prompt (ou `cmd` trocado por outro programa):
@@ -1337,9 +1348,9 @@ EgeonCLI.install()
                           + "o protocolo de marcador não sobe — a detecção fica só no "
                           + "silêncio", key: "marker.\(profile.displayName)")
             }
-            return (base, nil)
+            return (base, nil, false)
         }
-        return (base, text)
+        return (base, text, false)
     }
 
     /// A linha de comando que retoma a conversa deste terminal, ou cria a
@@ -1461,7 +1472,8 @@ EgeonCLI.install()
                                         cwd: config.directory(for: node),
                                         command: launch.command, profile: profile,
                                         config: node.config,
-                                        prompt: launch.promptToInject)
+                                        prompt: launch.promptToInject,
+                                        hooked: launch.hooked)
             if index >= 0, node.sessionId != nil, !node.hasStartedSession,
                let position = configs[index].nodes.firstIndex(where: { $0.id == node.id }) {
                 configs[index].nodes[position].sessionStarted = true

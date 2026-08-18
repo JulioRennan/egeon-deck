@@ -58,7 +58,9 @@ final class SidebarRow: NSView {
 
     override var isFlipped: Bool { true }
 
-    private static let statusWidth: CGFloat = 34
+    /// Cabe `⠙9 ●9 ●9`: os três avisos convivem, e o pior caso é a sessão que
+    /// tem nó em cada estado.
+    private static let statusWidth: CGFloat = 66
 
     override func layout() {
         super.layout()
@@ -66,7 +68,9 @@ final class SidebarRow: NSView {
         let textWidth = bounds.width - 40 - Self.statusWidth
         nameLabel.frame = NSRect(x: 28, y: 8, width: textWidth, height: 17)
         pathLabel.frame = NSRect(x: 28, y: 26, width: textWidth, height: 13)
-        statusLabel.frame = NSRect(x: bounds.width - Self.statusWidth - 10,
+        // 4 da borda da linha, que é onde o `+` do cabeçalho termina: encostado
+        // no limite útil da direita e alinhado com o que já estava lá.
+        statusLabel.frame = NSRect(x: bounds.width - Self.statusWidth - 4,
                                    y: bounds.midY - 9,
                                    width: Self.statusWidth, height: 18)
     }
@@ -74,32 +78,56 @@ final class SidebarRow: NSView {
     /// A sessão que precisa de você quase nunca é a que está na tela: o canvas
     /// das outras sai da hierarquia de views e não desenha nada. Esta linha é a
     /// única pista que elas têm.
+    ///
+    /// Os três avisos convivem, e é o caso normal de uma sessão com vários nós:
+    /// um agente rodando, outro te perguntando algo, um terceiro que já acabou.
+    /// Escolher um para mostrar escondia os outros dois — e como a laranja
+    /// ganhava sempre, o escondido era justamente o que dizia se ainda há
+    /// trabalho em curso.
     func show(_ summary: ActivitySummary) {
-        let text: String
-        let color: NSColor
-        if summary.attention > 0 {
-            text = summary.attention > 1 ? "● \(summary.attention)" : "●"
-            color = .systemOrange
-        } else if summary.done > 0 {
-            text = summary.done > 1 ? "● \(summary.done)" : "●"
-            color = .systemGreen
-        } else if summary.working > 0 {
-            text = String(Spinner.current)
-            color = NSColor(calibratedWhite: 1, alpha: 0.45)
-        } else {
-            text = ""
-            color = .clear
+        // Isto roda a cada quadro do spinner, em toda linha da barra. A
+        // assinatura carrega as três contagens e não o texto: com a MESMA
+        // bolinha em dois estados, `●` sozinho é ambíguo — laranja e verde
+        // escreveriam igual, e a linha ficaria presa na cor anterior.
+        let signature = "\(summary.working)/\(summary.attention)/\(summary.done)/"
+            + (summary.working > 0 ? String(Spinner.current) : "")
+        guard signature != lastBadge else { return }
+        lastBadge = signature
+
+        let badge = NSMutableAttributedString()
+        func add(_ glyph: String, _ count: Int, _ color: NSColor) {
+            guard count > 0 else { return }
+            if badge.length > 0 { badge.append(NSAttributedString(string: " ")) }
+            // Fonte e alinhamento vêm junto porque `attributedStringValue`
+            // ignora os do rótulo: sem a fonte o spinner volta a tremer em fonte
+            // proporcional, e sem o parágrafo o badge encosta na ESQUERDA da
+            // caixa — que é longe da borda do tile, justamente onde ele não
+            // serve.
+            badge.append(NSAttributedString(string: count > 1 ? "\(glyph)\(count)" : glyph,
+                                            attributes: [.foregroundColor: color,
+                                                         .font: statusLabel.font as Any,
+                                                         .paragraphStyle: Self.rightAligned]))
         }
 
-        // Chamado a cada quadro do spinner. Comparar antes de escrever mantém
-        // as linhas paradas sem redesenho nenhum. A cor entra na comparação
-        // porque as duas paradas usam a MESMA bolinha: comparando só o texto,
-        // a sessão que terminou e depois passou a te perguntar algo continuaria
-        // verde para sempre.
-        guard statusLabel.stringValue != text || statusLabel.textColor != color else { return }
-        statusLabel.stringValue = text
-        statusLabel.textColor = color
+        // Ordem fixa, na sequência do ciclo: rodando, parou te perguntando,
+        // parou pronto. Ordenar por urgência faria a bolinha trocar de lugar
+        // conforme a sessão anda, e badge que se move é badge que se procura em
+        // vez de se reconhecer.
+        add(String(Spinner.current), summary.working, NSColor(calibratedWhite: 1, alpha: 0.45))
+        add("●", summary.attention, .systemOrange)
+        add("●", summary.done, .systemGreen)
+
+        statusLabel.attributedStringValue = badge
     }
+
+    /// Última combinação desenhada, para não remontar o rótulo à toa.
+    private var lastBadge = ""
+
+    private static let rightAligned: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.alignment = .right
+        return style
+    }()
 
     private func restyle() {
         layer?.backgroundColor = isSelected
