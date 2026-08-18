@@ -15,7 +15,7 @@ Uso pessoal, um usuário, macOS. Não há multiusuário, telemetria, nem servido
 | | por quê |
 |---|---|
 | macOS 14+ | as barras usam vidro (`NSGlassEffectView`) no 26+; abaixo disso caem sozinhas num fundo semiopaco |
-| Xcode ou Command Line Tools | o app é Swift/SPM e você compila localmente — não há binário assinado para baixar |
+| Xcode ou Command Line Tools | só se for compilar. Há zip pronto nas [releases](https://github.com/JulioRennan/egeon-deck/releases), mas o app é Swift/SPM e quem clona compila |
 | [`code-server`](https://github.com/coder/code-server) | é o nó de editor. `brew install code-server`. Procurado em `/opt/homebrew/bin`, `/usr/local/bin` e `~/.local/bin` |
 | um CLI de agente | o que você já usa. Vêm configurados `claude`, `codex`, `opencode` e `gemini`; qualquer outro entra em `~/.egeon/agents.json` |
 
@@ -23,6 +23,33 @@ Nenhum deles é verificado no arranque: sem `code-server` o nó de editor não s
 resto funciona igual.
 
 ## Instalar
+
+Duas rotas: baixar o zip pronto, ou clonar e compilar. Compilar é o que anda junto
+com o repositório — o zip é de uma versão marcada.
+
+### Baixar
+
+Cada release traz dois zips, e a diferença é só o que vai dentro do executável:
+
+| arquivo | para quem |
+|---|---|
+| `EgeonDeck-<versão>-universal.zip` | qualquer Mac — Apple Silicon e Intel |
+| `EgeonDeck-<versão>-arm.zip` | só Apple Silicon, 1,4 MB menor |
+
+Universal **não** é mais lento: o binário carrega as duas fatias e o macOS executa só
+a nativa. O que dobra é o tamanho do executável, não o tempo de nada.
+
+```bash
+unzip EgeonDeck-v0.2-universal.zip -d /Applications
+xattr -dr com.apple.quarantine "/Applications/Egeon Deck.app"
+```
+
+O `xattr` não é opcional. O bundle vai assinado ad-hoc e sem notarização; o macOS põe
+quarentena em tudo que veio da internet e recusa abrir, dizendo que o app está
+"danificado" — mensagem enganosa, porque o arquivo está inteiro e o que falta é o
+carimbo da Apple.
+
+### Compilar
 
 ```bash
 git clone git@github.com:JulioRennan/egeon-deck.git
@@ -32,6 +59,10 @@ cd egeon-deck
 
 O script encerra qualquer instância antes de mexer no bundle, e confere no fim se o
 processo que subiu é mesmo o novo.
+
+Para gerar os zips de release em vez de instalar aqui, `./app/dist.sh universal` ou
+`./app/dist.sh arm` — eles empacotam em `app/dist/` e não encostam em
+`/Applications`.
 
 **O macOS vai pedir permissões de novo a cada build.** A assinatura é ad-hoc, e para
 o sistema um bundle reassinado é outro app. Para parar com isso, use um certificado
