@@ -1235,11 +1235,18 @@ Ele dispara para permissão **e** para "você sumiu há 60s". O segundo não tra
 notícia nenhuma: o fim do turno já veio pelo `Stop` e ali já se decidiu se valia
 chamar. Sem separar, toda cadeia silenciada voltava a apitar um minuto depois.
 
-A separação não olha o texto da mensagem — isso seria casar string do CLI, que é
-o que estes ADRs vêm evitando. Olha o relógio do pty: o pedido de permissão nasce
-no meio do trabalho, e o diálogo acabou de ser desenhado, então saiu byte agora há
-pouco; o aviso de ociosidade existe *porque* faz tempo que não sai nada. Dez
-segundos separam os dois com folga de seis vezes.
+A separação não olha o texto da mensagem — casar string do CLI é o que estes ADRs
+vêm evitando. Olha o **estado**: permissão interrompe trabalho, então o terminal
+está `working`; a ociosidade só pode existir depois que o turno acabou, com o
+terminal já parado.
+
+Tentei antes cortar pelo relógio — "saiu byte há menos de dez segundos é
+permissão" — e não segura: no minuto da ociosidade a TUI está redesenhando, o
+byte é recente, e o aviso passava. Pior, passava **calado**: com o latch já
+armado pelo `Stop`, o `attend` não reanuncia nem loga, só troca o estado — e o
+card virava laranja sem uma linha no log dizendo por quê. Foi assim que apareceu,
+numa barra lateral marcando dois em atenção com um dos dois exibindo `[[ED:ok]]`
+na tela.
 
 ### As duas paradas não pesam igual
 

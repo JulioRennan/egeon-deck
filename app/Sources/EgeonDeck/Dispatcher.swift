@@ -410,21 +410,22 @@ final class Session {
             break
         case "ask":
             // `Notification` são dois avisos num: o pedido de permissão e o
-            // "você sumiu há 60s". O primeiro nasce no meio do trabalho — o
-            // diálogo acabou de ser desenhado, então saiu byte agora há pouco. O
-            // segundo só existe porque faz tempo que não sai nada, e não traz
-            // notícia nenhuma: o fim do turno já veio pelo `Stop`, e ali já se
-            // decidiu se valia te chamar. Sem este corte, toda cadeia silenciada
-            // voltaria a apitar um minuto depois.
-            guard Date().timeIntervalSince(lastOutput) < Self.permissionWindow else { return }
+            // "você sumiu há 60s". O segundo não traz notícia nenhuma — o fim do
+            // turno já veio pelo `Stop`, e ali já se decidiu se valia te chamar.
+            //
+            // O que separa os dois é o ESTADO, não o relógio: permissão
+            // interrompe trabalho, então o terminal está `working`; a ociosidade
+            // só existe depois que o turno acabou, com o terminal já parado.
+            // Tentei cortar por "saiu byte há menos de 10s" e não segura: no
+            // minuto da ociosidade a TUI está redesenhando, o byte é recente, e
+            // o aviso passava — mudando o card para laranja sem nem logar,
+            // porque o latch já estava armado e só o estado mudava.
+            guard activity == .working || activity == .starting else { return }
             attend(.asking, via: "gancho Notification", stop: hookToken(event))
         default:
             Log.write("atenção[\(address)]: gancho com evento desconhecido '\(event)'")
         }
     }
-
-    /// Até quando, depois do último byte, um `Notification` ainda é permissão.
-    private static let permissionWindow: TimeInterval = 10
 
     /// Identifica uma parada relatada por gancho. O instante entra porque dois
     /// turnos seguidos produzem o mesmo evento e são paradas distintas.

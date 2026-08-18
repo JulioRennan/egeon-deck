@@ -81,8 +81,8 @@ final class SidebarRow: NSView {
             text = summary.attention > 1 ? "● \(summary.attention)" : "●"
             color = .systemOrange
         } else if summary.done > 0 {
-            text = summary.done > 1 ? "✓ \(summary.done)" : "✓"
-            color = NSColor(calibratedWhite: 1, alpha: 0.45)
+            text = summary.done > 1 ? "● \(summary.done)" : "●"
+            color = .systemGreen
         } else if summary.working > 0 {
             text = String(Spinner.current)
             color = NSColor(calibratedWhite: 1, alpha: 0.45)
@@ -92,8 +92,11 @@ final class SidebarRow: NSView {
         }
 
         // Chamado a cada quadro do spinner. Comparar antes de escrever mantém
-        // as linhas paradas sem redesenho nenhum.
-        guard statusLabel.stringValue != text else { return }
+        // as linhas paradas sem redesenho nenhum. A cor entra na comparação
+        // porque as duas paradas usam a MESMA bolinha: comparando só o texto,
+        // a sessão que terminou e depois passou a te perguntar algo continuaria
+        // verde para sempre.
+        guard statusLabel.stringValue != text || statusLabel.textColor != color else { return }
         statusLabel.stringValue = text
         statusLabel.textColor = color
     }

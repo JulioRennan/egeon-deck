@@ -30,7 +30,7 @@ enum Activity: Equatable {
         switch self {
         case .starting: return "\(Spinner.current) subindo"
         case .working:  return "\(Spinner.current) trabalhando"
-        case .waiting:  return "✓ terminou"
+        case .waiting:  return "● terminou"
         case .asking:   return "● precisa de você"
         case .dead:     return "✕ processo encerrado"
         case .ready:    return nil
@@ -40,6 +40,10 @@ enum Activity: Equatable {
     /// Cor do rótulo. `nil` = mantém o acento do tipo de nó.
     var color: NSColor? {
         switch self {
+        // A mesma bolinha das duas paradas, e a cor é que separa: verde
+        // terminou, laranja depende de você. Glifos diferentes obrigavam a ler
+        // o cabeçalho; a cor você reconhece de longe, que é quando importa.
+        case .waiting: return .systemGreen
         case .asking:  return .systemOrange
         case .dead:    return .systemRed
         default:       return nil

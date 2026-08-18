@@ -224,9 +224,10 @@ continua no silêncio do pty, como antes; a partir do primeiro gancho recebido, 
 camadas que adivinhavam pela tela calam, porque eram elas que acendiam o aviso a
 cada entrega.
 
-Os dois avisos não pesam igual. `asking` é o que interrompe: borda laranja, `●` na
-barra lateral e som. `waiting` é `✓ terminou` no cabeçalho, sem borda e sem som —
-você lê quando olhar.
+Os dois avisos não pesam igual, e a mesma bolinha separa os dois pela cor —
+glifos diferentes obrigam a ler o cabeçalho, a cor se reconhece de longe. `asking`
+é o que interrompe: `●` laranja, borda do card laranja e som. `waiting` é
+`● terminou` em verde, sem borda e sem som — você lê quando olhar.
 
 E **fim de turno de quem acabou de acionar um vizinho não avisa nada**: o trabalho
 seguiu para o outro card, e te chamar ali é te puxar para o meio de uma conversa
