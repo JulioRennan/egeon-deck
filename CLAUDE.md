@@ -180,9 +180,15 @@ desejado; no mosaico os cards dividem a janela inteira, e sobreposição ali é 
 coberto. A barra do canvas e o banner de aviso usam o mesmo `GlassPanel`. A barra de
 visualização, no topo, segue opaca e encostada.
 
-No canvas o conteúdo cede sempre só a largura do **trilho** (52pt, 70 com as
-margens) — o que se abre além disso passa por cima. No mosaico ele cede a largura de
-verdade, e recolher devolve 180pt aos cards.
+No canvas o conteúdo **não cede nada**: o grid vai até a borda e corre por baixo do
+vidro — é isso que faz a barra parecer flutuando. Reservar uma faixa ali pintava ela
+com o fundo da `RootView`, cinza neutro 0.09, mais claro que o azulado do canvas: dava
+uma moldura cinza em volta do vidro com cara de resto da barra antiga. No mosaico o
+conteúdo cede a largura de verdade, e recolher devolve 180pt aos cards.
+
+A barra começa abaixo da barra de visualização, que corre de borda a borda e é ela que
+passa por baixo dos botões da janela — por isso o título dela recua quando a sessão
+encosta na esquerda (`ViewToolbar.titleInset`, decidido pela posição e não pelo modo).
 
 Recolher é **só sua escolha**: `⌘/` ou o botão no cabeçalho da barra. Nem o modo nem o
 mouse passando por cima mexem nisso — barra fechada só abre por clique ou tecla, e

@@ -2359,10 +2359,10 @@ final class FormView: NSView {
 final class RootView: NSView {
     /// Margem do vidro até a borda da janela.
     private static let margin: CGFloat = 10
-    /// Onde a barra começa. Desvia dos botões da janela: com
-    /// `fullSizeContentView` eles moram no canto superior esquerdo, e vidro por
-    /// baixo deles fica ilegível.
-    private static let top: CGFloat = 44
+    /// Onde a barra começa: logo abaixo da barra de visualização, que agora corre
+    /// de borda a borda e é ela que carrega os botões da janela por baixo. Encostar
+    /// nela punha 2pt de vidro em cima do fio de baixo da barra.
+    private static let top: CGFloat = ViewToolbar.height + 8
     /// Folga entre a barra e o conteúdo.
     private static let gap: CGFloat = 8
 
@@ -2395,9 +2395,15 @@ final class RootView: NSView {
     }
 
     var contentFrame: NSRect {
-        // No canvas o conteúdo cede sempre só o trilho: o resto da barra passa por
-        // cima do grid. No mosaico cede a largura de verdade.
-        let left = Self.margin + (isMosaic ? sidebarWidth : Sidebar.railWidth) + Self.gap
+        // No canvas o conteúdo vai até a BORDA: o grid corre por baixo da barra, e
+        // é isso que faz a barra parecer flutuando. Reservar uma faixa aqui pintava
+        // ela com o fundo desta view — cinza neutro 0.09, mais claro que o azulado
+        // do canvas —, e o resultado era uma moldura cinza em volta do vidro, com
+        // cara de resto da barra antiga.
+        //
+        // No mosaico cede a largura de verdade, e ali a faixa não aparece porque o
+        // fundo do shell é o mesmo 0.09.
+        let left = isMosaic ? Self.margin + sidebarWidth + Self.gap : 0
         return NSRect(x: left, y: 0,
                       width: max(0, bounds.width - left), height: bounds.height)
     }

@@ -93,6 +93,12 @@ final class ViewToolbar: NSView {
 
     var onSelect: ((ViewMode) -> Void)?
 
+    /// Onde o título começa. Cresce quando a barra encosta na borda esquerda da
+    /// janela: com `fullSizeContentView`, os botões dela ficam ali em cima.
+    var titleInset: CGFloat = 16 {
+        didSet { if titleInset != oldValue { needsLayout = true } }
+    }
+
     private var buttons: [ViewMode: ModeButton] = [:]
     /// Fundo da dupla de modos. Um trilho atrás dos dois, como abas: sem ele os
     /// botões flutuam no meio da barra e não se leem como um par de estados
@@ -177,9 +183,9 @@ final class ViewToolbar: NSView {
             x += width + padding
         }
 
-        let esquerda = max(0, pill.frame.minX - margem * 2)
-        title.frame = NSRect(x: margem, y: 8, width: esquerda, height: 16)
-        subtitle.frame = NSRect(x: margem, y: 25, width: esquerda, height: 13)
+        let esquerda = max(0, pill.frame.minX - titleInset - margem)
+        title.frame = NSRect(x: titleInset, y: 8, width: esquerda, height: 16)
+        subtitle.frame = NSRect(x: titleInset, y: 25, width: esquerda, height: 13)
 
         let direita = max(0, bounds.width - pill.frame.maxX - margem * 2)
         hint.frame = NSRect(x: pill.frame.maxX + margem, y: (bounds.height - 13) / 2,
@@ -420,6 +426,12 @@ final class SessionShell: NSView {
 
     override func layout() {
         super.layout()
+        // Quem decide o recuo do título é a POSIÇÃO, e não o modo: se a sessão
+        // começa na borda esquerda da janela — o que acontece no canvas, onde o
+        // grid corre por baixo da barra flutuante —, os botões da janela ficam em
+        // cima do título. Perguntar a geometria evita combinar por convenção com o
+        // `RootView`, que é quem escolhe onde a sessão começa.
+        bar.titleInset = convert(NSPoint.zero, to: nil).x < 40 ? 82 : 16
         bar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: ViewToolbar.height)
         let content = contentFrame
         canvas.frame = content

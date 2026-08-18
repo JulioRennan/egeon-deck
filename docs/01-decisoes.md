@@ -1418,12 +1418,26 @@ continua em 14.
 AppKit tira a sombra do canal alfa da camada — que aqui está vazio. Sem o
 `shadowPath`, a barra fica sem sombra e volta a parecer mais um nó pousado no grid.
 
-**Onde a barra pousa depende do modo.** No canvas ela FLUTUA: o conteúdo cede só a
-largura do trilho (52pt, 70 com as margens) e o resto passa por cima do grid — a
-bancada tem sobra de espaço, e reservar os 232 devolveria a coluna fixa que se quis
-tirar. No mosaico ela fica AO LADO do container, que cede a largura de verdade:
-ali os cards dividem a janela inteira, e sobreposição significa terminal coberto.
-Recolher, no mosaico, devolve 180pt aos cards.
+**Onde a barra pousa depende do modo.** No canvas ela FLUTUA e o conteúdo não cede
+nada: o grid vai até a borda da janela e corre por baixo do vidro. No mosaico ela fica
+AO LADO do container, que cede a largura de verdade — ali os cards dividem a janela
+inteira, e sobreposição significa terminal coberto. Recolher, no mosaico, devolve
+180pt aos cards.
+
+**Faixa reservada é moldura cinza.** A primeira versão reservava no canvas a largura
+do trilho, para o grid não passar por baixo do vidro. O efeito foi o contrário do
+pretendido: a faixa é pintada com o fundo da `RootView`, cinza neutro 0.09, e o
+documento do canvas é azulado (0.06/0.07/0.09) e mais escuro — media-se (27,27,27)
+contra (19,22,28). O resultado era um L cinza em volta do vidro, com cara exata de
+resto da barra antiga. Flutuar não é "quase encostar": ou o conteúdo passa por baixo,
+ou aparece a moldura. No mosaico o problema não existe porque o fundo do shell é o
+mesmo 0.09 da raiz.
+
+**O título da barra de cima recua sozinho.** Com o conteúdo indo até a borda, a barra
+de visualização passou a correr por baixo dos botões da janela, e o nome da sessão
+cairia em cima deles. Quem decide o recuo é a POSIÇÃO — `convert(.zero, to: nil).x` do
+shell —, e não o modo: assim o `RootView` continua sendo o único dono de onde a sessão
+começa, sem um segundo lugar combinando o mesmo por convenção.
 
 Foi flutuante nos dois modos por algumas horas, com a barra recolhida no mosaico para
 não cobrir nada. Não se sustentou: abrir a barra em mosaico é justamente quando você
@@ -1475,4 +1489,7 @@ composição fora do processo. Verificado também o trilho com terminal em traba
 (spinner sob a pastilha, aro verde), três `toggle` seguidos alternando, e — por número,
 não por screenshot, porque o app estava em uso — o card mais à esquerda andando
 exatamente 180pt no mosaico ao recolher, e 0pt no canvas, que é a diferença entre
-ceder espaço e flutuar.
+ceder espaço e flutuar. A moldura cinza foi diagnosticada e conferida por AMOSTRA DE
+PIXEL no bitmap de `/shot?target=window`: o que era (27,27,27) em volta do vidro virou
+o azulado do canvas, e a coluna vertical mostra a barra de cima até y=46, canvas de 46
+a 54, e o painel a partir de 54.
