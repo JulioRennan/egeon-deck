@@ -1322,7 +1322,7 @@ EgeonCLI.install()
             confiar na memória. Acionar não é obrigatório, e responder a uma \
             mensagem também não. Endereço fora da lista é recusado, e uma cadeia \
             longa demais de agentes falando entre si também — quando isso \
-            acontecer, volte a falar com o Julio em vez de insistir.
+            acontecer, volte a falar com o usuário em vez de insistir.
             """
     }
 

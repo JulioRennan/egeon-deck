@@ -467,7 +467,7 @@ chat; sem terminador o teto é o cartão.
 
 Matou-a um caso concreto, e não a teoria: com um PM refinando tarefas **com você**,
 todo turno dele viraria mensagem para o frontend. Só o agente sabe distinguir
-"estou pensando com o Julio" de "agora vai".
+"estou pensando com o usuário" de "agora vai".
 
 **Mensageria nativa do Claude Code.** Ela existe (v2.1.224+) e já funcionava entre
 os terminais do app — verificado: um agente listou os irmãos com `/list-agents`.

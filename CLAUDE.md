@@ -231,7 +231,7 @@ digita no terminal.
 `LOCAL_PEERPID` do socket, subindo a cadeia de `ppid` até o `shellPid` de um
 terminal conhecido — o `egeon` nem tem parâmetro para dizer quem é. Foi campo do
 pedido até hoje, e ali as guardas não seguravam nada: omitir o campo fazia o app
-concluir "veio do Julio" e entregar direto, e preencher com o nome de um vizinho
+concluir "veio do usuário" e entregar direto, e preencher com o nome de um vizinho
 emprestava as arestas dele.
 
 A entrega diz ao receptor que quem falou foi outro agente e que isso não autoriza
