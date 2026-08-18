@@ -25,14 +25,37 @@ esac
 
 APP="build/$APP_NAME.app"
 
-swift build -c "$CONFIG"
+# EG_UNIVERSAL=1 monta um binário que roda em Apple Silicon E em Intel. Fica de
+# fora do padrão porque dobra o tempo de compilação, e o laço de dev não precisa:
+# só o app que você entrega para outra pessoa precisa.
+#
+# Duas compilações e um `lipo`, e não `swift build --arch arm64 --arch x86_64`
+# numa tacada: com mais de uma `--arch` o SwiftPM troca para o backend do
+# xcbuild, que compila o `Shaders.metal` do SwiftTerm e exige o Metal Toolchain
+# — um componente à parte do Xcode, de vários GB, que uma `--arch` sozinha não
+# pede porque nem chega a passar por ali.
+if [ "${EG_UNIVERSAL:-}" = "1" ]; then
+  for arco in arm64 x86_64; do
+    echo "compilando ${arco}…"
+    swift build -c "$CONFIG" --arch "$arco"
+  done
+else
+  swift build -c "$CONFIG"
+fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 
 # O executável mantém o mesmo nome nos dois: quem distingue os processos é o
 # caminho do bundle, e `pgrep -f` casa nele.
-cp ".build/$CONFIG/EgeonDeck" "$APP/Contents/MacOS/EgeonDeck"
+if [ "${EG_UNIVERSAL:-}" = "1" ]; then
+  lipo -create \
+    ".build/arm64-apple-macosx/$CONFIG/EgeonDeck" \
+    ".build/x86_64-apple-macosx/$CONFIG/EgeonDeck" \
+    -output "$APP/Contents/MacOS/EgeonDeck"
+else
+  cp ".build/$CONFIG/EgeonDeck" "$APP/Contents/MacOS/EgeonDeck"
+fi
 
 # Ícone gerado do PNG a cada build, em vez de um .icns commitado: a fonte de
 # verdade é uma imagem só, e trocar o ícone é substituir um arquivo.
