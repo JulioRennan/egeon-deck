@@ -270,6 +270,13 @@ final class ControlSocket {
             respond(fd, status: applied == nil ? "404 Not Found" : "200 OK",
                     json: ["ok": applied != nil, "mode": applied ?? mode])
 
+        case ("GET", _, _) where route.contains("/sidebar"):
+            // /sidebar?pin=0|1 — fixa a barra de sessões aberta, ou solta.
+            let pin = Self.query(in: route)["pin"] == "1"
+            let state = DispatchQueue.main.sync { AppControl.pinSidebar?(pin) }
+            respond(fd, status: state == nil ? "404 Not Found" : "200 OK",
+                    json: ["ok": state != nil, "pinned": state ?? false])
+
         case ("GET", _, _) where route.contains("/open"):
             // /open?target=ws/id&folder=<path> — troca a pasta do editor.
             let query = Self.query(in: route)

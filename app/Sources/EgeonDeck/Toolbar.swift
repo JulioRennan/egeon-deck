@@ -145,7 +145,7 @@ final class ToolbarButton: NSView {
             layer?.backgroundColor = hovering
                 ? NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
                 : NSColor.clear.cgColor
-            icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: hovering ? 0.9 : 0.6)
+            icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: hovering ? 0.95 : 0.72)
         }
     }
 
@@ -210,19 +210,9 @@ final class CanvasToolbar: NSView {
             tooltip: "Nova sessão numa worktree desta — nada aqui é reiniciado")
         super.init(frame: frameRect)
 
+        // Sem fundo, borda nem sombra próprios: quem dá tudo isso é o
+        // `GlassPanel` que a envolve no canvas.
         wantsLayer = true
-        layer?.cornerRadius = 12
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.13, alpha: 0.96).cgColor
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
-
-        // Sombra dá o descolamento do canvas que a barra precisa para não
-        // parecer mais um nó pousado no grid.
-        shadow = NSShadow()
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.45
-        layer?.shadowRadius = 14
-        layer?.shadowOffset = CGSize(width: 0, height: -3)
 
         for tool in CanvasTool.allCases {
             let button = ToolbarButton(symbols: tool.symbols, tooltip: tool.tooltip)
@@ -239,7 +229,7 @@ final class CanvasToolbar: NSView {
         }
 
         separator.wantsLayer = true
-        separator.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.12).cgColor
+        separator.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.18).cgColor
         addSubview(separator)
 
         zoomOut.onClick = { [weak self] in self?.onZoom?(-1) }
@@ -248,13 +238,13 @@ final class CanvasToolbar: NSView {
         addSubview(zoomIn)
 
         zoomLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        zoomLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.55)
+        zoomLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.72)
         zoomLabel.alignment = .center
         zoomLabel.toolTip = "Clique para voltar a 100% (⌘0)"
         addSubview(zoomLabel)
 
         templateSeparator.wantsLayer = true
-        templateSeparator.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.12).cgColor
+        templateSeparator.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.18).cgColor
         addSubview(templateSeparator)
 
         saveTemplate.onClick = { [weak self] in self?.onSaveTemplate?() }

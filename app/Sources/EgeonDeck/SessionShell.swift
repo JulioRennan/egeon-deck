@@ -217,6 +217,9 @@ final class SessionShell: NSView {
 
     private let bar = ViewToolbar()
     private let banner = NSTextField(labelWithString: "")
+    /// O vidro do banner. Entra na hierarquia no lugar do rótulo, e é ele que os
+    /// containers usam como referência de z-order.
+    private lazy var bannerPanel = GlassPanel(content: banner, radius: 8, tint: .systemOrange)
     private var mosaic: MosaicContainer?
 
     private(set) var nodes: [NodeView] = []
@@ -265,14 +268,11 @@ final class SessionShell: NSView {
         bar.select(mode)
         addSubview(bar)
 
-        banner.font = .systemFont(ofSize: 12, weight: .medium)
+        banner.font = .systemFont(ofSize: 12, weight: .semibold)
         banner.textColor = .black
-        banner.wantsLayer = true
-        banner.layer?.backgroundColor = NSColor.systemOrange.cgColor
-        banner.layer?.cornerRadius = 6
         banner.alignment = .center
-        banner.isHidden = true
-        addSubview(banner)
+        bannerPanel.isHidden = true
+        addSubview(bannerPanel)
 
         // O canvas conhece avisos que só ele sabe dar (componente armado, ciclo
         // de arestas), mas em modo mosaico ele está fora da hierarquia e o aviso
@@ -366,7 +366,7 @@ final class SessionShell: NSView {
         switch mode {
         case .canvas:
             mosaic?.removeFromSuperview()
-            addSubview(canvas, positioned: .below, relativeTo: banner)
+            addSubview(canvas, positioned: .below, relativeTo: bannerPanel)
             for node in nodes {
                 if let frame = canvasFrames[node.nodeID] { node.frame = frame }
                 canvas.add(node)
@@ -375,7 +375,7 @@ final class SessionShell: NSView {
         case .mosaic:
             canvas.removeFromSuperview()
             let container = mosaic ?? makeMosaic()
-            addSubview(container, positioned: .below, relativeTo: banner)
+            addSubview(container, positioned: .below, relativeTo: bannerPanel)
             container.layoutRatios = mosaicLayout
             container.arrange(nodes)
         }
@@ -411,13 +411,13 @@ final class SessionShell: NSView {
         let content = contentFrame
         canvas.frame = content
         mosaic?.frame = content
-        banner.frame = NSRect(x: bounds.midX - 380, y: ViewToolbar.height + 12,
-                              width: 760, height: 30)
+        bannerPanel.frame = NSRect(x: bounds.midX - 380, y: ViewToolbar.height + 12,
+                                   width: 760, height: 30)
     }
 
     func showBanner(_ text: String?) {
-        guard let text else { banner.isHidden = true; return }
+        guard let text else { bannerPanel.isHidden = true; return }
         banner.stringValue = text
-        banner.isHidden = false
+        bannerPanel.isHidden = false
     }
 }

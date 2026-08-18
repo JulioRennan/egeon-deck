@@ -86,6 +86,11 @@ EgeonCLI.install()
             shell.show(mode)
             return mode.rawValue
         }
+        AppControl.pinSidebar = { [weak self] pin in
+            guard let self else { return false }
+            if self.root.isPinned != pin { self.root.togglePinned() }
+            return self.root.isPinned
+        }
         AppControl.sessionEdges = { [weak self] name in
             self?.configs.first { $0.name == name }?.edgeList ?? []
         }
@@ -188,6 +193,10 @@ EgeonCLI.install()
         let previous = activeIndex
         activeIndex = index
         root.show(shell)
+        // O recolhimento é do MODO, e o modo é por sessão: entrar numa sessão em
+        // mosaico tem de recolher a barra, senão ela fica aberta em cima do
+        // primeiro painel.
+        root.setAutoCollapse(shell.mode == .mosaic)
         root.sidebar.select(index)
         root.sidebar.markLive(index)
         // Trocar de sessão dá por visto o "terminou" das DUAS: a que você abre,
@@ -1545,7 +1554,13 @@ EgeonCLI.install()
         shell.onRequestNodeWorktree = { [weak self] node in
             self?.nodeWorktree(node, index: index)
         }
-        shell.onModeChanged = { [weak self] mode in self?.recordViewMode(mode, index: index) }
+        shell.onModeChanged = { [weak self] mode in
+            guard let self else { return }
+            self.recordViewMode(mode, index: index)
+            // Só a sessão na tela manda na barra: as outras trocam de modo pelo
+            // socket sem estar visíveis.
+            if index == self.activeIndex { self.root.setAutoCollapse(mode == .mosaic) }
+        }
         shell.onMosaicLayoutChanged = { [weak self] layout in
             self?.recordMosaicLayout(layout, index: index)
         }
@@ -1588,6 +1603,9 @@ EgeonCLI.install()
         shells[index]?.mosaicLayout = layout
         schedulePersist()
     }
+
+    /// Manter a barra de sessões aberta mesmo em mosaico.
+    @objc func toggleSidebarPin() { root.togglePinned() }
 
     @objc func showCanvasView() { shells[activeIndex]?.show(.canvas) }
     @objc func showMosaicView() { shells[activeIndex]?.show(.mosaic) }
@@ -2198,6 +2216,11 @@ EgeonCLI.install()
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         // Os itens de visualização carregam o estado: a marca diz em que modo a
         // sessão ativa está, sem precisar olhar a barra.
+        if menuItem.action == #selector(toggleSidebarPin) {
+            menuItem.state = root.isPinned ? .on : .off
+            return true
+        }
+
         if menuItem.action == #selector(showCanvasView) || menuItem.action == #selector(showMosaicView) {
             guard let mode = shells[activeIndex]?.mode else { return false }
             let wants: ViewMode = menuItem.action == #selector(showCanvasView) ? .canvas : .mosaic
@@ -2285,6 +2308,9 @@ EgeonCLI.install()
                            keyEquivalent: "1").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Ver em mosaico", action: #selector(showMosaicView),
                            keyEquivalent: "2").keyEquivalentModifierMask = [.command, .option]
+        canvasMenu.addItem(withTitle: "Manter a barra de sessões aberta",
+                           action: #selector(toggleSidebarPin),
+                           keyEquivalent: "s").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(.separator())
         // Números, não letras. ⌘V/⌘T/⌘E/⌘W parecem naturais para as ferramentas,
         // mas um key equivalent de menu é consultado ANTES do responder chain:
@@ -2315,19 +2341,43 @@ final class FormView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// Raiz: sidebar fixa à esquerda + área de canvas trocável.
+/// Raiz: o conteúdo ocupa a janela e a barra de sessões flutua por cima dele.
+///
+/// O conteúdo reserva só a largura do TRILHO recolhido, e o que se abre além dele
+/// flutua. Reservar os 232 da barra aberta devolveria a coluna fixa de antes;
+/// não reservar nada faria o painel esquerdo do mosaico nascer debaixo da barra,
+/// e mosaico é justamente o modo onde nada deve ficar coberto.
 final class RootView: NSView {
-    static let sidebarWidth: CGFloat = 220
+    /// Margem do vidro até a borda da janela.
+    private static let margin: CGFloat = 10
+    /// Onde a barra começa. Desvia dos botões da janela: com
+    /// `fullSizeContentView` eles moram no canto superior esquerdo, e vidro por
+    /// baixo deles fica ilegível.
+    private static let top: CGFloat = 44
+    /// O que o conteúdo cede à esquerda.
+    static let gutter: CGFloat = margin + Sidebar.railWidth + 8
 
     let sidebar: Sidebar
+    private let sidebarPanel: GlassPanel
     private var content: NSView?
+
+    /// Recolher quando o mouse sai. Ligado pelo modo mosaico.
+    private var autoCollapse = false
+    /// Você mandou manter aberta (⌥⌘S). Vence o automático.
+    private(set) var isPinned = false
+    private var hovering = false
+    /// Atraso de abertura. Sem ele, passar o mouse a caminho do primeiro card do
+    /// mosaico escancara a barra em cima do terminal.
+    private var hoverTimer: Timer?
+    private var tracking: NSTrackingArea?
 
     init(sidebar: Sidebar) {
         self.sidebar = sidebar
+        self.sidebarPanel = GlassPanel(content: sidebar, radius: 16)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 1).cgColor
-        addSubview(sidebar)
+        addSubview(sidebarPanel)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -2335,22 +2385,87 @@ final class RootView: NSView {
     override var isFlipped: Bool { true }
 
     var contentFrame: NSRect {
-        NSRect(x: Self.sidebarWidth, y: 0,
-               width: max(0, bounds.width - Self.sidebarWidth), height: bounds.height)
+        NSRect(x: Self.gutter, y: 0,
+               width: max(0, bounds.width - Self.gutter), height: bounds.height)
     }
 
     func show(_ view: NSView) {
         guard content !== view else { return }
         content?.removeFromSuperview()
         view.frame = contentFrame
-        addSubview(view)
+        // Abaixo da barra: `addSubview` puro empilharia a sessão nova em cima do
+        // vidro, e a barra sumiria na primeira troca de sessão.
+        addSubview(view, positioned: .below, relativeTo: sidebarPanel)
         content = view
+    }
+
+    // MARK: Recolher
+
+    /// A barra está aberta agora?
+    private var isExpanded: Bool { isPinned || !autoCollapse || hovering }
+
+    /// Mosaico recolhe, canvas não. Chamado por quem troca de modo e por quem
+    /// troca de sessão.
+    func setAutoCollapse(_ on: Bool) {
+        guard autoCollapse != on else { return }
+        autoCollapse = on
+        applyExpansion()
+    }
+
+    func togglePinned() {
+        isPinned.toggle()
+        applyExpansion()
+    }
+
+    private func applyExpansion() {
+        let expanded = isExpanded
+        guard sidebar.isCompact == expanded else { return }
+        sidebar.isCompact = !expanded
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        refreshTracking()
+    }
+
+    /// A área de hover é o frame do vidro, e ele muda de largura ao abrir — por
+    /// isso é refeita a cada layout, e não só quando o bounds da raiz muda.
+    private func refreshTracking() {
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: sidebarPanel.frame,
+                                  options: [.mouseEnteredAndExited, .activeInKeyWindow],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard autoCollapse, !hovering else { return }
+        hoverTimer?.invalidate()
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.hovering = true
+            self.applyExpansion()
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        guard hovering else { return }
+        hovering = false
+        applyExpansion()
     }
 
     override func layout() {
         super.layout()
-        sidebar.frame = NSRect(x: 0, y: 0, width: Self.sidebarWidth, height: bounds.height)
+        let width = isExpanded ? Sidebar.expandedWidth : Sidebar.railWidth
+        sidebarPanel.frame = NSRect(x: Self.margin, y: Self.top, width: width,
+                                    height: max(0, bounds.height - Self.top - Self.margin))
         content?.frame = contentFrame
+        refreshTracking()
     }
 }
 

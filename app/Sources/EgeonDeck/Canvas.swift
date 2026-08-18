@@ -795,6 +795,9 @@ final class CanvasContainer: NSView {
     let edgeLayer = EdgeLayerView()
 
     let toolbar = CanvasToolbar()
+    /// O vidro que carrega a barra. É ele que entra na hierarquia e é dele que
+    /// sai o frame — a barra em si é só o conteúdo.
+    private lazy var toolbarPanel = GlassPanel(content: toolbar, radius: 14)
 
     /// De qual template esta sessão nasceu. Repassado à barra, que decide se
     /// mostra o botão de atualizar.
@@ -927,7 +930,7 @@ final class CanvasContainer: NSView {
         }
         toolbar.onZoom = { [weak self] direction in self?.stepZoom(direction) }
         toolbar.onResetZoom = { [weak self] in self?.zoom(to: 1) }
-        addSubview(toolbar)
+        addSubview(toolbarPanel)
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(viewMoved),
@@ -1032,7 +1035,7 @@ final class CanvasContainer: NSView {
     private func isOverCanvas(_ event: NSEvent) -> Bool {
         let point = convert(event.locationInWindow, from: nil)
         // A barra fica por cima do canvas e tem os cliques dela.
-        return bounds.contains(point) && !toolbar.frame.contains(point)
+        return bounds.contains(point) && !toolbarPanel.frame.contains(point)
     }
 
     /// O teclado está sendo digitado dentro de um nó (terminal, editor, campo de
@@ -1062,7 +1065,7 @@ final class CanvasContainer: NSView {
             // Com uma ferramenta armada o overlay está na frente, e o clique é
             // de criação de nó, não de pan.
             if current === overlay { return false }
-            if current === toolbar { return false }
+            if current === toolbarPanel { return false }
             view = current.superview
         }
         return hit === doc || hit === scroll || hit === scroll.contentView
@@ -1189,9 +1192,9 @@ final class CanvasContainer: NSView {
         overlay.frame = bounds
 
         let size = toolbar.fittingSize
-        toolbar.frame = NSRect(x: (bounds.width - size.width) / 2,
-                               y: bounds.minY + 24,
-                               width: size.width, height: size.height)
+        toolbarPanel.frame = NSRect(x: (bounds.width - size.width) / 2,
+                                    y: bounds.minY + 24,
+                                    width: size.width, height: size.height)
     }
 
     func showBanner(_ text: String?) { onBanner?(text) }

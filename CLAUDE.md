@@ -39,6 +39,7 @@ poc/          protótipos descartados
 | `Editor.swift` / `CodeServer.swift` | nó de editor (WKWebView) e o processo do code-server |
 | `WebNode.swift` | nó de navegador, com perfil de navegação isolado |
 | `Sidebar.swift` / `Toolbar.swift` | lista de sessões e barra de ferramentas do canvas |
+| `Glass.swift` | `GlassPanel` — o vidro das barras flutuantes, e o interruptor dele |
 | `Component.swift` / `Template.swift` | presets de nó e de sessão |
 | `Worktree.swift` | criar worktree do git e abrir sessão nela |
 | `NodeWorktree.swift` | worktree por terminal: o plano de cada nó e a lista do formulário |
@@ -170,6 +171,28 @@ mosaico, senão a montagem inteira seria regravada com o tamanho dos painéis.
 
 Ver ADR-016.
 
+## As barras
+
+A barra de sessões **flutua sobre o conteúdo**, em vidro (`NSGlassEffectView`,
+macOS 26). A barra do canvas e o banner de aviso usam o mesmo `GlassPanel`. A barra
+de visualização, no topo, segue opaca e encostada.
+
+O conteúdo cede à esquerda só a largura do **trilho recolhido** — o que se abre além
+dele passa por cima. Reservar a barra aberta devolveria a coluna fixa; não reservar
+nada faria o painel esquerdo do mosaico nascer debaixo dela, e mosaico é o modo onde
+nada fica coberto.
+
+Recolher é automático **pelo modo**, que é por sessão: mosaico recolhe, canvas não.
+Abre no hover com 0,18s de atraso, e ⌥⌘S fixa aberta. No trilho as **bolinhas
+continuam** — os três avisos em 10pt sob a pastilha, mais o aro da pastilha, onde
+laranja de "te espera" vence o verde de "está de pé". O que a largura tira é o nome,
+que vira a inicial: sessão inativa não desenha nada na tela, e essa linha é a única
+pista que ela tem.
+
+`EGEON_GLASS=0` volta as três para o fundo semiopaco, sem rebuild — vidro reamostra
+o backdrop a cada quadro, e elas ficam por cima de cards que redesenham dez vezes
+por segundo. O mesmo caminho é o fallback abaixo do macOS 26. Ver ADR-025.
+
 ## Ligações entre agentes
 
 Um agente pergunta com quem pode falar e fala, pelo comando `egeon`:
@@ -260,8 +283,9 @@ curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
 curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
-Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/mosaic` `/worktree` `/remove`
-`/activate` `/open` `/view` `/file` `/change` `/activity` `/message` `/peers` `/status`. As três últimas
+Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/mosaic` `/sidebar`
+`/worktree` `/remove` `/activate` `/open` `/view` `/file` `/change` `/activity`
+`/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
 conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
 guardas de cadeia. **`/peek` e `/dispatch` são as ferramentas de teste** — dá
@@ -273,6 +297,8 @@ começa dizendo em que modo está: em mosaico o `docFrame` é o do painel e o
 painel — o mesmo que arrastar um cabeçalho sobre o outro, e a única forma de
 verificar isso de fora, porque evento de mouse sintético depende de permissão de
 Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003).
+`/sidebar?pin=0|1` existe pelo mesmo motivo: a barra de sessões abre no hover, e sem
+esta rota não há como conferir de fora o que ela faz por cima de um card.
 
 `/targets` lista só terminais **de pé** — nó com processo morto continua no canvas
 mas não é destino. Com `?folder=<path>` responde `{targets, all, session}`: quem é

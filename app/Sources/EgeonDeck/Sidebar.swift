@@ -9,6 +9,10 @@ final class SidebarRow: NSView {
     private let pathLabel = NSTextField(labelWithString: "")
     private let dot = NSView()
     private let statusLabel = NSTextField(labelWithString: "")
+    /// Pastilha com a inicial da sessão, só no trilho recolhido. Nome inteiro não
+    /// cabe em 52pt, e uma coluna de bolinhas iguais não diz QUAL sessão é.
+    private let tile = NSView()
+    private let initial = NSTextField(labelWithString: "")
 
     var onClick: ((Int) -> Void)?
     var onRename: ((Int) -> Void)?
@@ -19,6 +23,28 @@ final class SidebarRow: NSView {
     var isSelected = false { didSet { needsDisplay = true; restyle() } }
     /// Sessão já materializada (terminais rodando, editor carregado).
     var isLive = false { didSet { restyle() } }
+
+    /// Alguma coisa nesta sessão está te esperando. Guardado porque no trilho
+    /// quem grita isso é o ARO da pastilha, e `restyle` não vê o resumo.
+    private var wantsAttention = false
+
+    /// Trilho recolhido: só a pastilha da inicial e o badge, sem nome nem caminho.
+    var isCompact = false {
+        didSet {
+            guard isCompact != oldValue else { return }
+            nameLabel.isHidden = isCompact
+            pathLabel.isHidden = isCompact
+            tile.isHidden = !isCompact
+            initial.isHidden = !isCompact
+            dot.isHidden = isCompact
+            // A assinatura do badge não muda de modo, mas a fonte e o alinhamento
+            // dele mudam: sem zerar o cache, o rótulo fica com a métrica do modo
+            // anterior até a próxima troca de contagem.
+            lastBadge = ""
+            restyle()
+            needsLayout = true
+        }
+    }
 
     init(index: Int, config: SessionConfig) {
         self.index = index
@@ -35,8 +61,8 @@ final class SidebarRow: NSView {
             : "caminho não existe — \(config.path)"
         pathLabel.font = .systemFont(ofSize: 10)
         pathLabel.textColor = config.exists
-            ? NSColor(calibratedWhite: 1, alpha: 0.35)
-            : NSColor.systemRed.withAlphaComponent(0.8)
+            ? NSColor(calibratedWhite: 1, alpha: 0.5)
+            : NSColor.systemRed.withAlphaComponent(0.85)
         pathLabel.lineBreakMode = .byTruncatingMiddle
 
         dot.wantsLayer = true
@@ -47,7 +73,18 @@ final class SidebarRow: NSView {
         statusLabel.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
         statusLabel.alignment = .right
 
+        tile.wantsLayer = true
+        tile.layer?.cornerRadius = 7
+        tile.isHidden = true
+
+        initial.stringValue = String(config.name.prefix(1)).uppercased()
+        initial.font = .systemFont(ofSize: 13, weight: .semibold)
+        initial.alignment = .center
+        initial.isHidden = true
+
         addSubview(dot)
+        addSubview(tile)
+        addSubview(initial)
         addSubview(nameLabel)
         addSubview(pathLabel)
         addSubview(statusLabel)
@@ -67,6 +104,19 @@ final class SidebarRow: NSView {
 
     override func layout() {
         super.layout()
+        if isCompact {
+            let side: CGFloat = 26
+            tile.frame = NSRect(x: ((bounds.width - side) / 2).rounded(), y: 2,
+                                width: side, height: side)
+            initial.frame = NSRect(x: tile.frame.minX, y: tile.frame.minY + 5,
+                                   width: side, height: 16)
+            // Badge embaixo da pastilha, em fonte miúda: no trilho os três avisos
+            // continuam convivendo (ADR-024) porque é o único lugar onde uma
+            // sessão inativa se anuncia — o que a largura não dá é o nome.
+            statusLabel.frame = NSRect(x: 0, y: 30, width: bounds.width, height: 12)
+            return
+        }
+
         dot.frame = NSRect(x: 12, y: bounds.midY - 3, width: 6, height: 6)
         let textWidth = bounds.width - 40 - badgeWidth
         nameLabel.frame = NSRect(x: 28, y: 8, width: textWidth, height: 17)
@@ -97,10 +147,20 @@ final class SidebarRow: NSView {
         guard signature != lastBadge else { return }
         lastBadge = signature
 
+        // No trilho o badge é miúdo e centrado sob a pastilha; expandido é 12pt
+        // encostado na direita. Escolhido aqui, e não no rótulo, porque
+        // `attributedStringValue` ignora fonte e alinhamento da view.
+        let font: NSFont = isCompact
+            ? .monospacedSystemFont(ofSize: 10, weight: .semibold)
+            : .monospacedSystemFont(ofSize: 12, weight: .medium)
+        let paragraph = isCompact ? Self.centered : Self.rightAligned
+
         let badge = NSMutableAttributedString()
         func add(_ glyph: String, _ count: Int, _ color: NSColor) {
             guard count > 0 else { return }
-            if badge.length > 0 { badge.append(NSAttributedString(string: " ")) }
+            // Sem espaço entre os grupos no trilho: os três com contagem passam
+            // de 48pt de largura, e o que sobra do rótulo é cortado no meio.
+            if badge.length > 0, !isCompact { badge.append(NSAttributedString(string: " ")) }
             // Fonte e alinhamento vêm junto porque `attributedStringValue`
             // ignora os do rótulo: sem a fonte o spinner volta a tremer em fonte
             // proporcional, e sem o parágrafo o badge encosta na ESQUERDA da
@@ -108,19 +168,29 @@ final class SidebarRow: NSView {
             // serve.
             badge.append(NSAttributedString(string: count > 1 ? "\(glyph)\(count)" : glyph,
                                             attributes: [.foregroundColor: color,
-                                                         .font: statusLabel.font as Any,
-                                                         .paragraphStyle: Self.rightAligned]))
+                                                         .font: font,
+                                                         .paragraphStyle: paragraph]))
         }
 
         // Ordem fixa, na sequência do ciclo: rodando, parou te perguntando,
         // parou pronto. Ordenar por urgência faria a bolinha trocar de lugar
         // conforme a sessão anda, e badge que se move é badge que se procura em
         // vez de se reconhecer.
-        add(String(Spinner.current), summary.working, NSColor(calibratedWhite: 1, alpha: 0.45))
+        // Mais claro no trilho: ali o spinner tem 10pt e concorre com o card que
+        // passa por trás do vidro.
+        add(String(Spinner.current), summary.working,
+            NSColor(calibratedWhite: 1, alpha: isCompact ? 0.75 : 0.45))
         add("●", summary.attention, .systemOrange)
         add("●", summary.done, .systemGreen)
 
         statusLabel.attributedStringValue = badge
+
+        // No trilho, 10pt de glifo é pouco para o aviso que INTERROMPE: o aro da
+        // pastilha vira laranja, que se reconhece sem ler.
+        if wantsAttention != (summary.attention > 0) {
+            wantsAttention = summary.attention > 0
+            restyle()
+        }
 
         // O nome da sessão fica com o que sobra, então a caixa acompanha o
         // conteúdo em vez de reservar o pior caso.
@@ -140,13 +210,36 @@ final class SidebarRow: NSView {
         return style
     }()
 
+    private static let centered: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        return style
+    }()
+
+    /// Contraste sobre vidro, não sobre chapa: os alfas subiram porque atrás da
+    /// barra agora passa o canvas — grid claro, terminal branco — e o que era
+    /// legível em cima de 0.09 opaco virava lodo.
     private func restyle() {
-        layer?.backgroundColor = isSelected
-            ? NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
+        // No trilho quem carrega a seleção é a pastilha: realçar a linha inteira
+        // pinta uma faixa de 52pt de ponta a ponta, que lê como divisor.
+        layer?.backgroundColor = (isSelected && !isCompact)
+            ? NSColor(calibratedWhite: 1, alpha: 0.14).cgColor
             : NSColor.clear.cgColor
         layer?.cornerRadius = 8
-        nameLabel.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.6)
-        dot.layer?.backgroundColor = (isLive ? NSColor.systemGreen : NSColor(calibratedWhite: 1, alpha: 0.18)).cgColor
+        nameLabel.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.72)
+
+        tile.layer?.backgroundColor = isSelected
+            ? NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor
+            : NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
+        // Aro por prioridade: laranja de "te espera" vence o verde de "está de
+        // pé", porque um pede coisa e o outro só informa.
+        tile.layer?.borderWidth = (wantsAttention || isLive) ? 2 : 0
+        tile.layer?.borderColor = wantsAttention
+            ? NSColor.systemOrange.cgColor
+            : NSColor.systemGreen.withAlphaComponent(0.75).cgColor
+        initial.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.7)
+
+        dot.layer?.backgroundColor = (isLive ? NSColor.systemGreen : NSColor(calibratedWhite: 1, alpha: 0.22)).cgColor
     }
 
     override func mouseDown(with event: NSEvent) { onClick?(index) }
@@ -176,9 +269,26 @@ final class SidebarRow: NSView {
 }
 
 final class Sidebar: NSView {
-    static let headerHeight: CGFloat = 66
+    /// Cabeçalho curto porque a barra agora flutua: os botões da janela ficam
+    /// FORA dela, e não há mais o que desviar aqui dentro.
+    static let headerHeight: CGFloat = 34
+    static let expandedWidth: CGFloat = 232
+    /// Largura do trilho recolhido: cabe a pastilha de 26pt com folga, e é o que
+    /// o conteúdo reserva de gutter — o que se abre além disso flutua por cima.
+    static let railWidth: CGFloat = 52
     private static let rowHeight: CGFloat = 46
     private static let rowGap: CGFloat = 4
+
+    /// Trilho recolhido. Propagado às linhas, que trocam nome por pastilha.
+    var isCompact = false {
+        didSet {
+            guard isCompact != oldValue else { return }
+            rows.forEach { $0.isCompact = isCompact }
+            title.isHidden = isCompact
+            emptyLabel.isHidden = isCompact || !rows.isEmpty
+            needsLayout = true
+        }
+    }
 
     private var rows: [SidebarRow] = []
     private let title = NSTextField(labelWithString: "SESSÕES")
@@ -196,10 +306,12 @@ final class Sidebar: NSView {
     init(configs: [SessionConfig]) {
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 1).cgColor
+        // Sem fundo próprio: quem pinta é o `GlassPanel` que a envolve. Chapa
+        // opaca aqui apagaria o vidro por dentro.
+        layer?.backgroundColor = NSColor.clear.cgColor
 
         title.font = .systemFont(ofSize: 10, weight: .bold)
-        title.textColor = NSColor(calibratedWhite: 1, alpha: 0.28)
+        title.textColor = NSColor(calibratedWhite: 1, alpha: 0.42)
         addSubview(title)
 
         // Menu, e não ação direta: as duas rotas terminam no mesmo lugar (uma
@@ -208,7 +320,7 @@ final class Sidebar: NSView {
         addSubview(addButton)
 
         emptyLabel.font = .systemFont(ofSize: 11)
-        emptyLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.3)
+        emptyLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.45)
         emptyLabel.stringValue = "Nenhuma sessão.\nUse + para criar,\nvazia ou de um template."
         emptyLabel.maximumNumberOfLines = 0
         addSubview(emptyLabel)
@@ -231,23 +343,31 @@ final class Sidebar: NSView {
             row.onDuplicateAsWorktree = { [weak self] in self?.onDuplicateAsWorktree?($0) }
             row.onRemove = { [weak self] in self?.onRemove?($0) }
             row.onEditVisitLimit = { [weak self] in self?.onEditVisitLimit?($0) }
+            row.isCompact = isCompact
             addSubview(row)
             return row
         }
-        emptyLabel.isHidden = !configs.isEmpty
+        emptyLabel.isHidden = isCompact || !configs.isEmpty
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
-        title.frame = NSRect(x: 20, y: 38, width: bounds.width - 60, height: 14)
-        addButton.frame = NSRect(x: bounds.width - 34, y: 33, width: 22, height: 22)
-        emptyLabel.frame = NSRect(x: 20, y: Self.headerHeight + 8,
-                                  width: bounds.width - 40, height: 56)
+        if isCompact {
+            addButton.frame = NSRect(x: ((bounds.width - 22) / 2).rounded(), y: 8,
+                                     width: 22, height: 22)
+        } else {
+            title.frame = NSRect(x: 16, y: 12, width: bounds.width - 56, height: 14)
+            addButton.frame = NSRect(x: bounds.width - 34, y: 8, width: 22, height: 22)
+        }
+        emptyLabel.frame = NSRect(x: 16, y: Self.headerHeight + 8,
+                                  width: bounds.width - 32, height: 56)
 
+        let inset: CGFloat = isCompact ? 2 : 8
         var y = Self.headerHeight
         for row in rows {
-            row.frame = NSRect(x: 8, y: y, width: bounds.width - 16, height: Self.rowHeight)
+            row.frame = NSRect(x: inset, y: y,
+                               width: bounds.width - inset * 2, height: Self.rowHeight)
             y += Self.rowHeight + Self.rowGap
         }
     }

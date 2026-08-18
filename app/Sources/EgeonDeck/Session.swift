@@ -254,6 +254,15 @@ enum AppControl {
     /// nenhuma sessão ativa.
     static var setViewMode: ((String) -> String?)?
 
+    /// Manter a barra de sessões aberta, ou devolvê-la ao automático.
+    ///
+    /// Existe pelo mesmo motivo que `/mosaic?swap=`: a barra abre no hover, e
+    /// evento de mouse sintético depende de permissão de Acessibilidade, que a
+    /// assinatura ad-hoc perde a cada build (ADR-003). Sem esta rota não há como
+    /// conferir de fora o que a barra flutuante faz por cima de um card.
+    /// Devolve o estado que ficou.
+    static var pinSidebar: ((Bool) -> Bool)?
+
     /// Cria worktree e reaponta: `sessão` duplica a sessão inteira levando os
     /// terminais de repo vizinho junto, `sessão/nó` leva só aquele terminal.
     ///

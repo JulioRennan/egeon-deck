@@ -1391,3 +1391,62 @@ inexplicável.
 - **Zoom no nó de editor.** WKWebView sob transform fica borrado. Alternativa
   conhecida: manter o webview vivo em zoom ≈ 1 e trocar por bitmap quando afasta
   (truque padrão de canvas com embed).
+
+## ADR-025 — As barras flutuam sobre o canvas, em vidro, e a de sessões recolhe
+
+**Decisão:** a barra de sessões deixa de ser uma coluna fixa e passa a flutuar
+sobre o conteúdo, em `NSGlassEffectView`. A barra do canvas e o banner de aviso
+ganham o mesmo vidro. A barra de visualização, no topo, fica opaca e encostada
+como estava.
+
+**Por que vidro de verdade e não uma imitação.** `NSGlassEffectView` existe a
+partir do macOS 26, e a máquina é 26.5. Copiar o efeito com camadas e alfa dá um
+retângulo cinza que não reage ao que passa por trás — e aqui o que passa por trás é
+justamente o trabalho: terminal branco, editor, página web. O `contentView` entra
+como `contentView` do efeito, e nunca por `addSubview`: o header da AppKit é
+explícito em que só ele tem z-order garantido dentro do vidro, e o sintoma de
+errar isso é uma barra que desaparece sem erro nenhum.
+
+**O interruptor.** `EGEON_GLASS=0` volta as três barras para o fundo semiopaco de
+antes, sem rebuild. Vidro reamostra o backdrop a cada quadro, e essas barras ficam
+por cima de cards que redesenham dez vezes por segundo com cinco agentes
+trabalhando — se algum dia isso custar caro, a saída não pode depender de recompilar.
+O mesmo caminho serve de fallback abaixo do macOS 26, então o alvo do pacote
+continua em 14.
+
+**Sombra com `shadowPath` explícito.** O vidro desenha em camada própria, e o
+AppKit tira a sombra do canal alfa da camada — que aqui está vazio. Sem o
+`shadowPath`, a barra fica sem sombra e volta a parecer mais um nó pousado no grid.
+
+**O que o conteúdo cede.** Só a largura do TRILHO recolhido (52pt, mais margens:
+70 no total). Reservar os 232 da barra aberta devolveria a coluna fixa que se quis
+tirar; não reservar nada faria o painel esquerdo do mosaico nascer debaixo da barra
+— e mosaico é, por definição, o modo onde nada fica coberto. O que se abre além do
+trilho flutua, e no canvas isso é o efeito desejado.
+
+**O topo desvia dos botões da janela.** A barra começa em y=44. Com
+`fullSizeContentView` os semáforos moram no canto superior esquerdo, e vidro por
+baixo deles fica ilegível. Antes disso quem desviava era o cabeçalho de 66pt da
+própria barra, que agora pode ser curto porque a barra não passa mais por ali.
+
+**Recolher.** Automático pelo MODO, que é por sessão: mosaico recolhe, canvas não.
+Abre no hover com 0,18s de atraso — sem o atraso, passar o mouse a caminho do
+primeiro card escancara a barra em cima do terminal. ⌥⌘S fixa aberta e vence o
+automático.
+
+**No trilho as bolinhas continuam.** É o ponto que quase se perdeu: uma sessão
+inativa não desenha nada na tela, e a linha da barra é a única pista que ela tem
+(ADR-011, ADR-024). Então o trilho mantém os três avisos, em 10pt sob a pastilha, e
+o que a largura tira é o NOME — que vira a inicial numa pastilha de 26pt. O aro da
+pastilha carrega o resto: laranja de "te espera" vence o verde de "está de pé",
+porque um pede coisa e o outro só informa.
+
+**Verificação.** `/sidebar?pin=0|1` existe pelo mesmo motivo que
+`/mosaic?swap=` (ADR-023): a barra abre no hover, e evento de mouse sintético exige
+permissão de Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003).
+Com ela, screenshot de tela real no dev mostrou o que precisava ser respondido: o
+vidro **amostra o `WKWebView`** — a barra fixada por cima do card do code-server
+mostra o conteúdo dele desfocado, sem buraco preto, que era o risco real de
+composição fora do processo. Verificado também o trilho com terminal em trabalho
+(spinner sob a pastilha, aro verde) e o mosaico sem card coberto. O hover em si não
+foi verificado de fora, por falta do gesto.
