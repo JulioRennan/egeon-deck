@@ -43,6 +43,13 @@ final class ChatComposer: NSView {
     /// abriu. Quem dá o frame precisa refazer a conta.
     var onHeightChanged: (() -> Void)?
 
+    /// Quanto a caixa pode ocupar, no total, imposto por quem dá o frame.
+    ///
+    /// O teto de oito linhas sozinho não basta: em janela baixa ele engole o
+    /// histórico, e quem cede área é justamente quem você está lendo. Então o
+    /// container passa a sobra dele e o menor dos dois manda.
+    var ceiling: CGFloat = .greatestFiniteMagnitude
+
     // MARK: Peças
 
     /// O que mora dentro do vidro. Separado porque `NSGlassEffectView` só garante
@@ -69,11 +76,18 @@ final class ChatComposer: NSView {
     private static let pad: CGFloat = 12
     /// A linha do destinatário.
     private static let headerHeight: CGFloat = 15
+    /// Altura de uma linha na fonte do corpo, medida.
+    ///
+    /// Medida e não chutada porque é ela que define o teto, e teto que não cai em
+    /// fronteira de linha corta a última no meio — a nona linha aparecia partida na
+    /// borda da caixa.
+    private static let lineHeight: CGFloat = ChatStyle.height("Ag", font: ChatStyle.body,
+                                                              width: 9999)
     /// Uma linha de texto. É o mínimo, e é o que a caixa mostra vazia.
-    private static let oneLine: CGFloat = 19
+    private static var oneLine: CGFloat { lineHeight }
     /// Teto do texto: daí para cima rola por dentro. Oito linhas cobre um prompt
     /// escrito à mão; mais que isso é arquivo, não mensagem.
-    private static let maxText: CGFloat = 152
+    private static var maxText: CGFloat { lineHeight * 8 }
     /// Largura do botão de enviar, mais o vão até o texto.
     private static let sendLane: CGFloat = 38
     /// Margem entre a lista de menção e o vidro.
@@ -98,6 +112,9 @@ final class ChatComposer: NSView {
         // dois casos sem barra permanente numa caixa de uma linha.
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
+        // Sobreposta: barra que ocupa largura reflui o texto quando aparece, e a
+        // linha que você está escrevendo salta no meio da digitação.
+        scroll.scrollerStyle = .overlay
         scroll.documentView = input
         surface.addSubview(scroll)
 
@@ -149,6 +166,34 @@ final class ChatComposer: NSView {
 
     func focus() { window?.makeFirstResponder(input) }
 
+    /// Escreve na caixa sem enviar, como se você tivesse digitado.
+    ///
+    /// É a mesma história do `/mosaic?swap=` e do `/edge?direction=`: o que só existe
+    /// por tecla não é verificável de fora, porque evento sintético exige
+    /// Acessibilidade e a assinatura ad-hoc a perde a cada build (ADR-003). Sem isto
+    /// não há como conferir que a caixa cresce para cima, que ela para no teto, e que
+    /// quem cede área é o histórico.
+    func setText(_ text: String) {
+        input.string = text
+        // Cursor no fim e a vista atrás dele, que é onde digitar deixaria os dois. Sem
+        // isto a caixa cheia mostra o COMEÇO do texto, e o retrato mentiria sobre o
+        // que você veria escrevendo.
+        let end = NSRange(location: (input.string as NSString).length, length: 0)
+        input.setSelectedRange(end)
+        input.didChangeText()
+        input.scrollRangeToVisible(end)
+    }
+
+    /// O texto passou do teto e está rolando por dentro.
+    var isCapped: Bool {
+        let inner = max(40, bounds.width - Self.pad * 2 - Self.sendLane)
+        return ChatStyle.height(input.string, font: ChatStyle.body, width: inner)
+            > textHeight(forWidth: bounds.width)
+    }
+
+    /// Altura do vidro agora, para quem confere de fora.
+    var glassHeightNow: CGFloat { glassHeight(forWidth: bounds.width) }
+
     /// Muda o destinatário de fora — clicar num agente no painel da direita.
     func aim(at id: String) {
         guard candidates.contains(id) else { return }
@@ -172,14 +217,27 @@ final class ChatComposer: NSView {
     }
 
     private func glassHeight(forWidth width: CGFloat) -> CGFloat {
-        Self.pad + Self.headerHeight + 8 + textHeight(forWidth: width) + Self.pad
+        Self.chrome + textHeight(forWidth: width)
     }
 
     private func textHeight(forWidth width: CGFloat) -> CGFloat {
         let inner = max(40, width - Self.pad * 2 - Self.sendLane)
         let measured = ChatStyle.height(input.string, font: ChatStyle.body, width: inner)
-        return min(Self.maxText, max(Self.oneLine, measured))
+        // O menor dos dois tetos, e nunca abaixo de uma linha: `oneLine` por último
+        // porque uma caixa de zero altura não é caixa. Os dois arredondados PARA BAIXO
+        // em linhas inteiras, senão o teto relativo reintroduz a linha partida.
+        let budget = max(Self.oneLine, ceiling - Self.chrome)
+        let roof = Self.floorToLine(min(Self.maxText, budget))
+        return min(roof, max(Self.oneLine, measured))
     }
+
+    /// A maior altura em linhas inteiras que cabe em `height`.
+    private static func floorToLine(_ height: CGFloat) -> CGFloat {
+        max(lineHeight, (height / lineHeight).rounded(.down) * lineHeight)
+    }
+
+    /// O que a caixa gasta fora do texto: recuo, linha do destinatário e o vão.
+    private static var chrome: CGFloat { pad + headerHeight + 8 + pad }
 
     // MARK: Destinatário
 

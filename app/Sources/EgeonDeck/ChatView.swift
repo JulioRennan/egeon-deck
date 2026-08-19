@@ -597,15 +597,6 @@ final class ChatThreadView: NSView {
     /// Levar ao terminal de quem está pedindo permissão.
     var onReveal: ((String) -> Void)?
 
-    /// Quanto o conteúdo cede embaixo para a caixa de escrever.
-    ///
-    /// O thread corre POR BAIXO do vidro — é isso que faz a caixa parecer flutuando,
-    /// como o grid do canvas por baixo da barra (ADR-025). Mas a última mensagem não
-    /// pode viver escondida ali, então a folga é somada ao fim do documento.
-    var bottomInset: CGFloat = 0 {
-        didSet { if bottomInset != oldValue { needsLayout = true } }
-    }
-
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -678,9 +669,19 @@ final class ChatThreadView: NSView {
 
     private var isAtBottom: Bool {
         let visible = scroll.contentView.bounds
-        // A folga da caixa entra na conta: sem descontá-la o thread nunca se
-        // consideraria no fim, e pararia de acompanhar mensagem nova.
-        return visible.maxY >= document.bounds.height - bottomInset - 40
+        return visible.maxY >= document.bounds.height - 40
+    }
+
+    /// A caixa de escrever cresceu e o histórico encolheu.
+    ///
+    /// Quem estava lendo o fim continua no fim: sem isto, crescer a caixa empurra a
+    /// última mensagem para fora da vista e você perde de olho exatamente a resposta
+    /// que está respondendo. Medido ANTES do `super`, porque depois os bounds já são
+    /// os novos e a pergunta não tem mais resposta.
+    override func setFrameSize(_ newSize: NSSize) {
+        let wasAtBottom = isAtBottom
+        super.setFrameSize(newSize)
+        if wasAtBottom { scrollToBottom() }
     }
 
     func scrollToBottom() {
@@ -708,8 +709,7 @@ final class ChatThreadView: NSView {
             y = max(y, 140)
         }
         document.frame = NSRect(x: 0, y: 0, width: bounds.width,
-                                height: max(y + 12 + bottomInset,
-                                            scroll.contentView.bounds.height))
+                                height: max(y + 12, scroll.contentView.bounds.height))
     }
 
     override func layout() {

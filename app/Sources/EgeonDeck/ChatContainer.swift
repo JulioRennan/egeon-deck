@@ -41,6 +41,14 @@ final class ChatContainer: NSView {
     /// Folga em volta das superfícies flutuantes. O mesmo 12 do banner.
     private static let margin: CGFloat = 12
 
+    /// Quanto da altura útil a caixa de escrever pode tomar no máximo.
+    ///
+    /// Pouco mais de um terço: acima disso o histórico deixa de ser histórico. É teto,
+    /// não tamanho — a caixa só chega ali com um texto que de fato o preencha.
+    private static let composerShare: CGFloat = 0.38
+    /// Piso do teto, para janela muito baixa não deixar a caixa sem uma linha.
+    private static let minComposer: CGFloat = 66
+
     private let content = ChatThread()
     private var timer: Timer?
     /// Processo com a gaveta aberta. Nil = fechada.
@@ -195,6 +203,30 @@ final class ChatContainer: NSView {
         }
     }
 
+    /// Escreve na caixa e devolve a geometria que saiu disso.
+    ///
+    /// A resposta é o que se afirma sobre o desenho: a caixa cresceu, ela parou no
+    /// teto, e o histórico encolheu na mesma medida. Ver `ChatComposer.setText`.
+    func compose(_ text: String) -> [String: Any] {
+        composer.setText(text)
+        // O layout roda agora, e não no próximo quadro: quem chamou vai ler a
+        // geometria na volta desta função.
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        return [
+            "ok": true,
+            "lines": text.isEmpty ? 0 : text.split(separator: "\n",
+                                                   omittingEmptySubsequences: false).count,
+            "composer": Int(composer.frame.height.rounded()),
+            "composerTop": Int(composer.frame.minY.rounded()),
+            "composerBottom": Int(composer.frame.maxY.rounded()),
+            "thread": Int(thread.frame.height.rounded()),
+            "ceiling": Int(composer.ceiling.rounded()),
+            "capped": composer.isCapped,
+            "content": Int(bounds.height.rounded())
+        ]
+    }
+
     // MARK: Envio
 
     private func deliver(_ text: String, to target: String) {
@@ -261,20 +293,31 @@ final class ChatContainer: NSView {
                                   height: max(0, bounds.height - margin * 2))
         panel.frame = panelGlass.bounds
 
-        // A largura do painel é CEDIDA, e a da caixa não. Os dois são vidro, e a
-        // diferença é o que está embaixo: à direita ficaria mensagem coberta o tempo
-        // todo; embaixo a folga do thread já garante que a última mensagem sobe, e
-        // o que passa por baixo é o meio da conversa enquanto você rola.
+        // A caixa é ANCORADA embaixo e cresce para cima, e quem cede área é o
+        // histórico — não o rodapé da janela, e não por sobreposição. Ela flutuava
+        // sobre o thread, com a folga somada ao fim do documento: a última mensagem
+        // subia, mas o meio da conversa passava por baixo do vidro, e um parágrafo
+        // de cinco linhas na caixa cobria a resposta que você estava respondendo.
+        // Agora o thread termina onde a caixa começa.
+        //
+        // A largura, ao contrário, o painel CEDE e a caixa não — ali sobreposição
+        // seria mensagem coberta o tempo todo, e não só enquanto você escreve.
         let center = max(0, bounds.width - panelWidth - margin * 2)
         let column = ChatStyle.columnWidth(in: center)
         let columnX = ((center - column) / 2).rounded()
+
+        // O teto da caixa é uma fração da altura útil: em janela baixa o teto de oito
+        // linhas engoliria o histórico, e sobrar menos de metade para ler é perder o
+        // motivo do modo.
+        let usable = max(0, bounds.height - margin * 2)
+        composer.ceiling = max(Self.minComposer, usable * Self.composerShare)
         let composerHeight = composer.height(forWidth: column)
 
-        thread.frame = NSRect(x: 0, y: 0, width: center, height: bounds.height)
-        thread.bottomInset = composerHeight + margin * 2
         composer.frame = NSRect(x: columnX,
                                 y: max(0, bounds.height - composerHeight - margin),
                                 width: column, height: composerHeight)
+        thread.frame = NSRect(x: 0, y: 0, width: center,
+                              height: max(0, composer.frame.minY - margin))
         banner.frame = NSRect(x: 0, y: max(0, composer.frame.minY - 18),
                               width: center, height: 14)
 

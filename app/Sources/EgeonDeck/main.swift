@@ -140,6 +140,13 @@ EgeonCLI.install()
                 "messages": entries.map(\.payload)
             ]
         }
+        AppControl.chatCompose = { [weak self] name, text in
+            guard let self,
+                  let index = self.configs.firstIndex(where: { $0.name == name }),
+                  let shell = self.shells[index], shell.mode == .chat
+            else { return nil }
+            return shell.chat.compose(text)
+        }
         AppControl.sessionOwning = { [weak self] folder in
             self?.sessionOwning(folder: folder)
         }

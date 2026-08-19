@@ -1828,6 +1828,20 @@ folga da caixa no fim do documento — então a última mensagem sempre sobe, e 
 passa por baixo do vidro é o meio da conversa enquanto você rola. É o mesmo princípio
 do grid correndo por baixo da barra flutuante no canvas.
 
+**A caixa é ancorada embaixo, e quem cede área é o histórico.** Ela flutuava sobre o
+thread, com a folga somada ao fim do documento: a última mensagem subia, mas o meio da
+conversa passava por baixo do vidro, e um parágrafo de cinco linhas cobria a resposta
+que você estava respondendo. Agora o thread TERMINA onde a caixa começa. A largura
+segue o contrário — o painel cede e a caixa não —, e a diferença é o tempo: à direita
+a sobreposição seria permanente, embaixo ela existiria só enquanto você escreve, que é
+exatamente quando você precisa ver o que está respondendo.
+
+O teto é o menor entre oito linhas e 38% da altura útil, arredondado para linhas
+inteiras. As três partes têm motivo: oito linhas é o prompt escrito à mão; a fração
+existe porque em janela baixa o teto absoluto engoliria o histórico; e o
+arredondamento porque teto que não cai em fronteira de linha corta a última no meio —
+a nona aparecia partida na borda.
+
 **A caixa cresce, e o teto é oito linhas.** Fresta de uma linha faz prompt de dez ser
 escrito às cegas, que é o oposto do motivo de existir o modo. Depois do teto rola por
 dentro, com barra que só aparece quando passa — antes dela é o próprio crescimento que
@@ -1860,9 +1874,16 @@ o caminho do vidro não é fotografável de dentro do processo, e é o fallback 
 raio, borda, recuo e alinhamento. Os dois cabeçalhos ficaram lado a lado no mesmo
 retrato — `SESSÕES  +  ▯|` e `NA SESSÃO  |▯` —, que é o que se queria conferir.
 
-Fora de verificação, e por limite de permissão e não por escolha: **nada que dependa de
-tecla ou clique**. O crescimento da caixa, o Tab, a lista do `@`, o Enter enviando, a
-gaveta abrindo. `screencapture` do shell é negado por Gravação de Tela e
-`System Events keystroke` por Acessibilidade — as duas medidas, as duas negadas. O
-`/shot` de dentro do app cobre o desenho estático; o resto é ADR-003 cobrando o preço
-dele.
+O crescimento da caixa foi medido por `POST /compose?target=ws`, que escreve nela sem
+enviar e devolve a geometria — rota criada pelo mesmo motivo do `/mosaic?swap=` e do
+`/edge?direction=`, porque tecla sintética exige Acessibilidade (ADR-003). Seis
+medições na mesma janela, com a base em **992 nas seis**: vazio 63pt de caixa e 917 de
+histórico; oito linhas 175 e 805; nove linhas 175 e 805 com `capped`; trinta linhas
+idem; e voltando a vazio, 63 e 917 sem resíduo. Nos passos intermediários o histórico
+cedeu EXATAMENTE o que a caixa cresceu — +29/−29, +48/−48, +56/−56.
+
+Fora de verificação, e por limite de permissão e não por escolha: **o resto do que
+depende de tecla ou clique** — o Tab, a lista do `@`, o Enter enviando, a gaveta
+abrindo. `screencapture` do shell é negado por Gravação de Tela e
+`System Events keystroke` por Acessibilidade; as duas medidas, as duas negadas. O
+`/shot` de dentro do app cobre o desenho estático.
