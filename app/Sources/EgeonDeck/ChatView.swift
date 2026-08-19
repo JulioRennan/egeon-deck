@@ -21,13 +21,19 @@ enum ChatStyle {
     static let rule = NSColor(calibratedWhite: 1, alpha: 0.18)
 
     static let threadBackground = NSColor(calibratedWhite: 0.078, alpha: 1)
-    static let panelBackground = NSColor(calibratedWhite: 0.07, alpha: 1)
     static let boxBackground = NSColor(calibratedWhite: 0.045, alpha: 1)
     static let bubbleBackground = NSColor(calibratedWhite: 0.145, alpha: 1)
 
     /// Largura máxima do texto no thread. Linha de 1400px é ilegível, e o
     /// mosaico já provou que a janela cheia é larga.
     static let column: CGFloat = 780
+
+    /// A coluna de fato, no espaço disponível. Uma conta só porque o thread e a
+    /// caixa de escrever têm de ficar alinhados: bordas diferentes por 60pt leem
+    /// como desalinho, não como decisão.
+    static func columnWidth(in available: CGFloat) -> CGFloat {
+        min(column, max(200, available - 48))
+    }
 
     /// Altura de um texto na largura dada. Usa `usesLineFragmentOrigin` porque
     /// sem ele o retorno é a altura de uma linha só, independentemente do texto.
@@ -591,6 +597,15 @@ final class ChatThreadView: NSView {
     /// Levar ao terminal de quem está pedindo permissão.
     var onReveal: ((String) -> Void)?
 
+    /// Quanto o conteúdo cede embaixo para a caixa de escrever.
+    ///
+    /// O thread corre POR BAIXO do vidro — é isso que faz a caixa parecer flutuando,
+    /// como o grid do canvas por baixo da barra (ADR-025). Mas a última mensagem não
+    /// pode viver escondida ali, então a folga é somada ao fim do documento.
+    var bottomInset: CGFloat = 0 {
+        didSet { if bottomInset != oldValue { needsLayout = true } }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -663,7 +678,9 @@ final class ChatThreadView: NSView {
 
     private var isAtBottom: Bool {
         let visible = scroll.contentView.bounds
-        return visible.maxY >= document.bounds.height - 40
+        // A folga da caixa entra na conta: sem descontá-la o thread nunca se
+        // consideraria no fim, e pararia de acompanhar mensagem nova.
+        return visible.maxY >= document.bounds.height - bottomInset - 40
     }
 
     func scrollToBottom() {
@@ -678,7 +695,7 @@ final class ChatThreadView: NSView {
     }
 
     private func reflow() {
-        let width = min(ChatStyle.column, max(200, bounds.width - 48))
+        let width = ChatStyle.columnWidth(in: bounds.width)
         let x = ((bounds.width - width) / 2).rounded()
         var y: CGFloat = 22
         for row in rows {
@@ -691,7 +708,8 @@ final class ChatThreadView: NSView {
             y = max(y, 140)
         }
         document.frame = NSRect(x: 0, y: 0, width: bounds.width,
-                                height: max(y + 12, scroll.contentView.bounds.height))
+                                height: max(y + 12 + bottomInset,
+                                            scroll.contentView.bounds.height))
     }
 
     override func layout() {

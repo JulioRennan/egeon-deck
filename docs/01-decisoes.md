@@ -1813,6 +1813,30 @@ os nós sobem, e na primeira leitura só o shell estava registrado — a caixa a
 dizendo "escreva pra t1" numa sessão de três agentes e nunca se corrigia. Tab e
 clique no painel marcam a escolha como sua, e daí em diante a lista não a desfaz.
 
+**As superfícies do chat são o vidro do app, não um estilo próprio.** Painel da
+direita, caixa de escrever e gaveta de processo entram no mesmo `GlassPanel` da barra
+de sessões e da barra do canvas: mesmo raio, mesma borda, mesmo recuo, e a mesma
+saída por `EGEON_GLASS=0` (ADR-025). Nenhuma delas pinta fundo próprio — fundo no
+`contentView` deixa o vidro invisível, porque ele reamostra o que está ATRÁS. O botão
+de recolher é o `ToolbarButton` da barra de sessões com os símbolos espelhados
+(`sidebar.trailing` à direita, `sidebar.leading` à esquerda): dois glifos diferentes
+para o mesmo gesto obrigariam a reaprender a barra.
+
+A largura do painel é CEDIDA e a da caixa não, e a diferença é o que está embaixo. À
+direita, sobreposição seria mensagem coberta o tempo todo. Embaixo, o thread reserva a
+folga da caixa no fim do documento — então a última mensagem sempre sobe, e o que
+passa por baixo do vidro é o meio da conversa enquanto você rola. É o mesmo princípio
+do grid correndo por baixo da barra flutuante no canvas.
+
+**A caixa cresce, e o teto é oito linhas.** Fresta de uma linha faz prompt de dez ser
+escrito às cegas, que é o oposto do motivo de existir o modo. Depois do teto rola por
+dentro, com barra que só aparece quando passa — antes dela é o próprio crescimento que
+diz que há espaço. A altura é medida com o MESMO helper que o thread usa, e devolvida
+ao container por `onHeightChanged`: sem avisar quem dá o frame, a caixa cresce por
+dentro do frame antigo e o texto passa a ser escrito atrás do thread. A lista de
+menção cresce para cima e **por dentro do frame** do composer, porque view que desenha
+fora dos próprios bounds não recebe clique.
+
 **Verificação.** `/chat?target=ws` devolve o thread como dados — autor, ordem, blocos
 — e o estado de cada nó, que é o que o painel da direita e o `para:` da caixa
 mostram. Existe pelo mesmo motivo do `/peek`: o thread é montado de vários arquivos
@@ -1829,3 +1853,16 @@ frase entregue a dois agentes voltando como UMA mensagem com dois destinatários
 ausência, no mesmo teste: `tool_result`, sidechain, `thinking` e eco de barra não
 viraram mensagem nenhuma. Cinco trocas de modo seguidas deixaram os quatro terminais
 de pé em `/targets`.
+
+O desenho das três superfícies foi conferido em PNG por `/shot?target=window`, com o
+app subido com `EGEON_GLASS=0`: `NSGlassEffectView` sai BRANCO no `cacheDisplay`, então
+o caminho do vidro não é fotografável de dentro do processo, e é o fallback que prova
+raio, borda, recuo e alinhamento. Os dois cabeçalhos ficaram lado a lado no mesmo
+retrato — `SESSÕES  +  ▯|` e `NA SESSÃO  |▯` —, que é o que se queria conferir.
+
+Fora de verificação, e por limite de permissão e não por escolha: **nada que dependa de
+tecla ou clique**. O crescimento da caixa, o Tab, a lista do `@`, o Enter enviando, a
+gaveta abrindo. `screencapture` do shell é negado por Gravação de Tela e
+`System Events keystroke` por Acessibilidade — as duas medidas, as duas negadas. O
+`/shot` de dentro do app cobre o desenho estático; o resto é ADR-003 cobrando o preço
+dele.

@@ -29,7 +29,17 @@ final class ChatContainer: NSView {
     private let composer = ChatComposer()
     private let panel = ChatSidePanel()
     private let drawer = ProcessDrawer()
+    /// Painel e gaveta entram em vidro, como as barras flutuantes do app: as três
+    /// superfícies do chat falam a mesma língua da barra de sessões e da barra do
+    /// canvas — mesmo raio, mesma borda, mesmo `EGEON_GLASS=0` como saída (ADR-025).
+    /// A caixa de escrever traz o vidro dela por dentro, porque a lista de menção
+    /// precisa nascer encostada nele.
+    private lazy var panelGlass = GlassPanel(content: panel, radius: 14)
+    private lazy var drawerGlass = GlassPanel(content: drawer, radius: 14)
     private let banner = ChatStyle.label("", font: ChatStyle.meta, color: .systemOrange)
+
+    /// Folga em volta das superfícies flutuantes. O mesmo 12 do banner.
+    private static let margin: CGFloat = 12
 
     private let content = ChatThread()
     private var timer: Timer?
@@ -44,12 +54,14 @@ final class ChatContainer: NSView {
 
         addSubview(thread)
         addSubview(composer)
-        addSubview(panel)
+        addSubview(panelGlass)
         banner.alignment = .center
         banner.isHidden = true
         addSubview(banner)
-        drawer.isHidden = true
-        addSubview(drawer)
+        drawerGlass.isHidden = true
+        addSubview(drawerGlass)
+
+        composer.onHeightChanged = { [weak self] in self?.needsLayout = true }
 
         thread.onReveal = { [weak self] id in self?.onReveal?(id) }
 
@@ -220,14 +232,14 @@ final class ChatContainer: NSView {
 
     private func openDrawer(_ id: String) {
         openProcess = id
-        drawer.isHidden = false
+        drawerGlass.isHidden = false
         refresh()
         needsLayout = true
     }
 
     private func closeDrawer() {
         openProcess = nil
-        drawer.isHidden = true
+        drawerGlass.isHidden = true
         needsLayout = true
     }
 
@@ -242,19 +254,34 @@ final class ChatContainer: NSView {
 
     override func layout() {
         super.layout()
+        let margin = Self.margin
         let panelWidth = panel.isCollapsed ? ChatSidePanel.collapsedWidth : ChatSidePanel.width
-        panel.frame = NSRect(x: bounds.width - panelWidth, y: 0,
-                             width: panelWidth, height: bounds.height)
+        panelGlass.frame = NSRect(x: bounds.width - panelWidth - margin, y: margin,
+                                  width: panelWidth,
+                                  height: max(0, bounds.height - margin * 2))
+        panel.frame = panelGlass.bounds
 
-        let center = max(0, bounds.width - panelWidth)
-        let composerHeight = ChatComposer.height
-        thread.frame = NSRect(x: 0, y: 0, width: center,
-                              height: max(0, bounds.height - composerHeight))
-        composer.frame = NSRect(x: 0, y: thread.frame.maxY, width: center, height: composerHeight)
-        banner.frame = NSRect(x: 0, y: max(0, thread.frame.maxY - 18), width: center, height: 14)
+        // A largura do painel é CEDIDA, e a da caixa não. Os dois são vidro, e a
+        // diferença é o que está embaixo: à direita ficaria mensagem coberta o tempo
+        // todo; embaixo a folga do thread já garante que a última mensagem sobe, e
+        // o que passa por baixo é o meio da conversa enquanto você rola.
+        let center = max(0, bounds.width - panelWidth - margin * 2)
+        let column = ChatStyle.columnWidth(in: center)
+        let columnX = ((center - column) / 2).rounded()
+        let composerHeight = composer.height(forWidth: column)
 
-        let drawerWidth = min(ProcessDrawer.width, center * 0.9)
-        drawer.frame = NSRect(x: bounds.width - panelWidth - drawerWidth, y: 0,
-                              width: drawerWidth, height: bounds.height)
+        thread.frame = NSRect(x: 0, y: 0, width: center, height: bounds.height)
+        thread.bottomInset = composerHeight + margin * 2
+        composer.frame = NSRect(x: columnX,
+                                y: max(0, bounds.height - composerHeight - margin),
+                                width: column, height: composerHeight)
+        banner.frame = NSRect(x: 0, y: max(0, composer.frame.minY - 18),
+                              width: center, height: 14)
+
+        let drawerWidth = min(ProcessDrawer.width, max(0, center - margin * 2))
+        drawerGlass.frame = NSRect(x: max(0, bounds.width - panelWidth - margin * 2 - drawerWidth),
+                                   y: margin, width: drawerWidth,
+                                   height: max(0, bounds.height - margin * 2))
+        drawer.frame = drawerGlass.bounds
     }
 }
