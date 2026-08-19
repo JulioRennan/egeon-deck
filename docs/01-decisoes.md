@@ -1580,3 +1580,49 @@ Digitado byte a byte, o mesmo caminho ficou na caixa como texto e nenhum `[Image
 O gesto em si não é dirigível de fora — evento sintético exige Acessibilidade, que
 a assinatura ad-hoc perde a cada build (ADR-003) —, então o drop registra no log o
 caminho que injetou, e é ali que o arrasto de verdade se confere.
+
+---
+
+## ADR-027 — O microfone é pedido pelo app, porque o TCC não pergunta ao CLI
+
+**Decisão:** o `Info.plist` que o `make.sh` escreve passa a levar
+`NSMicrophoneUsageDescription`. É o que faltava para o modo de voz do CLI
+funcionar dentro de um terminal do Egeon.
+
+**O sintoma.** `/voice` não funcionava, e não havia erro à vista. O motivo é que o
+macOS atribui o microfone ao processo **responsável** — o bundle que iniciou a
+cadeia —, e não a quem chamou a API. Quem grava é o módulo nativo do CLI, filho de
+um pty que este app segura: para o TCC, quem pede é o Egeon Deck. Sem a chave não
+existe negativa nem diálogo, e o que acontece é pior — o sistema **aborta** o
+processo. Medido com um binário de teste rodado de dentro de um terminal do app, e o
+relatório de crash é explícito:
+
+```
+namespace: TCC
+"This app has crashed because it attempted to access privacy-sensitive data
+ without a usage description. ... NSMicrophoneUsageDescription"
+responsibleProc: EgeonDeck
+```
+
+É por isso que o mesmo `claude` grava no Terminal.app: aquele bundle tem a chave, e
+o diálogo aparece em nome dele.
+
+**O CLI já tinha uma saída, e ela não serve para nós.** Para sessões `--bg` ele cria
+um `ClaudeCode.app` com a chave e se re-executa com `macDisclaimResponsibility`,
+soltando a responsabilidade do pai (`CLAUDE_BG_TCC_DISCLAIMED`). Sessão interativa
+não passa por ali, e não há como pedir de fora que passe.
+
+**Segurar espaço não exige nada do terminal.** Era o outro risco, e não se
+concretizou: o push-to-talk não depende de evento de key-release — que num pty não
+existe — nem do protocolo de teclado do Kitty. O CLI conta os espaços do auto-repeat
+(`Fds === L$.repeat(Fds.length)`) e usa um timeout de silêncio como "soltou". O que
+o SwiftTerm já entrega basta.
+
+**A permissão morre a cada build.** O TCC guarda por identidade de código, e a
+assinatura ad-hoc gera uma nova em cada build — a mesma dor do ADR-003. Com
+`EG_SIGN_ID` apontando para um certificado fixo, a concessão sobrevive.
+
+**Verificação.** Antes: exit 134 e relatório de crash com `responsibleProc:
+EgeonDeck`. Depois, com o mesmo binário despachado por `/dispatch` para um shell do
+app dev e lido por `/peek`: `status inicial: notDetermined` · `requestAccess: true`
+· `status final: authorized`.

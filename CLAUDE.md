@@ -256,6 +256,16 @@ PNG num rascunho em `$TMPDIR/egeon-drop/`, fora de `~/.egeon`, que é pasta para
 editar à mão. Arrastar áudio só entrega o caminho: o CLI tem o vocabulário de
 `[Audio #N]` mas passa `onAudioPaste: void 0` no chat. Ver ADR-026.
 
+## Voz
+
+O modo de voz do CLI grava pelo módulo nativo dele, dentro do pty que este app
+segura — e o TCC atribui o microfone ao processo **responsável**, que é o bundle do
+Egeon e não o `claude`. Por isso o `Info.plist` leva
+`NSMicrophoneUsageDescription`: sem a chave não há negativa nem diálogo, o sistema
+aborta o processo. Segurar espaço não pede nada do terminal — o CLI conta os espaços
+do auto-repeat e usa timeout de silêncio como "soltou". A permissão morre a cada
+build ad-hoc; `EG_SIGN_ID` com certificado fixo resolve. Ver ADR-027.
+
 ## Dispatch
 
 Um prompt entra pelo socket, vira texto, entra numa fila, e só é entregue quando o

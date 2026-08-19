@@ -122,6 +122,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSDownloadsFolderUsageDescription</key>
   <string>Acesso a projetos que estejam em Transferências.</string>
 
+  <!-- O modo de voz do CLI grava pelo módulo nativo dele, dentro do pty que este
+       app segura. O TCC atribui o microfone ao processo RESPONSÁVEL, que é este
+       bundle e não o `claude` — e sem esta chave não há negativa: o processo é
+       abortado pelo sistema (namespace TCC, SIGABRT). -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>O $DISPLAY usa o microfone para o ditado por voz dos agentes que rodam nos terminais.</string>
+
   <!-- O nó de editor carrega http://127.0.0.1 (code-server local).
        Sem esta exceção o ATS bloqueia HTTP e o WKWebView mostra erro. -->
   <key>NSAppTransportSecurity</key>
