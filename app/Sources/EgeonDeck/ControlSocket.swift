@@ -205,9 +205,15 @@ final class ControlSocket {
             //
             // Devolve a geometria que saiu: altura da caixa, topo, base, altura do
             // histórico e se bateu no teto.
-            let target = Self.query(in: route)["target"] ?? ""
+            let query = Self.query(in: route)
+            let target = query["target"] ?? ""
             let text = String(decoding: body, as: UTF8.self)
-            let result = DispatchQueue.main.sync { AppControl.chatCompose?(target, text) ?? nil }
+            // `&send=1` aperta o Enter — é o gesto que faz a bolha de "entregando"
+            // nascer, e sem ele ela não é verificável de fora.
+            let send = query["send"] == "1"
+            let result = DispatchQueue.main.sync {
+                AppControl.chatCompose?(target, text, send) ?? nil
+            }
             respond(fd, status: result == nil ? "404 Not Found" : "200 OK",
                     json: result ?? ["ok": false,
                                      "error": "sessão sem chat montado '\(target)'"])

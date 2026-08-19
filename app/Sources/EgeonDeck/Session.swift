@@ -330,7 +330,8 @@ enum AppControl {
     /// caixa é digitar, e tecla sintética exige Acessibilidade, que a assinatura
     /// ad-hoc perde a cada build (ADR-003). Sem esta rota, "a caixa cresce para cima e
     /// o histórico cede a área" é afirmação sem evidência.
-    static var chatCompose: ((_ session: String, _ text: String) -> [String: Any]?)?
+    static var chatCompose: ((_ session: String, _ text: String, _ send: Bool)
+                             -> [String: Any]?)?
 }
 
 enum SessionStore {

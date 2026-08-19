@@ -20,8 +20,6 @@ final class ChatContainer: NSView {
     var send: ((_ text: String, _ target: String) -> String?)?
     /// O que o terminal está mostrando, para a gaveta de processo.
     var peek: ((_ id: String) -> [String])?
-    /// Levar você ao card — usado pelo pedido de permissão, que só se responde lá.
-    var onReveal: ((_ id: String) -> Void)?
     /// Você recolheu ou abriu o painel da direita.
     var onPanelToggled: ((Bool) -> Void)?
 
@@ -54,6 +52,17 @@ final class ChatContainer: NSView {
     /// Processo com a gaveta aberta. Nil = fechada.
     private var openProcess: String?
     private var lastNodes: [ChatNode] = []
+    /// O que você mandou e o CLI ainda não gravou no transcript.
+    ///
+    /// Existe pelo intervalo: a entrega passa por fila, injeção e Enter, e a mensagem
+    /// só volta a existir quando o CLI a grava. Sem esta lista o thread fica parado
+    /// nesse intervalo e parece ter engolido o que você escreveu.
+    private var inFlight: [(entry: ChatEntry, at: Date)] = []
+    /// Quanto tempo uma entrega pode ficar sem aparecer antes de ser esquecida.
+    ///
+    /// O Dispatcher desiste depois de três tentativas, coisa de 6s. O dobro disso com
+    /// folga: mais que isso e a bolha apagada viraria mentira permanente na tela.
+    private static let inFlightTimeout: TimeInterval = 20
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -70,8 +79,6 @@ final class ChatContainer: NSView {
         addSubview(drawerGlass)
 
         composer.onHeightChanged = { [weak self] in self?.needsLayout = true }
-
-        thread.onReveal = { [weak self] id in self?.onReveal?(id) }
 
         composer.onSend = { [weak self] text, target in self?.deliver(text, to: target) }
         composer.statusOf = { [weak self] id in
@@ -136,9 +143,18 @@ final class ChatContainer: NSView {
         lastNodes = nodes
 
         let participants = nodes.filter(\.isAgent)
-            .map { ChatThread.Participant(id: $0.id, transcript: $0.transcript) }
+            .map { ChatThread.Participant(id: $0.id, agent: $0.agentKey,
+                                          transcript: $0.transcript) }
         content.forget(except: participants)
         let entries = content.entries(of: participants)
+
+        // A bolha apagada sai quando a de verdade chega — casada pelo texto, que é o
+        // que atravessa o socket sem alteração num dispatch cru. Ou por tempo, se
+        // nunca chegar.
+        let seen = Set(entries.filter { $0.kind == .user }.map(\.text))
+        let now = Date()
+        inFlight.removeAll { seen.contains($0.entry.text)
+            || now.timeIntervalSince($0.at) > Self.inFlightTimeout }
 
         // Só terminal DE PÉ é destino: nó com processo morto continua na lista para
         // você ver que morreu, mas mandar prompt para ele é encher fila que ninguém
@@ -153,7 +169,12 @@ final class ChatContainer: NSView {
 
         panel.aimed = composer.target
         panel.show(nodes)
-        thread.show(entries, asking: nodes.filter { $0.activity == .asking }.map(\.id))
+        // Trabalhando é `starting` junto: entre subir e o primeiro byte o terminal
+        // também está ocupado, e é o pior momento para a tela não dizer nada.
+        let working = nodes
+            .filter { $0.isAgent && ($0.activity == .working || $0.activity == .starting) }
+            .map { (id: $0.id, note: content.live(of: $0.id)) }
+        thread.show(entries, working: working, inFlight: inFlight.map(\.entry))
         thread.placeholder = Self.placeholder(nodes: nodes, entries: entries)
 
         if let openProcess {
@@ -199,6 +220,7 @@ final class ChatContainer: NSView {
             ]
             if !node.reaches.isEmpty { out["reaches"] = node.reaches }
             if node.id == composer.target { out["target"] = true }
+            if let live = content.live(of: node.id) { out["live"] = live }
             return out
         }
     }
@@ -207,14 +229,17 @@ final class ChatContainer: NSView {
     ///
     /// A resposta é o que se afirma sobre o desenho: a caixa cresceu, ela parou no
     /// teto, e o histórico encolheu na mesma medida. Ver `ChatComposer.setText`.
-    func compose(_ text: String) -> [String: Any] {
+    func compose(_ text: String, send: Bool = false) -> [String: Any] {
         composer.setText(text)
+        if send { composer.submit() }
         // O layout roda agora, e não no próximo quadro: quem chamou vai ler a
         // geometria na volta desta função.
         needsLayout = true
         layoutSubtreeIfNeeded()
         return [
             "ok": true,
+            "sent": send,
+            "inFlight": inFlight.count,
             "lines": text.isEmpty ? 0 : text.split(separator: "\n",
                                                    omittingEmptySubsequences: false).count,
             "composer": Int(composer.frame.height.rounded()),
@@ -238,17 +263,28 @@ final class ChatContainer: NSView {
         }
 
         var failures: [String] = []
+        var delivered: [String] = []
         for id in ids {
-            if let error = send?(text, id) { failures.append("\(id): \(error)") }
+            if let error = send?(text, id) {
+                failures.append("\(id): \(error)")
+            } else {
+                delivered.append(id)
+            }
         }
         if failures.isEmpty {
             show(banner: nil)
         } else {
             show(banner: failures.joined(separator: "  ·  "))
         }
-        // A entrega vira mensagem no thread quando o CLI a gravar, e não agora: uma
-        // linha otimista aqui apareceria antes de existir, e duplicaria quando a
-        // leitura seguinte trouxesse a de verdade.
+        // A bolha entra APAGADA e só para quem aceitou a entrega. Ela não substitui a
+        // de verdade: quando o CLI gravar, a leitura seguinte traz a definitiva e esta
+        // sai, casada pelo texto. Entrar como definitiva aqui seria afirmar que
+        // chegou antes de ter chegado.
+        if !delivered.isEmpty {
+            inFlight.append((ChatEntry(id: "flight-\(delivered.joined())-\(text.hashValue)",
+                                       kind: .user, recipients: delivered,
+                                       at: Date(), text: text), Date()))
+        }
         refresh()
         thread.scrollToBottom()
     }
