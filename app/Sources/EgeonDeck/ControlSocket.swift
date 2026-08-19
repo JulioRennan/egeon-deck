@@ -197,6 +197,21 @@ final class ControlSocket {
             let payload = DispatchQueue.main.sync { AppControl.canvasGeometry?() ?? [:] }
             respond(fd, status: "200 OK", json: payload)
 
+        case ("POST", _, _) where route.contains("/compose"):
+            // /compose?target=ws — corpo é o texto que vai para a caixa de escrever,
+            // sem enviar. Corpo em texto puro pelo mesmo motivo do `/message`: aqui o
+            // que interessa é justamente texto de VÁRIAS linhas, e escapar quebra de
+            // linha em JSON à mão é onde se erra.
+            //
+            // Devolve a geometria que saiu: altura da caixa, topo, base, altura do
+            // histórico e se bateu no teto.
+            let target = Self.query(in: route)["target"] ?? ""
+            let text = String(decoding: body, as: UTF8.self)
+            let result = DispatchQueue.main.sync { AppControl.chatCompose?(target, text) ?? nil }
+            respond(fd, status: result == nil ? "404 Not Found" : "200 OK",
+                    json: result ?? ["ok": false,
+                                     "error": "sessão sem chat montado '\(target)'"])
+
         case ("GET", _, _) where route.contains("/chat"):
             // /chat?target=ws — o thread do modo Chat da sessão, como dados.
             //

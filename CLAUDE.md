@@ -213,9 +213,15 @@ destinatários: um envio para `todos` é gravado em cada transcript, e sem junta
 pergunta apareceria três vezes seguidas.
 
 Na caixa de escrever o destinatário está na tela porque aqui ele não é implícito:
-**Tab cicla**, `@` oferece quem existe, Enter envia, Shift+Enter quebra linha. Ela
-**cresce com o que você escreve** até oito linhas, e daí em diante rola por dentro —
-prompt de dez linhas não se escreve às cegas numa fresta de uma linha. Clicar
+**Tab cicla**, `@` oferece quem existe, Enter envia, Shift+Enter quebra linha. Ela é
+**ancorada embaixo e cresce para cima**, até oito linhas, e daí em diante rola por
+dentro — prompt de dez linhas não se escreve às cegas numa fresta de uma linha. Quem
+cede área é o **histórico**: o thread termina onde a caixa começa. O teto é o menor
+entre oito linhas e 38% da altura útil, sempre em linhas inteiras.
+
+`POST /compose?target=ws` escreve na caixa sem enviar e devolve a geometria — é a
+única forma de conferir de fora que ela cresce para cima, para no teto e devolve a
+área ao histórico, porque tecla sintética exige Acessibilidade (ADR-003). Clicar
 num agente no painel da direita também aponta. Até você escolher, o padrão é o
 primeiro agente — e é **re-derivado**, não fixado: os alvos entram no Dispatcher na
 ordem em que os nós sobem, e fixar na primeira leitura grudava no terminal comum.
@@ -400,7 +406,7 @@ curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
 curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
-Rotas: `/targets` `/dispatch` `/peek` `/chat` `/geometry` `/layout` `/mosaic`
+Rotas: `/targets` `/dispatch` `/peek` `/chat` `/compose` `/geometry` `/layout` `/mosaic`
 `/sidebar` `/edge` `/worktree` `/remove` `/activate` `/open` `/view` `/file` `/change`
 `/activity` `/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
