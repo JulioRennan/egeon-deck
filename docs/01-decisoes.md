@@ -1712,3 +1712,120 @@ por clique deixou no log `claude ↔ claude-2` · `claude ← claude-2` · `clau
 claude-2` · `claude ↔ claude-2`, que é a ordem prometida voltando ao começo; e o
 screenshot da janela mostra uma linha só entre os dois cards, com `◀` encostado na
 borda de um e `▶` na do outro.
+
+---
+
+## ADR-029 — Modo Chat: a sessão como conversa, e o transcript do CLI como fonte
+
+**Contexto.** Canvas e mosaico mostram a MONTAGEM: onde cada nó está, quem está
+ligado a quem. Com um agente isso basta. Com cinco não: para saber o que aconteceu
+é preciso varrer cinco cards, e a ordem em que aconteceu não está em nenhum deles —
+cada card só sabe do próprio turno. E a montagem, que é o que os dois modos
+mostram bem, é justamente a parte que já está pronta e não muda mais.
+
+Então um terceiro modo (⌥⌘3, `/layout?mode=chat`), sem card nenhum: um thread por
+sessão, o composer embaixo e, à direita, quem está na sessão e o que está rodando.
+
+**A fonte é o transcript JSONL que o CLI grava, e nada mais.** A tela do terminal
+não serve: ela é TUI e mente de dois jeitos já medidos (ADR-011). O transcript é o
+que o CLI de fato registrou — timestamp real, prosa separada de chamada de
+ferramenta, e o caminho até ele já vem no payload do gancho (`transcript_path`), que
+passou a ser relatado pelo `UserPromptSubmit` junto com o `session_id` e guardado em
+`NodeConfig.transcript`.
+
+Três consequências, e as três foram o motivo da escolha:
+
+- **o thread sobrevive a fechar o app.** Ele é remontado da leitura dos arquivos, e o
+  app não guarda mensagem nenhuma. Registrar em memória o que você mandou faria o
+  thread nascer pela metade no arranque seguinte — as respostas do agente voltariam
+  do disco e as suas perguntas, não
+- **a ordem entre agentes é a real.** O timestamp é do CLI, não do app, então dois
+  agentes respondendo ao mesmo tempo aparecem na ordem em que responderam
+- **a topologia se reconstrói do próprio texto.** Uma entrada `user` que começa com
+  `[egeon] mensagem de <endereço>` é entrega de agente para agente — o envelope é
+  montado pelo app em `DispatchRequest.agentEnvelope`, então é o app quem diz quem
+  falou. Isso vira a linha recolhida `A → B` no meio do thread, sem o app precisar
+  gravar o tráfego de aresta
+
+O que o leitor descarta é tão decidido quanto o que ele mostra: `thinking` (rascunho,
+não foi dito a você), `tool_result` (devolução de ferramenta, não é ninguém falando),
+`isSidechain` (subagente — trabalho interno que abafa o que você precisa ler), eco de
+comando de barra (interface, não conversa), `system-reminder` (injeção de contexto,
+maior que a mensagem) e o marcador `[[ED:ok]]`/`[[ED:ask]]`, que é conversa do app
+com o app. `Edit` e `Write` viram diff, `Bash` vira o comando, e o resto vira uma
+linha — saber que ele leu `Canvas.swift` basta, e despejar o arquivo enterraria a
+resposta.
+
+O diff do `Edit` não é LCS: o próprio `Edit` entrega o antes e o depois de um trecho
+pequeno, e o que falta para ler é só onde ele começa. Casar prefixo e sufixo comuns
+resolve em dois laços e erra para o lado seguro — mostra mais linha marcada que o
+mínimo, nunca menos.
+
+Um agente sem gancho — shell, outro CLI — não tem thread, e o vazio DIZ isso em vez
+de mentir por omissão: sessão sem nó de agente lê "aqui não vai aparecer conversa",
+sessão cujos agentes ainda não receberam prompt lê "mande o primeiro por aqui".
+
+**A cor é derivada do id, não configurada.** O que o thread precisa é distinguir três
+agentes numa linha: quem falou se lê pela cor antes de se ler o nome. O acento do
+card não serve — lá ele diz o TIPO do nó, e dois agentes têm o mesmo. Campo de cor no
+`sessions.json` é mais uma coisa para manter, e paleta escolhida à mão em sessão de
+cinco acaba em dois tons de azul. O hash é próprio (FNV-1a) porque `hashValue` do
+Swift tem semente por processo: com ele a cor de `orquestrador` mudaria a cada
+arranque.
+
+**Aprovar permissão pelo chat ficou de fora.** O card aparece, fixado no fim do
+thread — é o que está te travando agora, e no meio do histórico ele passaria em
+branco —, mas o botão leva ao terminal. O diálogo de permissão é desenhado pela TUI,
+e responder de fora é injetar seta e Enter às cegas, sem saber em que opção o cursor
+está. Errar nisso aprova o que você quis negar.
+
+**As arestas são só de leitura aqui.** Elas aparecem como os chips de `alcança` de
+cada agente. Desenhar ligação continua sendo arrasto no canvas: o gesto é bom, e
+duplicar a edição em dois lugares é duplicar a chance de divergir.
+
+**O canvas continua montado por baixo do chat.** Esta é a parte que custou. A ideia
+óbvia — o chat não desenha card, então tire os cards da hierarquia — foi
+implementada e derrubou os terminais: `NodeView` fora da hierarquia nunca recebe
+passe de layout, o SwiftTerm não tem colunas para informar ao pty, e a TUI sobe sem
+onde desenhar. Medido numa sessão que ABRE em chat: tela vazia para sempre, e
+`SIGWINCH` depois não faz o shell reimprimir o prompt. Então o `place()` do chat faz
+o mesmo do canvas e acrescenta a view do chat, opaca, em cima. O hit test para no
+chat, que é o irmão de cima, e o foco vai para a caixa de escrever no `start()` —
+sem isso o primeiro responder seria um terminal coberto, e você digitaria no card que
+não está vendo.
+
+**A barra de sessões deixa de flutuar.** Ela flutua no canvas porque o grid corre por
+baixo dela, e é isso que a faz parecer suspensa (ADR-025). Chat e mosaico dividem a
+janela inteira com conteúdo opaco, e ali flutuar é cobrir mensagem — a regra passou a
+ser "ao lado em tudo que não é canvas".
+
+**Medida de texto própria, não `intrinsicContentSize`.** Rótulo com truncamento
+ligado reporta como largura intrínseca o MÍNIMO a que ele aceita encolher, não o que
+o texto precisa. Resultado na tela: `AGENTES` virava `AGENT…` e `claude` virava
+`clau…` — e o prejuízo é de dois caracteres, não de um, porque faltando espaço o
+último glifo sai E a elipse entra no lugar dele. `ChatStyle.width` mede o par
+texto-mais-fonte que vai de fato ser desenhado, com folga de um caractere para o
+recuo interno do `NSTextFieldCell`.
+
+**O destinatário padrão é re-derivado até você escolher.** Fixado na primeira
+leitura, ele grudava no terminal comum: os alvos entram no Dispatcher na ordem em que
+os nós sobem, e na primeira leitura só o shell estava registrado — a caixa abria
+dizendo "escreva pra t1" numa sessão de três agentes e nunca se corrigia. Tab e
+clique no painel marcam a escolha como sua, e daí em diante a lista não a desfaz.
+
+**Verificação.** `/chat?target=ws` devolve o thread como dados — autor, ordem, blocos
+— e o estado de cada nó, que é o que o painel da direita e o `para:` da caixa
+mostram. Existe pelo mesmo motivo do `/peek`: o thread é montado de vários arquivos
+cruzados por tempo, e conferir isso na tela é conferir o resultado sem ver a conta.
+
+Verificado no dev contra três transcripts reais de agente (123 mensagens: 91 de
+agente, 27 suas, 5 de agente para agente) — ordem cronológica conferida crescente, e
+o envelope reconhecido com o remetente saindo do cabeçalho. E contra um transcript
+montado de propósito, que fechou os oito casos de uma vez: prompt seu com
+destinatário; prosa sem o marcador; `Edit` virando `sync/adapter.ts +2 −1` com
+contexto, remoção e adição na ordem certa; `Read` virando uma linha; `Bash` virando o
+comando; envelope virando `claude → claude-2` sem cabeçalho nem rodapé; e a MESMA
+frase entregue a dois agentes voltando como UMA mensagem com dois destinatários. Por
+ausência, no mesmo teste: `tool_result`, sidechain, `thinking` e eco de barra não
+viraram mensagem nenhuma. Cinco trocas de modo seguidas deixaram os quatro terminais
+de pé em `/targets`.

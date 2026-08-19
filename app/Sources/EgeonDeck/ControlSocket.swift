@@ -114,8 +114,13 @@ final class ControlSocket {
             respond(fd, status: "200 OK", json: payload)
 
         case ("POST", _, _) where route.contains("/session"):
-            // /session?target=sessão/id&id=<uuid> — o CLI relatando qual conversa
-            // está aberta. Vem do gancho `UserPromptSubmit`, a cada prompt.
+            // /session?target=sessão/id&id=<uuid>[&transcript=<path>] — o CLI
+            // relatando qual conversa está aberta e onde a está gravando. Vem do
+            // gancho `UserPromptSubmit`, a cada prompt.
+            //
+            // O transcript é o que o modo Chat lê (ADR-029). Opcional porque um CLI
+            // que não o informe continua valendo como agente — perde o thread, não
+            // o dispatch.
             let query = Self.query(in: route)
             let target = query["target"] ?? ""
             let id = query["id"] ?? ""
@@ -125,7 +130,7 @@ final class ControlSocket {
                 return
             }
             DispatchQueue.main.sync {
-                AppControl.recordSession?(target, id)
+                AppControl.recordSession?(target, id, query["transcript"])
                 // Relatar a conversa também prova que o gancho chega aqui — e é
                 // isso que faz o terminal parar de depender de adivinhação sobre
                 // a tela já no primeiro turno (ADR-024).
@@ -191,6 +196,17 @@ final class ControlSocket {
             // /geometry — onde cada nó está na tela, para dirigir gestos de fora.
             let payload = DispatchQueue.main.sync { AppControl.canvasGeometry?() ?? [:] }
             respond(fd, status: "200 OK", json: payload)
+
+        case ("GET", _, _) where route.contains("/chat"):
+            // /chat?target=ws — o thread do modo Chat da sessão, como dados.
+            //
+            // É a ferramenta de teste do modo, do mesmo jeito que `/peek` é a do
+            // terminal: o thread sai de vários transcripts cruzados por tempo, e
+            // conferir isso na tela é conferir o resultado sem ver a conta.
+            let target = Self.query(in: route)["target"] ?? ""
+            let payload = DispatchQueue.main.sync { AppControl.chatThread?(target) ?? nil }
+            respond(fd, status: payload == nil ? "404 Not Found" : "200 OK",
+                    json: payload ?? ["ok": false, "error": "sessão desconhecida '\(target)'"])
 
         case ("GET", _, _) where route.contains("/peek"):
             // /peek?target=ws/id — mostra o que o terminal realmente exibe.

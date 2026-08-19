@@ -109,8 +109,36 @@ EgeonCLI.install()
             return self?.configs.first { $0.name == parts[0] }?
                 .nodes.first { $0.id == parts[1] }?.prompt
         }
-        AppControl.recordSession = { [weak self] target, id in
-            self?.recordSession(target: target, id: id)
+        AppControl.recordSession = { [weak self] target, id, transcript in
+            self?.recordSession(target: target, id: id, transcript: transcript)
+        }
+        AppControl.chatThread = { [weak self] name in
+            guard let self,
+                  let index = self.configs.firstIndex(where: { $0.name == name })
+            else { return nil }
+            let config = self.configs[index]
+            let participants = config.nodes
+                .filter { $0.type == .agent }
+                .map { ChatThread.Participant(id: $0.id,
+                                              transcript: $0.transcript.map(URL.init(fileURLWithPath:))) }
+            // Leitor novo a cada chamada: a rota é ferramenta de teste, e reusar o
+            // do container faria a resposta depender de o modo já ter sido aberto.
+            let entries = ChatThread().entries(of: participants)
+            // O estado de cada nó vai junto: o painel da direita e o destinatário
+            // padrão da caixa saem daqui, e sem isto a única forma de conferir os
+            // dois seria comparar pixels.
+            let nodes = self.shells[index]?.chat.snapshot() ?? []
+            return [
+                "session": name,
+                "mode": (self.shells[index]?.mode ?? config.view ?? .canvas).rawValue,
+                "agents": participants.map { participant -> [String: Any] in
+                    var out: [String: Any] = ["id": participant.id]
+                    if let path = participant.transcript?.path { out["transcript"] = path }
+                    return out
+                },
+                "nodes": nodes,
+                "messages": entries.map(\.payload)
+            ]
         }
         AppControl.sessionOwning = { [weak self] folder in
             self?.sessionOwning(folder: folder)
@@ -208,8 +236,8 @@ EgeonCLI.install()
         activeIndex = index
         root.show(shell)
         // O layout da barra é do MODO, e o modo é por sessão: entrar numa sessão em
-        // mosaico tem de tirar a barra de cima do primeiro painel.
-        root.setMosaic(shell.mode == .mosaic)
+        // mosaico ou em chat tem de tirar a barra de cima do conteúdo.
+        root.setMosaic(shell.mode != .canvas)
         root.sidebar.select(index)
         root.sidebar.markLive(index)
         // Trocar de sessão dá por visto o "terminou" das DUAS: a que você abre,
@@ -1425,18 +1453,31 @@ EgeonCLI.install()
     ///
     /// Chamado a cada prompt do agente, então só grava quando o valor muda de
     /// fato — senão seria uma reescrita do sessions.json por mensagem sua.
-    private func recordSession(target: String, id: String) {
+    private func recordSession(target: String, id: String, transcript: String?) {
         let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
         guard parts.count == 2,
               let index = configs.firstIndex(where: { $0.name == parts[0] }),
-              let position = configs[index].nodes.firstIndex(where: { $0.id == parts[1] }),
-              configs[index].nodes[position].sessionId != id else { return }
+              let position = configs[index].nodes.firstIndex(where: { $0.id == parts[1] })
+        else { return }
 
-        let anterior = configs[index].nodes[position].sessionId ?? "nenhuma"
-        configs[index].nodes[position].sessionId = id
-        configs[index].nodes[position].sessionStarted = true
+        var changed = false
+        // O transcript é conferido mesmo com a conversa igual: depois de um
+        // rebuild o `sessionId` volta do arquivo e o caminho não, e sair cedo aqui
+        // deixaria o chat sem thread até você trocar de conversa.
+        if let transcript, !transcript.isEmpty,
+           configs[index].nodes[position].transcript != transcript {
+            configs[index].nodes[position].transcript = transcript
+            changed = true
+        }
+        if configs[index].nodes[position].sessionId != id {
+            let anterior = configs[index].nodes[position].sessionId ?? "nenhuma"
+            configs[index].nodes[position].sessionId = id
+            configs[index].nodes[position].sessionStarted = true
+            changed = true
+            Log.write("conversa[\(target)]: \(anterior) → \(id)")
+        }
+        guard changed else { return }
         schedulePersist()
-        Log.write("conversa[\(target)]: \(anterior) → \(id)")
     }
 
     /// Qual sessão é dona de uma pasta.
@@ -1572,13 +1613,19 @@ EgeonCLI.install()
             self.recordViewMode(mode, index: index)
             // Só a sessão na tela manda na barra: as outras trocam de modo pelo
             // socket sem estar visíveis.
-            if index == self.activeIndex { self.root.setMosaic(mode == .mosaic) }
+            //
+            // Ao lado em tudo que não é canvas: a barra flutua porque o grid corre
+            // por baixo dela e é isso que a faz parecer suspensa. Mosaico e chat têm
+            // conteúdo opaco de largura cheia, e ali flutuar é cobrir mensagem.
+            if index == self.activeIndex { self.root.setMosaic(mode != .canvas) }
         }
         shell.onMosaicLayoutChanged = { [weak self] layout in
             self?.recordMosaicLayout(layout, index: index)
         }
         shell.mosaicLayout = configs[index].mosaic
         shell.setSession(name: configs[index].name, path: configs[index].path)
+
+        wireChat(shell.chat, index: index)
 
         let canvas = shell.canvas
         canvas.onPlace = { [weak self] tool, rect in self?.place(tool, rect: rect, index: index) }
@@ -1599,6 +1646,70 @@ EgeonCLI.install()
             self?.cycleEdgeDirection(link, index: index)
         }
         canvas.edges = configs[index].edgeList
+    }
+
+    // MARK: - Modo chat
+
+    /// De onde o modo Chat tira o que mostra.
+    ///
+    /// Fechaduras de leitura, e nenhuma referência a `NodeView`: em chat os cards
+    /// estão fora da hierarquia, e o que o painel desenha é estado — o retrato é
+    /// remontado a cada leitura para não haver cópia de verdade em lugar nenhum.
+    private func wireChat(_ chat: ChatContainer, index: Int) {
+        chat.nodes = { [weak self] in
+            guard let self, index >= 0, index < self.configs.count else { return [] }
+            let config = self.configs[index]
+            let edges = config.edgeList
+            return config.nodes.compactMap { node in
+                // Editor e web não são endereçáveis e não têm conversa: na lista
+                // eles seriam duas linhas que não fazem nada.
+                guard node.type == .agent || node.type == .shell else { return nil }
+                let address = "\(config.name)/\(node.id)"
+                return ChatNode(
+                    id: node.id,
+                    address: address,
+                    isAgent: node.type == .agent,
+                    role: node.prompt,
+                    cmd: node.cmd ?? "",
+                    activity: Dispatcher.shared.session(address)?.activity ?? .dead,
+                    transcript: node.transcript.map { URL(fileURLWithPath: $0) },
+                    reaches: edges.filter { $0.from == node.id }.map(\.to))
+            }
+        }
+
+        chat.send = { [weak self] text, id in
+            guard let self, index >= 0, index < self.configs.count else { return "sessão sumiu" }
+            var request = DispatchRequest(target: "\(self.configs[index].name)/\(id)")
+            request.text = text
+            do {
+                // `from: nil` de propósito: quem está mandando é VOCÊ, e as quatro
+                // guardas de cadeia só valem entre agentes. Passar a si mesmo como
+                // remetente exigiria uma aresta para poder falar com o próprio
+                // terminal.
+                _ = try Dispatcher.shared.dispatch(request, from: nil)
+                return nil
+            } catch {
+                return "\(error)"
+            }
+        }
+
+        chat.peek = { [weak self] id in
+            guard let self, index >= 0, index < self.configs.count else { return [] }
+            let address = "\(self.configs[index].name)/\(id)"
+            // Fundo de tela inteiro: num terminal comum não há TUI redesenhando, e o
+            // que interessa na saída de um servidor é o rastro, não a última linha.
+            return Dispatcher.shared.session(address)?.peek(lines: 200) ?? []
+        }
+
+        chat.onReveal = { [weak self] id in
+            guard let self, let shell = self.shells[index] else { return }
+            // Permissão se responde no terminal, e o caminho até lá é o canvas: o
+            // chat não desenha o card, então não há onde clicar sem trocar de modo.
+            shell.show(.canvas)
+            guard let node = shell.nodes.first(where: { $0.nodeID == id }) as? TerminalNode
+            else { return }
+            self.window?.makeFirstResponder(node.term)
+        }
     }
 
     // MARK: - Visualização
@@ -1625,6 +1736,7 @@ EgeonCLI.install()
 
     @objc func showCanvasView() { shells[activeIndex]?.show(.canvas) }
     @objc func showMosaicView() { shells[activeIndex]?.show(.mosaic) }
+    @objc func showChatView() { shells[activeIndex]?.show(.chat) }
 
     // MARK: - Ligações entre terminais
 
@@ -2362,9 +2474,13 @@ EgeonCLI.install()
             return !(shells[activeIndex]?.focusIsInsideEditor ?? false)
         }
 
-        if menuItem.action == #selector(showCanvasView) || menuItem.action == #selector(showMosaicView) {
+        let modeItems: [Selector: ViewMode] = [
+            #selector(showCanvasView): .canvas,
+            #selector(showMosaicView): .mosaic,
+            #selector(showChatView): .chat
+        ]
+        if let action = menuItem.action, let wants = modeItems[action] {
             guard let mode = shells[activeIndex]?.mode else { return false }
-            let wants: ViewMode = menuItem.action == #selector(showCanvasView) ? .canvas : .mosaic
             menuItem.state = mode == wants ? .on : .off
             return true
         }
@@ -2376,8 +2492,8 @@ EgeonCLI.install()
         ]
         guard let action = menuItem.action, canvasOnly.contains(action) else { return true }
         guard let shell = shells[activeIndex] else { return false }
-        // Ferramenta e zoom só existem no canvas; no mosaico o item some do
-        // caminho e a tecla volta para quem tem o foco.
+        // Ferramenta e zoom só existem no canvas; fora dele o item some do caminho e
+        // a tecla volta para quem tem o foco — no chat, a caixa de escrever.
         return shell.mode == .canvas && !shell.canvas.focusIsInsideNode
     }
 
@@ -2449,6 +2565,8 @@ EgeonCLI.install()
                            keyEquivalent: "1").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Ver em mosaico", action: #selector(showMosaicView),
                            keyEquivalent: "2").keyEquivalentModifierMask = [.command, .option]
+        canvasMenu.addItem(withTitle: "Ver como chat", action: #selector(showChatView),
+                           keyEquivalent: "3").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Recolher a barra de sessões",
                            action: #selector(toggleSidebarCollapsed), keyEquivalent: "/")
         canvasMenu.addItem(.separator())
@@ -2552,7 +2670,12 @@ final class RootView: NSView {
 
     // MARK: Recolher
 
-    /// Em mosaico a barra fica ao lado do container; no canvas, por cima do grid.
+    /// Fora do canvas a barra fica ao lado do conteúdo; no canvas, por cima do grid.
+    ///
+    /// Só o canvas tem folga: o grid corre até a borda e por baixo do vidro, e é isso
+    /// que faz a barra parecer flutuando. Mosaico e chat dividem a janela inteira com
+    /// conteúdo opaco, e sobreposição ali é terminal — ou mensagem — coberta.
+    ///
     /// Chamado por quem troca de modo e por quem troca de sessão.
     func setMosaic(_ on: Bool) {
         guard isMosaic != on else { return }

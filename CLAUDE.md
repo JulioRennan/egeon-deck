@@ -31,6 +31,12 @@ poc/          protótipos descartados
 | `Canvas.swift` | `NodeView` (card base), `TerminalNode`, `CanvasContainer` (pan/zoom/grid), `MBTerminalView` |
 | `SessionShell.swift` | a sessão na tela: barra superior de visualização e o dono dos nós |
 | `Mosaic.swift` | o modo mosaico — `ViewMode`, `MosaicLayout` e o split view com mínimo por painel |
+| `Chat.swift` | o modo chat por dentro — `AgentColor`, `ChatNode` e a junção dos transcripts |
+| `Transcript.swift` | leitor do JSONL do CLI: mensagem, bloco de código, diff |
+| `ChatView.swift` | o thread — vocabulário visual, chip de agente e as linhas |
+| `ChatComposer.swift` | a caixa de escrever: destinatário, Tab, `@` e a lista de menção |
+| `ChatPanel.swift` | "na sessão" — agentes, processos e a gaveta de saída |
+| `ChatContainer.swift` | o modo montado: thread, caixa, painel e o laço de leitura |
 | `Dispatcher.swift` | `Session` (alvo endereçável) e `Dispatcher` — fila, injeção, ociosidade, estado, cadeia |
 | `Attention.swift` | `Activity`, `Spinner`, `AttentionSound` — vocabulário de "carregando / precisa de você" |
 | `Edge.swift` | `EdgeConfig`, traçado das ligações (`EdgeCurve`, `EdgeLayerView`) e a porta `+` do card |
@@ -63,7 +69,8 @@ sessões podem apontar para o mesmo repositório em worktrees diferentes. O nome
 título de janela, posição na tela ou ordem. `shell` e `agent` são endereçáveis.
 
 **Conversa** — cada nó `agent` tem um `sessionId` próprio, gerado na primeira
-subida, que sobrevive ao rebuild. Se você trocar de conversa dentro da TUI
+subida, que sobrevive ao rebuild. Ao lado dele mora o `transcript`, o caminho do JSONL
+que o CLI grava — é dele que o modo chat monta o thread (ADR-029). Se você trocar de conversa dentro da TUI
 (`/resume`, `/clear`, fork), o CLI avisa o app por um gancho `UserPromptSubmit` e o
 `sessionId` acompanha. Ver ADR-014.
 
@@ -146,11 +153,12 @@ ADR-018.
 
 ## Visualização
 
-Duas maneiras de olhar a mesma sessão, na barra de cima (⌥⌘1 / ⌥⌘2):
+Três maneiras de olhar a mesma sessão, na barra de cima (⌥⌘1 / ⌥⌘2 / ⌥⌘3):
 
 **Canvas** — a bancada livre: posição, tamanho, zoom, arestas desenhadas.
 **Mosaico** — os mesmos nós dividindo a janela inteira, sem sobreposição e sem
 zoom. Colunas empilhadas, divisores arrastáveis, coluna sem nó não aparece.
+**Chat** — a sessão como conversa, sem card nenhum. Ver a seção abaixo.
 
 No mosaico o arranjo é seu: **arraste o cabeçalho de um card sobre outro e os dois
 trocam de painel**, em qualquer direção, inclusive entre colunas. O painel que vai
@@ -159,7 +167,7 @@ receber acende antes de você soltar. Quem nunca arrastou nada vê o arranjo por
 parte. O que você montou vive em `mosaic.slots`, ids de nó por coluna; nó criado
 depois entra na coluna de quem é do mesmo tipo, sem desfazer o resto. Ver ADR-023.
 
-**Não são duas cópias do nó.** Em qualquer modo o card é o MESMO `NodeView`, e o
+**Não são cópias do nó.** Em qualquer modo o card é o MESMO `NodeView`, e o
 que muda é quem lhe dá o frame. Reparentar uma view não toca no processo — o pty
 segue ligado ao SwiftTerm e o WKWebView não recarrega —, então dá para trocar de
 modo com cinco agentes trabalhando. É por isso que o dono dos nós é o
@@ -172,16 +180,65 @@ e o arrasto chamaria `onRequestSpace`, que desloca o mundo do canvas.
 
 Modo e proporções são **por sessão**, gravados no `sessions.json` (`view`,
 `mosaic`) e copiados por template e por duplicação em worktree. A geometria dos
-nós no arquivo continua sendo sempre a do canvas: `syncFrames` não roda em
-mosaico, senão a montagem inteira seria regravada com o tamanho dos painéis.
+nós no arquivo continua sendo sempre a do canvas: `syncFrames` só roda em canvas,
+senão a montagem inteira seria regravada com o tamanho dos painéis.
 
 Ver ADR-016.
+
+## Modo chat
+
+Canvas e mosaico mostram a **montagem**. Com cinco agentes ela é a parte que já está
+pronta, e o que falta é o **fio**: o que aconteceu, e em que ordem. Cada card só sabe
+do próprio turno, então esse fio não está em nenhum deles.
+
+O chat é um thread por sessão. Ele sai do **transcript JSONL que o CLI grava** — o
+caminho vem no payload do gancho (`transcript_path`) e fica em `NodeConfig.transcript`,
+ao lado do `sessionId`. A tela do terminal não serve para isso: ela é TUI e mente
+(ADR-011). Como o thread é remontado dos arquivos, ele **volta inteiro no arranque
+seguinte** e o app não guarda mensagem nenhuma.
+
+O que aparece: sua pergunta com os destinatários; a prosa do agente; `Edit` e `Write`
+como diff com `+n −m`; `Bash` como o comando; o resto como uma linha (`leu
+Canvas.swift`). O que não aparece, e cada um por um motivo: `thinking` é rascunho,
+`tool_result` não é ninguém falando, subagente é trabalho interno, e o marcador
+`[[ED:ok]]` é conversa do app com o app.
+
+**Agente falando com agente vira uma linha recolhida no meio do thread**, `A → B`, que
+abre no que foi dito. O app não grava esse tráfego: uma entrada que começa com
+`[egeon] mensagem de <endereço>` é entrega de aresta, e o envelope é montado por ele
+em `DispatchRequest.agentEnvelope` — então é o app quem diz quem falou, não o texto.
+
+A **mesma frase entregue a vários** volta como uma mensagem só com vários
+destinatários: um envio para `todos` é gravado em cada transcript, e sem juntar sua
+pergunta apareceria três vezes seguidas.
+
+Na caixa de escrever o destinatário está na tela porque aqui ele não é implícito:
+**Tab cicla**, `@` oferece quem existe, Enter envia, Shift+Enter quebra linha. Clicar
+num agente no painel da direita também aponta. Até você escolher, o padrão é o
+primeiro agente — e é **re-derivado**, não fixado: os alvos entram no Dispatcher na
+ordem em que os nós sobem, e fixar na primeira leitura grudava no terminal comum.
+
+À direita, o que o canvas dava de graça e o chat esconderia: **agentes** com estado,
+cor e os chips de `alcança` — as arestas, aqui só de leitura —, e **processos**, que
+são os terminais comuns, com a saída numa gaveta. Cor de agente é derivada do id
+(FNV-1a, estável entre execuções): o acento do card diz o TIPO, então dois agentes
+teriam a mesma.
+
+Permissão **não se responde aqui**. O card aparece fixado no fim do thread, porque é
+o que está te travando agora, e o botão leva ao terminal: o diálogo é desenhado pela
+TUI, e responder de fora é injetar seta e Enter às cegas.
+
+E o **canvas continua montado por baixo**, coberto pelo chat opaco. Não é preguiça:
+nó fora da hierarquia nunca recebe passe de layout, e sem layout o pty sobe com zero
+colunas — sessão que abre em chat ficava com os terminais em branco para sempre.
+
+Ver ADR-029.
 
 ## As barras
 
 A barra de sessões é de vidro (`NSGlassEffectView`, macOS 26), e onde ela pousa
-depende do modo: **no canvas flutua** sobre o grid, **no mosaico fica ao lado** do
-container. A bancada do canvas tem sobra de espaço e a barra por cima dele é o efeito
+depende do modo: **no canvas flutua** sobre o grid, **fora dele fica ao lado** do
+container — mosaico e chat. A bancada do canvas tem sobra de espaço e a barra por cima dele é o efeito
 desejado; no mosaico os cards dividem a janela inteira, e sobreposição ali é terminal
 coberto. A barra do canvas e o banner de aviso usam o mesmo `GlassPanel`. A barra de
 visualização, no topo, segue opaca e encostada.
@@ -332,15 +389,21 @@ curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
 curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
-Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/mosaic` `/sidebar`
-`/edge` `/worktree` `/remove` `/activate` `/open` `/view` `/file` `/change`
+Rotas: `/targets` `/dispatch` `/peek` `/chat` `/geometry` `/layout` `/mosaic`
+`/sidebar` `/edge` `/worktree` `/remove` `/activate` `/open` `/view` `/file` `/change`
 `/activity` `/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
 conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
 guardas de cadeia. **`/peek` e `/dispatch` são as ferramentas de teste** — dá
 para verificar comportamento de agente ponta a ponta sem tocar na UI.
 
-`/layout?mode=canvas|mosaic` troca a visualização da sessão ativa, e `/geometry`
+`/chat?target=ws` devolve o thread do modo chat como dados — autor, ordem e blocos de
+cada mensagem — mais o estado de cada nó, que é o que o painel da direita e o `para:`
+da caixa mostram. Existe pelo mesmo motivo do `/peek`: o thread é montado de vários
+transcripts cruzados por tempo, e conferir isso na tela é conferir o resultado sem ver
+a conta (ADR-029).
+
+`/layout?mode=canvas|mosaic|chat` troca a visualização da sessão ativa, e `/geometry`
 começa dizendo em que modo está: em mosaico o `docFrame` é o do painel e o
 `grabPoint` não arrasta nada. `/mosaic?target=ws&swap=id1,id2` troca dois cards de
 painel — o mesmo que arrastar um cabeçalho sobre o outro, e a única forma de
