@@ -52,6 +52,9 @@ struct ChatNode {
     let address: String
     /// Roda um agente de IA — tem perfil. O contrário é shell.
     let isAgent: Bool
+    /// Chave em `agents.json`. É por ela que se escolhe o adapter que sabe ler a
+    /// conversa deste CLI.
+    let agentKey: String?
     let role: String?
     /// Linha de comando do nó, que é o que identifica um processo na lista.
     let cmd: String
@@ -73,27 +76,36 @@ struct ChatNode {
 /// O timestamp é do CLI, não do app — então a ordem é a real, mesmo com dois
 /// agentes respondendo ao mesmo tempo.
 final class ChatThread {
-    /// Um leitor por caminho de transcript, para o offset incremental sobreviver
+    /// Um adapter por caminho de transcript, para o offset incremental sobreviver
     /// entre leituras. Chaveado pelo caminho e não pelo id do nó: trocar de
     /// conversa dentro da TUI muda o arquivo, e o leitor antigo não serve mais.
-    private var readers: [String: TranscriptReader] = [:]
+    private var adapters: [String: ChatAdapter] = [:]
+    /// O que cada nó estava fazendo na última leitura. Preenchido por `entries`.
+    private var liveByNode: [String: String] = [:]
 
-    /// Quem participa: id curto do nó e onde está o transcript dele.
+    /// Quem participa: id curto do nó, qual CLI ele roda e onde está o transcript.
     struct Participant {
         let id: String
+        let agent: String?
         let transcript: URL?
     }
 
+    /// O que este nó está fazendo agora, se o adapter dele souber dizer.
+    func live(of id: String) -> String? { liveByNode[id] }
+
     func entries(of participants: [Participant]) -> [ChatEntry] {
         var all: [ChatEntry] = []
+        liveByNode = [:]
         for participant in participants {
             guard let url = participant.transcript else { continue }
-            let reader = readers[url.path] ?? {
-                let new = TranscriptReader(url: url)
-                readers[url.path] = new
+            let adapter = adapters[url.path] ?? {
+                let new = ChatAdapters.make(agent: participant.agent, transcript: url)
+                if let new { adapters[url.path] = new }
                 return new
             }()
-            all += reader.read(author: participant.id)
+            guard let adapter else { continue }
+            all += adapter.read(author: participant.id)
+            if let live = adapter.live { liveByNode[participant.id] = live }
         }
         // Empate resolvido pelo id para a ordem não dançar entre leituras: dois
         // agentes gravam no mesmo milissegundo com mais frequência do que parece.
@@ -107,8 +119,8 @@ final class ChatThread {
     /// Esquece transcripts que não são de ninguém mais. Sem isto, trocar de
     /// conversa num nó dez vezes deixa dez leitores com o arquivo antigo aberto.
     func forget(except participants: [Participant]) {
-        let live = Set(participants.compactMap { $0.transcript?.path })
-        readers = readers.filter { live.contains($0.key) }
+        let alive = Set(participants.compactMap { $0.transcript?.path })
+        adapters = adapters.filter { alive.contains($0.key) }
     }
 
     /// Junta o que é uma mensagem só aparecendo em vários transcripts.

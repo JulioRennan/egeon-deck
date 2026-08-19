@@ -184,6 +184,18 @@ final class ChatComposer: NSView {
         input.scrollRangeToVisible(end)
     }
 
+    /// Aperta Enter por você. Devolve `false` quando não havia o que enviar.
+    ///
+    /// Mesma razão do `setText`: o Enter é tecla, e tecla sintética exige
+    /// Acessibilidade (ADR-003). Sem isto a bolha apagada de "entregando" não é
+    /// verificável de fora — ela só nasce do envio.
+    @discardableResult
+    func submit() -> Bool {
+        let had = !input.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        send()
+        return had
+    }
+
     /// O texto passou do teto e está rolando por dentro.
     var isCapped: Bool {
         let inner = max(40, bounds.width - Self.pad * 2 - Self.sendLane)

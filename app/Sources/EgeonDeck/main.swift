@@ -119,8 +119,9 @@ EgeonCLI.install()
             let config = self.configs[index]
             let participants = config.nodes
                 .filter { $0.type == .agent }
-                .map { ChatThread.Participant(id: $0.id,
-                                              transcript: $0.transcript.map(URL.init(fileURLWithPath:))) }
+                .map { ChatThread.Participant(
+                    id: $0.id, agent: $0.agent,
+                    transcript: $0.transcript.map(URL.init(fileURLWithPath:))) }
             // Leitor novo a cada chamada: a rota é ferramenta de teste, e reusar o
             // do container faria a resposta depender de o modo já ter sido aberto.
             let entries = ChatThread().entries(of: participants)
@@ -140,12 +141,12 @@ EgeonCLI.install()
                 "messages": entries.map(\.payload)
             ]
         }
-        AppControl.chatCompose = { [weak self] name, text in
+        AppControl.chatCompose = { [weak self] name, text, send in
             guard let self,
                   let index = self.configs.firstIndex(where: { $0.name == name }),
                   let shell = self.shells[index], shell.mode == .chat
             else { return nil }
-            return shell.chat.compose(text)
+            return shell.chat.compose(text, send: send)
         }
         AppControl.sessionOwning = { [weak self] folder in
             self?.sessionOwning(folder: folder)
@@ -1676,6 +1677,7 @@ EgeonCLI.install()
                     id: node.id,
                     address: address,
                     isAgent: node.type == .agent,
+                    agentKey: node.agent,
                     role: node.prompt,
                     cmd: node.cmd ?? "",
                     activity: Dispatcher.shared.session(address)?.activity ?? .dead,
@@ -1708,15 +1710,6 @@ EgeonCLI.install()
             return Dispatcher.shared.session(address)?.peek(lines: 200) ?? []
         }
 
-        chat.onReveal = { [weak self] id in
-            guard let self, let shell = self.shells[index] else { return }
-            // Permissão se responde no terminal, e o caminho até lá é o canvas: o
-            // chat não desenha o card, então não há onde clicar sem trocar de modo.
-            shell.show(.canvas)
-            guard let node = shell.nodes.first(where: { $0.nodeID == id }) as? TerminalNode
-            else { return }
-            self.window?.makeFirstResponder(node.term)
-        }
     }
 
     // MARK: - Visualização

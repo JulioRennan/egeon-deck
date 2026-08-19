@@ -197,11 +197,25 @@ ao lado do `sessionId`. A tela do terminal não serve para isso: ela é TUI e me
 (ADR-011). Como o thread é remontado dos arquivos, ele **volta inteiro no arranque
 seguinte** e o app não guarda mensagem nenhuma.
 
+Quem lê o transcript é um **adapter por CLI** (`ChatAdapter`), escolhido pela chave do
+`agents.json`. Hoje só `claude` tem um; os outros não rendem thread, e o vazio diz
+isso. O formato é de cada um, e sem esta costura o modo inteiro ficaria preso a um
+programa.
+
 O que aparece: sua pergunta com os destinatários; a prosa do agente; `Edit` e `Write`
 como diff com `+n −m`; `Bash` como o comando; o resto como uma linha (`leu
 Canvas.swift`). O que não aparece, e cada um por um motivo: `thinking` é rascunho,
 `tool_result` não é ninguém falando, subagente é trabalho interno, e o marcador
 `[[ED:ok]]` é conversa do app com o app.
+
+**Enquanto o turno corre, o chat não fica mudo.** A mensagem que você mandou entra na
+hora, apagada, com `entregando…` — ela sai quando a de verdade volta do transcript, ou
+por tempo se nunca voltar. E o agente que está trabalhando ganha uma linha no fim com
+três pontos pulsando e **o que ele está fazendo agora**: `pensando`, `lendo
+Canvas.swift`, `$ npx vitest`. Esse detalhe é o `live` do adapter, e é o que separa
+isto de um spinner — ele diz que o trabalho ANDOU desde a última vez que você olhou.
+O raciocínio entra aqui e não no histórico: lá é rascunho longo, aqui é a única coisa
+que existe para mostrar.
 
 **Agente falando com agente vira uma linha recolhida no meio do thread**, `A → B`, que
 abre no que foi dito. O app não grava esse tráfego: uma entrada que começa com
@@ -219,9 +233,10 @@ dentro — prompt de dez linhas não se escreve às cegas numa fresta de uma lin
 cede área é o **histórico**: o thread termina onde a caixa começa. O teto é o menor
 entre oito linhas e 38% da altura útil, sempre em linhas inteiras.
 
-`POST /compose?target=ws` escreve na caixa sem enviar e devolve a geometria — é a
-única forma de conferir de fora que ela cresce para cima, para no teto e devolve a
-área ao histórico, porque tecla sintética exige Acessibilidade (ADR-003). Clicar
+`POST /compose?target=ws[&send=1]` escreve na caixa — e com `send=1` aperta o Enter —
+devolvendo a geometria. É a única forma de conferir de fora que ela cresce para cima,
+para no teto e devolve a área ao histórico, porque tecla sintética exige
+Acessibilidade (ADR-003). Clicar
 num agente no painel da direita também aponta. Até você escolher, o padrão é o
 primeiro agente — e é **re-derivado**, não fixado: os alvos entram no Dispatcher na
 ordem em que os nós sobem, e fixar na primeira leitura grudava no terminal comum.
@@ -232,9 +247,9 @@ são os terminais comuns, com a saída numa gaveta. Cor de agente é derivada do
 (FNV-1a, estável entre execuções): o acento do card diz o TIPO, então dois agentes
 teriam a mesma.
 
-Permissão **não se responde aqui**. O card aparece fixado no fim do thread, porque é
-o que está te travando agora, e o botão leva ao terminal: o diálogo é desenhado pela
-TUI, e responder de fora é injetar seta e Enter às cegas.
+Pedido de permissão **não aparece no chat**. O aviso já existe e funciona: borda
+laranja no card, som, bolinha na barra lateral (ADR-024). Um card aqui só saberia
+apontar para o terminal, e aviso duplicado que não age é ruído.
 
 E o **canvas continua montado por baixo**, coberto pelo chat opaco. Não é preguiça:
 nó fora da hierarquia nunca recebe passe de layout, e sem layout o pty sobe com zero

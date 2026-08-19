@@ -152,14 +152,21 @@ final class ChatUserRow: ChatRow {
     /// fazer.
     private static let maxWidth: CGFloat = 470
 
-    init(entry: ChatEntry) {
+    /// Você mandou e o CLI ainda não gravou. A bolha aparece na hora, apagada.
+    ///
+    /// Sem ela a mensagem só existe na tela quando volta do transcript, e o segundo
+    /// entre apertar Enter e vê-la aparecer é o segundo em que o modo parece ter
+    /// engolido o que você escreveu.
+    init(entry: ChatEntry, inFlight: Bool = false) {
         text = ChatStyle.paragraph(entry.text, font: ChatStyle.body, color: ChatStyle.text)
-        time = ChatStyle.label(entry.timeLabel, font: ChatStyle.meta, color: ChatStyle.faint)
+        time = ChatStyle.label(inFlight ? "entregando…" : entry.timeLabel,
+                               font: ChatStyle.meta, color: ChatStyle.faint)
         super.init(frame: .zero)
 
         bubble.wantsLayer = true
         bubble.layer?.backgroundColor = ChatStyle.bubbleBackground.cgColor
         bubble.layer?.cornerRadius = 6
+        if inFlight { alphaValue = 0.55 }
         addSubview(bubble)
         bubble.addSubview(text)
 
@@ -365,60 +372,84 @@ final class ChatSystemRow: ChatRow {
     }
 }
 
-/// O CLI está pedindo permissão.
+/// O agente está trabalhando: três pontos na cor dele e o que ele está fazendo.
 ///
-/// Sem botão de aprovar: o diálogo é desenhado pela TUI, e responder de fora é
-/// injetar seta e Enter às cegas, sem saber em que opção o cursor está. Errar
-/// nisso aprova o que você quis negar. O card leva você ao terminal, que é onde a
-/// pergunta está escrita.
-final class ChatApprovalRow: ChatRow {
-    private let box = NSView()
-    private let who: NSTextField
-    private let what = NSTextField(labelWithString: "pede sua permissão para continuar")
-    private let button = NSButton()
+/// É o feedback que faltava. O `Activity` já sabia que o turno estava correndo (é o
+/// que acende o spinner no cabeçalho do card), mas no chat isso não aparecia em lugar
+/// nenhum: você mandava um prompt e ficava olhando o thread parado, sem saber se a
+/// entrega passou, se ele estava pensando, ou se nada aconteceu.
+///
+/// O detalhe vem do adapter do CLI (`ChatAdapter.live`), e é o que separa isto de um
+/// spinner: "lendo Canvas.swift" e "$ npx vitest" dizem que o trabalho ANDOU desde a
+/// última vez que você olhou.
+final class ThinkingRow: ChatRow {
+    private let bar = NSView()
+    private let author: NSTextField
+    private let note: NSTextField
+    private let dots = [NSView(), NSView(), NSView()]
+    let agentID: String
 
-    var onReveal: (() -> Void)?
+    private static let gutter: CGFloat = 12
 
-    init(agent: String) {
-        who = ChatStyle.label(agent, font: ChatStyle.name, color: AgentColor.of(agent))
+    init(agent: String, note text: String?) {
+        agentID = agent
+        author = ChatStyle.label(agent, font: ChatStyle.name, color: AgentColor.of(agent))
+        note = ChatStyle.label(text ?? "pensando", font: ChatStyle.meta, color: ChatStyle.dim)
         super.init(frame: .zero)
 
-        box.wantsLayer = true
-        box.layer?.backgroundColor = NSColor(calibratedWhite: 0.13, alpha: 1).cgColor
-        box.layer?.borderWidth = 1
-        box.layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.55).cgColor
-        box.layer?.cornerRadius = 6
-        addSubview(box)
-
-        what.font = ChatStyle.body
-        what.textColor = ChatStyle.text
-        box.addSubview(who)
-        box.addSubview(what)
-
-        button.title = "Abrir o terminal"
-        button.bezelStyle = .rounded
-        button.font = .systemFont(ofSize: 12, weight: .semibold)
-        button.target = self
-        button.action = #selector(reveal)
-        box.addSubview(button)
+        bar.wantsLayer = true
+        bar.layer?.backgroundColor = AgentColor.of(agent).cgColor
+        addSubview(bar)
+        addSubview(author)
+        for dot in dots {
+            dot.wantsLayer = true
+            dot.layer?.backgroundColor = AgentColor.of(agent).cgColor
+            dot.layer?.cornerRadius = 2.5
+            addSubview(dot)
+        }
+        addSubview(note)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    @objc private func reveal() { onReveal?() }
+    /// Troca só o texto, sem refazer a linha: remontar reinicia a animação, e três
+    /// pontos que recomeçam a cada meio segundo leem como travamento, não como
+    /// trabalho.
+    func update(note text: String?) {
+        note.stringValue = text ?? "pensando"
+        needsLayout = true
+    }
 
-    override func height(for width: CGFloat) -> CGFloat { 62 }
+    override func height(for width: CGFloat) -> CGFloat { 34 }
+
+    /// A animação entra quando a view tem janela. Fora dela o CoreAnimation pausa, e
+    /// religar no `init` deixaria os pontos parados no primeiro quadro.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        for (index, dot) in dots.enumerated() {
+            dot.layer?.removeAllAnimations()
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 0.25
+            pulse.toValue = 1
+            pulse.duration = 0.5
+            pulse.autoreverses = true
+            pulse.repeatCount = .greatestFiniteMagnitude
+            pulse.beginTime = CACurrentMediaTime() + Double(index) * 0.16
+            dot.layer?.add(pulse, forKey: "pulse")
+        }
+    }
 
     override func layout() {
         super.layout()
-        let width = min(bounds.width, 480)
-        box.frame = NSRect(x: ((bounds.width - width) / 2).rounded(), y: 0,
-                           width: width, height: 54)
-        who.frame = NSRect(x: 13, y: 10, width: who.measured, height: 14)
-        what.frame = NSRect(x: 13, y: 28, width: width - 26, height: 16)
-        let size = button.intrinsicContentSize
-        button.frame = NSRect(x: width - size.width - 12, y: 12,
-                              width: size.width, height: 24)
+        bar.frame = NSRect(x: 0, y: 1, width: 2, height: 26)
+        author.frame = NSRect(x: Self.gutter, y: 0, width: author.measured, height: 14)
+        var x = Self.gutter
+        for dot in dots {
+            dot.frame = NSRect(x: x, y: 20, width: 5, height: 5)
+            x += 8
+        }
+        note.frame = NSRect(x: x + 4, y: 17, width: max(0, bounds.width - x - 16), height: 13)
     }
 }
 
@@ -594,9 +625,6 @@ final class ChatThreadView: NSView {
     private let document = FlippedView()
     private var rows: [ChatRow] = []
 
-    /// Levar ao terminal de quem está pedindo permissão.
-    var onReveal: ((String) -> Void)?
-
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -616,10 +644,25 @@ final class ChatThreadView: NSView {
     /// perderia a seleção de texto e o estado dos blocos abertos — e o laço lê a
     /// cada meio segundo.
     private var drawn: String = ""
+    private var thinkingRows: [ThinkingRow] = []
 
-    func show(_ entries: [ChatEntry], asking: [String]) {
-        let signature = entries.map(\.id).joined(separator: ",") + "|" + asking.joined(separator: ",")
-        guard signature != drawn else { return }
+    /// Quem está trabalhando, e o que está fazendo.
+    ///
+    /// O texto NÃO entra na assinatura: ele muda a cada ferramenta, e remontar a linha
+    /// reinicia a animação dos pontos. Quem muda é atualizado no lugar.
+    func show(_ entries: [ChatEntry],
+              working: [(id: String, note: String?)] = [],
+              inFlight: [ChatEntry] = []) {
+        let signature = entries.map(\.id).joined(separator: ",")
+            + "|" + working.map(\.id).joined(separator: ",")
+            + "|" + inFlight.map(\.text).joined(separator: "\u{1}")
+        if signature == drawn {
+            // Só o texto do que está rodando mudou.
+            for row in thinkingRows {
+                row.update(note: working.first { $0.id == row.agentID }?.note)
+            }
+            return
+        }
         let wasAtBottom = isAtBottom
         drawn = signature
 
@@ -635,17 +678,17 @@ final class ChatThreadView: NSView {
             case .system:
                 return ChatSystemRow(text: entry.text,
                                      color: entry.alert ? .systemRed : ChatStyle.faint)
-            case .approval:
-                return ChatSystemRow(text: entry.text, color: .systemOrange)
             }
         }
-        // Pedido de permissão vive no fim e não na ordem do tempo: é o que está
-        // te travando agora, e no meio do histórico ele passa em branco.
-        for agent in asking {
-            let row = ChatApprovalRow(agent: agent)
-            row.onReveal = { [weak self] in self?.onReveal?(agent) }
-            rows.append(row)
+        // O que você acabou de mandar e o CLI ainda não gravou. Antes das linhas de
+        // trabalho, porque foi antes no tempo.
+        for entry in inFlight {
+            rows.append(ChatUserRow(entry: entry, inFlight: true))
         }
+
+        // Quem está trabalhando, no fim: é o presente, e o thread é passado.
+        thinkingRows = working.map { ThinkingRow(agent: $0.id, note: $0.note) }
+        rows.append(contentsOf: thinkingRows as [ChatRow])
         rows.forEach { document.addSubview($0) }
         reflow()
         if wasAtBottom { scrollToBottom() }

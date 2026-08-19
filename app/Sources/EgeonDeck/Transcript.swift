@@ -43,8 +43,6 @@ struct ChatEntry {
         case agent
         /// Um agente acionando outro — o envelope `[egeon] mensagem de X`.
         case link
-        /// O CLI pedindo permissão. Só o card; responder é no terminal.
-        case approval
     }
 
     var id: String
@@ -66,9 +64,50 @@ struct ChatEntry {
     }
 }
 
-// MARK: - Leitura do transcript do CLI
+// MARK: - Quem sabe ler qual CLI
 
-/// Lê o JSONL que o CLI grava e devolve mensagens.
+/// Como um CLI de agente conta o que aconteceu na conversa dele.
+///
+/// Existe porque o formato é de CADA UM. O Claude Code grava JSONL com `type`,
+/// `message` e blocos de conteúdo; outro CLI grava outra coisa, ou não grava. Sem esta
+/// costura o modo Chat inteiro fica preso a um programa, e o dia que entrar o segundo
+/// a escolha é entre um `if` no meio do parser e reescrever o modo.
+///
+/// Um adapter novo precisa responder duas perguntas, e a segunda é a que faz o chat
+/// deixar de ser mudo enquanto o agente trabalha.
+protocol ChatAdapter: AnyObject {
+    /// O que a conversa tem, do início da cauda lida até agora.
+    func read(author: String) -> [ChatEntry]
+
+    /// O que ele está fazendo NESTE instante — "lendo Canvas.swift", "$ npx vitest",
+    /// a linha de raciocínio em curso. `nil` quando o CLI não dá como saber.
+    ///
+    /// Só vale enquanto o terminal está trabalhando; quem decide isso é quem mostra.
+    var live: String? { get }
+}
+
+enum ChatAdapters {
+    /// O adapter deste nó, se houver algum que saiba lê-lo.
+    ///
+    /// A chave é a do `agents.json` — a mesma que monta a linha de comando. Nil
+    /// significa "este CLI não conta nada que o app saiba ler", e o modo Chat já
+    /// trata esse caso dizendo o que falta em vez de mostrar thread vazio.
+    static func make(agent: String?, transcript: URL?) -> ChatAdapter? {
+        guard let transcript else { return nil }
+        switch agent {
+        case "claude": return ClaudeCodeTranscript(url: transcript)
+        default: return nil
+        }
+    }
+
+    /// Chaves de `agents.json` que hoje rendem thread. Para a mensagem de vazio poder
+    /// dizer o nome de quem falta em vez de "não suportado".
+    static let supported: Set<String> = ["claude"]
+}
+
+// MARK: - Claude Code
+
+/// Lê o JSONL que o Claude Code grava e devolve mensagens.
 ///
 /// É a única fonte do thread, e é de propósito. A tela do terminal não serve —
 /// ela é TUI e mente de dois jeitos já medidos (ADR-011). O transcript é o que o
@@ -79,7 +118,7 @@ struct ChatEntry {
 /// O caminho vem do gancho, que recebe `transcript_path` no payload. Não é
 /// derivado de `sessionId` + convenção de pasta: isso amarraria o app ao
 /// `CLAUDE_CONFIG_DIR` do usuário, que não é assunto dele.
-final class TranscriptReader {
+final class ClaudeCodeTranscript: ChatAdapter {
     private let url: URL
     /// Até onde já foi lido. Turno novo são bytes no fim do arquivo — reler o
     /// arquivo inteiro a cada 0,5s num transcript de 20 MB trava a UI.
@@ -91,6 +130,10 @@ final class TranscriptReader {
     /// Um transcript de conversa longa passa de 20 MB. Abrir o modo Chat não
     /// pode custar isso — o que interessa é o fim da conversa.
     private static let tailLimit: UInt64 = 512 * 1024
+
+    /// A última coisa que ele fez e que não foi falar com você. Atualizada na leitura,
+    /// e é o que o chat mostra enquanto o turno não acaba.
+    private(set) var live: String?
 
     init(url: URL) { self.url = url }
 
@@ -139,8 +182,81 @@ final class TranscriptReader {
                 continue
             }
             entries.append(contentsOf: Self.parse(entry, author: author))
+            note(entry)
         }
         return entries
+    }
+
+    /// Mantém o `live` com o último sinal de vida do turno.
+    ///
+    /// Prosa ZERA: ele falou, não há nada pendente para anunciar. Ferramenta e
+    /// raciocínio preenchem, e o raciocínio entra AQUI e não no thread — no histórico
+    /// ele é rascunho longo que não foi dito a você (ADR-029), mas enquanto o turno
+    /// corre é a única coisa que existe para mostrar, e ficar sem nada é o que faz
+    /// mandar um prompt parecer que não aconteceu.
+    private func note(_ raw: [String: Any]) {
+        guard raw["type"] as? String == "assistant",
+              raw["isSidechain"] as? Bool != true,
+              let content = (raw["message"] as? [String: Any])?["content"] as? [[String: Any]]
+        else {
+            // Prompt NOVO recomeça o turno, e o que havia não vale mais. Mas só o
+            // prompt: devolução de ferramenta também chega como `user`, e ali o que
+            // ele estava fazendo continua valendo. Confundir os dois zerava o status a
+            // cada resultado de Read — medido, o chat ficava mudo o turno inteiro.
+            // O que separa é a forma do conteúdo: texto é você, array é ferramenta.
+            if raw["type"] as? String == "user",
+               (raw["message"] as? [String: Any])?["content"] is String { live = nil }
+            return
+        }
+        for block in content {
+            switch block["type"] as? String {
+            case "text":
+                let text = (block["text"] as? String ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty { live = nil }
+            case "thinking":
+                let text = (block["thinking"] as? String ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty { live = Self.firstLine(text) }
+            case "tool_use":
+                live = Self.toolLabel(block)
+            default: continue
+            }
+        }
+    }
+
+    /// A primeira frase do raciocínio, curta. Ele escreve parágrafos; o que cabe numa
+    /// linha de status é a abertura.
+    private static func firstLine(_ text: String) -> String {
+        let flat = text.replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        // Corta na primeira pontuação de fim, senão em 90 caracteres.
+        if let end = flat.firstIndex(where: { $0 == "." || $0 == "?" || $0 == "!" }),
+           flat.distance(from: flat.startIndex, to: end) > 12 {
+            return String(flat[..<end])
+        }
+        return flat.count > 90 ? String(flat.prefix(90)) + "…" : flat
+    }
+
+    /// O verbo do que ele está fazendo, para a linha de status.
+    private static func toolLabel(_ block: [String: Any]) -> String {
+        let name = block["name"] as? String ?? "?"
+        let input = block["input"] as? [String: Any] ?? [:]
+        switch name {
+        case "Edit", "Write":
+            return "editando " + short(input["file_path"] as? String ?? "")
+        case "Read":
+            return "lendo " + short(input["file_path"] as? String ?? "")
+        case "Bash":
+            let command = (input["command"] as? String ?? "")
+                .split(separator: "\n").first.map(String.init) ?? ""
+            return command.isEmpty ? "rodando um comando" : "$ " + String(command.prefix(70))
+        case "Grep":  return "buscando " + (input["pattern"] as? String ?? "")
+        case "Glob":  return "listando " + (input["pattern"] as? String ?? "")
+        case "Task":  return "delegando a um subagente"
+        case "WebSearch", "WebFetch": return "pesquisando"
+        default:      return "usando " + name
+        }
     }
 
     // MARK: Uma linha do JSONL

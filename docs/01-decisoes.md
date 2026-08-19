@@ -1773,11 +1773,46 @@ cinco acaba em dois tons de azul. O hash é próprio (FNV-1a) porque `hashValue`
 Swift tem semente por processo: com ele a cor de `orquestrador` mudaria a cada
 arranque.
 
-**Aprovar permissão pelo chat ficou de fora.** O card aparece, fixado no fim do
-thread — é o que está te travando agora, e no meio do histórico ele passaria em
-branco —, mas o botão leva ao terminal. O diálogo de permissão é desenhado pela TUI,
-e responder de fora é injetar seta e Enter às cegas, sem saber em que opção o cursor
-está. Errar nisso aprova o que você quis negar.
+**Pedido de permissão não entra no chat, e o card que existia saiu.** Responder de
+fora está descartado por segurança: o diálogo é desenhado pela TUI, e injetar seta e
+Enter às cegas, sem saber em que opção o cursor está, aprova o que você quis negar.
+Sobrava então um card que só apontava para o terminal — e esse foi construído, olhado
+e removido. O aviso de permissão JÁ funciona por três canais que agem: borda laranja no
+card, som, e bolinha na barra lateral (ADR-024). Um quarto que não age é aviso
+duplicado, e aviso duplicado que só diz "vá olhar em outro lugar" é ruído no meio da
+conversa.
+
+**Quem lê o transcript é um adapter, um por CLI.** `ChatAdapter` responde duas
+perguntas: o que a conversa tem, e o que o agente está fazendo agora. O registro
+despacha pela chave do `agents.json` — a mesma que monta a linha de comando. Hoje só
+`claude` tem adapter; `codex`, `gemini` e `opencode` não rendem thread, e o vazio diz
+isso pelo nome. A costura existe porque o formato é de cada um: sem ela, o dia que
+entrar o segundo CLI a escolha é entre um `if` no meio do parser e reescrever o modo.
+
+**O chat não pode ficar mudo enquanto o turno corre**, e ficava. Você mandava um prompt
+e olhava um thread parado: a entrega passa por fila, injeção e Enter, e a mensagem só
+volta a existir quando o CLI a grava. São dois remédios, e cada um cobre metade do
+intervalo.
+
+A sua mensagem entra **na hora, apagada**, com `entregando…` no lugar da hora. Ela não
+substitui a definitiva — sai quando a de verdade volta do transcript, casada pelo
+texto, ou por tempo (20s, o dobro com folga das três tentativas do Dispatcher) se
+nunca voltar. Entrar como definitiva seria afirmar que chegou antes de ter chegado.
+
+E o agente que está trabalhando ganha uma linha no fim: três pontos pulsando na cor
+dele e **o que ele está fazendo agora** — `pensando`, `lendo Canvas.swift`, `$ npx
+vitest`. Esse detalhe vem do `live` do adapter e é o que separa isto de um spinner:
+ele diz que o trabalho ANDOU. O raciocínio aparece AQUI e não no histórico, e a
+distinção é o tempo — no histórico é rascunho longo que não foi dito a você, mas
+enquanto o turno corre é a única coisa que existe para mostrar.
+
+Duas armadilhas medidas nisso. A primeira: **devolução de ferramenta chega como
+`type: "user"`**, e zerar o status em todo `user` deixava o chat mudo o turno inteiro —
+cada resultado de `Read` apagava o que acabara de ser posto. O que separa prompt de
+devolução é a forma do conteúdo: texto é você, array é ferramenta. A segunda: o texto
+da linha **não entra na assinatura** do que está desenhado. Entrando, a linha era
+remontada a cada ferramenta nova e a animação recomeçava — três pontos que reiniciam a
+cada meio segundo leem como travamento, não como trabalho.
 
 **As arestas são só de leitura aqui.** Elas aparecem como os chips de `alcança` de
 cada agente. Desenhar ligação continua sendo arrasto no canvas: o gesto é bom, e
@@ -1874,16 +1909,25 @@ o caminho do vidro não é fotografável de dentro do processo, e é o fallback 
 raio, borda, recuo e alinhamento. Os dois cabeçalhos ficaram lado a lado no mesmo
 retrato — `SESSÕES  +  ▯|` e `NA SESSÃO  |▯` —, que é o que se queria conferir.
 
-O crescimento da caixa foi medido por `POST /compose?target=ws`, que escreve nela sem
-enviar e devolve a geometria — rota criada pelo mesmo motivo do `/mosaic?swap=` e do
-`/edge?direction=`, porque tecla sintética exige Acessibilidade (ADR-003). Seis
+O crescimento da caixa foi medido por `POST /compose?target=ws[&send=1]`, que escreve
+nela — e com `send=1` aperta o Enter — devolvendo a geometria. Rota criada pelo mesmo
+motivo do `/mosaic?swap=` e do `/edge?direction=`, porque tecla sintética exige
+Acessibilidade (ADR-003). Seis
 medições na mesma janela, com a base em **992 nas seis**: vazio 63pt de caixa e 917 de
 histórico; oito linhas 175 e 805; nove linhas 175 e 805 com `capped`; trinta linhas
 idem; e voltando a vazio, 63 e 917 sem resíduo. Nos passos intermediários o histórico
 cedeu EXATAMENTE o que a caixa cresceu — +29/−29, +48/−48, +56/−56.
 
+O adapter e a linha de trabalho foram verificados contra **agente de verdade**, e não
+mais contra fixture: o gancho passou a reportar o transcript real e o thread mostrou a
+conversa viva — prompt, bloco de comando, prosa. Acompanhando `/chat` a cada 2,5s
+durante um turno, o estado foi `working` com o detalhe indo de vazio a
+`$ grep -n "ADR-011" …` e voltando a vazio quando virou `waiting`. Nos retratos, os
+dois estados da linha: `claude ●●● pensando` no começo do turno, e
+`claude ●●● $ grep -n "ADR-011" …` com ferramenta em curso.
+
 Fora de verificação, e por limite de permissão e não por escolha: **o resto do que
-depende de tecla ou clique** — o Tab, a lista do `@`, o Enter enviando, a gaveta
-abrindo. `screencapture` do shell é negado por Gravação de Tela e
+depende de tecla ou clique** — o Tab, a lista do `@`, a gaveta abrindo. O Enter passou
+a ser verificável pelo `&send=1`. `screencapture` do shell é negado por Gravação de Tela e
 `System Events keystroke` por Acessibilidade; as duas medidas, as duas negadas. O
 `/shot` de dentro do app cobre o desenho estático.
