@@ -87,7 +87,7 @@ final class ModeButton: NSView {
 ///
 /// Separada da barra do canvas — que é flutuante, mora no rodapé e trata do que
 /// você está FAZENDO: ferramenta armada, zoom, template. Esta trata de onde os
-/// nós aparecem, e por isso é a única que continua na tela nos dois modos.
+/// nós aparecem, e por isso é a única que continua na tela em todos os modos.
 final class ViewToolbar: NSView {
     static let height: CGFloat = 46
 
@@ -118,7 +118,7 @@ final class ViewToolbar: NSView {
         pill.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.06).cgColor
         addSubview(pill)
 
-        for mode in [ViewMode.canvas, .mosaic] {
+        for mode in ViewMode.all {
             let button = ModeButton(mode: mode)
             button.onClick = { [weak self] in self?.onSelect?(mode) }
             pill.addSubview(button)
@@ -167,7 +167,7 @@ final class ViewToolbar: NSView {
         // que sobrar. Centrada na JANELA e não no espaço livre — se dependesse do
         // texto da esquerda, ela andaria a cada troca de sessão.
         var largura = padding
-        for mode in [ViewMode.canvas, .mosaic] {
+        for mode in ViewMode.all {
             largura += (buttons[mode]?.fittingSize.width ?? 0) + padding
         }
         let altura = ModeButton.height + padding * 2
@@ -176,7 +176,7 @@ final class ViewToolbar: NSView {
                             width: largura, height: altura)
 
         var x = padding
-        for mode in [ViewMode.canvas, .mosaic] {
+        for mode in ViewMode.all {
             guard let button = buttons[mode] else { continue }
             let width = button.fittingSize.width
             button.frame = NSRect(x: x, y: padding, width: width, height: ModeButton.height)
@@ -202,16 +202,18 @@ final class ViewToolbar: NSView {
 
     func select(_ mode: ViewMode) {
         for (key, button) in buttons { button.isSelected = (key == mode) }
-        hint.stringValue = mode == .mosaic
-            ? "as posições do canvas ficam guardadas"
-            : ""
+        switch mode {
+        case .mosaic: hint.stringValue = "as posições do canvas ficam guardadas"
+        case .chat:   hint.stringValue = "os terminais continuam rodando"
+        case .canvas: hint.stringValue = ""
+        }
     }
 }
 
 // MARK: - A sessão na tela
 
-/// Uma sessão: a barra de visualização em cima e, embaixo, o canvas ou o mosaico
-/// — com os MESMOS nós.
+/// Uma sessão: a barra de visualização em cima e, embaixo, o canvas, o mosaico ou
+/// o chat — os dois primeiros com os MESMOS nós.
 ///
 /// É o dono dos nós, e é por isso que existe. Antes quem os guardava era o
 /// canvas, na forma de `doc.subviews`; com dois containers disputando o mesmo
@@ -227,6 +229,10 @@ final class SessionShell: NSView {
     /// containers usam como referência de z-order.
     private lazy var bannerPanel = GlassPanel(content: banner, radius: 8, tint: .systemOrange)
     private var mosaic: MosaicContainer?
+    /// O modo chat. Criado junto com a sessão e não sob demanda como o mosaico: ele
+    /// não guarda geometria de card nenhum, então nasce barato, e main.swift precisa
+    /// dele para ligar as fontes de dados uma vez só.
+    let chat = ChatContainer()
 
     private(set) var nodes: [NodeView] = []
     private(set) var mode: ViewMode
@@ -311,6 +317,12 @@ final class SessionShell: NSView {
         // A coluna inteira muda de tamanho com um nó a mais, então não há como
         // encaixar sem remontar.
         case .mosaic: mosaic?.arrange(nodes)
+        // Em chat o card entra no canvas coberto, como em `place`: ele precisa do
+        // passe de layout para o pty nascer com colunas. Na tela o que muda é a
+        // lista da direita, na leitura seguinte.
+        case .chat:
+            canvas.add(node)
+            chat.refresh()
         }
     }
 
@@ -322,6 +334,7 @@ final class SessionShell: NSView {
         node.prepareForRemoval()
         node.removeFromSuperview()
         if mode == .mosaic { mosaic?.arrange(nodes) }
+        if mode == .chat { chat.refresh() }
     }
 
     /// Onde este nó fica no canvas, mesmo que agora esteja num painel do mosaico.
@@ -338,7 +351,13 @@ final class SessionShell: NSView {
     /// Quem mede geometria pergunta a ele, e não ao canvas: em mosaico o canvas
     /// está fora da hierarquia de janela, e converter coordenada nele devolve
     /// número plausível e errado.
-    var visibleContent: NSView { mode == .canvas ? canvas : (mosaic ?? canvas) }
+    var visibleContent: NSView {
+        switch mode {
+        case .canvas: return canvas
+        case .mosaic: return mosaic ?? canvas
+        case .chat:   return chat
+        }
+    }
 
     /// O foco está dentro de um EDITOR.
     ///
@@ -385,6 +404,7 @@ final class SessionShell: NSView {
         switch mode {
         case .canvas:
             mosaic?.removeFromSuperview()
+            chat.removeFromSuperview()
             addSubview(canvas, positioned: .below, relativeTo: bannerPanel)
             for node in nodes {
                 if let frame = canvasFrames[node.nodeID] { node.frame = frame }
@@ -393,10 +413,30 @@ final class SessionShell: NSView {
 
         case .mosaic:
             canvas.removeFromSuperview()
+            chat.removeFromSuperview()
             let container = mosaic ?? makeMosaic()
             addSubview(container, positioned: .below, relativeTo: bannerPanel)
             container.layoutRatios = mosaicLayout
             container.arrange(nodes)
+
+        case .chat:
+            // O canvas CONTINUA montado, com os nós nele, e o chat entra opaco por
+            // cima. Não é preguiça: um `NodeView` fora da hierarquia nunca recebe
+            // passe de layout, e sem layout o SwiftTerm não tem colunas para
+            // informar ao pty. Medido — sessão que ABRE em chat sobe os terminais
+            // com tamanho zero, a TUI não tem onde desenhar, e a tela fica vazia
+            // para sempre: `SIGWINCH` depois não faz o shell reimprimir o prompt.
+            //
+            // Coberto por uma view opaca de frame cheio, o canvas não aparece e não
+            // recebe clique — o hit test para no chat, que é o irmão de cima.
+            mosaic?.removeFromSuperview()
+            addSubview(canvas, positioned: .below, relativeTo: bannerPanel)
+            for node in nodes {
+                if let frame = canvasFrames[node.nodeID] { node.frame = frame }
+                canvas.add(node)
+            }
+            addSubview(chat, positioned: .below, relativeTo: bannerPanel)
+            chat.refresh()
         }
 
         needsLayout = true
@@ -436,6 +476,7 @@ final class SessionShell: NSView {
         let content = contentFrame
         canvas.frame = content
         mosaic?.frame = content
+        chat.frame = content
         bannerPanel.frame = NSRect(x: bounds.midX - 380, y: ViewToolbar.height + 12,
                                    width: 760, height: 30)
     }

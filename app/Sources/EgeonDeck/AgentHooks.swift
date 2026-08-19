@@ -86,10 +86,20 @@ enum AgentHooks {
 
         case "$event" in
           prompt)
-            id=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
-              'import sys,json;print(json.load(sys.stdin).get("session_id",""))' 2>/dev/null)
-            [ -n "$id" ] || exit 0
-            post "/session?target=$EGEON_TARGET&id=$id"
+            # O python devolve a query pronta, com os dois campos já escapados.
+            #
+            # Um processo só porque o gancho roda a cada prompt e bloqueia a TUI. E
+            # a query montada lá dentro, e não aqui, porque o `transcript_path`
+            # carrega a pasta do usuário: passando pelo shell, um home com espaço
+            # viraria dois campos, e no `read` o caminho chegaria cortado.
+            q=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
+              'import sys,json,urllib.parse as u
+        d=json.load(sys.stdin)
+        i=d.get("session_id") or ""
+        print("" if not i else "id="+u.quote(i)+"&transcript="+u.quote(d.get("transcript_path") or ""))' \\
+              2>/dev/null)
+            [ -n "$q" ] || exit 0
+            post "/session?target=$EGEON_TARGET&$q"
             ;;
           stop|ask)
             post "/activity?target=$EGEON_TARGET&event=$event"

@@ -41,6 +41,17 @@ struct NodeConfig: Codable {
     /// a mais recente do diretório, entregaria a mesma para os dois.
     var sessionId: String?
 
+    /// Onde o CLI está gravando esta conversa.
+    ///
+    /// Relatado pelo gancho, que recebe `transcript_path` no payload, e guardado
+    /// aqui porque o modo Chat precisa dele no arranque — antes do primeiro prompt
+    /// não haveria gancho nenhum e o thread nasceria vazio numa conversa cheia.
+    ///
+    /// Não é derivado de `sessionId` mais convenção de pasta: isso amarraria o app
+    /// ao `CLAUDE_CONFIG_DIR` do usuário, que é config de CLI e não é assunto
+    /// nosso. Quem sabe onde grava é quem grava.
+    var transcript: String?
+
     /// O terminal já subiu uma vez com este `sessionId`?
     ///
     /// Separado do id porque a estreia usa flag diferente da retomada. Sem isso a
@@ -64,6 +75,9 @@ struct NodeConfig: Codable {
         var copy = self
         copy.sessionId = nil
         copy.sessionStarted = nil
+        // O transcript é da conversa, não da montagem: mantê-lo faria o chat do
+        // clone mostrar o thread do original.
+        copy.transcript = nil
         return copy
     }
 
@@ -300,7 +314,15 @@ enum AppControl {
 
     /// O CLI avisou qual conversa está aberta neste terminal. Chamado a cada
     /// prompt, então quem implementa só grava quando o valor muda de fato.
-    static var recordSession: ((_ target: String, _ id: String) -> Void)?
+    static var recordSession: ((_ target: String, _ id: String, _ transcript: String?) -> Void)?
+
+    /// O thread do modo Chat de uma sessão, como dados.
+    ///
+    /// Existe pelo mesmo motivo do `/peek`: o thread é montado de vários arquivos,
+    /// e "a mensagem do dev-backend apareceu depois da sua, com o diff certo" é
+    /// exatamente o tipo de afirmação que não se confere olhando print. Aqui dá
+    /// para ver a ordem, o autor e os blocos de cada mensagem sem abrir o app.
+    static var chatThread: ((String) -> [String: Any]?)?
 }
 
 enum SessionStore {
