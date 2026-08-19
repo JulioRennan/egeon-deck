@@ -234,6 +234,19 @@ final class ControlSocket {
             respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
                     json: payload)
 
+        case ("GET", _, _) where route.contains("/edge"):
+            // /edge?target=ws&from=a&to=b[&direction=->|<-|<->|cycle|none] — cria a
+            // ligação ou troca a direção dela. Sem `direction`, cria como o arrasto
+            // cria, com o padrão da casa; `cycle` é exatamente o botão da linha.
+            let query = Self.query(in: route)
+            let payload = DispatchQueue.main.sync {
+                AppControl.setEdgeDirection?(query["target"] ?? "", query["from"] ?? "",
+                                             query["to"] ?? "", query["direction"] ?? "")
+                    ?? ["ok": false, "error": "app sem arestas disponíveis"]
+            }
+            respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
+                    json: payload)
+
         case ("GET", _, _) where route.contains("/mosaic"):
             // /mosaic?target=ws&swap=id1,id2 — troca dois cards de painel, o mesmo
             // que arrastar o cabeçalho de um sobre o outro.

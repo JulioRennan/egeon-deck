@@ -1626,3 +1626,72 @@ assinatura ad-hoc gera uma nova em cada build — a mesma dor do ADR-003. Com
 EgeonDeck`. Depois, com o mesmo binário despachado por `/dispatch` para um shell do
 app dev e lido por `/peek`: `status inicial: notDetermined` · `requestAccess: true`
 · `status final: authorized`.
+
+---
+
+## ADR-028 — O par é uma linha só, com ponta nas duas extremidades, e nasce bidirecional
+
+**Decisão:** ida e volta continuam sendo **duas arestas dirigidas** no
+`sessions.json` e nas guardas, mas a tela passa a desenhá-las como **uma linha**,
+com ponta em cada extremidade que tem sentido — `───▶`, `◀───`, `◀───▶`. A ponta
+sai do meio da curva para as extremidades e cresce de 9 para 20pt. Um botão no meio
+da linha cicla ida → ida e volta → volta. Ligação nova nasce nos dois sentidos.
+
+**O que isto revisa, e o que não revisa.** O ADR-012 descartou um "tipo
+bidirecional" porque ele cobriria só o ciclo de dois e deixaria `A→B→C→A` sem
+tratamento. O argumento continua de pé e é por isso que **o modelo não mudou**: não
+existe campo `direction` no arquivo, existem duas arestas. O que mudou é só o
+desenho e o padrão de criação — `EdgeLink` é uma vista derivada, montada por
+`collapse` a cada mudança, e a autorização, o `maxSends` e o `egeon peers`
+continuam lendo aresta por sentido, sem saber que existe uma vista.
+
+**A ponta muda de lugar, e isso reverte uma escolha anterior.** Ela vivia no meio
+do traçado porque na extremidade ficaria escondida atrás do card de destino. Na
+prática o vértice encosta na BORDA e o corpo cresce para fora, então o que sobra
+atrás do card é nada — e ler o sentido nas pontas é o que o desenho de seta
+promete. O tamanho subiu junto: a 9pt, com o canvas afastado, a ponta virava um
+engrossamento da linha.
+
+**O par colapsado apaga um problema em vez de contorná-lo.** Duas curvas para o
+mesmo par disputavam a mesma faixa: com os cards empilhados na mesma coluna as duas
+viravam volta por baixo, com 0pt de distância medida entre elas. A solução era
+mandar uma pela faixa de cima com o corredor deslocado (`isSecondary`, `laneGap`),
+e ainda sobrava um cruzamento. Com uma linha por par, o caso não existe — os dois
+saíram do código.
+
+**Quem é a origem do traçado é a geometria, não o alfabeto.** O par guarda os ids
+em ordem de nome para ter identidade estável, mas quem vira origem da curva é o
+card que está à esquerda: escolher pelo nome faria uma linha que podia ser reta dar
+a volta por baixo por causa da ordem alfabética. A ponta então é desenhada na
+extremidade em que o sentido CHEGA, e não no lado de um id fixo.
+
+**Nasce bidirecional, e isso amplia autorização.** Aresta é permissão (ADR-012):
+nascer nos dois sentidos significa que quem você acionou pode acionar de volta sem
+você desenhar nada. Fica assim porque a montagem que se usa é o par conversando, e
+desenhar a volta à mão era o passo que se esquecia — o limite continua sendo o
+`maxSends` da linha, que passa a contar ida e volta desde o começo. O botão desfaz
+em um clique.
+
+**O aviso de ciclo passa a valer só de três nós para cima.** Com o par nascendo
+bidirecional, todo par fechado é um ciclo de dois, e o banner tocaria em cada
+ligação criada — ruído não avisa nada. O ciclo de dois tem o `maxSends` da própria
+linha; o que ainda merece banner é o de três ou mais, onde cada seta dispara uma vez
+só e nenhum contador de seta chega perto (é literalmente o que o ADR-012 diz do
+`maxVisits`).
+
+**O bug que o realce carregava.** `EdgeLink` é igual pelo par, de propósito — trocar
+a direção não faz dele outra linha, e o realce sob o cursor precisa sobreviver ao
+clique. Só que a view guardava a CÓPIA realçada: depois do clique a linha desenhava
+o estado novo e o botão desenhava o glifo do anterior. Visto num screenshot da tela
+real — ponta à direita, glifo `←`. O `didSet` de `edges` passou a re-resolver o
+realce contra a lista nova em vez de só conferir se o par ainda existe.
+
+**Verificação.** `/edge?target=ws&from=a&to=b[&direction=…]` existe pelo mesmo
+motivo que `/mosaic?swap=` e `/sidebar?collapsed=`: desenhar é arrasto, ciclar é
+clique num botão de 32pt, e evento sintético exige Acessibilidade, que a assinatura
+ad-hoc perde a cada build (ADR-003). Verificado no dev: criar sem `direction`
+respondeu `"direction": "<->"` com as duas arestas, provando o padrão novo; o ciclo
+por clique deixou no log `claude ↔ claude-2` · `claude ← claude-2` · `claude →
+claude-2` · `claude ↔ claude-2`, que é a ordem prometida voltando ao começo; e o
+screenshot da janela mostra uma linha só entre os dois cards, com `◀` encostado na
+borda de um e `▶` na do outro.

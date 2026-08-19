@@ -115,6 +115,14 @@ EgeonCLI.install()
         AppControl.sessionOwning = { [weak self] folder in
             self?.sessionOwning(folder: folder)
         }
+        AppControl.setEdgeDirection = { [weak self] session, from, to, direction in
+            guard let self,
+                  let index = self.configs.firstIndex(where: { $0.name == session })
+            else { return ["ok": false, "error": "sessão desconhecida '\(session)'"] }
+            return self.applyEdgeDirection(index: index, from: from, to: to,
+                                           direction: direction)
+        }
+
         AppControl.swapMosaic = { [weak self] session, first, second in
             guard let self,
                   let index = self.configs.firstIndex(where: { $0.name == session })
@@ -1585,8 +1593,11 @@ EgeonCLI.install()
         canvas.componentNames = { ComponentStore.names }
         canvas.onConfigureTerminal = { [weak self] in self?.configureNewTerminal(index: index) }
         canvas.onCreateEdge = { [weak self] edge in self?.addEdge(edge, index: index) }
-        canvas.onRemoveEdge = { [weak self] edge in self?.removeEdge(edge, index: index) }
-        canvas.onEditEdgeLimit = { [weak self] edge in self?.editEdgeLimit(edge, index: index) }
+        canvas.onRemoveEdge = { [weak self] link in self?.removeLink(link, index: index) }
+        canvas.onEditEdgeLimit = { [weak self] link in self?.editEdgeLimit(link, index: index) }
+        canvas.onCycleEdgeDirection = { [weak self] link in
+            self?.cycleEdgeDirection(link, index: index)
+        }
         canvas.edges = configs[index].edgeList
     }
 
@@ -1617,22 +1628,37 @@ EgeonCLI.install()
 
     // MARK: - Ligações entre terminais
 
+    /// Liga dois terminais. Nasce nos DOIS sentidos — o botão de direção na linha
+    /// tira o que você não quiser.
+    ///
+    /// Bidirecional por padrão é escolha de fluxo, e ela amplia autorização: quem
+    /// você acionou pode acionar de volta sem você desenhar nada. Fica assim porque
+    /// a montagem que se usa é o par conversando, e desenhar a volta à mão toda vez
+    /// era o passo que se esquecia — o limite continua sendo o `maxSends` da linha,
+    /// que passa a contar ida e volta desde o começo. Ver ADR-028.
     private func addEdge(_ edge: EdgeConfig, index: Int) {
         guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
         var edges = configs[index].edgeList
-        guard !edges.contains(edge) else { return }
+        guard !edges.contains(edge),
+              !edges.contains(EdgeConfig(from: edge.to, to: edge.from)) else { return }
         edges.append(edge)
+        edges.append(EdgeConfig(from: edge.to, to: edge.from))
         configs[index].edges = edges
         canvas.edges = edges
         schedulePersist()
 
         let session = configs[index].name
-        Log.write("aresta[\(session)]: \(edge.from) → \(edge.to)")
+        Log.write("aresta[\(session)]: \(edge.from) ↔ \(edge.to)")
 
         // Ciclo é legítimo — revisor e implementador são exatamente isso — mas
         // não pode ser silencioso: é ele que faz duas máquinas conversarem sem
         // você no meio.
-        if let cycle = Self.cycle(through: edge, in: edges) {
+        // Par conversando é o padrão agora, e `maxSends` é quem segura ele: avisar
+        // em toda ligação criada transformaria o banner em ruído, e ruído não avisa
+        // nada. O que ainda merece aviso é o ciclo que só o teto da sessão segura —
+        // três nós ou mais, onde cada seta dispara uma vez e nenhum contador de
+        // seta chega perto (ADR-012).
+        if let cycle = Self.cycle(through: edge, in: edges), cycle.count - 1 >= 3 {
             let limit = configs[index].visitLimit
             canvas.showBanner("Ciclo: \(cycle.joined(separator: " → ")) — "
                               + "cada terminal entra \(limit)× na mesma cadeia, depois recusa")
@@ -1677,12 +1703,14 @@ EgeonCLI.install()
     /// Vazio = sem limite próprio, sobra o teto da sessão. O diálogo diz isso na
     /// cara porque "vazio" e "zero" são coisas opostas aqui, e errar entre os
     /// dois é a diferença entre liberar e travar.
-    private func editEdgeLimit(_ edge: EdgeConfig, index: Int) {
+    private func editEdgeLimit(_ link: EdgeLink, index: Int) {
         guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
-        let current = configs[index].edgeList.first { $0 == edge }?.maxSends
+        let current = link.maxSends
 
         let alert = NSAlert()
-        alert.messageText = "\(edge.from) → \(edge.to)"
+        alert.messageText = link.isBidirectional
+            ? "\(link.a) ↔ \(link.b)"
+            : (link.aToB ? "\(link.a) → \(link.b)" : "\(link.b) → \(link.a)")
         alert.informativeText = "Quantas vezes esta ligação pode disparar numa mesma conversa. "
             + "Num par ligado nos dois sentidos, é o número de idas e voltas.\n\n"
             + "Vazio = sem limite próprio; vale só o teto da sessão "
@@ -1703,23 +1731,127 @@ EgeonCLI.install()
         // digitou algo, e interpretar isso como "libera" é o erro mais caro
         // possível nesse campo.
         if !typed.isEmpty, limit == nil { return }
-        guard let position = configs[index].edgeList.firstIndex(where: { $0 == edge }) else { return }
 
-        configs[index].edges?[position].maxSends = limit.map { max(1, $0) }
+        // Grava nos dois sentidos: na tela é uma linha, e um número que valesse só
+        // para a ida deixaria a volta com o valor antigo sem nada dizendo isso.
+        var updated = link
+        updated.maxSends = limit.map { max(1, $0) }
+        replace(updated, index: index)
         canvas.edges = configs[index].edgeList
-        schedulePersist()
-        Log.write("aresta[\(configs[index].name)]: \(edge.from) → \(edge.to) "
+        Log.write("aresta[\(configs[index].name)]: \(link.a) ↔ \(link.b) "
                   + "limite \(limit.map(String.init) ?? "nenhum")")
     }
 
-    private func removeEdge(_ edge: EdgeConfig, index: Int) {
+    /// Troca a direção da ligação: ida → ida e volta → volta, e de volta ao começo.
+    private func cycleEdgeDirection(_ link: EdgeLink, index: Int) {
         guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
-        var edges = configs[index].edgeList
-        edges.removeAll { $0 == edge }
+        let next = link.cycled()
+        replace(next, index: index)
+        canvas.edges = configs[index].edgeList
+        let sentido = next.isBidirectional ? "↔" : (next.aToB ? "→" : "←")
+        Log.write("aresta[\(configs[index].name)]: \(link.a) \(sentido) \(link.b)")
+    }
+
+    /// A rota `/edge` por dentro: cria a ligação se ela não existe, e aponta,
+    /// inverte ou cicla a que existe.
+    ///
+    /// Direção vazia é o caminho do arrasto: cria como o gesto cria, com o padrão da
+    /// casa. É o que faz a rota servir para verificar o próprio padrão, em vez de só
+    /// o que ela mesma manda.
+    private func applyEdgeDirection(index: Int, from: String, to: String,
+                                    direction: String) -> [String: Any] {
+        let ids = Set(configs[index].nodes.map(\.id))
+        guard ids.contains(from), ids.contains(to), from != to else {
+            return ["ok": false, "error": "nó desconhecido ou igual: '\(from)' / '\(to)'"]
+        }
+        let (a, b) = EdgeLink.pair(from, to)
+        let existente = EdgeLink.collapse(configs[index].edgeList)
+            .first { $0.a == a && $0.b == b }
+
+        var alvo: EdgeLink
+        switch direction {
+        case "":
+            // Vazio é o caminho do gesto quando não há nada: `addEdge` cria com o
+            // padrão da casa, e é o que faz esta rota verificar o próprio padrão em
+            // vez de só o que ela manda. Existindo, vazio é CONSULTA — forçar
+            // bidirecional aqui faria uma leitura mudar o que ela mede.
+            if let existente { return Self.edgePayload(existente, a: a, b: b) }
+            addEdge(EdgeConfig(from: from, to: to), index: index)
+            return Self.edgePayload(EdgeLink.collapse(configs[index].edgeList)
+                                        .first { $0.a == a && $0.b == b }, a: a, b: b)
+        case "<->", "both":
+            alvo = EdgeLink(a: a, b: b, aToB: true, bToA: true,
+                            maxSends: existente?.maxSends ?? EdgeConfig.defaultSends)
+        case "->":
+            alvo = EdgeLink(a: a, b: b, aToB: from == a, bToA: from != a,
+                            maxSends: existente?.maxSends ?? EdgeConfig.defaultSends)
+        case "<-":
+            alvo = EdgeLink(a: a, b: b, aToB: from != a, bToA: from == a,
+                            maxSends: existente?.maxSends ?? EdgeConfig.defaultSends)
+        case "none":
+            // O que o X da linha faz. Está aqui pelo mesmo motivo que o resto da
+            // rota: sem desfazer, verificar a criação de fora deixa lixo na sessão.
+            guard let existente else {
+                return ["ok": true, "a": a, "b": b, "direction": "none", "edges": []]
+            }
+            removeLink(existente, index: index)
+            shells[index]?.canvas.edges = configs[index].edgeList
+            return ["ok": true, "a": a, "b": b, "direction": "none", "edges": []]
+        case "cycle":
+            guard let existente else {
+                return ["ok": false, "error": "não há ligação entre '\(a)' e '\(b)' para ciclar"]
+            }
+            alvo = existente.cycled()
+        default:
+            return ["ok": false, "error": "direction desconhecida '\(direction)'; "
+                    + "use ->, <-, <->, cycle ou none"]
+        }
+
+        replace(alvo, index: index)
+        shells[index]?.canvas.edges = configs[index].edgeList
+        let sentido = alvo.isBidirectional ? "↔" : (alvo.aToB ? "→" : "←")
+        Log.write("aresta[\(configs[index].name)]: \(a) \(sentido) \(b) (por /edge)")
+        return Self.edgePayload(alvo, a: a, b: b)
+    }
+
+    private static func edgePayload(_ link: EdgeLink?, a: String, b: String) -> [String: Any] {
+        guard let link else { return ["ok": false, "error": "ligação \(a)/\(b) não existe"] }
+        return ["ok": true, "a": a, "b": b,
+                "direction": link.isBidirectional ? "<->" : (link.aToB ? "->" : "<-"),
+                "maxSends": link.maxSends ?? NSNull(),
+                "edges": link.edges.map { "\($0.from)→\($0.to)" }]
+    }
+
+    /// Reescreve as arestas de um par com o que a ligação diz agora.
+    ///
+    /// Na posição da primeira que existia, e não no fim da lista: o `sessions.json`
+    /// é lido à mão, e uma ligação que salta para o fim do arquivo a cada clique
+    /// embaralharia o arquivo sem nada ter mudado de fato.
+    private func replace(_ link: EdgeLink, index: Int) {
+        let others = configs[index].edgeList.filter {
+            EdgeLink.pair($0.from, $0.to) != (link.a, link.b)
+        }
+        let position = configs[index].edgeList.firstIndex {
+            EdgeLink.pair($0.from, $0.to) == (link.a, link.b)
+        } ?? others.count
+        var edges = others
+        edges.insert(contentsOf: link.edges, at: min(position, edges.count))
+        configs[index].edges = edges
+        schedulePersist()
+    }
+
+    /// Remove a ligação inteira, os dois sentidos. Na tela é uma linha só, e tirar
+    /// metade do que se vê seria mais confuso que tirar tudo — para ficar com um
+    /// sentido só existe o botão de direção ao lado.
+    private func removeLink(_ link: EdgeLink, index: Int) {
+        guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
+        let edges = configs[index].edgeList.filter {
+            EdgeLink.pair($0.from, $0.to) != (link.a, link.b)
+        }
         configs[index].edges = edges
         canvas.edges = edges
         schedulePersist()
-        Log.write("aresta[\(configs[index].name)]: removida \(edge.from) → \(edge.to)")
+        Log.write("aresta[\(configs[index].name)]: removida \(link.a) ↔ \(link.b)")
     }
 
     /// Caminho de volta de `edge.to` até `edge.from`, se existir — ou seja, o

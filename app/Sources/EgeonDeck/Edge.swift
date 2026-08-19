@@ -3,10 +3,10 @@ import AppKit
 /// Uma ligação dirigida entre dois nós da mesma sessão: `from` pode acionar
 /// `to`.
 ///
-/// Sempre de mão única. Ida e volta são duas arestas, desenhadas separadamente,
-/// e é de propósito: um tipo "bidirecional" cobriria só o ciclo de dois e
-/// deixaria A→B→C→A sem tratamento. Com uma seta só, ciclo de dois e de três são
-/// o mesmo mecanismo — e aparecem os dois na tela.
+/// Sempre de mão única, e ida e volta continuam sendo DUAS: é o que faz o ciclo de
+/// dois e o de três serem o mesmo mecanismo, com `maxSends` e autorização
+/// raciocinando por sentido (ADR-012). O que mudou é só a tela — o par é desenhado
+/// como uma linha só, com ponta nas duas extremidades. Ver `EdgeLink` e ADR-028.
 struct EdgeConfig: Codable, Equatable {
     var from: String
     var to: String
@@ -59,6 +59,89 @@ extension EdgeConfig {
     }
 }
 
+// MARK: - Ligação (o par visto como uma coisa só)
+
+/// As arestas entre dois nós, colapsadas no que a tela mostra: uma linha com ponta
+/// em cada extremidade que tem sentido — `───▶`, `◀───` ou `◀───▶`.
+///
+/// Existe por dois motivos. O par desenhado como duas curvas precisava de uma
+/// faixa própria para cada uma não cobrir a outra, e ainda sobrava um cruzamento;
+/// colapsado, o problema deixa de existir em vez de ser contornado. E ler o sentido
+/// passa a ser olhar as pontas, sem contar quantas linhas saem de onde.
+///
+/// Guarda o par em ordem de nome para ter identidade estável — quem é a origem do
+/// TRAÇADO é decidido na hora de desenhar, pela posição dos cards, senão uma linha
+/// que podia ser reta viraria volta por baixo só por causa do alfabeto.
+struct EdgeLink: Equatable {
+    let a: String
+    let b: String
+    /// `a` pode acionar `b`. Na tela, ponta do lado de `b`.
+    var aToB: Bool
+    /// `b` pode acionar `a`. Na tela, ponta do lado de `a`.
+    var bToA: Bool
+    /// Limite da ligação. Com os dois sentidos divergindo no arquivo editado à mão,
+    /// vale o de `a→b` — a pastilha grava nos dois, porque na tela é uma coisa só.
+    var maxSends: Int?
+
+    var isBidirectional: Bool { aToB && bToA }
+
+    /// As arestas reais, que são o que vive no `sessions.json` e o que as guardas
+    /// leem.
+    var edges: [EdgeConfig] {
+        var out: [EdgeConfig] = []
+        if aToB { out.append(EdgeConfig(from: a, to: b, maxSends: maxSends)) }
+        if bToA { out.append(EdgeConfig(from: b, to: a, maxSends: maxSends)) }
+        return out
+    }
+
+    /// Igualdade só pelo par: é o que identifica a linha na tela. Trocar a direção
+    /// não faz dela outra ligação — é a mesma linha mudando de estado, e o realce
+    /// sob o cursor precisa sobreviver ao clique no botão.
+    static func == (x: EdgeLink, y: EdgeLink) -> Bool { x.a == y.a && x.b == y.b }
+
+    /// Próximo estado do botão: ida → ida e volta → volta → ida.
+    ///
+    /// Nunca passa por "nenhum dos dois": ligação sem sentido nenhum não é uma
+    /// linha, é uma linha removida, e para isso existe o X ao lado.
+    func cycled() -> EdgeLink {
+        var next = self
+        switch (aToB, bToA) {
+        case (true, false):  next.aToB = true;  next.bToA = true
+        case (true, true):   next.aToB = false; next.bToA = true
+        default:             next.aToB = true;  next.bToA = false
+        }
+        return next
+    }
+
+    static func pair(_ x: String, _ y: String) -> (a: String, b: String) {
+        x <= y ? (x, y) : (y, x)
+    }
+
+    /// Colapsa as arestas de uma sessão em ligações, na ordem em que aparecem.
+    static func collapse(_ edges: [EdgeConfig]) -> [EdgeLink] {
+        var links: [EdgeLink] = []
+        for edge in edges {
+            let (a, b) = pair(edge.from, edge.to)
+            let forward = edge.from == a
+            if let index = links.firstIndex(where: { $0.a == a && $0.b == b }) {
+                if forward {
+                    links[index].aToB = true
+                    // O limite do sentido a→b manda quando existe: sem esta regra,
+                    // qual dos dois números aparece dependeria da ordem do arquivo.
+                    links[index].maxSends = edge.maxSends
+                } else {
+                    links[index].bToA = true
+                    if !links[index].aToB { links[index].maxSends = edge.maxSends }
+                }
+            } else {
+                links.append(EdgeLink(a: a, b: b, aToB: forward, bToA: !forward,
+                                      maxSends: edge.maxSends))
+            }
+        }
+        return links
+    }
+}
+
 // MARK: - Geometria
 
 /// Como uma aresta vai da origem ao destino.
@@ -79,7 +162,10 @@ enum EdgeRoute {
 enum EdgeCurve {
     /// Raio das bolinhas de porta.
     static let portRadius: CGFloat = 4
-    static let arrowSize: CGFloat = 9
+    /// Lado do triângulo da ponta. Cresceu de 9 para 20: a ponta é o único desenho
+    /// que diz o sentido, e no tamanho antigo, com o canvas afastado, ela virava um
+    /// engrossamento da linha em vez de uma seta.
+    static let arrowSize: CGFloat = 20
 
     /// Constantes do n8n. `loopClearance` é adaptação: lá o `EDGE_PADDING_BOTTOM`
     /// é 130 fixo, o que funciona porque um nó do n8n tem ~100pt de altura. Aqui
@@ -92,38 +178,17 @@ enum EdgeCurve {
     /// Zona morta para o destino "quase" alinhado não virar loop.
     static let backwardThreshold: CGFloat = 20
 
-    /// Afastamento do corredor vertical da segunda volta. Ver `isSecondary`.
-    static let laneGap: CGFloat = 28
-
-    /// Esta aresta é a "segunda" do par, e por isso dá a volta por cima.
-    ///
-    /// Com dois terminais empilhados na mesma coluna, as DUAS direções viram
-    /// loop: mesmas portas em x, mesma faixa, e medido dá 0pt de distância — uma
-    /// desenha exatamente por cima da outra. Só afastar a faixa não resolve,
-    /// porque os corredores verticais continuam no mesmo x.
-    ///
-    /// Então uma volta desce e a outra sobe, com corredores em x diferentes.
-    /// Sobra um único cruzamento, onde o trecho de saída de uma atravessa o
-    /// corredor da outra — inevitável quando os dois cards ocupam a mesma faixa
-    /// horizontal, e muito melhor que sobreposição total.
-    ///
-    /// Quem é a segunda é decidido pela ordem dos nomes, não pela ordem em que
-    /// você desenhou: assim não troca quando o arquivo é reescrito.
-    static func isSecondary(_ edge: EdgeConfig, among edges: [EdgeConfig]) -> Bool {
-        edges.contains(EdgeConfig(from: edge.to, to: edge.from)) && edge.from > edge.to
-    }
-
-    static func route(from sourceFrame: NSRect, to targetFrame: NSRect,
-                      secondary: Bool = false) -> EdgeRoute {
+    /// Não existe mais "segunda volta do par": ida e volta são uma linha só
+    /// (`EdgeLink`), então duas curvas nunca disputam a mesma faixa. A faixa
+    /// afastada e o corredor deslocado que resolviam isso saíram junto — ADR-028.
+    static func route(from sourceFrame: NSRect, to targetFrame: NSRect) -> EdgeRoute {
         let source = sourcePort(sourceFrame)
         let target = targetPort(targetFrame)
         guard source.x - backwardThreshold > target.x else {
             return .direct(from: source, to: target)
         }
-        let lane = secondary
-            ? min(sourceFrame.minY, targetFrame.minY) - loopClearance
-            : max(sourceFrame.maxY, targetFrame.maxY) + loopClearance
-        let out = loopOffsetX + (secondary ? laneGap : 0)
+        let lane = max(sourceFrame.maxY, targetFrame.maxY) + loopClearance
+        let out = loopOffsetX
         return .loop(corners: [
             source,
             NSPoint(x: source.x + out, y: source.y),
@@ -132,6 +197,13 @@ enum EdgeCurve {
             NSPoint(x: target.x - out, y: target.y),
             target
         ])
+    }
+
+    /// Se a rota entre estes dois cards sai reta, sem dar a volta por baixo. É como
+    /// o desenho escolhe qual dos dois pontas do par é a origem do traçado: a linha
+    /// fica reta quando pode, e a volta sobra para quem de fato está atrás.
+    static func prefersDirect(from sourceFrame: NSRect, to targetFrame: NSRect) -> Bool {
+        sourcePort(sourceFrame).x - backwardThreshold <= targetPort(targetFrame).x
     }
 
     /// Portas no meio vertical do card, como no n8n. No cabeçalho elas ficariam
@@ -218,8 +290,36 @@ enum EdgeCurve {
         return dense
     }
 
-    /// Ponto e direção no meio do traçado, medido por comprimento. É onde a
-    /// ponta da seta vai.
+    /// Extremidades do traçado com a direção em que ele chega e sai.
+    ///
+    /// A ponta mora aqui e não no meio, e é uma decisão revista: no meio ela nunca
+    /// se esconde, mas também não é onde se procura o sentido de uma seta. `start`
+    /// é a saída da porta de origem, e `startTangent` aponta PARA FORA do card — é
+    /// a direção da ponta de quem aciona no sentido contrário.
+    static func endpoints(_ route: EdgeRoute)
+        -> (start: NSPoint, startTangent: CGVector, end: NSPoint, endTangent: CGVector) {
+        switch route {
+        case let .direct(source, target):
+            let (c1, c2) = controls(from: source, to: target)
+            // Derivada da cúbica em t=0 e t=1: com os controles na horizontal ela é
+            // horizontal também, e é o que faz a ponta encostar reta na borda do
+            // card em vez de entrar torta.
+            return (source, normalized(from: c1, to: source),
+                    target, normalized(from: c2, to: target))
+        case let .loop(corners):
+            let n = corners.count
+            return (corners[0], normalized(from: corners[1], to: corners[0]),
+                    corners[n - 1], normalized(from: corners[n - 2], to: corners[n - 1]))
+        }
+    }
+
+    private static func normalized(from a: NSPoint, to b: NSPoint) -> CGVector {
+        let length = segment(a, b)
+        return CGVector(dx: (b.x - a.x) / length, dy: (b.y - a.y) / length)
+    }
+
+    /// Ponto e direção no meio do traçado, medido por comprimento. É onde os
+    /// controles do hover se penduram.
     static func midpoint(_ route: EdgeRoute) -> (NSPoint, CGVector) {
         let points = polyline(route)
         var lengths: [CGFloat] = [0]
@@ -318,18 +418,36 @@ final class EdgeLayerView: NSView {
     /// é onde o nó está agora, não onde o JSON diz que ele estava.
     var frameForNode: ((String) -> NSRect?)?
 
-    var edges: [EdgeConfig] = [] { didSet { needsDisplay = true } }
+    /// As arestas como vivem no `sessions.json`. A tela desenha as LIGAÇÕES
+    /// derivadas daqui: um par com os dois sentidos é uma linha, não duas.
+    var edges: [EdgeConfig] = [] {
+        didSet {
+            links = EdgeLink.collapse(edges)
+            // Re-resolve o realce contra a lista nova, em vez de só conferir se ele
+            // continua existindo. `EdgeLink` é igual pelo PAR, então o objeto
+            // guardado sobrevive a uma troca de direção carregando os flags
+            // antigos — e o botão desenhava o glifo do estado anterior enquanto a
+            // linha já mostrava o novo. Some junto se o par saiu.
+            hovered = hovered.flatMap { antigo in links.first { $0 == antigo } }
+            needsDisplay = true
+        }
+    }
 
-    /// Aresta sob o cursor. Recebe destaque e mostra o alvo de remoção.
-    private(set) var hovered: EdgeConfig?
+    private(set) var links: [EdgeLink] = []
+
+    /// Ligação sob o cursor. Recebe destaque e mostra os controles.
+    private(set) var hovered: EdgeLink?
 
     /// Ligação sendo desenhada agora: origem fixa, ponta seguindo o mouse.
     var pending: (from: String, to: NSPoint)? { didSet { needsDisplay = true } }
 
-    /// Clique no X de uma aresta.
-    var onRemove: ((EdgeConfig) -> Void)?
+    /// Clique no X. Leva a ligação inteira — os dois sentidos —, porque na tela ela
+    /// é uma linha só e remover metade do que se vê seria pior que remover tudo.
+    var onRemove: ((EdgeLink) -> Void)?
     /// Clique na pastilha do limite.
-    var onEditLimit: ((EdgeConfig) -> Void)?
+    var onEditLimit: ((EdgeLink) -> Void)?
+    /// Clique no botão de direção: ida → ida e volta → volta.
+    var onCycleDirection: ((EdgeLink) -> Void)?
 
     override var isFlipped: Bool { true }
 
@@ -340,27 +458,51 @@ final class EdgeLayerView: NSView {
         return self
     }
 
+    // MARK: Traçado
+
+    /// Onde a linha de uma ligação passa, e em qual extremidade vai cada ponta.
+    private struct Laid {
+        let route: EdgeRoute
+        /// A extremidade em que o traçado termina leva ponta.
+        let headAtEnd: Bool
+        let headAtStart: Bool
+    }
+
+    private func layout(_ link: EdgeLink) -> Laid? {
+        guard let frameA = frameForNode?(link.a),
+              let frameB = frameForNode?(link.b) else { return nil }
+        let aFirst = EdgeCurve.prefersDirect(from: frameA, to: frameB)
+            || !EdgeCurve.prefersDirect(from: frameB, to: frameA)
+        let route = aFirst
+            ? EdgeCurve.route(from: frameA, to: frameB)
+            : EdgeCurve.route(from: frameB, to: frameA)
+        // A ponta fica onde o sentido CHEGA: `a→b` desenha ponta do lado de b, e
+        // quem é o lado de b depende de quem virou origem do traçado.
+        return Laid(route: route,
+                    headAtEnd: aFirst ? link.aToB : link.bToA,
+                    headAtStart: aFirst ? link.bToA : link.aToB)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        for edge in edges {
-            guard let source = frameForNode?(edge.from),
-                  let target = frameForNode?(edge.to) else { continue }
-            draw(EdgeCurve.route(from: source, to: target,
-                                 secondary: EdgeCurve.isSecondary(edge, among: edges)),
-                 highlighted: edge == hovered)
+        for link in links {
+            guard let laid = layout(link) else { continue }
+            draw(laid, highlighted: link == hovered)
         }
 
         if let pending, let source = frameForNode?(pending.from) {
             // Arrastando, o destino ainda é o cursor e não um card: rota direta,
-            // tracejada, sem decidir loop por um ponto que vai mudar.
-            draw(.direct(from: EdgeCurve.sourcePort(source), to: pending.to),
+            // tracejada, sem decidir loop por um ponto que vai mudar. Com as duas
+            // pontas, porque é bidirecional que vai nascer quando você soltar.
+            draw(Laid(route: .direct(from: EdgeCurve.sourcePort(source), to: pending.to),
+                      headAtEnd: true, headAtStart: true),
                  highlighted: true, dashed: true)
         }
 
-        if let hovered { drawRemoveButton(for: hovered) }
+        if let hovered { drawControls(for: hovered) }
     }
 
-    private func draw(_ route: EdgeRoute, highlighted: Bool, dashed: Bool = false) {
-        let path = EdgeCurve.path(route)
+    private func draw(_ laid: Laid, highlighted: Bool, dashed: Bool = false) {
+        let path = EdgeCurve.path(laid.route)
         path.lineWidth = highlighted ? 2.5 : 1.8
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
@@ -372,36 +514,38 @@ final class EdgeLayerView: NSView {
         color.setStroke()
         path.stroke()
 
-        color.setFill()
-        let ends = EdgeCurve.polyline(route)
-        for port in [ends[0], ends[ends.count - 1]] {
-            NSBezierPath(ovalIn: NSRect(x: port.x - EdgeCurve.portRadius,
-                                        y: port.y - EdgeCurve.portRadius,
-                                        width: EdgeCurve.portRadius * 2,
-                                        height: EdgeCurve.portRadius * 2)).fill()
-        }
-        drawArrow(route, color: color)
+        let ends = EdgeCurve.endpoints(laid.route)
+        // Bolinha só na extremidade sem ponta: as duas no mesmo lugar viram um
+        // borrão, e a ponta já diz que a linha encosta ali.
+        if !laid.headAtStart { drawPort(ends.start, color: color) }
+        if !laid.headAtEnd { drawPort(ends.end, color: color) }
+        if laid.headAtStart { drawHead(at: ends.start, direction: ends.startTangent, color: color) }
+        if laid.headAtEnd { drawHead(at: ends.end, direction: ends.endTangent, color: color) }
     }
 
-    /// Ponta no meio do traçado, como no n8n: na extremidade ela ficaria
-    /// escondida atrás do card de destino, e é justamente o sentido que a seta
-    /// existe para dizer.
-    private func drawArrow(_ route: EdgeRoute, color: NSColor) {
-        let (point, direction) = EdgeCurve.midpoint(route)
+    private func drawPort(_ point: NSPoint, color: NSColor) {
+        color.setFill()
+        NSBezierPath(ovalIn: NSRect(x: point.x - EdgeCurve.portRadius,
+                                    y: point.y - EdgeCurve.portRadius,
+                                    width: EdgeCurve.portRadius * 2,
+                                    height: EdgeCurve.portRadius * 2)).fill()
+    }
+
+    /// Triângulo com o vértice encostado na borda do card e o corpo para fora dele.
+    ///
+    /// Para fora de propósito: crescer para dentro cobriria o cabeçalho do card, e
+    /// é ali que ficam o título e os avisos de estado.
+    private func drawHead(at tip: NSPoint, direction: CGVector, color: NSColor) {
         let size = EdgeCurve.arrowSize
         let normal = CGVector(dx: -direction.dy, dy: direction.dx)
-
-        let tip = NSPoint(x: point.x + direction.dx * size * 0.6,
-                          y: point.y + direction.dy * size * 0.6)
-        let back = NSPoint(x: point.x - direction.dx * size * 0.5,
-                           y: point.y - direction.dy * size * 0.5)
+        let base = NSPoint(x: tip.x - direction.dx * size, y: tip.y - direction.dy * size)
 
         let head = NSBezierPath()
         head.move(to: tip)
-        head.line(to: NSPoint(x: back.x + normal.dx * size * 0.45,
-                              y: back.y + normal.dy * size * 0.45))
-        head.line(to: NSPoint(x: back.x - normal.dx * size * 0.45,
-                              y: back.y - normal.dy * size * 0.45))
+        head.line(to: NSPoint(x: base.x + normal.dx * size * 0.42,
+                              y: base.y + normal.dy * size * 0.42))
+        head.line(to: NSPoint(x: base.x - normal.dx * size * 0.42,
+                              y: base.y - normal.dy * size * 0.42))
         head.close()
         color.setFill()
         head.fill()
@@ -409,55 +553,81 @@ final class EdgeLayerView: NSView {
 
     // MARK: Controles no hover
 
-    private static let buttonSize: CGFloat = 24
-    private static let pillSize = NSSize(width: 50, height: 24)
-    private static let controlGap: CGFloat = 6
+    /// Controles do tamanho de alvo de clique de verdade. Eram 24pt, e num canvas
+    /// afastado tanto o alvo quanto o glifo ficavam pequenos para o que decidem —
+    /// direção da ligação e remoção.
+    private static let buttonSize: CGFloat = 32
+    private static let pillSize = NSSize(width: 68, height: 32)
+    private static let controlGap: CGFloat = 7
     /// Altura entre a curva e a base dos controles.
-    private static let controlLift: CGFloat = 12
+    private static let controlLift: CGFloat = 14
 
-    /// Onde ficam os dois controles da aresta sob o cursor.
+    /// Onde ficam os três controles da ligação sob o cursor.
     ///
     /// Acima da curva, e não sobre ela: em cima da linha eles tapam a ponta da
     /// seta justamente quando você precisa conferir o sentido antes de mexer.
-    private func controlRects(for edge: EdgeConfig) -> (pill: NSRect, remove: NSRect)? {
-        guard let source = frameForNode?(edge.from),
-              let target = frameForNode?(edge.to) else { return nil }
-        let (point, _) = EdgeCurve.midpoint(
-            EdgeCurve.route(from: source, to: target,
-                            secondary: EdgeCurve.isSecondary(edge, among: edges)))
+    private func controlRects(for link: EdgeLink)
+        -> (direction: NSRect, pill: NSRect, remove: NSRect)? {
+        guard let laid = layout(link) else { return nil }
+        let (point, _) = EdgeCurve.midpoint(laid.route)
         let pill = Self.pillSize, button = Self.buttonSize, gap = Self.controlGap
-        let total = pill.width + gap + button
+        let total = button + gap + pill.width + gap + button
         let y = point.y - max(pill.height, button) - Self.controlLift
         let left = point.x - total / 2
-        return (NSRect(x: left, y: y, width: pill.width, height: pill.height),
-                NSRect(x: left + pill.width + gap, y: y, width: button, height: button))
+        return (NSRect(x: left, y: y, width: button, height: button),
+                NSRect(x: left + button + gap, y: y, width: pill.width, height: pill.height),
+                NSRect(x: left + total - button, y: y, width: button, height: button))
     }
 
     /// Área invisível que mantém os controles no ar.
     ///
     /// Sem ela o realce é decidido só pela distância à curva, e os controles ficam
     /// acima dela: subir o mouse para clicar sai da zona e eles somem antes de
-    /// você chegar. O retângulo cobre os dois botões e desce colando na linha,
+    /// você chegar. O retângulo cobre os botões e desce colando na linha,
     /// fechando o vão por onde o cursor passa.
-    private func hoverHull(for edge: EdgeConfig) -> NSRect? {
-        guard let rects = controlRects(for: edge),
-              let source = frameForNode?(edge.from),
-              let target = frameForNode?(edge.to) else { return nil }
-        let (point, _) = EdgeCurve.midpoint(
-            EdgeCurve.route(from: source, to: target,
-                            secondary: EdgeCurve.isSecondary(edge, among: edges)))
-        let controls = rects.pill.union(rects.remove)
-        // Da linha até o topo dos botões, com folga em volta.
+    private func hoverHull(for link: EdgeLink) -> NSRect? {
+        guard let rects = controlRects(for: link), let laid = layout(link) else { return nil }
+        let (point, _) = EdgeCurve.midpoint(laid.route)
+        let controls = rects.direction.union(rects.pill).union(rects.remove)
         return NSRect(x: controls.minX, y: controls.minY,
                       width: controls.width, height: point.y - controls.minY + 6)
             .insetBy(dx: -10, dy: -8)
     }
 
-    private func drawRemoveButton(for edge: EdgeConfig) {
-        guard let rects = controlRects(for: edge) else { return }
-        drawLimitPill(edge, in: rects.pill)
+    private func drawControls(for link: EdgeLink) {
+        guard let rects = controlRects(for: link), let laid = layout(link) else { return }
 
-        let rect = rects.remove
+        // O glifo mostra o que a linha faz AGORA, na orientação em que ela está
+        // desenhada — clicar troca para o próximo estado.
+        let glyph: String
+        if laid.headAtEnd && laid.headAtStart { glyph = "↔" }
+        else if laid.headAtEnd { glyph = "→" }
+        else { glyph = "←" }
+        drawRoundButton(rects.direction, glyph: glyph, fontSize: 19)
+
+        drawLimitPill(link, in: rects.pill)
+        drawRemoveButton(rects.remove)
+    }
+
+    private func drawRoundButton(_ rect: NSRect, glyph: String, fontSize: CGFloat) {
+        NSColor(calibratedWhite: 0.14, alpha: 1).setFill()
+        NSBezierPath(ovalIn: rect).fill()
+        NSColor.systemOrange.setStroke()
+        let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+        ring.lineWidth = 1
+        ring.stroke()
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontSize, weight: .semibold),
+            .foregroundColor: NSColor.systemOrange
+        ]
+        let size = (glyph as NSString).size(withAttributes: attributes)
+        (glyph as NSString).draw(
+            at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
+            withAttributes: attributes)
+    }
+
+    private func drawRemoveButton(_ rect: NSRect) {
         NSColor(calibratedWhite: 0.14, alpha: 1).setFill()
         NSBezierPath(ovalIn: rect).fill()
         NSColor.systemOrange.setStroke()
@@ -466,20 +636,20 @@ final class EdgeLayerView: NSView {
         ring.stroke()
 
         let cross = NSBezierPath()
-        let inset = rect.insetBy(dx: 7, dy: 7)
+        let inset = rect.insetBy(dx: 9.5, dy: 9.5)
         cross.move(to: NSPoint(x: inset.minX, y: inset.minY))
         cross.line(to: NSPoint(x: inset.maxX, y: inset.maxY))
         cross.move(to: NSPoint(x: inset.maxX, y: inset.minY))
         cross.line(to: NSPoint(x: inset.minX, y: inset.maxY))
-        cross.lineWidth = 1.5
+        cross.lineWidth = 2
         cross.lineCapStyle = .round
         NSColor.systemOrange.setStroke()
         cross.stroke()
     }
 
-    /// Quantas idas e voltas esta seta permite. `∞` = sem limite próprio, vale só
+    /// Quantas idas e voltas esta ligação permite. `∞` = sem limite próprio, vale só
     /// o teto da sessão.
-    private func drawLimitPill(_ edge: EdgeConfig, in rect: NSRect) {
+    private func drawLimitPill(_ link: EdgeLink, in rect: NSRect) {
         NSColor(calibratedWhite: 0.14, alpha: 1).setFill()
         NSBezierPath(roundedRect: rect, xRadius: rect.height / 2,
                      yRadius: rect.height / 2).fill()
@@ -489,9 +659,9 @@ final class EdgeLayerView: NSView {
         NSColor.systemOrange.setStroke()
         ring.stroke()
 
-        let text = "↻ \(edge.maxSends.map(String.init) ?? "∞")"
+        let text = "↻ \(link.maxSends.map(String.init) ?? "∞")"
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 17, weight: .semibold),
             .foregroundColor: NSColor.systemOrange
         ]
         let size = (text as NSString).size(withAttributes: attributes)
@@ -500,53 +670,53 @@ final class EdgeLayerView: NSView {
             withAttributes: attributes)
     }
 
-    private func hitButton(at point: NSPoint) -> EdgeConfig? {
+    private func hitButton(at point: NSPoint) -> EdgeLink? {
         guard let hovered, let rects = controlRects(for: hovered) else { return nil }
-        return (rects.remove.contains(point) || rects.pill.contains(point)) ? hovered : nil
+        return rects.direction.contains(point) || rects.pill.contains(point)
+            || rects.remove.contains(point) ? hovered : nil
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard let edge = hovered, let rects = controlRects(for: edge) else { return }
+        guard let link = hovered, let rects = controlRects(for: link) else { return }
         if rects.remove.contains(point) {
-            onRemove?(edge)
+            onRemove?(link)
         } else if rects.pill.contains(point) {
-            onEditLimit?(edge)
+            onEditLimit?(link)
+        } else if rects.direction.contains(point) {
+            onCycleDirection?(link)
         }
     }
 
     // MARK: Hover
 
-    /// Qual aresta está perto deste ponto. Amostra a curva em vez de resolver a
+    /// Qual ligação está perto deste ponto. Amostra a curva em vez de resolver a
     /// cúbica: a tolerância de clique é maior que o erro da amostragem, e o custo
     /// é irrelevante para a quantidade de arestas que cabe num canvas.
-    func edge(near point: NSPoint, tolerance: CGFloat = 14) -> EdgeConfig? {
-        // A aresta já realçada ganha primeiro: enquanto o cursor estiver na área
+    func link(near point: NSPoint, tolerance: CGFloat = 14) -> EdgeLink? {
+        // A ligação já realçada ganha primeiro: enquanto o cursor estiver na área
         // dos controles dela, é ela que continua no ar. Sem esta precedência, uma
         // curva vizinha passando perto rouba o realce no meio do seu clique.
         if let hovered, hoverHull(for: hovered)?.contains(point) == true { return hovered }
 
-        var best: (edge: EdgeConfig, distance: CGFloat)?
-        for edge in edges {
-            guard let sourceFrame = frameForNode?(edge.from),
-                  let targetFrame = frameForNode?(edge.to) else { continue }
-            let route = EdgeCurve.route(from: sourceFrame, to: targetFrame,
-                                        secondary: EdgeCurve.isSecondary(edge, among: edges))
+        var best: (link: EdgeLink, distance: CGFloat)?
+        for link in links {
+            guard let laid = layout(link) else { continue }
             var closest = CGFloat.greatestFiniteMagnitude
-            for sample in EdgeCurve.densePolyline(route) {
+            for sample in EdgeCurve.densePolyline(laid.route) {
                 let dx = sample.x - point.x, dy = sample.y - point.y
                 closest = min(closest, sqrt(dx*dx + dy*dy))
             }
             if closest <= tolerance, closest < (best?.distance ?? .greatestFiniteMagnitude) {
-                best = (edge, closest)
+                best = (link, closest)
             }
         }
-        return best?.edge
+        return best?.link
     }
 
-    func setHovered(_ edge: EdgeConfig?) {
-        guard edge != hovered else { return }
-        hovered = edge
+    func setHovered(_ link: EdgeLink?) {
+        guard link != hovered else { return }
+        hovered = link
         needsDisplay = true
     }
 }

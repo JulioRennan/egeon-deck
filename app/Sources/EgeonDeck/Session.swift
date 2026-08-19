@@ -223,6 +223,16 @@ enum AppControl {
     static var swapMosaic: ((_ session: String, _ first: String, _ second: String)
                             -> [String: Any])?
 
+    /// Direção de uma ligação: criar, apontar para um lado, ou ciclar.
+    ///
+    /// Existe pelo mesmo motivo do `swapMosaic`: desenhar aresta é arrasto e trocar
+    /// direção é clique num botão de 24pt, e nenhum dos dois é dirigível de fora —
+    /// evento sintético exige Acessibilidade, que a assinatura ad-hoc perde a cada
+    /// build (ADR-003). Sem esta rota não há como verificar que o par nasce nos dois
+    /// sentidos nem que o ciclo do botão passa onde deve.
+    static var setEdgeDirection: ((_ session: String, _ from: String, _ to: String,
+                                   _ direction: String) -> [String: Any])?
+
     /// PNG do card de um nó — cabeçalho, borda e corpo, como está na tela.
     ///
     /// Mudança que é só desenho não tem log nem DOM para conferir: ou se olha a

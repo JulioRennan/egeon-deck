@@ -863,11 +863,15 @@ final class CanvasContainer: NSView {
     var onConfigureTerminal: (() -> Void)?
     /// Componentes salvos, para o menu da ferramenta de terminal.
     var componentNames: (() -> [String])?
-    /// Ligação criada ou removida no canvas.
+    /// Gesto de criar: dirigido, de quem você arrastou para quem recebeu. Quantos
+    /// sentidos isso vira é política de quem grava, não do gesto.
     var onCreateEdge: ((EdgeConfig) -> Void)?
-    var onRemoveEdge: ((EdgeConfig) -> Void)?
-    /// Clique na pastilha de limite da aresta.
-    var onEditEdgeLimit: ((EdgeConfig) -> Void)?
+    /// Remover e editar chegam por LIGAÇÃO, que é o que existe na tela.
+    var onRemoveEdge: ((EdgeLink) -> Void)?
+    /// Clique na pastilha de limite da ligação.
+    var onEditEdgeLimit: ((EdgeLink) -> Void)?
+    /// Clique no botão de direção: ida → ida e volta → volta.
+    var onCycleEdgeDirection: ((EdgeLink) -> Void)?
     /// Aviso a mostrar. O banner mora acima do canvas, e não aqui, porque em modo
     /// mosaico este container está fora da hierarquia — o aviso não apareceria.
     var onBanner: ((String?) -> Void)?
@@ -916,8 +920,9 @@ final class CanvasContainer: NSView {
         edgeLayer.frameForNode = { [weak self] id in
             self?.nodes.first { $0.nodeID == id }?.frame
         }
-        edgeLayer.onRemove = { [weak self] edge in self?.onRemoveEdge?(edge) }
-        edgeLayer.onEditLimit = { [weak self] edge in self?.onEditEdgeLimit?(edge) }
+        edgeLayer.onRemove = { [weak self] link in self?.onRemoveEdge?(link) }
+        edgeLayer.onEditLimit = { [weak self] link in self?.onEditEdgeLimit?(link) }
+        edgeLayer.onCycleDirection = { [weak self] link in self?.onCycleEdgeDirection?(link) }
         doc.addSubview(edgeLayer)
 
         scroll.documentView = doc
@@ -1024,7 +1029,7 @@ final class CanvasContainer: NSView {
                 return event
             }
             let inDoc = doc.convert(event.locationInWindow, from: nil)
-            edgeLayer.setHovered(edgeLayer.edge(near: inDoc))
+            edgeLayer.setHovered(edgeLayer.link(near: inDoc))
             return event
 
         case .scrollWheel:
@@ -1403,7 +1408,10 @@ final class CanvasContainer: NSView {
             let inDoc = self.doc.convert(point, from: nil)
             guard let target = self.terminals.first(where: { $0.frame.contains(inDoc) }),
                   target.nodeID != node.nodeID,
-                  !self.edges.contains(EdgeConfig(from: node.nodeID, to: target.nodeID))
+                  // Já ligado é já ligado em qualquer sentido: o par é uma linha
+                  // só, e arrastar de novo por cima dela não cria nada.
+                  !self.edges.contains(EdgeConfig(from: node.nodeID, to: target.nodeID)),
+                  !self.edges.contains(EdgeConfig(from: target.nodeID, to: node.nodeID))
             else { return }
             self.onCreateEdge?(EdgeConfig(from: node.nodeID, to: target.nodeID))
         }

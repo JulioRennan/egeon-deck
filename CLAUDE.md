@@ -80,10 +80,15 @@ segunda a subir não consegue abri-la — o card fica com a TUI desenhada e o
 processo morto, sem erro à vista. Duplicar para worktree leva também as arestas e
 o `maxVisits`: a rede é parte da montagem.
 
-**Aresta** — ligação de mão única entre dois terminais: `from` **pode acionar**
-`to`. Desenhada arrastando a porta `+` de um card até outro. Não é um cano — o
-agente descobre o endereço com `egeon peers` e decide quando usar. Ida e volta
-são duas arestas. Ver ADR-012.
+**Aresta** — ligação entre dois terminais: `from` **pode acionar** `to`. Desenhada
+arrastando a porta `+` de um card até outro. Não é um cano — o agente descobre o
+endereço com `egeon peers` e decide quando usar. Ver ADR-012.
+
+Por baixo cada sentido é uma aresta dirigida, e continua sendo: é o que faz o ciclo
+de dois e o de três serem o mesmo mecanismo. **Na tela o par é uma linha só**, com
+ponta em cada extremidade que tem sentido — `───▶`, `◀───` ou `◀───▶` —, e é ali
+que se lê a direção. Ligação nova **nasce nos dois sentidos**; o botão no meio da
+linha cicla ida → ida e volta → volta, e o X ao lado leva os dois. Ver ADR-028.
 
 ## Worktree
 
@@ -328,8 +333,8 @@ curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ```
 
 Rotas: `/targets` `/dispatch` `/peek` `/geometry` `/layout` `/mosaic` `/sidebar`
-`/worktree` `/remove` `/activate` `/open` `/view` `/file` `/change` `/activity`
-`/message` `/peers` `/status`. As três últimas
+`/edge` `/worktree` `/remove` `/activate` `/open` `/view` `/file` `/change`
+`/activity` `/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
 conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
 guardas de cadeia. **`/peek` e `/dispatch` são as ferramentas de teste** — dá
@@ -344,6 +349,12 @@ Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003).
 `/sidebar?collapsed=0|1|toggle` existe pelo mesmo motivo: recolher é tecla de menu e
 clique, e nenhum dos dois é dirigível de fora. `toggle` é exatamente o que o ⌘/ e o
 botão fazem.
+
+`/edge?target=ws&from=a&to=b[&direction=->|<-|<->|cycle|none]` é a mesma história com
+as ligações: criar é arrasto e trocar direção é clique num botão de 32pt. Sem
+`direction` é consulta quando a ligação existe, e criação com o padrão da casa quando
+não — é o que permite verificar que ela nasce bidirecional. `cycle` é o botão da
+linha; `none` é o X.
 
 `/targets` lista só terminais **de pé** — nó com processo morto continua no canvas
 mas não é destino. Com `?folder=<path>` responde `{targets, all, session}`: quem é
