@@ -238,6 +238,24 @@ emprestava as arestas dele.
 A entrega diz ao receptor que quem falou foi outro agente e que isso não autoriza
 nada — sem essa regra, um agente barrado numa permissão pede ao vizinho.
 
+## Arrastar arquivo para o terminal
+
+Soltar arquivos sobre um terminal escreve o caminho deles na caixa de input, sem
+Enter — arrastar é entregar o arquivo, não mandar o agente trabalhar.
+
+Em terminal com IA o texto entra como **paste**, e não como digitação: é só no
+evento de paste que o Claude Code reconhece caminho de imagem (`png` · `jpg` ·
+`jpeg` · `gif` · `webp`), lê o arquivo e troca o caminho por `[Image #1]` — imagem
+anexada de verdade, em vez de um `Read`. Digitado, o mesmo caminho fica texto cru.
+Quem decide é o `injectConfig.mode` do perfil, o mesmo do dispatch: shell recebe
+digitação, porque ali o marcador de paste volta literal.
+
+Extensão que o CLI não reconhece — `.pdf`, `.swift` — entra como texto, e é o que
+se quer. Imagem arrastada de dentro do navegador não tem arquivo deste lado: vira
+PNG num rascunho em `$TMPDIR/egeon-drop/`, fora de `~/.egeon`, que é pasta para se
+editar à mão. Arrastar áudio só entrega o caminho: o CLI tem o vocabulário de
+`[Audio #N]` mas passa `onAudioPaste: void 0` no chat. Ver ADR-026.
+
 ## Dispatch
 
 Um prompt entra pelo socket, vira texto, entra numa fila, e só é entregue quando o

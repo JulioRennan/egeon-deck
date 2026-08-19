@@ -491,6 +491,14 @@ class NodeView: NSView {
 final class MBTerminalView: LocalProcessTerminalView {
     var onOutput: (() -> Void)?
 
+    /// Se o arrasto entra como texto COLADO em vez de digitado. Não é preferência:
+    /// o Claude Code só reconhece caminho de imagem no evento de paste — é ali que
+    /// ele lê o arquivo e troca o caminho por `[Image #1]`, anexando a imagem de
+    /// verdade em vez de deixar o agente abrir com `Read`. Digitado, o mesmo
+    /// caminho fica texto cru. Segue o modo de injeção do perfil, e não um
+    /// interruptor próprio, porque no zsh o marcador volta literal (ADR-007).
+    var dropAsPaste = false
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         registerForDraggedTypes(TerminalDrop.types)
@@ -511,7 +519,11 @@ final class MBTerminalView: LocalProcessTerminalView {
         guard let texto = TerminalDrop.text(from: sender.draggingPasteboard) else { return false }
         // Só o caminho, e o Enter é seu: arrastar um arquivo é entregá-lo, e não
         // mandar o agente sair trabalhando com o que ele achar do assunto.
-        send(txt: texto)
+        if dropAsPaste {
+            send(txt: "\u{1b}[200~" + texto + "\u{1b}[201~")
+        } else {
+            send(txt: texto)
+        }
         // Sem isto o texto entra aqui e o teclado continua no card de onde você
         // veio — a frase que acompanha o arquivo iria para o terminal errado.
         window?.makeFirstResponder(self)
@@ -552,6 +564,8 @@ final class TerminalNode: NodeView {
         subtitle = NodeWorktreePlanner.short(cwd)
         titleLabel.toolTip = address + (profile.map { " · \($0.displayName)" } ?? "")
         body.addSubview(term)
+        // Terminal com IA recebe o arrasto como paste; shell, como digitação.
+        term.dropAsPaste = profile?.injectConfig.mode == "bracketed-paste"
 
         // Depois do corpo, para ficar na frente do SwiftTerm — ele consome o
         // mouse inteiro, e uma subview atrás dele nunca receberia o arrasto.

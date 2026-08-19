@@ -1496,13 +1496,14 @@ a 54, e o painel a partir de 54.
 
 ---
 
-## ADR-026 — Arrastar arquivo para o terminal injeta o caminho, e não a imagem
+## ADR-026 — Arrastar arquivo para o terminal injeta o caminho, colado
 
 **Decisão:** o `MBTerminalView` passa a ser destino de arrasto. Soltar arquivos
-sobre um terminal escreve os **caminhos** na caixa de input dele, sem Enter.
-Imagem arrastada de dentro do navegador — que vem como PNG ou TIFF cru, sem
-arquivo do lado de cá — é gravada num rascunho em `$TMPDIR/egeon-drop/` e o que
-entra é o caminho dela.
+sobre um terminal escreve os **caminhos** na caixa de input dele, sem Enter. Em
+terminal com IA o texto entra como **paste**; em shell, como digitação. Imagem
+arrastada de dentro do navegador — que vem como PNG ou TIFF cru, sem arquivo do
+lado de cá — é gravada num rascunho em `$TMPDIR/egeon-drop/` e o que entra é o
+caminho dela.
 
 **O que estava quebrado.** O SwiftTerm não implementa `NSDraggingDestination` em
 nenhuma das views do `Mac/` — nenhum `registerForDraggedTypes`, nenhum
@@ -1510,14 +1511,36 @@ nenhuma das views do `Mac/` — nenhum `registerForDraggedTypes`, nenhum
 única forma de dar uma imagem a um agente era descobrir o caminho dela à mão e
 digitar.
 
-**Por que o caminho e não o clipboard.** O CLI tem um caminho pronto e melhor em
-fidelidade: `readClipboardImage` nativo, ligado ao ctrl+v (`chat:imagePaste`), que
-anexa a imagem como bloco de imagem de verdade em vez de gastar uma chamada de
-`Read`. Bastaria o drop escrever o PNG no `NSPasteboard` e mandar `0x16`. Foi
-descartado por dois motivos: sobrescreve o clipboard do usuário — que não é do app
-para gastar — e vale só em terminal com IA, enquanto metade dos cards aqui é shell
-comum, onde o que serve é justamente o caminho. Uma regra que vale nos dois tipos
-de terminal ganha da que vale em um.
+**Colado, e não digitado — o padrão do CLI.** O Claude Code já tem um caminho para
+isso, e a telemetria dele o chama de `input_image_drag`: ele espera que o terminal
+insira o caminho num **paste**, e é só ali que a detecção roda. O texto colado é
+quebrado por `/ (?=\/|[A-Za-z]:\\)/` — espaço antes de caminho absoluto — e por
+`\n`; cada pedaço perde as aspas que o envolvem (`"` ou `'`), desfaz escape de
+barra invertida (`\ ` → espaço, preservando `\\`) e é testado contra
+`/\.(png|jpe?g|gif|webp)$/i`. Casando, o CLI lê o arquivo, converte BMP, ajusta ao
+orçamento de bytes, e chama `onImagePaste` com `{mediaType, filename, dimensions,
+sourcePath}`: o caminho **desaparece** da caixa e no lugar dele fica `[Image #1]`,
+com a imagem anexada de verdade. Não casando — ou falhando a leitura —, o pedaço
+volta como texto, que é exatamente o que se quer para `.pdf` ou `.swift`.
+
+Isso decide o modo de injeção, e não é preferência de estilo: digitado byte a byte,
+o mesmo caminho fica texto cru na caixa e o agente precisa abrir com `Read`. O drop
+segue então o `injectConfig.mode` do perfil — `bracketed-paste` em terminal com IA,
+`plain` no shell, onde o marcador volta literal (ADR-007). Um interruptor próprio
+seria uma segunda fonte de verdade para a mesma pergunta.
+
+**Por que não o clipboard.** Havia um caminho de fidelidade igual e mais curto:
+escrever o PNG no `NSPasteboard` e mandar `0x16` — no macOS, um paste **vazio** faz
+o CLI ler a imagem direto do clipboard, que é como o ctrl+v (`chat:imagePaste`)
+funciona. Descartado por dois motivos: sobrescreve o clipboard do usuário, que não
+é do app para gastar, e vale só em terminal com IA, enquanto metade dos cards aqui
+é shell comum, onde o que serve é o caminho. Uma regra que vale nos dois tipos de
+terminal ganha da que vale em um.
+
+**Áudio ficou de fora porque o CLI o desligou.** O vocabulário existe — `[Audio
+#N]`, regex de `mp3|m4a|wav|ogg|opus|flac|aac|webm` — mas no input do chat a versão
+2.1.235 passa `onAudioPaste: void 0`. Arrastar um `.wav` hoje entrega o caminho como
+texto, e é o máximo que há para entregar.
 
 **Sem Enter, e o foco vai junto.** Arrastar é entregar o arquivo, não mandar o
 agente trabalhar: quem submete é você, depois de escrever a frase que acompanha.
@@ -1528,7 +1551,10 @@ a frase indo para o terminal errado.
 **Aspas só quando precisam.** Citar sempre seria mais simples, mas do outro lado
 nem sempre há shell: no terminal com IA o caminho é lido por um modelo, e `'…'` em
 volta é ruído que não protege nada. Caminho sem espaço nem caractere de shell vai
-cru; o resto vira `'…'` com `'` interno virando `'\''`.
+cru; o resto vira `'…'` com `'` interno virando `'\''` — que o `Xqa` do CLI desfaz
+e o zsh também. Resta uma borda conhecida: caminho citado com um espaço seguido de
+barra (`'/tmp/a /b.png'`) é quebrado pelo split do CLI antes do unquote, e degrada
+para texto em vez de virar anexo.
 
 **Rascunho fora de `~/.egeon`.** A pasta de configuração é feita para ser aberta e
 editada à mão — todo arquivo dela é seu. PNG despejado ali só atrapalha quem for
@@ -1537,12 +1563,20 @@ flavor. O nome leva milissegundos e não segundos: duas imagens arrastadas em
 seguida ganhariam o mesmo nome, e a segunda apagaria a primeira antes de o agente
 ter lido qualquer uma.
 
-**Verificação.** A metade que dá para dirigir de fora foi verificada por um
-harness que usa o MESMO `Drop.swift` contra um `NSPasteboard` real: arquivo
-simples sai cru; caminho com espaço e apóstrofo sai citado e foi conferido por
-`eval` num shell de verdade, que resolveu o arquivo certo; dois arquivos saem
-separados por espaço; TIFF cru virou PNG em disco com magic `89504e470d0a1a0a`;
-texto puro é recusado por `accepts`. O gesto em si não é dirigível de fora —
-evento sintético exige Acessibilidade, que a assinatura ad-hoc perde a cada build
-(ADR-003) —, então o drop registra no log o caminho que injetou, e é ali que o
-arrasto de verdade se confere.
+**Verificação.** Duas metades, as duas medidas.
+
+O que o arrasto produz foi verificado por um harness que usa o MESMO `Drop.swift`
+contra um `NSPasteboard` real: arquivo simples sai cru; caminho com espaço e
+apóstrofo sai citado, e o `eval` num shell de verdade resolveu o arquivo certo;
+dois arquivos saem separados por espaço; TIFF cru virou PNG em disco com magic
+`89504e470d0a1a0a`; texto puro é recusado por `accepts`.
+
+O que o CLI faz com aquilo foi verificado num pty próprio, subindo o `claude` de
+verdade fora do app e sem nunca mandar Enter — nada foi submetido. Colado, a tela
+mostrou `Pasting…` e depois `[Image #1]`, com o caminho fora da caixa: virou anexo.
+Digitado byte a byte, o mesmo caminho ficou na caixa como texto e nenhum `[Image
+#N]` apareceu. É a diferença que o `dropAsPaste` carrega.
+
+O gesto em si não é dirigível de fora — evento sintético exige Acessibilidade, que
+a assinatura ad-hoc perde a cada build (ADR-003) —, então o drop registra no log o
+caminho que injetou, e é ali que o arrasto de verdade se confere.
