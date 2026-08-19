@@ -213,7 +213,9 @@ destinatários: um envio para `todos` é gravado em cada transcript, e sem junta
 pergunta apareceria três vezes seguidas.
 
 Na caixa de escrever o destinatário está na tela porque aqui ele não é implícito:
-**Tab cicla**, `@` oferece quem existe, Enter envia, Shift+Enter quebra linha. Clicar
+**Tab cicla**, `@` oferece quem existe, Enter envia, Shift+Enter quebra linha. Ela
+**cresce com o que você escreve** até oito linhas, e daí em diante rola por dentro —
+prompt de dez linhas não se escreve às cegas numa fresta de uma linha. Clicar
 num agente no painel da direita também aponta. Até você escolher, o padrão é o
 primeiro agente — e é **re-derivado**, não fixado: os alvos entram no Dispatcher na
 ordem em que os nós sobem, e fixar na primeira leitura grudava no terminal comum.
@@ -238,7 +240,16 @@ Ver ADR-029.
 
 A barra de sessões é de vidro (`NSGlassEffectView`, macOS 26), e onde ela pousa
 depende do modo: **no canvas flutua** sobre o grid, **fora dele fica ao lado** do
-container — mosaico e chat. A bancada do canvas tem sobra de espaço e a barra por cima dele é o efeito
+container — mosaico e chat.
+
+As três superfícies do chat — painel da direita, caixa de escrever e gaveta de
+processo — são o **mesmo `GlassPanel`**, com o mesmo raio, a mesma borda, o mesmo
+recuo de 12pt e a mesma saída por `EGEON_GLASS=0`. Elas não pintam fundo próprio:
+fundo no `contentView` deixa o vidro invisível, porque ele reamostra o que está
+ATRÁS. O botão de recolher o painel é o `ToolbarButton` da barra de sessões, com os
+mesmos símbolos espelhados — `sidebar.trailing` de um lado, `sidebar.leading` do
+outro. A largura do painel é **cedida**; a da caixa, **não**: à direita haveria
+mensagem coberta o tempo todo, e embaixo o thread já reserva a folga. A bancada do canvas tem sobra de espaço e a barra por cima dele é o efeito
 desejado; no mosaico os cards dividem a janela inteira, e sobreposição ali é terminal
 coberto. A barra do canvas e o banner de aviso usam o mesmo `GlassPanel`. A barra de
 visualização, no topo, segue opaca e encostada.

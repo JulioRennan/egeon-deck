@@ -6,6 +6,11 @@ import AppKit
 /// sem tirar a mão do teclado, e **quem mais existe**, oferecido enquanto você
 /// escreve. No canvas isso é implícito — você clica no card e digita nele. Aqui há
 /// um campo e cinco agentes, então o destinatário tem de estar na tela.
+///
+/// É uma superfície só, de vidro, como as barras flutuantes do app: destinatário em
+/// cima, texto no meio, botão à direita. E **cresce com o que você escreve**, até um
+/// teto, depois do qual rola por dentro — é a convenção de caixa de mensagem, e sem
+/// ela um prompt de dez linhas se escreve às cegas numa fresta de 44pt.
 final class ChatComposer: NSView {
     /// Ids de destino possíveis, na ordem em que o Tab cicla. `todos` no fim.
     var candidates: [String] = [] {
@@ -34,37 +39,67 @@ final class ChatComposer: NSView {
     /// porque quem sabe o estado é o Dispatcher.
     var statusOf: ((String) -> String)?
 
+    /// A caixa mudou de altura — cresceu com uma linha nova, ou a lista de menção
+    /// abriu. Quem dá o frame precisa refazer a conta.
+    var onHeightChanged: (() -> Void)?
+
+    // MARK: Peças
+
+    /// O que mora dentro do vidro. Separado porque `NSGlassEffectView` só garante
+    /// z-order do `contentView` — subview solta pode acabar ATRÁS do vidro.
+    private let surface = FlippedView()
+    private lazy var glass = GlassPanel(content: surface, radius: 12)
+
     private let toLabel = ChatStyle.label("para:", font: ChatStyle.meta, color: ChatStyle.dim)
     private let dot = NSView()
     private let name = ChatStyle.label("", font: ChatStyle.name, color: ChatStyle.text)
     private let hint = ChatStyle.label("⇥ troca o destinatário  ·  @ menciona  ·  ⏎ envia",
                                        font: ChatStyle.meta, color: ChatStyle.faint)
-    private let box = NSView()
+    /// O texto rola por dentro depois do teto. Sem scroll de verdade, texto além do
+    /// teto fica escrito num lugar que não existe na tela.
+    private let scroll = NSScrollView()
     private let input = ComposerTextView()
     private let placeholder = ChatStyle.label("", font: ChatStyle.body, color: ChatStyle.faint)
     private let sendButton = NSButton()
     private let mentions = MentionList()
 
-    static let height: CGFloat = 92
+    // MARK: Medidas
+
+    /// Recuo do conteúdo dentro do vidro.
+    private static let pad: CGFloat = 12
+    /// A linha do destinatário.
+    private static let headerHeight: CGFloat = 15
+    /// Uma linha de texto. É o mínimo, e é o que a caixa mostra vazia.
+    private static let oneLine: CGFloat = 19
+    /// Teto do texto: daí para cima rola por dentro. Oito linhas cobre um prompt
+    /// escrito à mão; mais que isso é arquivo, não mensagem.
+    private static let maxText: CGFloat = 152
+    /// Largura do botão de enviar, mais o vão até o texto.
+    private static let sendLane: CGFloat = 38
+    /// Margem entre a lista de menção e o vidro.
+    private static let mentionGap: CGFloat = 6
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.095, alpha: 1).cgColor
 
+        surface.addSubview(toLabel)
         dot.wantsLayer = true
-        addSubview(toLabel)
-        addSubview(dot)
-        addSubview(name)
+        dot.layer?.cornerRadius = 3.5
+        surface.addSubview(dot)
+        surface.addSubview(name)
         hint.alignment = .right
-        addSubview(hint)
+        surface.addSubview(hint)
 
-        box.wantsLayer = true
-        box.layer?.backgroundColor = NSColor(calibratedWhite: 0.075, alpha: 1).cgColor
-        box.layer?.borderWidth = 1
-        box.layer?.borderColor = ChatStyle.hairline.cgColor
-        box.layer?.cornerRadius = 5
-        addSubview(box)
+        // A moldura do campo é sutil de propósito: o vidro já é a superfície, e uma
+        // segunda borda forte dentro dele viraria caixa dentro de caixa.
+        scroll.drawsBackground = false
+        // Com `autohides`, a barra aparece só depois do teto — antes dela a caixa
+        // cresce, e é o crescimento que diz que há espaço. As duas juntas cobrem os
+        // dois casos sem barra permanente numa caixa de uma linha.
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.documentView = input
+        surface.addSubview(scroll)
 
         input.font = ChatStyle.body
         input.textColor = ChatStyle.text
@@ -72,25 +107,38 @@ final class ChatComposer: NSView {
         input.isRichText = false
         input.isAutomaticQuoteSubstitutionEnabled = false
         input.insertionPointColor = ChatStyle.text
-        input.textContainerInset = NSSize(width: 4, height: 6)
+        input.textContainerInset = NSSize(width: 0, height: 1)
+        // O arranjo canônico de campo que cresce: o container acompanha a largura da
+        // view e é infinito na altura, e a view cresce na vertical dentro do scroll.
+        input.minSize = NSSize(width: 0, height: Self.oneLine)
+        input.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                               height: CGFloat.greatestFiniteMagnitude)
+        input.isVerticallyResizable = true
+        input.isHorizontallyResizable = false
+        input.autoresizingMask = [.width]
+        input.textContainer?.widthTracksTextView = true
+        input.textContainer?.containerSize = NSSize(width: 0,
+                                                    height: CGFloat.greatestFiniteMagnitude)
         input.onSubmit = { [weak self] in self?.send() }
         input.onCycle = { [weak self] backwards in self?.cycle(backwards) }
         input.onTextChange = { [weak self] in self?.textChanged() }
         input.onMentionKey = { [weak self] key in self?.mentions.handle(key) ?? false }
-        box.addSubview(input)
 
         placeholder.textColor = ChatStyle.faint
-        box.addSubview(placeholder)
+        surface.addSubview(placeholder)
 
-        sendButton.image = NSImage(systemSymbolName: "arrow.right",
+        sendButton.image = NSImage(systemSymbolName: "arrow.up",
                                    accessibilityDescription: "enviar")
-        sendButton.bezelStyle = .rounded
+        sendButton.bezelStyle = .circular
         sendButton.target = self
         sendButton.action = #selector(sendClicked)
-        addSubview(sendButton)
+        surface.addSubview(sendButton)
+
+        addSubview(glass)
 
         mentions.isHidden = true
         mentions.onPick = { [weak self] id in self?.insertMention(id) }
+        mentions.onResize = { [weak self] in self?.onHeightChanged?() }
         addSubview(mentions)
         restyle()
     }
@@ -107,6 +155,30 @@ final class ChatComposer: NSView {
         chosen = true
         target = id
         focus()
+    }
+
+    // MARK: Altura
+
+    /// Altura que a caixa quer nesta largura — o vidro mais a lista de menção
+    /// aberta, se estiver.
+    ///
+    /// Perguntada pelo container antes de dar o frame, porque a altura depende do
+    /// texto e o texto depende da largura. Medida com o mesmo helper que o thread
+    /// usa: fonte diferente entre quem mede e quem desenha corta a última linha.
+    func height(forWidth width: CGFloat) -> CGFloat {
+        var total = glassHeight(forWidth: width)
+        if !mentions.isHidden { total += mentions.fittingSize.height + Self.mentionGap }
+        return total
+    }
+
+    private func glassHeight(forWidth width: CGFloat) -> CGFloat {
+        Self.pad + Self.headerHeight + 8 + textHeight(forWidth: width) + Self.pad
+    }
+
+    private func textHeight(forWidth width: CGFloat) -> CGFloat {
+        let inner = max(40, width - Self.pad * 2 - Self.sendLane)
+        let measured = ChatStyle.height(input.string, font: ChatStyle.body, width: inner)
+        return min(Self.maxText, max(Self.oneLine, measured))
     }
 
     // MARK: Destinatário
@@ -131,7 +203,6 @@ final class ChatComposer: NSView {
         name.stringValue = target
         name.textColor = targetColor
         dot.layer?.backgroundColor = targetColor.cgColor
-        box.layer?.borderColor = ChatStyle.hairline.cgColor
         placeholder.stringValue = target.isEmpty
             ? "nenhum terminal de pé nesta sessão"
             : "escreva pra \(target)"
@@ -142,18 +213,24 @@ final class ChatComposer: NSView {
 
     private func textChanged() {
         placeholder.isHidden = !input.string.isEmpty
+        let before = height(forWidth: bounds.width)
         // A palavra que está sendo digitada antes do cursor. Nada de `@` no meio
         // de e-mail ou de caminho: só vale colado num limite de palavra.
-        guard let query = input.pendingMention else {
+        if let query = input.pendingMention {
+            let items = candidates.filter { $0.lowercased().contains(query.lowercased()) }
+            if items.isEmpty {
+                mentions.dismiss()
+            } else {
+                mentions.show(items) { [weak self] id in self?.statusOf?(id) ?? "" }
+            }
+        } else {
             mentions.dismiss()
-            needsLayout = true
-            return
-        }
-        let items = candidates.filter { $0.lowercased().contains(query.lowercased()) }
-        if items.isEmpty { mentions.dismiss() } else {
-            mentions.show(items) { [weak self] id in self?.statusOf?(id) ?? "" }
         }
         needsLayout = true
+        // Linha nova ou lista abrindo mudam a altura, e quem dá o frame é o
+        // container: sem avisar, a caixa cresce por dentro do frame antigo e o
+        // texto passa a ser escrito atrás do thread.
+        if height(forWidth: bounds.width) != before { onHeightChanged?() }
     }
 
     private func insertMention(_ id: String) {
@@ -174,45 +251,53 @@ final class ChatComposer: NSView {
         placeholder.isHidden = false
         mentions.dismiss()
         onSend?(text, target)
+        needsLayout = true
+        onHeightChanged?()
     }
 
     // MARK: Layout
 
     override func layout() {
         super.layout()
-        let margin: CGFloat = 24
-        let width = min(ChatStyle.column, max(200, bounds.width - margin * 2))
-        let x = ((bounds.width - width) / 2).rounded()
+        let glassHeight = self.glassHeight(forWidth: bounds.width)
+        let top = max(0, bounds.height - glassHeight)
+        glass.frame = NSRect(x: 0, y: top, width: bounds.width, height: glassHeight)
+        surface.frame = glass.bounds
 
+        // A lista cresce PARA CIMA e por dentro do frame: a caixa mora no rodapé da
+        // janela, e para baixo a lista sairia da tela. Dentro do frame porque view
+        // que desenha fora dos próprios bounds não recebe clique.
+        if mentions.isHidden {
+            mentions.frame = .zero
+        } else {
+            let size = mentions.fittingSize
+            mentions.frame = NSRect(x: 0, y: max(0, top - Self.mentionGap - size.height),
+                                    width: size.width, height: size.height)
+        }
+
+        let pad = Self.pad
+        let width = surface.bounds.width
         let toWidth = toLabel.measured
-        toLabel.frame = NSRect(x: x, y: 11, width: toWidth, height: 13)
-        dot.frame = NSRect(x: x + toWidth + 6, y: 14, width: 7, height: 7)
-        let nameLeft = x + toWidth + 19
+        toLabel.frame = NSRect(x: pad, y: pad, width: toWidth, height: 13)
+        dot.frame = NSRect(x: pad + toWidth + 6, y: pad + 3, width: 7, height: 7)
+        let nameLeft = pad + toWidth + 19
         let nameWidth = name.measured
-        name.frame = NSRect(x: nameLeft, y: 9, width: nameWidth, height: 15)
+        name.frame = NSRect(x: nameLeft, y: pad - 1, width: nameWidth, height: 15)
         let hintLeft = nameLeft + nameWidth + 12
-        hint.frame = NSRect(x: hintLeft, y: 11,
-                            width: max(0, x + width - hintLeft), height: 13)
+        hint.frame = NSRect(x: hintLeft, y: pad, width: max(0, width - pad - hintLeft),
+                            height: 13)
 
-        let boxHeight: CGFloat = 44
-        box.frame = NSRect(x: x, y: 30, width: width - 42, height: boxHeight)
-        input.frame = box.bounds
-        placeholder.frame = NSRect(x: 8, y: 12, width: box.bounds.width - 16, height: 17)
-        sendButton.frame = NSRect(x: box.frame.maxX + 8, y: 30, width: 34, height: boxHeight)
-
-        // Acima da caixa: a lista cresce para cima porque a caixa está no rodapé
-        // da janela e para baixo ela sairia da tela.
-        let size = mentions.fittingSize
-        mentions.frame = NSRect(x: x, y: max(0, 30 - size.height - 6),
-                                width: size.width, height: size.height)
-    }
-
-    /// Fio em cima em vez de sombra: o thread rola encostado nela, e sombra aqui
-    /// pousaria sobre a última mensagem.
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        ChatStyle.rule.setFill()
-        NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
+        let textTop = pad + Self.headerHeight + 8
+        let textHeight = self.textHeight(forWidth: bounds.width)
+        scroll.frame = NSRect(x: pad, y: textTop,
+                              width: max(40, width - pad * 2 - Self.sendLane),
+                              height: textHeight)
+        placeholder.frame = NSRect(x: pad + 1, y: textTop + 1,
+                                   width: scroll.frame.width - 2, height: 17)
+        // Encostado embaixo: com o texto em três linhas o botão centrado ficaria no
+        // meio do parágrafo, e o gesto de enviar é o fim da mensagem.
+        sendButton.frame = NSRect(x: width - pad - 26,
+                                  y: textTop + textHeight - 26, width: 26, height: 26)
     }
 }
 
@@ -287,26 +372,27 @@ final class ComposerTextView: NSTextView {
 // MARK: - Lista de menção
 
 /// Quem existe, oferecido enquanto você escreve `@`.
+///
+/// De vidro como a caixa: ela nasce encostada nela e as duas leem como a mesma
+/// superfície, com a lista sendo uma extensão do campo para cima.
 final class MentionList: NSView {
     var onPick: ((String) -> Void)?
+    /// A lista mudou de tamanho — quem dá o frame precisa refazer a conta.
+    var onResize: (() -> Void)?
 
+    private let surface = FlippedView()
+    private lazy var glass = GlassPanel(content: surface, radius: 10)
     private var items: [String] = []
     private var rows: [NSView] = []
     private var selected = 0
 
     private static let rowHeight: CGFloat = 26
     private static let width: CGFloat = 260
+    private static let padding: CGFloat = 5
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.14, alpha: 1).cgColor
-        layer?.borderWidth = 1
-        layer?.borderColor = ChatStyle.rule.cgColor
-        layer?.cornerRadius = 5
-        layer?.shadowOpacity = 0.45
-        layer?.shadowRadius = 12
-        layer?.shadowOffset = NSSize(width: 0, height: -4)
+        addSubview(glass)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -315,13 +401,15 @@ final class MentionList: NSView {
 
     override var fittingSize: NSSize {
         isHidden ? .zero
-            : NSSize(width: Self.width, height: CGFloat(items.count) * Self.rowHeight + 8)
+            : NSSize(width: Self.width,
+                     height: CGFloat(items.count) * Self.rowHeight + Self.padding * 2)
     }
 
     func show(_ items: [String], status: (String) -> String) {
         let changed = items != self.items
         self.items = items
         if changed { selected = 0 }
+        let wasHidden = isHidden
         isHidden = false
         guard changed else { highlight(); return }
 
@@ -329,16 +417,18 @@ final class MentionList: NSView {
         rows = items.map { id in
             let row = NSView()
             row.wantsLayer = true
+            row.layer?.cornerRadius = 5
             let chip = AgentChip(id)
             row.addSubview(chip)
             let state = ChatStyle.label(status(id), font: ChatStyle.meta, color: ChatStyle.faint)
             state.alignment = .right
             row.addSubview(state)
-            addSubview(row)
+            surface.addSubview(row)
             return row
         }
         needsLayout = true
         highlight()
+        if wasHidden || changed { onResize?() }
     }
 
     func dismiss() {
@@ -347,6 +437,7 @@ final class MentionList: NSView {
         items = []
         rows.forEach { $0.removeFromSuperview() }
         rows = []
+        onResize?()
     }
 
     /// Seta escolhe, Enter e Tab confirmam, Esc fecha. Devolve `true` quando
@@ -365,16 +456,20 @@ final class MentionList: NSView {
     private func highlight() {
         for (index, row) in rows.enumerated() {
             row.layer?.backgroundColor = index == selected
-                ? NSColor(calibratedWhite: 1, alpha: 0.09).cgColor
+                ? NSColor(calibratedWhite: 1, alpha: 0.12).cgColor
                 : NSColor.clear.cgColor
         }
     }
 
     override func layout() {
         super.layout()
+        glass.frame = bounds
+        surface.frame = glass.bounds
         for (index, row) in rows.enumerated() {
-            row.frame = NSRect(x: 4, y: 4 + CGFloat(index) * Self.rowHeight,
-                               width: bounds.width - 8, height: Self.rowHeight)
+            row.frame = NSRect(x: Self.padding,
+                               y: Self.padding + CGFloat(index) * Self.rowHeight,
+                               width: surface.bounds.width - Self.padding * 2,
+                               height: Self.rowHeight)
             guard let chip = row.subviews.first as? AgentChip else { continue }
             let size = chip.fittingSize
             chip.frame = NSRect(x: 7, y: 5, width: size.width, height: size.height)

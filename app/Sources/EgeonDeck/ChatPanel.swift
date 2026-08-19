@@ -6,6 +6,10 @@ import AppKit
 /// canvas dava de graça: dá para ver de relance que `dev-backend` está trabalhando
 /// e que o `vitest` caiu. Aqui isso volta como lista, e a lista cabe em 300pt —
 /// no canvas os mesmos cinco cards não caberiam sem zoom.
+///
+/// Não pinta fundo nem fio: quem monta o painel o embrulha num `GlassPanel`, e é
+/// dele que vêm a superfície, o raio e a borda. Fundo próprio aqui deixaria o vidro
+/// invisível — ele reamostra o que está ATRÁS do `contentView`.
 final class ChatSidePanel: NSView {
     /// Clicar num agente aponta o composer para ele. É o atalho que substitui
     /// "clicar no card e digitar".
@@ -21,7 +25,11 @@ final class ChatSidePanel: NSView {
 
     private let title = ChatStyle.label("NA SESSÃO", font: ChatStyle.sectionTitle,
                                         color: ChatStyle.dim)
-    private let toggle = NSButton()
+    /// O MESMO botão da barra de sessões, com os mesmos símbolos — espelhados,
+    /// porque este painel mora do outro lado: recolher aqui empurra para a direita.
+    /// Dois glifos diferentes para o mesmo gesto obrigariam a reaprender a barra.
+    private let toggle = ToolbarButton(symbols: ["sidebar.trailing", "chevron.right"],
+                                       tooltip: "Recolher o painel", size: 22)
     private let scroll = NSScrollView()
     private let document = FlippedView()
     private var rows: [NSView] = []
@@ -31,16 +39,8 @@ final class ChatSidePanel: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.backgroundColor = ChatStyle.panelBackground.cgColor
-
         addSubview(title)
-        toggle.title = "»"
-        toggle.isBordered = false
-        toggle.font = ChatStyle.mono
-        toggle.contentTintColor = ChatStyle.dim
-        toggle.target = self
-        toggle.action = #selector(toggleClicked)
+        toggle.onClick = { [weak self] in self?.onToggleCollapse?() }
         addSubview(toggle)
 
         scroll.hasVerticalScroller = true
@@ -53,12 +53,12 @@ final class ChatSidePanel: NSView {
 
     override var isFlipped: Bool { true }
 
-    @objc private func toggleClicked() { onToggleCollapse?() }
-
     func setCollapsed(_ collapsed: Bool) {
         guard collapsed != isCollapsed else { return }
         isCollapsed = collapsed
-        toggle.title = collapsed ? "«" : "»"
+        toggle.setSymbols(collapsed ? ["sidebar.leading", "chevron.left"]
+                                    : ["sidebar.trailing", "chevron.right"],
+                          tooltip: collapsed ? "Abrir o painel" : "Recolher o painel")
         title.isHidden = collapsed
         scroll.isHidden = collapsed
         needsLayout = true
@@ -109,11 +109,13 @@ final class ChatSidePanel: NSView {
     override func layout() {
         super.layout()
         if isCollapsed {
-            toggle.frame = NSRect(x: 5, y: 12, width: 20, height: 20)
+            // Centrado no trilho, como o da barra de sessões faz quando recolhida.
+            toggle.frame = NSRect(x: ((bounds.width - 22) / 2).rounded(), y: 10,
+                                  width: 22, height: 22)
             return
         }
         title.frame = NSRect(x: 16, y: 15, width: bounds.width - 50, height: 14)
-        toggle.frame = NSRect(x: bounds.width - 26, y: 12, width: 20, height: 20)
+        toggle.frame = NSRect(x: bounds.width - 32, y: 10, width: 22, height: 22)
         scroll.frame = NSRect(x: 0, y: 38, width: bounds.width,
                               height: max(0, bounds.height - 38))
 
@@ -135,12 +137,6 @@ final class ChatSidePanel: NSView {
                                 height: max(y + 16, scroll.contentView.bounds.height))
     }
 
-    /// Fio na esquerda: o painel é encostado no thread, como a barra de cima.
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        ChatStyle.rule.setFill()
-        NSRect(x: 0, y: 0, width: 1, height: bounds.height).fill()
-    }
 }
 
 // MARK: - Linhas do painel
@@ -309,7 +305,8 @@ final class ProcessDrawer: NSView {
 
     private let head = ChatStyle.label("", font: ChatStyle.name, color: ChatStyle.text)
     private let subtitle = ChatStyle.label("", font: ChatStyle.meta, color: ChatStyle.dim)
-    private let closeButton = NSButton()
+    private let closeButton = ToolbarButton(symbols: ["xmark"],
+                                            tooltip: "Fechar · Esc", size: 22)
     private let scroll = NSScrollView()
     private let document = FlippedView()
     private var lines: [NSTextField] = []
@@ -318,33 +315,29 @@ final class ProcessDrawer: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.065, alpha: 1).cgColor
-        layer?.shadowOpacity = 0.5
-        layer?.shadowRadius = 24
-        layer?.shadowOffset = NSSize(width: -8, height: 0)
-
         addSubview(head)
         addSubview(subtitle)
-        closeButton.title = "✕"
-        closeButton.isBordered = false
-        closeButton.font = .systemFont(ofSize: 13)
-        closeButton.contentTintColor = ChatStyle.dim
-        closeButton.target = self
-        closeButton.action = #selector(closeClicked)
+        closeButton.onClick = { [weak self] in self?.onClose?() }
         addSubview(closeButton)
+
+        // A saída ganha caixa escura própria: log em fonte fixa sobre vidro fica
+        // ilegível — o texto compete com o que passa por baixo.
+        well.wantsLayer = true
+        well.layer?.backgroundColor = ChatStyle.boxBackground.cgColor
+        well.layer?.cornerRadius = 6
+        addSubview(well)
 
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         scroll.documentView = document
-        addSubview(scroll)
+        well.addSubview(scroll)
     }
+
+    private let well = NSView()
 
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
-
-    @objc private func closeClicked() { onClose?() }
 
     func show(id: String, cmd: String, lines text: [String]) {
         head.stringValue = id
@@ -373,8 +366,10 @@ final class ProcessDrawer: NSView {
         super.layout()
         head.frame = NSRect(x: 16, y: 14, width: 200, height: 15)
         subtitle.frame = NSRect(x: 16, y: 32, width: bounds.width - 60, height: 13)
-        closeButton.frame = NSRect(x: bounds.width - 30, y: 12, width: 22, height: 22)
-        scroll.frame = NSRect(x: 0, y: 54, width: bounds.width, height: max(0, bounds.height - 54))
+        closeButton.frame = NSRect(x: bounds.width - 32, y: 11, width: 22, height: 22)
+        well.frame = NSRect(x: 10, y: 62, width: max(0, bounds.width - 20),
+                            height: max(0, bounds.height - 72))
+        scroll.frame = well.bounds
 
         var y: CGFloat = 8
         for line in lines {
@@ -385,10 +380,10 @@ final class ProcessDrawer: NSView {
                                 height: max(y + 8, scroll.contentView.bounds.height))
     }
 
+    /// O fio embaixo do cabeçalho fica: é divisor DE DENTRO da gaveta, e o vidro só
+    /// desenha a borda de fora.
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        ChatStyle.rule.setFill()
-        NSRect(x: 0, y: 0, width: 2, height: bounds.height).fill()
         ChatStyle.hairline.setFill()
         NSRect(x: 0, y: 53, width: bounds.width, height: 1).fill()
     }
