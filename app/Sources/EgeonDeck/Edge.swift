@@ -163,9 +163,9 @@ enum EdgeCurve {
     /// Raio das bolinhas de porta.
     static let portRadius: CGFloat = 4
     /// Lado do triângulo da ponta, em pontos de TELA — não encolhe com o zoom, e é
-    /// por isso que 14 aqui basta. A 9 ela era um engrossamento da linha; a 20,
-    /// grande demais para o card ao lado.
-    static let arrowSize: CGFloat = 14
+    /// por isso que 12 aqui bastam. A 9, medindo documento, ela era um engrossamento
+    /// da linha; a 20, grande demais ao lado do card.
+    static let arrowSize: CGFloat = 12
 
     /// Constantes do n8n. `loopClearance` é adaptação: lá o `EDGE_PADDING_BOTTOM`
     /// é 130 fixo, o que funciona porque um nó do n8n tem ~100pt de altura. Aqui

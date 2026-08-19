@@ -1634,7 +1634,7 @@ app dev e lido por `/peek`: `status inicial: notDetermined` · `requestAccess: t
 **Decisão:** ida e volta continuam sendo **duas arestas dirigidas** no
 `sessions.json` e nas guardas, mas a tela passa a desenhá-las como **uma linha**,
 com ponta em cada extremidade que tem sentido — `───▶`, `◀───`, `◀───▶`. A ponta
-sai do meio da curva para as extremidades, em cor sólida, medindo 14pt de tela. Um botão no meio
+sai do meio da curva para as extremidades, em cor sólida, medindo 12pt de tela. Um botão no meio
 da linha cicla ida → ida e volta → volta. Ligação nova nasce nos dois sentidos.
 
 **O que isto revisa, e o que não revisa.** O ADR-012 descartou um "tipo
