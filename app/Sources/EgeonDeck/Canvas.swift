@@ -830,6 +830,8 @@ final class CanvasContainer: NSView {
     let scroll = NSScrollView()
     let doc = CanvasDocument(frame: NSRect(x: 0, y: 0, width: 6000, height: 4000))
     let edgeLayer = EdgeLayerView()
+    /// Zoom com que as arestas foram desenhadas por último. Ver `viewMoved`.
+    private var edgeZoom: CGFloat = 1
 
     let toolbar = CanvasToolbar()
     /// O vidro que carrega a barra. É ele que entra na hierarquia e é dele que
@@ -1246,6 +1248,13 @@ final class CanvasContainer: NSView {
     @objc private func viewMoved() {
         toolbar.showZoom(scroll.magnification)
         refreshContentsScale()
+        // Ponta e controles da aresta são medidos em pontos de TELA, então mudar o
+        // zoom muda o que eles valem no documento. Só no zoom: isto também roda a
+        // cada pixel de pan, e ali nada mudou de tamanho.
+        if abs(edgeZoom - scroll.magnification) > 0.0001 {
+            edgeZoom = scroll.magnification
+            edgeLayer.needsDisplay = true
+        }
     }
 
     // MARK: - Nitidez

@@ -451,6 +451,21 @@ final class EdgeLayerView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Quanto vale um ponto de TELA em unidades de documento.
+    ///
+    /// O canvas é um scroll view magnificado, e o layer escala tudo que está dentro
+    /// dele: a 0.5x a ponta de 20pt virava 10px e o alvo de clique do botão de
+    /// direção, 16px — pequeno para o que ele decide. Então tudo que existe para ser
+    /// LIDO ou CLICADO — ponta, bolinha, botões, glifo, espessura, tolerância — é
+    /// medido em pontos de tela e multiplicado por isto. O traçado em si não: ele
+    /// liga dois cards, e são os cards que escalam.
+    ///
+    /// O piso de 0.05 é contra divisão por zero na animação de zoom.
+    private var screenPoint: CGFloat {
+        let magnification = enclosingScrollView?.magnification ?? 1
+        return magnification > 0.05 ? 1 / magnification : 20
+    }
+
     /// Não recebe clique nenhum por padrão: as arestas passam por baixo dos nós,
     /// e o hit test só responde onde há de fato uma curva ou o botão dela.
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -502,11 +517,12 @@ final class EdgeLayerView: NSView {
     }
 
     private func draw(_ laid: Laid, highlighted: Bool, dashed: Bool = false) {
+        let z = screenPoint
         let path = EdgeCurve.path(laid.route)
-        path.lineWidth = highlighted ? 2.5 : 1.8
+        path.lineWidth = (highlighted ? 2.5 : 1.8) * z
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
-        if dashed { path.setLineDash([6, 5], count: 2, phase: 0) }
+        if dashed { path.setLineDash([6 * z, 5 * z], count: 2, phase: 0) }
 
         let color = highlighted
             ? NSColor.systemOrange
@@ -524,11 +540,10 @@ final class EdgeLayerView: NSView {
     }
 
     private func drawPort(_ point: NSPoint, color: NSColor) {
+        let radius = EdgeCurve.portRadius * screenPoint
         color.setFill()
-        NSBezierPath(ovalIn: NSRect(x: point.x - EdgeCurve.portRadius,
-                                    y: point.y - EdgeCurve.portRadius,
-                                    width: EdgeCurve.portRadius * 2,
-                                    height: EdgeCurve.portRadius * 2)).fill()
+        NSBezierPath(ovalIn: NSRect(x: point.x - radius, y: point.y - radius,
+                                    width: radius * 2, height: radius * 2)).fill()
     }
 
     /// Triângulo com o vértice encostado na borda do card e o corpo para fora dele.
@@ -536,7 +551,7 @@ final class EdgeLayerView: NSView {
     /// Para fora de propósito: crescer para dentro cobriria o cabeçalho do card, e
     /// é ali que ficam o título e os avisos de estado.
     private func drawHead(at tip: NSPoint, direction: CGVector, color: NSColor) {
-        let size = EdgeCurve.arrowSize
+        let size = EdgeCurve.arrowSize * screenPoint
         let normal = CGVector(dx: -direction.dy, dy: direction.dx)
         let base = NSPoint(x: tip.x - direction.dx * size, y: tip.y - direction.dy * size)
 
@@ -570,9 +585,11 @@ final class EdgeLayerView: NSView {
         -> (direction: NSRect, pill: NSRect, remove: NSRect)? {
         guard let laid = layout(link) else { return nil }
         let (point, _) = EdgeCurve.midpoint(laid.route)
-        let pill = Self.pillSize, button = Self.buttonSize, gap = Self.controlGap
+        let z = screenPoint
+        let pill = NSSize(width: Self.pillSize.width * z, height: Self.pillSize.height * z)
+        let button = Self.buttonSize * z, gap = Self.controlGap * z
         let total = button + gap + pill.width + gap + button
-        let y = point.y - max(pill.height, button) - Self.controlLift
+        let y = point.y - max(pill.height, button) - Self.controlLift * z
         let left = point.x - total / 2
         return (NSRect(x: left, y: y, width: button, height: button),
                 NSRect(x: left + button + gap, y: y, width: pill.width, height: pill.height),
@@ -589,9 +606,10 @@ final class EdgeLayerView: NSView {
         guard let rects = controlRects(for: link), let laid = layout(link) else { return nil }
         let (point, _) = EdgeCurve.midpoint(laid.route)
         let controls = rects.direction.union(rects.pill).union(rects.remove)
+        let z = screenPoint
         return NSRect(x: controls.minX, y: controls.minY,
-                      width: controls.width, height: point.y - controls.minY + 6)
-            .insetBy(dx: -10, dy: -8)
+                      width: controls.width, height: point.y - controls.minY + 6 * z)
+            .insetBy(dx: -10 * z, dy: -8 * z)
     }
 
     private func drawControls(for link: EdgeLink) {
@@ -603,7 +621,7 @@ final class EdgeLayerView: NSView {
         if laid.headAtEnd && laid.headAtStart { glyph = "↔" }
         else if laid.headAtEnd { glyph = "→" }
         else { glyph = "←" }
-        drawRoundButton(rects.direction, glyph: glyph, fontSize: 19)
+        drawRoundButton(rects.direction, glyph: glyph, fontSize: 19 * screenPoint)
 
         drawLimitPill(link, in: rects.pill)
         drawRemoveButton(rects.remove)
@@ -613,8 +631,8 @@ final class EdgeLayerView: NSView {
         NSColor(calibratedWhite: 0.14, alpha: 1).setFill()
         NSBezierPath(ovalIn: rect).fill()
         NSColor.systemOrange.setStroke()
-        let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
-        ring.lineWidth = 1
+        let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5 * screenPoint, dy: 0.5 * screenPoint))
+        ring.lineWidth = screenPoint
         ring.stroke()
 
         let attributes: [NSAttributedString.Key: Any] = [
@@ -630,18 +648,19 @@ final class EdgeLayerView: NSView {
     private func drawRemoveButton(_ rect: NSRect) {
         NSColor(calibratedWhite: 0.14, alpha: 1).setFill()
         NSBezierPath(ovalIn: rect).fill()
+        let z = screenPoint
         NSColor.systemOrange.setStroke()
-        let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
-        ring.lineWidth = 1
+        let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5 * z, dy: 0.5 * z))
+        ring.lineWidth = z
         ring.stroke()
 
         let cross = NSBezierPath()
-        let inset = rect.insetBy(dx: 9.5, dy: 9.5)
+        let inset = rect.insetBy(dx: 9.5 * z, dy: 9.5 * z)
         cross.move(to: NSPoint(x: inset.minX, y: inset.minY))
         cross.line(to: NSPoint(x: inset.maxX, y: inset.maxY))
         cross.move(to: NSPoint(x: inset.maxX, y: inset.minY))
         cross.line(to: NSPoint(x: inset.minX, y: inset.maxY))
-        cross.lineWidth = 2
+        cross.lineWidth = 2 * z
         cross.lineCapStyle = .round
         NSColor.systemOrange.setStroke()
         cross.stroke()
@@ -653,15 +672,16 @@ final class EdgeLayerView: NSView {
         NSColor(calibratedWhite: 0.14, alpha: 1).setFill()
         NSBezierPath(roundedRect: rect, xRadius: rect.height / 2,
                      yRadius: rect.height / 2).fill()
-        let ring = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5),
+        let z = screenPoint
+        let ring = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5 * z, dy: 0.5 * z),
                                 xRadius: rect.height / 2, yRadius: rect.height / 2)
-        ring.lineWidth = 1
+        ring.lineWidth = z
         NSColor.systemOrange.setStroke()
         ring.stroke()
 
         let text = "↻ \(link.maxSends.map(String.init) ?? "∞")"
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 17, weight: .semibold),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 17 * z, weight: .semibold),
             .foregroundColor: NSColor.systemOrange
         ]
         let size = (text as NSString).size(withAttributes: attributes)
@@ -694,6 +714,9 @@ final class EdgeLayerView: NSView {
     /// cúbica: a tolerância de clique é maior que o erro da amostragem, e o custo
     /// é irrelevante para a quantidade de arestas que cabe num canvas.
     func link(near point: NSPoint, tolerance: CGFloat = 14) -> EdgeLink? {
+        // Tolerância em pontos de tela também: afastado, 14 unidades de documento
+        // viram 7px e a linha foge do cursor.
+        let reach = tolerance * screenPoint
         // A ligação já realçada ganha primeiro: enquanto o cursor estiver na área
         // dos controles dela, é ela que continua no ar. Sem esta precedência, uma
         // curva vizinha passando perto rouba o realce no meio do seu clique.
@@ -707,7 +730,7 @@ final class EdgeLayerView: NSView {
                 let dx = sample.x - point.x, dy = sample.y - point.y
                 closest = min(closest, sqrt(dx*dx + dy*dy))
             }
-            if closest <= tolerance, closest < (best?.distance ?? .greatestFiniteMagnitude) {
+            if closest <= reach, closest < (best?.distance ?? .greatestFiniteMagnitude) {
                 best = (link, closest)
             }
         }

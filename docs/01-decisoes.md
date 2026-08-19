@@ -1686,6 +1686,15 @@ o estado novo e o botão desenhava o glifo do anterior. Visto num screenshot da 
 real — ponta à direita, glifo `←`. O `didSet` de `edges` passou a re-resolver o
 realce contra a lista nova em vez de só conferir se o par ainda existe.
 
+**Ponta e controles medem pontos de TELA, não de documento.** Aumentar o número
+resolvia para um nível de zoom só: o canvas é um scroll view magnificado, e a 0.5x a
+ponta de 20pt virava 10px e o alvo de clique do botão, 16px. Então tudo que existe
+para ser lido ou clicado — ponta, bolinha, botões, glifo, espessura da linha,
+tolerância de proximidade — é multiplicado pelo inverso da magnificação. O traçado
+segue a régua do documento, porque ele liga dois cards e são os cards que escalam.
+`viewMoved` invalida a camada só quando a magnificação muda, e não a cada pixel de
+pan.
+
 **Verificação.** `/edge?target=ws&from=a&to=b[&direction=…]` existe pelo mesmo
 motivo que `/mosaic?swap=` e `/sidebar?collapsed=`: desenhar é arrasto, ciclar é
 clique num botão de 32pt, e evento sintético exige Acessibilidade, que a assinatura
