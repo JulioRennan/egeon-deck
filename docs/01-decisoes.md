@@ -1634,7 +1634,7 @@ app dev e lido por `/peek`: `status inicial: notDetermined` · `requestAccess: t
 **Decisão:** ida e volta continuam sendo **duas arestas dirigidas** no
 `sessions.json` e nas guardas, mas a tela passa a desenhá-las como **uma linha**,
 com ponta em cada extremidade que tem sentido — `───▶`, `◀───`, `◀───▶`. A ponta
-sai do meio da curva para as extremidades e cresce de 9 para 20pt. Um botão no meio
+sai do meio da curva para as extremidades, em cor sólida, medindo 14pt de tela. Um botão no meio
 da linha cicla ida → ida e volta → volta. Ligação nova nasce nos dois sentidos.
 
 **O que isto revisa, e o que não revisa.** O ADR-012 descartou um "tipo
@@ -1685,6 +1685,14 @@ clique. Só que a view guardava a CÓPIA realçada: depois do clique a linha des
 o estado novo e o botão desenhava o glifo do anterior. Visto num screenshot da tela
 real — ponta à direita, glifo `←`. O `didSet` de `edges` passou a re-resolver o
 realce contra a lista nova em vez de só conferir se o par ainda existe.
+
+**A ponta é opaca; a linha, não.** A linha é branco a 32% sobre o canvas, e a ponta
+usava a mesma cor. Só que o triângulo cresce POR CIMA do traçado — a base cobre o
+fim da linha —, e dois 32% somados deixam ver o fio atravessando a seta por dentro.
+A ponta e a bolinha passam a ser pintadas em cor sólida, no tom que a linha
+translúcida aparenta sobre o canvas: a seta não brilha mais que a linha, só tapa o
+que passa por baixo. No realce as duas já eram opacas (`systemOrange`), e ali o
+defeito nunca apareceu.
 
 **Ponta e controles medem pontos de TELA, não de documento.** Aumentar o número
 resolvia para um nível de zoom só: o canvas é um scroll view magnificado, e a 0.5x a

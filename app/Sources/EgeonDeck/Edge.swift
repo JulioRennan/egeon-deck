@@ -162,10 +162,10 @@ enum EdgeRoute {
 enum EdgeCurve {
     /// Raio das bolinhas de porta.
     static let portRadius: CGFloat = 4
-    /// Lado do triângulo da ponta. Cresceu de 9 para 20: a ponta é o único desenho
-    /// que diz o sentido, e no tamanho antigo, com o canvas afastado, ela virava um
-    /// engrossamento da linha em vez de uma seta.
-    static let arrowSize: CGFloat = 20
+    /// Lado do triângulo da ponta, em pontos de TELA — não encolhe com o zoom, e é
+    /// por isso que 14 aqui basta. A 9 ela era um engrossamento da linha; a 20,
+    /// grande demais para o card ao lado.
+    static let arrowSize: CGFloat = 14
 
     /// Constantes do n8n. `loopClearance` é adaptação: lá o `EDGE_PADDING_BOTTOM`
     /// é 130 fixo, o que funciona porque um nó do n8n tem ~100pt de altura. Aqui
@@ -530,13 +530,20 @@ final class EdgeLayerView: NSView {
         color.setStroke()
         path.stroke()
 
+        // Ponta e bolinha em cor OPACA, e não na cor translúcida da linha: o
+        // triângulo cresce por cima do traçado, e com os dois a 32% os alphas somam
+        // — dá para ver o fio atravessando a seta por dentro. Opaco no tom que a
+        // linha translúcida aparenta sobre o canvas, então a seta não brilha mais
+        // que a linha; ela só tapa o que passa por baixo.
+        let solid = highlighted ? NSColor.systemOrange : NSColor(calibratedWhite: 0.4, alpha: 1)
+
         let ends = EdgeCurve.endpoints(laid.route)
         // Bolinha só na extremidade sem ponta: as duas no mesmo lugar viram um
         // borrão, e a ponta já diz que a linha encosta ali.
-        if !laid.headAtStart { drawPort(ends.start, color: color) }
-        if !laid.headAtEnd { drawPort(ends.end, color: color) }
-        if laid.headAtStart { drawHead(at: ends.start, direction: ends.startTangent, color: color) }
-        if laid.headAtEnd { drawHead(at: ends.end, direction: ends.endTangent, color: color) }
+        if !laid.headAtStart { drawPort(ends.start, color: solid) }
+        if !laid.headAtEnd { drawPort(ends.end, color: solid) }
+        if laid.headAtStart { drawHead(at: ends.start, direction: ends.startTangent, color: solid) }
+        if laid.headAtEnd { drawHead(at: ends.end, direction: ends.endTangent, color: solid) }
     }
 
     private func drawPort(_ point: NSPoint, color: NSColor) {
