@@ -39,7 +39,7 @@ struct NodeConfig: Codable {
     /// Vive no NÓ e não é derivado da pasta de propósito: dois agentes na mesma
     /// worktree têm conversas separadas, e o `--continue` do Claude Code, que pega
     /// a mais recente do diretório, entregaria a mesma para os dois.
-    var sessionId: String?
+    var conversationId: String?
 
     /// Onde o CLI está gravando esta conversa.
     ///
@@ -47,34 +47,58 @@ struct NodeConfig: Codable {
     /// aqui porque o modo Chat precisa dele no arranque — antes do primeiro prompt
     /// não haveria gancho nenhum e o thread nasceria vazio numa conversa cheia.
     ///
-    /// Não é derivado de `sessionId` mais convenção de pasta: isso amarraria o app
+    /// Não é derivado do id da conversa mais convenção de pasta: isso amarraria o app
     /// ao `CLAUDE_CONFIG_DIR` do usuário, que é config de CLI e não é assunto
     /// nosso. Quem sabe onde grava é quem grava.
     var transcript: String?
 
-    /// O terminal já subiu uma vez com este `sessionId`?
+    /// O terminal já subiu uma vez com esta conversa?
     ///
     /// Separado do id porque a estreia usa flag diferente da retomada. Sem isso a
     /// primeira subida tentaria retomar uma conversa que não existe e mostraria
     /// "No conversation found" antes de criar — funciona, mas suja a tela toda vez
     /// que você cria um terminal.
-    var sessionStarted: Bool?
+    var conversationStarted: Bool?
 
     /// Ausente significa "nunca subiu": nó gravado antes deste campo existir não
     /// o tem.
-    var hasStartedSession: Bool { sessionStarted ?? false }
+    var hasStartedConversation: Bool { conversationStarted ?? false }
+
+    /// Os nomes antigos dos dois campos acima. **Não use**: eles existem só para ler
+    /// arquivo gravado por versão anterior, são absorvidos na carga por
+    /// `migratingLegacyNames` e nunca voltam ao disco — o encoder sintetizado omite
+    /// opcional nulo.
+    ///
+    /// O campo se chamava `sessionId` porque o CLI chama a conversa de sessão. Aqui
+    /// dentro isso colidia com a sessão do app e com o `Target` do Dispatcher: três
+    /// coisas diferentes, uma palavra.
+    ///
+    /// Internos e não `private` porque propriedade privada torna PRIVADO o init
+    /// membro-a-membro sintetizado, e é por ele que todo nó nasce.
+    var sessionId: String?
+    var sessionStarted: Bool?
+
+    /// O nó com os nomes antigos absorvidos.
+    var migratingLegacyNames: NodeConfig {
+        var copy = self
+        if copy.conversationId == nil { copy.conversationId = copy.sessionId }
+        if copy.conversationStarted == nil { copy.conversationStarted = copy.sessionStarted }
+        copy.sessionId = nil
+        copy.sessionStarted = nil
+        return copy
+    }
 
     /// O mesmo nó, sem a conversa — pronto para nascer em outro lugar.
     ///
     /// Copiar um nó é copiar a montagem, nunca o que foi dito dentro dele. Com o
-    /// `sessionId` junto, o clone e o original apontam para a MESMA conversa e o
+    /// `conversationId` junto, o clone e o original apontam para a MESMA conversa e o
     /// segundo a subir não consegue abri-la: o terminal mostra a TUI desenhada e
     /// morre em seguida, sem erro visível no app. Vale para o template e para a
     /// duplicação em worktree.
     var withoutConversation: NodeConfig {
         var copy = self
-        copy.sessionId = nil
-        copy.sessionStarted = nil
+        copy.conversationId = nil
+        copy.conversationStarted = nil
         // O transcript é da conversa, não da montagem: mantê-lo faria o chat do
         // clone mostrar o thread do original.
         copy.transcript = nil
@@ -350,7 +374,14 @@ enum SessionStore {
         guard let data = try? Data(contentsOf: url),
               let list = try? JSONDecoder().decode([SessionConfig].self, from: data),
               !list.isEmpty else { return nil }
-        return list
+        // Arquivo gravado antes do rename traz `sessionId`/`sessionStarted`. Sem
+        // absorver aqui, todo agente perderia a conversa no primeiro arranque desta
+        // versão — o terminal subiria limpo e o thread do chat nasceria vazio.
+        return list.map { config in
+            var copy = config
+            copy.nodes = config.nodes.map(\.migratingLegacyNames)
+            return copy
+        }
     }
 
     static func save(_ list: [SessionConfig]) {

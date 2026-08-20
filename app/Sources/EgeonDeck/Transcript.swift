@@ -170,7 +170,7 @@ enum ChatAdapters {
 /// arranque seguinte sem o app ter de guardar nada.
 ///
 /// O caminho vem do gancho, que recebe `transcript_path` no payload. Não é
-/// derivado de `sessionId` + convenção de pasta: isso amarraria o app ao
+/// derivado do id da conversa + convenção de pasta: isso amarraria o app ao
 /// `CLAUDE_CONFIG_DIR` do usuário, que não é assunto dele.
 final class ClaudeCodeTranscript: ChatAdapter {
     private let url: URL

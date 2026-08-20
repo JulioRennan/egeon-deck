@@ -29,7 +29,7 @@ struct Template: Codable {
     /// de outra sessão para herdar.
     ///
     /// A conversa é zerada de novo, embora `capture` já não a guarde: templates
-    /// salvos por uma versão anterior têm o `sessionId` do molde dentro, e sem
+    /// salvos por uma versão anterior têm o `conversationId` do molde dentro, e sem
     /// isto continuariam ressuscitando a conversa alheia a cada sessão nova.
     func instantiate() -> [NodeConfig] { nodes.map(\.withoutConversation) }
 }
@@ -81,7 +81,7 @@ enum TemplateStore {
     /// em que o nó web estava, da qual sobra a origem, e a conversa de cada
     /// agente.
     ///
-    /// A conversa é o que mais dói se escapar: o template guardava o `sessionId`
+    /// A conversa é o que mais dói se escapar: o template guardava o `conversationId`
     /// junto, e aí toda sessão criada dele subia com `--resume` na MESMA conversa
     /// do molde — o agente aparecia no meio do assunto de outra sessão, sem o
     /// papel novo, e duas sessões diferentes escreviam na mesma conversa. Um

@@ -1426,7 +1426,7 @@ EgeonCLI.install()
     /// 2.1.229.
     private static func sessionCommand(base: String, flags: String,
                                        node: NodeConfig, profile: AgentProfile) -> String {
-        guard profile.keepsSession, let id = node.sessionId,
+        guard profile.keepsConversation, let id = node.conversationId,
               let resume = profile.sessionArguments(profile.resume, id: id),
               let fresh = profile.sessionArguments(profile.newSession, id: id) else {
             return base + flags
@@ -1434,9 +1434,9 @@ EgeonCLI.install()
         func line(_ arguments: [String]) -> String {
             base + " " + arguments.map(AppEnvironment.shellQuote).joined(separator: " ") + flags
         }
-        // `sessionStarted` diz se já houve uma primeira subida: sem isso a linha
+        // `conversationStarted` diz se já houve uma primeira subida: sem isso a linha
         // de estreia mostraria "No conversation found" antes de criar.
-        return node.hasStartedSession ? "\(line(resume)) || \(line(fresh))" : line(fresh)
+        return node.hasStartedConversation ? "\(line(resume)) || \(line(fresh))" : line(fresh)
     }
 
     /// Garante que um nó de agente tenha id de sessão próprio antes de subir.
@@ -1445,15 +1445,15 @@ EgeonCLI.install()
     /// id em outro lugar não faz sentido.
     private func prepared(_ node: NodeConfig, index: Int) -> NodeConfig {
         guard node.type == .agent,
-              let profile = node.agent.flatMap({ agents[$0] }), profile.keepsSession,
+              let profile = node.agent.flatMap({ agents[$0] }), profile.keepsConversation,
               let position = configs[index].nodes.firstIndex(where: { $0.id == node.id })
         else { return node }
 
-        if configs[index].nodes[position].sessionId == nil {
-            configs[index].nodes[position].sessionId = UUID().uuidString
+        if configs[index].nodes[position].conversationId == nil {
+            configs[index].nodes[position].conversationId = UUID().uuidString
             schedulePersist()
             Log.write("sessão \(configs[index].name): nó \"\(node.id)\" ganhou conversa "
-                      + "\(configs[index].nodes[position].sessionId ?? "?")")
+                      + "\(configs[index].nodes[position].conversationId ?? "?")")
         }
         return configs[index].nodes[position]
     }
@@ -1471,17 +1471,17 @@ EgeonCLI.install()
 
         var changed = false
         // O transcript é conferido mesmo com a conversa igual: depois de um
-        // rebuild o `sessionId` volta do arquivo e o caminho não, e sair cedo aqui
+        // rebuild o `conversationId` volta do arquivo e o caminho não, e sair cedo aqui
         // deixaria o chat sem thread até você trocar de conversa.
         if let transcript, !transcript.isEmpty,
            configs[index].nodes[position].transcript != transcript {
             configs[index].nodes[position].transcript = transcript
             changed = true
         }
-        if configs[index].nodes[position].sessionId != id {
-            let anterior = configs[index].nodes[position].sessionId ?? "nenhuma"
-            configs[index].nodes[position].sessionId = id
-            configs[index].nodes[position].sessionStarted = true
+        if configs[index].nodes[position].conversationId != id {
+            let anterior = configs[index].nodes[position].conversationId ?? "nenhuma"
+            configs[index].nodes[position].conversationId = id
+            configs[index].nodes[position].conversationStarted = true
             changed = true
             Log.write("conversa[\(target)]: \(anterior) → \(id)")
         }
@@ -1546,9 +1546,9 @@ EgeonCLI.install()
                                         config: node.config,
                                         prompt: launch.promptToInject,
                                         hooked: launch.hooked)
-            if index >= 0, node.sessionId != nil, !node.hasStartedSession,
+            if index >= 0, node.conversationId != nil, !node.hasStartedConversation,
                let position = configs[index].nodes.firstIndex(where: { $0.id == node.id }) {
-                configs[index].nodes[position].sessionStarted = true
+                configs[index].nodes[position].conversationStarted = true
                 schedulePersist()
             }
             return terminal
@@ -1681,7 +1681,7 @@ EgeonCLI.install()
                     agentKey: node.agent,
                     role: node.prompt,
                     cmd: node.cmd ?? "",
-                    activity: Dispatcher.shared.session(address)?.activity ?? .dead,
+                    activity: Dispatcher.shared.target(address)?.activity ?? .dead,
                     transcript: node.transcript.map { URL(fileURLWithPath: $0) },
                     reaches: edges.filter { $0.from == node.id }.map(\.to))
             }
@@ -1708,7 +1708,7 @@ EgeonCLI.install()
             let address = "\(self.configs[index].name)/\(id)"
             // Fundo de tela inteiro: num terminal comum não há TUI redesenhando, e o
             // que interessa na saída de um servidor é o rastro, não a última linha.
-            return Dispatcher.shared.session(address)?.peek(lines: 200) ?? []
+            return Dispatcher.shared.target(address)?.peek(lines: 200) ?? []
         }
 
     }
