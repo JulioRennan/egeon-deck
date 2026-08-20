@@ -216,8 +216,12 @@ ainda em zero, e a posição calculada ali não vale quando o layout de verdade 
 último bloco ficava cortado na borda de baixo.
 
 **Turno acionado por outro agente não é bloco de primeiro nível** — ele aninha dentro
-do bloco de quem o acionou, como `▸ acionou claude-2 · 2 mensagens · 24s`, recolhido. A
-ligação é pelo remetente e pelo tempo, não pelo texto: o envelope diz quem falou, e um
+do bloco de quem o acionou, como `↳ acionou claude-2 · 24s`. E a regra da dobra é uma
+só, em todo nível: **resposta sempre à vista, só o caminho dobra**. Dobrar a
+sub-conversa inteira escondia exatamente o que faltava saber — o agente dizia "perguntei
+ao vizinho quanto é 7 vezes 6" e a resposta dele ficava atrás do clique.
+
+A ligação é pelo remetente e pelo tempo, não pelo texto: o envelope diz quem falou, e um
 agente só pode ter acionado alguém durante um turno dele que já tinha começado. É
 recursivo, então a volta de B para A é mais uma dobra dentro da primeira — o ciclo de
 dois se desenha com o mesmo mecanismo do de três. Solto na linha do tempo, esse
