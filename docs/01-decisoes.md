@@ -1819,12 +1819,15 @@ quem o acionou, como mais uma bolha. Solto na linha do tempo, o trabalho entre a
 aparecia entre duas perguntas SUAS e afogava a conversa que você pediu — que é exatamente
 o problema que o agrupamento existe para resolver, reaparecendo por outra porta.
 
-**Mas a cadeia é ACHATADA, não aninhada.** Foi construída aninhada primeiro, com cada
-volta recuando um degrau, e o defeito é de leitura: três voltas viravam uma escada dentro
-do cartão, e o desenho passava a falar da topologia em vez da conversa — ficava confuso
-justamente onde precisava ser claro. Achatada, é uma bolha embaixo da outra, todas na
-mesma margem, e quem falou é dito pelo nome e pela cor (`↳ claude-2`). A ordem já é a do
-tempo por construção: uma volta só existe depois da ida.
+**Mas a cadeia é ACHATADA, e reusa o cartão.** Foi construída aninhada primeiro, com cada
+volta recuando um degrau e uma seta (`↳`) marcando o nível. O defeito é de leitura: três
+voltas viravam uma escada dentro do cartão, e o desenho passava a falar da topologia em
+vez da conversa — ficava confuso justamente onde precisava ser claro.
+
+Agora não há recuo, não há seta, e não há bolha própria. A fala do vizinho usa o MESMO
+cabeçalho do turno — nome do agente na cor dele — e a MESMA `ChatBubble` da resposta. Um
+cartão, várias falas, e o que muda entre uma e a seguinte é só quem fala. A ordem já é a
+do tempo por construção: uma volta só existe depois da ida.
 
 A pergunta de cada fala não é repetida: ela está na bolha de cima, que é a resposta de
 quem acionou ("perguntei ao vizinho quanto é 7 vezes 6"). Só aparece quando o outro ainda
@@ -1993,9 +1996,9 @@ agentes, lida por `/chat`:
 
 O turno do `claude-2` **não** aparece no topo, e a volta dele aninha dentro da ida. No
 retrato, a cadeia inteira legível sem um clique e sem recuo: o pedido numa bolha à
-direita, `▸ 2 passos` dobrado, a resposta do `claude`, `↳ claude-2` com os passos dele
-dobrados e a resposta `7×6 = 42`, e `↳ claude` com a volta. Todas as bolhas na mesma
-margem, cada rótulo na cor de quem falou.
+direita, `▸ 2 passos` dobrado, a resposta do `claude`, o cabeçalho `claude-2` com os
+passos dele dobrados e a resposta `7×6 = 42`, e o cabeçalho `claude` com a volta. Todas
+as bolhas na mesma margem, cada nome na cor de quem falou.
 
 O adapter e a linha de trabalho foram verificados contra **agente de verdade**, e não
 mais contra fixture: o gancho passou a reportar o transcript real e o thread mostrou a
