@@ -1782,6 +1782,42 @@ card, som, e bolinha na barra lateral (ADR-024). Um quarto que não age é aviso
 duplicado, e aviso duplicado que só diz "vá olhar em outro lugar" é ruído no meio da
 conversa.
 
+**A unidade do thread é o TURNO, e não a mensagem.** Esta foi a correção mais
+importante do modo, e ela vem do defeito que o próprio uso mostrou: com dois agentes,
+mensagens ordenadas por tempo se intercalam, e a resposta do A cai no meio da sua
+terceira pergunta ao B. A literatura de conversa multi-parte nomeia isso — conversa
+casual **cinde em pisos**, e participantes de um piso não se orientam pela troca de
+turnos do outro. Um thread linear finge que existe um piso só, e brigar com o fenômeno
+não dá certo. O bloco de turno não cinde: tudo dentro dele é do mesmo par.
+
+Dentro do bloco: o pedido em cima, apagado; o caminho no meio; a resposta no fim. O
+corte entre caminho e resposta é a prosa FINAL do turno, e não a primeira, porque o
+agente narra enquanto trabalha ("vou ler o arquivo") — narração é caminho.
+
+O caminho **nasce aberto**. Nasceu recolhido, pela razão certa: turno de trinta
+ferramentas viraria um cartão que não cabe na tela, e aí o agrupamento pioraria a
+leitura em vez de melhorá-la. Mas acompanhar o agente trabalhando é metade do motivo de
+olhar o chat, e recolhido era preciso abrir a cada turno. A linha continua ali para
+dobrar o que já não interessa — o teto do problema é a dobra existir, não ela começar
+fechada.
+
+**Turno acionado por outro agente não é bloco de primeiro nível.** Ele aninha dentro do
+bloco de quem o acionou, recolhido, como `▸ acionou claude-2 · 2 mensagens · 24s`. Solto
+na linha do tempo, o trabalho entre agentes aparecia entre duas perguntas SUAS e afogava
+a conversa que você pediu — que é exatamente o problema que o agrupamento existe para
+resolver, reaparecendo por outra porta.
+
+A ligação é pelo **remetente e pelo tempo**, não pelo texto: o envelope diz quem falou
+(e o app é quem o monta), e um agente só pode ter acionado alguém durante um turno dele
+que já tinha começado. Casar por texto seria mais frágil de graça — o mesmo pedido
+repetido duas vezes na mesma cadeia não se distingue. É recursivo, então a volta de B
+para A é mais uma dobra dentro da primeira, e o ciclo de dois se desenha com o mesmo
+mecanismo do de três. Turno acionado cujo provocador ficou fora da cauda lida sobe para
+o topo em vez de desaparecer: mostrar meia conversa é melhor que engolir metade dela.
+
+A sub-conversa é montada **só quando abre**: uma cadeia de cinco voltas construiria
+cinco sub-árvores de views que ninguém pediu para ver.
+
 **Quem lê o transcript é um adapter, um por CLI.** `ChatAdapter` responde duas
 perguntas: o que a conversa tem, e o que o agente está fazendo agora. O registro
 despacha pela chave do `agents.json` — a mesma que monta a linha de comando. Hoje só
@@ -1917,6 +1953,20 @@ medições na mesma janela, com a base em **992 nas seis**: vazio 63pt de caixa 
 histórico; oito linhas 175 e 805; nove linhas 175 e 805 com `capped`; trinta linhas
 idem; e voltando a vazio, 63 e 917 sem resíduo. Nos passos intermediários o histórico
 cedeu EXATAMENTE o que a caixa cresceu — +29/−29, +48/−48, +56/−56.
+
+O agrupamento em turnos foi verificado com uma **cadeia real de três níveis** entre dois
+agentes, lida por `/chat`:
+
+```
+21:56 claude    from=None       "Rode: egeon peers. Depois use egeon send…"
+  21:57 claude-2  from=claude     "Quanto é 7 vezes 6?"
+    21:57 claude    from=claude-2   "42"
+```
+
+O turno do `claude-2` **não** aparece no topo, e a volta dele aninha dentro da ida. No
+retrato, o bloco montado: cabeçalho com o agente e a hora, o pedido apagado,
+`▾ 2 passos` aberto com os dois comandos, a resposta, e `▸ acionou claude-2 · 2
+mensagens · 24s` recolhido no pé.
 
 O adapter e a linha de trabalho foram verificados contra **agente de verdade**, e não
 mais contra fixture: o gancho passou a reportar o transcript real e o thread mostrou a

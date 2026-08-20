@@ -197,6 +197,25 @@ ao lado do `sessionId`. A tela do terminal não serve para isso: ela é TUI e me
 (ADR-011). Como o thread é remontado dos arquivos, ele **volta inteiro no arranque
 seguinte** e o app não guarda mensagem nenhuma.
 
+A unidade do thread é o **turno**, não a mensagem: um bloco por pedido, com tudo o que
+o agente fez a respeito dentro dele. Mensagem solta ordenada por tempo intercala duas
+conversas, e a resposta do A cai no meio da sua terceira pergunta ao B — a análise de
+conversa chama isso de **cisma de piso**, e quem está num piso não se orienta pela
+troca de turnos do outro. O bloco não cinde.
+
+Dentro do bloco: seu pedido em cima, apagado; o **caminho** (`▾ 12 passos · 3
+arquivos`), que nasce aberto e dobra com um clique; e a **resposta** no fim, que é a
+prosa do último trecho do turno. O corte da resposta é no fim e não na primeira prosa
+porque o agente narra enquanto trabalha, e narração é caminho.
+
+**Turno acionado por outro agente não é bloco de primeiro nível** — ele aninha dentro
+do bloco de quem o acionou, como `▸ acionou claude-2 · 2 mensagens · 24s`, recolhido. A
+ligação é pelo remetente e pelo tempo, não pelo texto: o envelope diz quem falou, e um
+agente só pode ter acionado alguém durante um turno dele que já tinha começado. É
+recursivo, então a volta de B para A é mais uma dobra dentro da primeira — o ciclo de
+dois se desenha com o mesmo mecanismo do de três. Solto na linha do tempo, esse
+trabalho afogava a conversa que você pediu.
+
 Quem lê o transcript é um **adapter por CLI** (`ChatAdapter`), escolhido pela chave do
 `agents.json`. Hoje só `claude` tem um; os outros não rendem thread, e o vazio diz
 isso. O formato é de cada um, e sem esta costura o modo inteiro ficaria preso a um
@@ -208,10 +227,10 @@ Canvas.swift`). O que não aparece, e cada um por um motivo: `thinking` é rascu
 `tool_result` não é ninguém falando, subagente é trabalho interno, e o marcador
 `[[ED:ok]]` é conversa do app com o app.
 
-**Enquanto o turno corre, o chat não fica mudo.** A mensagem que você mandou entra na
-hora, apagada, com `entregando…` — ela sai quando a de verdade volta do transcript, ou
-por tempo se nunca voltar. E o agente que está trabalhando ganha uma linha no fim com
-três pontos pulsando e **o que ele está fazendo agora**: `pensando`, `lendo
+**Enquanto o turno corre, o chat não fica mudo.** O bloco do que você mandou entra na
+hora, apagado, com `entregando…` — ele sai quando o de verdade volta do transcript, ou
+por tempo se nunca voltar. E o cabeçalho do bloco aberto ganha três pontos pulsando e
+**o que ele está fazendo agora**: `pensando`, `lendo
 Canvas.swift`, `$ npx vitest`. Esse detalhe é o `live` do adapter, e é o que separa
 isto de um spinner — ele diz que o trabalho ANDOU desde a última vez que você olhou.
 O raciocínio entra aqui e não no histórico: lá é rascunho longo, aqui é a única coisa

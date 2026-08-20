@@ -22,7 +22,9 @@ enum ChatStyle {
 
     static let threadBackground = NSColor(calibratedWhite: 0.078, alpha: 1)
     static let boxBackground = NSColor(calibratedWhite: 0.045, alpha: 1)
-    static let bubbleBackground = NSColor(calibratedWhite: 0.145, alpha: 1)
+    /// O fundo do bloco de turno. Um degrau acima do thread, para o bloco se ler como
+    /// um cartão sem precisar de borda forte.
+    static let turnBackground = NSColor(calibratedWhite: 0.105, alpha: 1)
 
     /// Largura máxima do texto no thread. Linha de 1400px é ilegível, e o
     /// mosaico já provou que a janela cheia é larga.
@@ -135,213 +137,375 @@ class ChatRow: NSView {
     func height(for width: CGFloat) -> CGFloat { 0 }
 }
 
-/// Você falando: bolha à direita, com os destinatários acima.
-final class ChatUserRow: ChatRow {
-    private let bubble = NSView()
-    private let text: NSTextField
-    private let time: NSTextField
-    private var chips: [AgentChip] = []
+/// Um TURNO, como um bloco só: o que foi pedido, o caminho, e a resposta.
+///
+/// É a unidade do thread. Ordenar mensagens soltas por tempo intercala duas conversas
+/// e a resposta do A cai no meio da sua terceira pergunta ao B — cisma de piso. O bloco
+/// não cinde: tudo dentro dele é do mesmo par.
+///
+/// Nasce RECOLHIDO no meio. Um turno de trinta chamadas de ferramenta viraria um cartão
+/// que não cabe na tela, e aí o agrupamento pioraria a leitura em vez de melhorá-la —
+/// então o que fica sempre à vista é a pergunta e a resposta, e o caminho é uma linha
+/// que abre.
+final class ChatTurnRow: ChatRow {
+    /// A altura mudou porque algo abriu ou fechou. Quem empilha refaz a conta.
+    var onToggle: (() -> Void)?
 
-    /// A bolha não vai até a borda: mensagem sua e resposta de agente alinhadas na
-    /// mesma largura não se distinguem de relance, e o recuo é o que diz "isto é
-    /// meu".
-    private static let inset: CGFloat = 90
-    private static let padding: CGFloat = 10
-    /// Teto da bolha. Sem ele, numa coluna de 780pt a mensagem sua ocupa 690 e para
-    /// de se distinguir da resposta do agente, que é o que o recuo existe para
-    /// fazer.
-    private static let maxWidth: CGFloat = 470
-
-    /// Você mandou e o CLI ainda não gravou. A bolha aparece na hora, apagada.
-    ///
-    /// Sem ela a mensagem só existe na tela quando volta do transcript, e o segundo
-    /// entre apertar Enter e vê-la aparecer é o segundo em que o modo parece ter
-    /// engolido o que você escreveu.
-    init(entry: ChatEntry, inFlight: Bool = false) {
-        text = ChatStyle.paragraph(entry.text, font: ChatStyle.body, color: ChatStyle.text)
-        time = ChatStyle.label(inFlight ? "entregando…" : entry.timeLabel,
-                               font: ChatStyle.meta, color: ChatStyle.faint)
-        super.init(frame: .zero)
-
-        bubble.wantsLayer = true
-        bubble.layer?.backgroundColor = ChatStyle.bubbleBackground.cgColor
-        bubble.layer?.cornerRadius = 6
-        if inFlight { alphaValue = 0.55 }
-        addSubview(bubble)
-        bubble.addSubview(text)
-
-        addSubview(time)
-        for id in entry.recipients {
-            let chip = AgentChip(id, prefix: "→ ")
-            chips.append(chip)
-            addSubview(chip)
-        }
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    private func bubbleWidth(_ width: CGFloat) -> CGFloat {
-        min(Self.maxWidth, max(80, width - Self.inset))
-    }
-
-    override func height(for width: CGFloat) -> CGFloat {
-        let inner = bubbleWidth(width) - Self.padding * 2
-        return 17 + ChatStyle.height(text.stringValue, font: ChatStyle.body, width: inner)
-            + Self.padding * 2 + 6
-    }
-
-    override func layout() {
-        super.layout()
-        var x = bounds.width
-        for chip in chips.reversed() {
-            let size = chip.fittingSize
-            x -= size.width
-            chip.frame = NSRect(x: x, y: 1, width: size.width, height: size.height)
-            x -= 4
-        }
-        let timeWidth = time.measured
-        time.frame = NSRect(x: max(0, x - timeWidth), y: 2, width: timeWidth, height: 13)
-
-        let width = bubbleWidth(bounds.width)
-        let inner = width - Self.padding * 2
-        let textHeight = ChatStyle.height(text.stringValue, font: ChatStyle.body, width: inner)
-        bubble.frame = NSRect(x: bounds.width - width, y: 17,
-                              width: width, height: textHeight + Self.padding * 2)
-        text.frame = NSRect(x: Self.padding, y: Self.padding, width: inner, height: textHeight)
-    }
-}
-
-/// O agente respondendo: fio na cor dele à esquerda, e os blocos embaixo do nome.
-final class ChatAgentRow: ChatRow {
+    private let turn: ChatTurn
+    /// Quem atendeu. O thread usa para casar o "está rodando" sem guardar índice.
+    var agent: String { turn.author }
+    private let accent: NSColor
     private let bar = NSView()
     private let author: NSTextField
     private let time: NSTextField
-    private let blocks: [ChatBlockView]
+    private let fromChip: AgentChip?
+    /// Os três pontos, só enquanto o turno está aberto.
+    private var dots: [NSView] = []
+    private let live: NSTextField?
+    private let prompt: NSTextField?
+    private let workToggle: DisclosureLine?
+    private var workBlocks: [ChatBlockView] = []
+    private var answerBlocks: [ChatBlockView] = []
+    private var subConversations: [SubConversationView] = []
+    /// O caminho nasce ABERTO: acompanhar o agente trabalhando é metade do motivo de
+    /// olhar o chat, e recolhido você tinha de abrir a cada turno para ver. A linha
+    /// continua ali para dobrar o turno que não interessa mais.
+    ///
+    /// A sub-conversa entre agentes segue recolhida, e a diferença é de quem é o
+    /// trabalho: o caminho é do agente que você acionou, e a sub-conversa é de dois
+    /// que se resolveram sozinhos.
+    private var workOpen = true
 
-    private static let gutter: CGFloat = 12
-    /// Resposta de agente não ocupa a coluna inteira: sobra à direita é o que
-    /// deixa a bolha sua se ler como o outro lado da conversa.
-    private static let trailing: CGFloat = 70
+    private static let gutter: CGFloat = 14
+    private static let pad: CGFloat = 12
+    private static let gap: CGFloat = 8
 
-    init(entry: ChatEntry) {
-        let id = entry.author ?? ""
-        author = ChatStyle.label(id, font: ChatStyle.name, color: AgentColor.of(id))
-        time = ChatStyle.label(entry.timeLabel, font: ChatStyle.meta, color: ChatStyle.faint)
-        blocks = entry.blocks.map { ChatBlockView(block: $0, accent: AgentColor.of(id)) }
+    init(turn: ChatTurn, note: String?, running: Bool) {
+        self.turn = turn
+        accent = AgentColor.of(turn.author)
+        author = ChatStyle.label(turn.author, font: ChatStyle.name, color: accent)
+        time = ChatStyle.label(turn.inFlight ? "entregando…" : turn.timeLabel,
+                               font: ChatStyle.meta, color: ChatStyle.faint)
+        // Quem pediu, quando não foi você. O chip é a mesma peça do destinatário: em
+        // qualquer lugar do chat, nome de agente na cor dele quer dizer a mesma coisa.
+        fromChip = turn.from.map { AgentChip($0, prefix: "de ") }
+        live = running ? ChatStyle.label(note ?? "pensando", font: ChatStyle.meta,
+                                         color: ChatStyle.dim) : nil
+        prompt = turn.prompt.isEmpty
+            ? nil : ChatStyle.paragraph(turn.prompt, font: ChatStyle.body, color: ChatStyle.text)
+        workToggle = turn.work.isEmpty
+            ? nil : DisclosureLine(text: turn.workSummary, color: ChatStyle.faint)
         super.init(frame: .zero)
 
+        wantsLayer = true
+        layer?.backgroundColor = ChatStyle.turnBackground.cgColor
+        layer?.cornerRadius = 8
+        layer?.borderWidth = 1
+        layer?.borderColor = ChatStyle.hairline.cgColor
+        if turn.inFlight { alphaValue = 0.6 }
+
         bar.wantsLayer = true
-        bar.layer?.backgroundColor = AgentColor.of(id).cgColor
+        bar.layer?.backgroundColor = accent.cgColor
         addSubview(bar)
         addSubview(author)
         addSubview(time)
-        blocks.forEach { addSubview($0) }
+        if let fromChip { addSubview(fromChip) }
+        if let live {
+            for _ in 0..<3 {
+                let dot = NSView()
+                dot.wantsLayer = true
+                dot.layer?.backgroundColor = accent.cgColor
+                dot.layer?.cornerRadius = 2.5
+                dots.append(dot)
+                addSubview(dot)
+            }
+            addSubview(live)
+        }
+        // A pergunta é apagada e o corpo é claro: o bloco tem dois autores, e a cor do
+        // texto é o que diz de relance quem escreveu qual metade.
+        if let prompt {
+            prompt.textColor = ChatStyle.dim
+            addSubview(prompt)
+        }
+        if let workToggle {
+            workToggle.onClick = { [weak self] in self?.toggleWork() }
+            addSubview(workToggle)
+        }
+        workToggle?.isOpen = true
+        workBlocks = turn.work.map { ChatBlockView(block: $0, accent: accent) }
+        workBlocks.forEach { addSubview($0) }
+
+        answerBlocks = turn.answer.map { ChatBlockView(block: $0, accent: accent) }
+        answerBlocks.forEach { addSubview($0) }
+
+        subConversations = turn.replies.map { reply in
+            let view = SubConversationView(turn: reply)
+            view.onToggle = { [weak self] in self?.onToggle?() }
+            addSubview(view)
+            return view
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    private func toggleWork() {
+        workOpen.toggle()
+        workToggle?.isOpen = workOpen
+        workBlocks.forEach { $0.isHidden = !workOpen }
+        onToggle?()
+    }
+
     private func contentWidth(_ width: CGFloat) -> CGFloat {
-        max(120, width - Self.gutter - Self.trailing)
+        max(120, width - Self.gutter - Self.pad)
     }
 
     override func height(for width: CGFloat) -> CGFloat {
         let inner = contentWidth(width)
-        return 18 + blocks.reduce(0) { $0 + $1.height(for: inner) + 7 }
+        var y = Self.pad + 16 + Self.gap
+        if let prompt {
+            y += ChatStyle.height(prompt.stringValue, font: ChatStyle.body, width: inner)
+                + Self.gap
+        }
+        if workToggle != nil { y += DisclosureLine.height + Self.gap }
+        if workOpen {
+            y += workBlocks.reduce(0) { $0 + $1.height(for: inner) + 6 }
+        }
+        y += answerBlocks.reduce(0) { $0 + $1.height(for: inner) + 6 }
+        y += subConversations.reduce(0) { $0 + $1.height(for: inner) + 6 }
+        return y + Self.pad - Self.gap
+    }
+
+    /// A animação entra quando a view tem janela. Fora dela o CoreAnimation pausa.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        for (index, dot) in dots.enumerated() {
+            dot.layer?.removeAllAnimations()
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 0.25
+            pulse.toValue = 1
+            pulse.duration = 0.5
+            pulse.autoreverses = true
+            pulse.repeatCount = .greatestFiniteMagnitude
+            pulse.beginTime = CACurrentMediaTime() + Double(index) * 0.16
+            dot.layer?.add(pulse, forKey: "pulse")
+        }
+    }
+
+    /// Troca só o texto do que está rodando. Remontar reiniciaria a animação, e três
+    /// pontos que recomeçam a cada meio segundo leem como travamento.
+    func update(note text: String?) {
+        live?.stringValue = text ?? "pensando"
+        needsLayout = true
     }
 
     override func layout() {
         super.layout()
         let inner = contentWidth(bounds.width)
-        author.frame = NSRect(x: Self.gutter, y: 0, width: author.measured, height: 14)
-        time.frame = NSRect(x: author.frame.maxX + 7, y: 1, width: time.measured, height: 13)
+        bar.frame = NSRect(x: 0, y: 0, width: 3, height: bounds.height)
 
-        var y: CGFloat = 18
-        for block in blocks {
+        var y = Self.pad
+        var x = Self.gutter
+        author.frame = NSRect(x: x, y: y, width: author.measured, height: 15)
+        x = author.frame.maxX + 8
+        if let fromChip {
+            let size = fromChip.fittingSize
+            fromChip.frame = NSRect(x: x, y: y + 1, width: size.width, height: size.height)
+            x = fromChip.frame.maxX + 8
+        }
+        time.frame = NSRect(x: x, y: y + 2, width: time.measured, height: 13)
+        x = time.frame.maxX + 10
+        if let live {
+            for dot in dots {
+                dot.frame = NSRect(x: x, y: y + 6, width: 5, height: 5)
+                x += 8
+            }
+            live.frame = NSRect(x: x + 3, y: y + 2,
+                                width: max(0, bounds.width - x - Self.pad - 3), height: 13)
+        }
+        y += 16 + Self.gap
+
+        if let prompt {
+            let height = ChatStyle.height(prompt.stringValue, font: ChatStyle.body, width: inner)
+            prompt.frame = NSRect(x: Self.gutter, y: y, width: inner, height: height)
+            y += height + Self.gap
+        }
+        if let workToggle {
+            workToggle.frame = NSRect(x: Self.gutter, y: y, width: inner,
+                                      height: DisclosureLine.height)
+            y += DisclosureLine.height + Self.gap
+        }
+        if workOpen {
+            for block in workBlocks {
+                let height = block.height(for: inner)
+                block.frame = NSRect(x: Self.gutter, y: y, width: inner, height: height)
+                y += height + 6
+            }
+        }
+        for block in answerBlocks {
             let height = block.height(for: inner)
             block.frame = NSRect(x: Self.gutter, y: y, width: inner, height: height)
-            y += height + 7
+            y += height + 6
         }
-        bar.frame = NSRect(x: 0, y: 1, width: 2, height: max(0, y - 8))
+        for sub in subConversations {
+            let height = sub.height(for: inner)
+            sub.frame = NSRect(x: Self.gutter, y: y, width: inner, height: height)
+            y += height + 6
+        }
     }
 }
 
-/// Um agente acionando outro. Fica recolhido: você quer saber QUE eles falaram,
-/// e ler o quê só quando o resultado não fizer sentido.
-final class ChatLinkRow: ChatRow {
-    private let head = NSTextField(labelWithString: "")
-    private let body: NSTextField
+/// A linha que abre e fecha: caret, texto, e um fio até a borda.
+final class DisclosureLine: NSView {
+    var onClick: (() -> Void)?
+    var isOpen = false { didSet { caret.stringValue = isOpen ? "▾" : "▸" } }
+
+    static let height: CGFloat = 17
+
     private let caret = NSTextField(labelWithString: "▸")
-    private var open = false
-    private let bodyText: String
+    private let label: NSTextField
 
-    /// Redesenhar a linha muda a altura, e quem sabe empilhar é o thread.
-    var onToggle: (() -> Void)?
-
-    init(entry: ChatEntry) {
-        bodyText = entry.text
-        body = ChatStyle.paragraph(entry.text, font: ChatStyle.body, color: ChatStyle.dim)
+    init(text: String, color: NSColor) {
+        label = ChatStyle.label(text, font: ChatStyle.meta, color: color)
         super.init(frame: .zero)
-
-        let from = entry.author ?? "?"
-        let to = entry.recipients.first ?? "?"
-        let line = NSMutableAttributedString()
-        line.append(NSAttributedString(string: from, attributes: [
-            .font: ChatStyle.name, .foregroundColor: AgentColor.of(from)]))
-        line.append(NSAttributedString(string: "  →  ", attributes: [
-            .font: ChatStyle.meta, .foregroundColor: ChatStyle.faint]))
-        line.append(NSAttributedString(string: to, attributes: [
-            .font: ChatStyle.name, .foregroundColor: AgentColor.of(to)]))
-        line.append(NSAttributedString(string: "   \(entry.timeLabel)", attributes: [
-            .font: ChatStyle.meta, .foregroundColor: ChatStyle.faint]))
-        head.attributedStringValue = line
-        head.isBordered = false
-        head.drawsBackground = false
-        head.isEditable = false
-
         caret.font = ChatStyle.meta
         caret.textColor = ChatStyle.faint
         caret.isBordered = false
         caret.drawsBackground = false
         caret.isEditable = false
-
         addSubview(caret)
-        addSubview(head)
-        body.isHidden = true
-        addSubview(body)
+        addSubview(label)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    private func bodyWidth(_ width: CGFloat) -> CGFloat { max(80, width - 120) }
+    override var isFlipped: Bool { true }
 
-    override func height(for width: CGFloat) -> CGFloat {
-        guard open else { return 20 }
-        return 22 + ChatStyle.height(bodyText, font: ChatStyle.body, width: bodyWidth(width)) + 6
-    }
+    func setText(_ text: String) { label.stringValue = text; needsLayout = true }
 
-    override func mouseDown(with event: NSEvent) {
-        open.toggle()
-        caret.stringValue = open ? "▾" : "▸"
-        body.isHidden = !open
-        onToggle?()
-    }
-
+    override func mouseDown(with event: NSEvent) { onClick?() }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 
     override func layout() {
         super.layout()
-        // Centrado: tráfego entre agentes não é fala de nenhum dos dois lados da
-        // conversa, e alinhá-lo à esquerda o faria passar por resposta.
-        let width = head.attributedStringValue.size().width
-        let x = ((bounds.width - width) / 2).rounded()
-        caret.frame = NSRect(x: max(0, x - 14), y: 3, width: 12, height: 13)
-        head.frame = NSRect(x: x, y: 2, width: width, height: 15)
-        if open {
-            let inner = bodyWidth(bounds.width)
-            body.frame = NSRect(x: (bounds.width - inner) / 2, y: 22, width: inner,
-                                height: ChatStyle.height(bodyText, font: ChatStyle.body,
-                                                         width: inner))
+        caret.frame = NSRect(x: 0, y: 2, width: 12, height: 13)
+        label.frame = NSRect(x: 13, y: 2, width: max(0, bounds.width - 13), height: 13)
+    }
+}
+
+/// A conversa que um agente teve com outro, dobrada dentro do bloco de quem acionou.
+///
+/// Recolhida por padrão e recursiva: a volta de B para A é mais um turno provocado, e
+/// o ciclo de dois se desenha com o mesmo mecanismo do de três. É o que impede o
+/// trabalho entre agentes de virar ruído no meio da SUA conversa — ele continua
+/// legível, mas só quando você pedir.
+final class SubConversationView: NSView {
+    var onToggle: (() -> Void)?
+
+    private let turn: ChatTurn
+    private let head: DisclosureLine
+    private let rail = NSView()
+    private let author: NSTextField
+    private let prompt: NSTextField?
+    private var answerBlocks: [ChatBlockView] = []
+    private var nested: [SubConversationView] = []
+    private var open = false
+
+    private static let indent: CGFloat = 14
+
+    init(turn: ChatTurn) {
+        self.turn = turn
+        let accent = AgentColor.of(turn.author)
+        // O rótulo é o verbo da aresta: no Egeon, `from` PODE ACIONAR `to`. Presente
+        // enquanto o outro ainda não respondeu, passado depois.
+        let verb = turn.answer.isEmpty ? "acionando" : "acionou"
+        let span = Int(turn.conversationSpan.rounded())
+        var meta = "\(turn.conversationCount) mensage" + (turn.conversationCount == 1 ? "m" : "ns")
+        if span > 0 { meta += " · \(span)s" }
+        head = DisclosureLine(text: "\(verb) \(turn.author) · \(meta)", color: accent)
+        author = ChatStyle.label(turn.author, font: ChatStyle.name, color: accent)
+        prompt = turn.prompt.isEmpty
+            ? nil : ChatStyle.paragraph(turn.prompt, font: ChatStyle.body, color: ChatStyle.dim)
+        super.init(frame: .zero)
+
+        head.onClick = { [weak self] in self?.toggle() }
+        addSubview(head)
+
+        rail.wantsLayer = true
+        rail.layer?.backgroundColor = ChatStyle.hairline.cgColor
+        rail.isHidden = true
+        addSubview(rail)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    private func toggle() {
+        open.toggle()
+        head.isOpen = open
+        if open, answerBlocks.isEmpty, nested.isEmpty {
+            // Montado só quando abre: uma cadeia de cinco voltas construiria cinco
+            // sub-árvores de views que ninguém pediu para ver.
+            if let prompt { addSubview(prompt) }
+            addSubview(author)
+            answerBlocks = turn.answer.map { ChatBlockView(block: $0, accent: AgentColor.of(turn.author)) }
+            answerBlocks.forEach { addSubview($0) }
+            nested = turn.replies.map { reply in
+                let view = SubConversationView(turn: reply)
+                view.onToggle = { [weak self] in self?.onToggle?() }
+                addSubview(view)
+                return view
+            }
         }
+        rail.isHidden = !open
+        prompt?.isHidden = !open
+        author.isHidden = !open
+        answerBlocks.forEach { $0.isHidden = !open }
+        nested.forEach { $0.isHidden = !open }
+        onToggle?()
+    }
+
+    private func innerWidth(_ width: CGFloat) -> CGFloat { max(80, width - Self.indent) }
+
+    func height(for width: CGFloat) -> CGFloat {
+        guard open else { return DisclosureLine.height }
+        let inner = innerWidth(width)
+        var y = DisclosureLine.height + 6
+        if let prompt {
+            y += ChatStyle.height(prompt.stringValue, font: ChatStyle.body, width: inner) + 6
+        }
+        y += 16
+        y += answerBlocks.reduce(0) { $0 + $1.height(for: inner) + 5 }
+        y += nested.reduce(0) { $0 + $1.height(for: inner) + 5 }
+        return y + 4
+    }
+
+    override func layout() {
+        super.layout()
+        head.frame = NSRect(x: 0, y: 0, width: bounds.width, height: DisclosureLine.height)
+        guard open else { return }
+        let inner = innerWidth(bounds.width)
+        var y = DisclosureLine.height + 6
+        if let prompt {
+            let height = ChatStyle.height(prompt.stringValue, font: ChatStyle.body, width: inner)
+            prompt.frame = NSRect(x: Self.indent, y: y, width: inner, height: height)
+            y += height + 6
+        }
+        author.frame = NSRect(x: Self.indent, y: y, width: author.measured, height: 14)
+        y += 16
+        for block in answerBlocks {
+            let height = block.height(for: inner)
+            block.frame = NSRect(x: Self.indent, y: y, width: inner, height: height)
+            y += height + 5
+        }
+        for sub in nested {
+            let height = sub.height(for: inner)
+            sub.frame = NSRect(x: Self.indent, y: y, width: inner, height: height)
+            y += height + 5
+        }
+        rail.frame = NSRect(x: 3, y: DisclosureLine.height + 2, width: 1,
+                            height: max(0, y - DisclosureLine.height - 4))
     }
 }
 
@@ -641,57 +805,48 @@ final class ChatThreadView: NSView {
     override var isFlipped: Bool { true }
 
     /// Assinatura do que está desenhado. Remontar a cada leitura de transcript
-    /// perderia a seleção de texto e o estado dos blocos abertos — e o laço lê a
-    /// cada meio segundo.
+    /// perderia a seleção de texto e o estado do que você abriu — e o laço lê a cada
+    /// meio segundo.
     private var drawn: String = ""
-    private var thinkingRows: [ThinkingRow] = []
+    private var turnRows: [ChatTurnRow] = []
 
-    /// Quem está trabalhando, e o que está fazendo.
-    ///
-    /// O texto NÃO entra na assinatura: ele muda a cada ferramenta, e remontar a linha
-    /// reinicia a animação dos pontos. Quem muda é atualizado no lugar.
-    func show(_ entries: [ChatEntry],
-              working: [(id: String, note: String?)] = [],
-              inFlight: [ChatEntry] = []) {
-        let signature = entries.map(\.id).joined(separator: ",")
-            + "|" + working.map(\.id).joined(separator: ",")
-            + "|" + inFlight.map(\.text).joined(separator: "\u{1}")
+    /// O texto do que está rodando NÃO entra na assinatura: ele muda a cada
+    /// ferramenta, e remontar reinicia a animação dos pontos.
+    func show(_ turns: [ChatTurn], working: [(id: String, note: String?)] = []) {
+        let runningIDs = Set(working.map(\.id))
+        let signature = Self.signature(of: turns) + "|" + runningIDs.sorted().joined(separator: ",")
         if signature == drawn {
-            // Só o texto do que está rodando mudou.
-            for row in thinkingRows {
-                row.update(note: working.first { $0.id == row.agentID }?.note)
-            }
+            for row in turnRows { row.update(note: working.first { $0.id == row.agent }?.note) }
             return
         }
         let wasAtBottom = isAtBottom
         drawn = signature
 
         rows.forEach { $0.removeFromSuperview() }
-        rows = entries.map { entry in
-            switch entry.kind {
-            case .user: return ChatUserRow(entry: entry) as ChatRow
-            case .agent: return ChatAgentRow(entry: entry)
-            case .link:
-                let row = ChatLinkRow(entry: entry)
-                row.onToggle = { [weak self] in self?.reflow() }
-                return row
-            case .system:
-                return ChatSystemRow(text: entry.text,
-                                     color: entry.alert ? .systemRed : ChatStyle.faint)
-            }
+        turnRows = []
+        rows = turns.map { turn -> ChatRow in
+            // Só o ÚLTIMO turno de um agente pode estar rodando: o anterior acabou
+            // quando este abriu.
+            let running = runningIDs.contains(turn.author)
+                && turn.id == turns.last(where: { $0.author == turn.author })?.id
+            let row = ChatTurnRow(turn: turn,
+                                  note: working.first { $0.id == turn.author }?.note,
+                                  running: running)
+            row.onToggle = { [weak self] in self?.reflow() }
+            turnRows.append(row)
+            return row
         }
-        // O que você acabou de mandar e o CLI ainda não gravou. Antes das linhas de
-        // trabalho, porque foi antes no tempo.
-        for entry in inFlight {
-            rows.append(ChatUserRow(entry: entry, inFlight: true))
-        }
-
-        // Quem está trabalhando, no fim: é o presente, e o thread é passado.
-        thinkingRows = working.map { ThinkingRow(agent: $0.id, note: $0.note) }
-        rows.append(contentsOf: thinkingRows as [ChatRow])
         rows.forEach { document.addSubview($0) }
         reflow()
         if wasAtBottom { scrollToBottom() }
+    }
+
+    /// Identidade do que está na tela, incluindo o aninhamento: sub-conversa nova
+    /// dentro de um bloco antigo também é mudança.
+    private static func signature(of turns: [ChatTurn]) -> String {
+        turns.map { turn in
+            turn.id + (turn.replies.isEmpty ? "" : "(" + signature(of: turn.replies) + ")")
+        }.joined(separator: ",")
     }
 
     /// Vazio significa duas coisas diferentes, e a mensagem separa: sessão sem
