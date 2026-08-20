@@ -22,17 +22,42 @@ final class ControlSocket {
     private let acceptQueue = DispatchQueue(label: "\(Flavor.current.identifier).control.accept", qos: .utility)
     private let workQueue = DispatchQueue(label: "\(Flavor.current.identifier).control.work",
                                           qos: .utility, attributes: .concurrent)
+    /// Fila só do watchdog. Não pode ser a do `accept`, que fica bloqueada dentro do
+    /// `accept()` a vida inteira — timer agendado ali nunca dispara.
+    private let watchQueue = DispatchQueue(label: "\(Flavor.current.identifier).control.watch",
+                                           qos: .utility)
+
+    /// Inode do arquivo depois do bind. É por ele que se sabe se o `sock` que está
+    /// no disco ainda é o NOSSO — e é o que impede este processo de apagar o socket
+    /// de outra instância na saída.
+    private var boundInode: (dev: Int32, ino: UInt64)?
+
+    /// Relógio que confere se o arquivo continua lá. Ver `watch()`.
+    private var watchdog: DispatchSourceTimer?
 
     func start() {
         try? FileManager.default.createDirectory(
             at: URL(fileURLWithPath: Self.path).deletingLastPathComponent(),
             withIntermediateDirectories: true)
-        unlink(Self.path)
 
         guard Self.path.utf8.count < 104 else {
             Log.write("socket: caminho longo demais para sockaddr_un (\(Self.path))")
             return
         }
+
+        // Duas instâncias do MESMO flavor: a segunda a subir apagava o `sock` da
+        // primeira e botava o dela no lugar. Quando ela saía, o `unlink` do encerramento
+        // levava o arquivo — e a primeira, viva, ficava com um socket que ninguém
+        // alcança. Nada na tela dizia isso: o app parecia inteiro e só os ganchos do
+        // CLI morriam, então nenhum agente avisava mais que tinha terminado.
+        if Self.someoneAnswers(at: Self.path) {
+            Log.write("socket: JÁ TEM outra instância deste flavor escutando em "
+                      + "\(Self.path) — este processo segue sem socket de controle. "
+                      + "Feche uma das duas: elas também disputam o \(Flavor.current.config("workbenches.json").lastPathComponent).")
+            return
+        }
+        // Ninguém atende: o que estiver no caminho é resto de execução anterior.
+        unlink(Self.path)
 
         listenFD = socket(AF_UNIX, SOCK_STREAM, 0)
         guard listenFD >= 0 else {
@@ -59,13 +84,81 @@ final class ControlSocket {
             return
         }
 
+        // Sem CLOEXEC o fd de escuta vaza para todo processo filho — e os filhos aqui
+        // são os pty dos agentes, que vivem horas. Um `lsof` mostrava cinco `claude`
+        // segurando o socket do app.
+        _ = fcntl(listenFD, F_SETFD, FD_CLOEXEC)
+        boundInode = Self.inode(of: Self.path)
+
         Log.write("socket: escutando em \(Self.path)")
         acceptQueue.async { [weak self] in self?.acceptLoop() }
+        watch()
     }
 
     func stop() {
+        watchdog?.cancel()
+        watchdog = nil
         if listenFD >= 0 { close(listenFD) }
-        unlink(Self.path)
+        // Só apaga o que é nosso: o arquivo no caminho pode ser o socket de outra
+        // instância, e apagá-lo deixaria ELA viva e inalcançável.
+        if let mine = boundInode, let now = Self.inode(of: Self.path),
+           now == mine { unlink(Self.path) }
+        listenFD = -1
+        boundInode = nil
+    }
+
+    /// Confere de dez em dez segundos se o arquivo do socket ainda é o nosso, e
+    /// reconstrói quando não é.
+    ///
+    /// O modo de falhar aqui é silencioso e caro: quem perde o caminho continua com
+    /// janela, canvas e agentes de pé, e só o relato do CLI para de chegar — o verde
+    /// de "terminou" e o laranja de "precisa de você" simplesmente nunca mais
+    /// aparecem, sem nenhuma linha de erro. Dez segundos porque é `stat` num arquivo.
+    private func watch() {
+        watchdog?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: watchQueue)
+        timer.schedule(deadline: .now() + 10, repeating: 10)
+        timer.setEventHandler { [weak self] in
+            guard let self, let mine = self.boundInode else { return }
+            if let now = Self.inode(of: Self.path), now == mine { return }
+            Log.write("socket: o arquivo \(Self.path) sumiu ou virou de outro processo — "
+                      + "religando (sem isso os ganchos do CLI param de chegar em silêncio)")
+            self.stop()
+            self.start()
+        }
+        timer.resume()
+        watchdog = timer
+    }
+
+    /// Alguém aceita conexão neste caminho agora.
+    ///
+    /// Conectar e não escrever nada: é o único teste que separa "instância viva" de
+    /// "arquivo de socket órfão", e o órfão é o caso comum depois de um crash.
+    private static func someoneAnswers(at path: String) -> Bool {
+        var isSocket = stat()
+        guard stat(path, &isSocket) == 0 else { return false }
+
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        withUnsafeMutablePointer(to: &addr.sun_path) { tuple in
+            tuple.withMemoryRebound(to: CChar.self, capacity: 104) { dest in
+                _ = strcpy(dest, path)
+            }
+        }
+        let size = socklen_t(MemoryLayout<sockaddr_un>.size)
+        return withUnsafePointer(to: &addr) { raw in
+            raw.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, size) == 0 }
+        }
+    }
+
+    private static func inode(of path: String) -> (dev: Int32, ino: UInt64)? {
+        var info = stat()
+        guard stat(path, &info) == 0 else { return nil }
+        return (info.st_dev, info.st_ino)
     }
 
     private func acceptLoop() {

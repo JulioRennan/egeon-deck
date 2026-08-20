@@ -495,8 +495,19 @@ não se delega. Detalhes: ADR-011 e ADR-024.
 ## Socket de controle
 
 `~/.egeon/sock` — unix domain socket falando HTTP/1.1 mínimo. É como a
-extensão do VSCode conversa com o app, como o `egeon` fala por dentro, e é como
-se testa o app de fora.
+extensão do VSCode conversa com o app, como o `egeon` fala por dentro, e é como se
+testa o app de fora.
+
+**Duas instâncias do mesmo flavor não brigam mais pelo arquivo.** Quem sobe segundo
+testa se alguém atende no caminho: se atende, não apaga nada e segue sem socket de
+controle, dizendo isso no log. E quem sai só apaga o `sock` se o inode dele ainda for o
+que ele mesmo criou. Antes, a segunda instância apagava o socket da primeira e punha o
+dela no lugar; ao sair, levava o arquivo — e a primeira, viva, ficava com um socket que
+ninguém alcança. **Nada na tela dizia isso**: janela, canvas e agentes de pé, e só os
+ganchos do CLI morriam — o verde de "terminou" e o laranja de "precisa de você" nunca
+mais apareciam, sem uma linha de erro. Um watchdog confere o inode de dez em dez
+segundos e religa. O fd de escuta leva `FD_CLOEXEC`, senão vaza para todo pty filho —
+`lsof` mostrava cinco `claude` segurando o socket do app. Ver ADR-032.
 
 ```bash
 curl --unix-socket ~/.egeon/sock http://eg/targets
