@@ -81,6 +81,27 @@ enum ChatStyle {
         return ceil(rect.width) + ceil(font.pointSize * 0.75)
     }
 
+    /// Quem falou, e para quem quando importa: `claude` ou `claude → claude-2`.
+    ///
+    /// Cada nome na cor do agente. `você` sai em branco de propósito — você não é um nó
+    /// da sessão e não tem cor de agente; dar uma faria parecer que tem.
+    static func speaker(_ names: [String]) -> NSAttributedString {
+        let line = NSMutableAttributedString()
+        for name in names {
+            if line.length > 0 {
+                line.append(NSAttributedString(string: "  →  ", attributes: [
+                    .font: meta, .foregroundColor: faint]))
+            }
+            let color = name == ChatStyle.you ? text : AgentColor.of(name)
+            line.append(NSAttributedString(string: name, attributes: [
+                .font: ChatStyle.name, .foregroundColor: color]))
+        }
+        return line
+    }
+
+    /// Como você aparece nos títulos das bolhas.
+    static let you = "você"
+
     /// Rótulo que não quebra e não vira campo editável.
     static func label(_ string: String = "", font: NSFont, color: NSColor) -> NSTextField {
         let field = NSTextField(labelWithString: string)
@@ -152,19 +173,17 @@ class ChatRow: NSView {
 
 /// Uma fala dentro do bloco do turno.
 ///
-/// Bolha dentro de bolha: o cartão do turno mantém o par junto, e as duas bolhas dizem
-/// de quem é cada metade. O que as separa é o LADO, e não a cor — é o mesmo vocabulário
-/// do resto do chat, onde o que você diz encosta à direita e o que o agente responde
-/// encosta à esquerda.
+/// **Todas encostam à esquerda, e todas levam o nome de quem falou DENTRO** — como
+/// mensagem de grupo no WhatsApp. O lado dizia quem falava enquanto eram duas pontas
+/// (você e o agente); com a cadeia entre agentes no mesmo cartão passaram a existir
+/// quatro, e aí lado só dá para duas: `claude → claude-2` e `claude-2 → claude` caíam
+/// no mesmo lado e se confundiam.
+///
+/// Com o nome dentro, a bolha se explica sozinha e não depende de rótulo acima nem de
+/// alinhamento. Sobra o TOM para dizer o que importa: resposta para você, seu pedido, ou
+/// processo entre agentes.
 final class ChatBubble: NSView {
-    enum Side {
-        /// Quem pede. Encosta à direita e não ocupa a largura toda.
-        case yours
-        /// Quem responde. Encosta à esquerda.
-        case agent
-    }
-
-    /// O peso da fala. O lado diz quem falou; o tom diz o quanto aquilo importa para
+    /// O peso da fala. O título diz quem falou; o tom diz o quanto aquilo importa para
     /// você.
     enum Tone {
         /// A resposta final, para você. A mais clara.
@@ -183,16 +202,14 @@ final class ChatBubble: NSView {
         }
     }
 
-    private let side: Side
+    private let title = NSTextField(labelWithString: "")
     private let blocks: [ChatBlockView]
 
     private static let padding: CGFloat = 11
-    /// Quanto da largura a bolha do pedido ocupa. Menos que tudo, senão ela e a da
-    /// resposta se alinham nas duas bordas e o lado deixa de dizer qualquer coisa.
-    private static let yoursShare: CGFloat = 0.84
+    private static let titleHeight: CGFloat = 15
+    private static let titleGap: CGFloat = 5
 
-    init(blocks source: [ChatBlock], accent: NSColor, side: Side, tone: Tone) {
-        self.side = side
+    init(speaker names: [String], blocks source: [ChatBlock], accent: NSColor, tone: Tone) {
         blocks = source.map { ChatBlockView(block: $0, accent: accent) }
         super.init(frame: .zero)
         wantsLayer = true
@@ -204,6 +221,12 @@ final class ChatBubble: NSView {
             layer?.borderWidth = 1
             layer?.borderColor = accent.withAlphaComponent(0.35).cgColor
         }
+
+        title.attributedStringValue = ChatStyle.speaker(names)
+        title.isBordered = false
+        title.drawsBackground = false
+        title.isEditable = false
+        addSubview(title)
         blocks.forEach { addSubview($0) }
     }
 
@@ -211,32 +234,24 @@ final class ChatBubble: NSView {
 
     override var isFlipped: Bool { true }
 
-    private func bubbleWidth(_ width: CGFloat) -> CGFloat {
-        side == .yours ? (width * Self.yoursShare).rounded() : width
-    }
-
     func height(for width: CGFloat) -> CGFloat {
-        let inner = bubbleWidth(width) - Self.padding * 2
-        return blocks.reduce(Self.padding * 2) { $0 + $1.height(for: inner) + 4 } - 4
+        let inner = max(40, width - Self.padding * 2)
+        let body = blocks.reduce(0) { $0 + $1.height(for: inner) + 4 } - (blocks.isEmpty ? 0 : 4)
+        return Self.padding * 2 + Self.titleHeight + Self.titleGap + body
     }
 
     override func layout() {
         super.layout()
         let inner = bounds.width - Self.padding * 2
-        var y = Self.padding
+        title.frame = NSRect(x: Self.padding, y: Self.padding, width: inner,
+                             height: Self.titleHeight)
+        var y = Self.padding + Self.titleHeight + Self.titleGap
         for block in blocks {
             let height = block.height(for: inner)
             block.frame = NSRect(x: Self.padding, y: y, width: inner, height: height)
             y += height + 4
         }
     }
-
-    /// Onde a bolha começa, na largura útil do bloco. É o que faz o lado.
-    func originX(in width: CGFloat) -> CGFloat {
-        side == .yours ? width - bubbleWidth(width) : 0
-    }
-
-    func widthNeeded(in width: CGFloat) -> CGFloat { bubbleWidth(width) }
 }
 
 /// Um TURNO, como um bloco só: o que foi pedido, o caminho, e a resposta.
@@ -290,12 +305,13 @@ final class ChatTurnRow: ChatRow {
         fromChip = turn.from.map { AgentChip($0, prefix: "de ") }
         live = running ? ChatStyle.label(note ?? "pensando", font: ChatStyle.meta,
                                          color: ChatStyle.dim) : nil
+        // Quem pediu está no título: `você`, ou o agente que acionou este turno.
         promptBubble = turn.prompt.isEmpty
-            ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent,
-                               side: .yours, tone: .yours)
+            ? nil : ChatBubble(speaker: [turn.from ?? ChatStyle.you],
+                               blocks: [.prose(turn.prompt)], accent: accent, tone: .yours)
         answerBubble = turn.answer.isEmpty
-            ? nil : ChatBubble(blocks: turn.answer, accent: accent,
-                               side: .agent, tone: .answer)
+            ? nil : ChatBubble(speaker: [turn.author], blocks: turn.answer,
+                               accent: accent, tone: .answer)
         workToggle = turn.work.isEmpty
             ? nil : DisclosureLine(text: turn.workSummary, color: ChatStyle.faint)
         super.init(frame: .zero)
@@ -423,8 +439,7 @@ final class ChatTurnRow: ChatRow {
 
         if let promptBubble {
             let height = promptBubble.height(for: inner)
-            promptBubble.frame = NSRect(x: Self.gutter + promptBubble.originX(in: inner), y: y,
-                                        width: promptBubble.widthNeeded(in: inner), height: height)
+            promptBubble.frame = NSRect(x: Self.gutter, y: y, width: inner, height: height)
             y += height + Self.gap
         }
         if let workToggle {
@@ -441,8 +456,7 @@ final class ChatTurnRow: ChatRow {
         }
         if let answerBubble {
             let height = answerBubble.height(for: inner)
-            answerBubble.frame = NSRect(x: Self.gutter + answerBubble.originX(in: inner), y: y,
-                                        width: answerBubble.widthNeeded(in: inner), height: height)
+            answerBubble.frame = NSRect(x: Self.gutter, y: y, width: inner, height: height)
             y += height + Self.gap
         }
         for entry in chainEntries {
@@ -503,20 +517,18 @@ final class DisclosureLine: NSView {
 /// bolha embaixo da outra e a ordem de leitura é de cima para baixo, como qualquer
 /// conversa.
 ///
-/// O título nomeia o PAR — `claude → claude-2` —, e não só quem respondeu. Numa fala
-/// entre agentes as duas pontas importam: sem o destinatário, uma cadeia de três não
-/// diz quem estava falando com quem, e "claude-2" sozinho não conta se ele foi acionado
-/// pelo `claude` ou pelo `qa`. Cada nome sai na cor dele.
+/// Cada bolha leva o PAR no título — `claude → claude-2` na que saiu, `claude-2 →
+/// claude` na que voltou. Numa fala entre agentes as duas pontas importam: sem o
+/// destinatário, uma cadeia de três não diz quem estava falando com quem, e `claude-2`
+/// sozinho não conta se ele foi acionado pelo `claude` ou pelo `qa`.
 ///
-/// Abaixo do título vão as DUAS bolhas: o que foi mandado, à direita, e o que voltou, à
-/// esquerda. É a mesma leitura do turno de fora — pedido de um lado, resposta do outro —
-/// e é o que impede o título de dois nomes de deixar dúvida sobre de quem é cada bolha.
+/// O rótulo que ficava ACIMA das duas bolhas saiu: com o nome dentro de cada uma, ele
+/// dizia a mesma coisa uma linha antes.
 final class ChainEntryView: NSView {
     var onToggle: (() -> Void)?
 
     private let turn: ChatTurn
     private let accent: NSColor
-    private let head = NSTextField(labelWithString: "")
     private let askBubble: ChatBubble?
     private let answerBubble: ChatBubble?
     private let workToggle: DisclosureLine?
@@ -528,32 +540,17 @@ final class ChainEntryView: NSView {
     init(turn: ChatTurn) {
         self.turn = turn
         accent = AgentColor.of(turn.author)
+        let sender = turn.from ?? ChatStyle.you
         askBubble = turn.prompt.isEmpty
-            ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent,
-                               side: .yours, tone: .aside)
+            ? nil : ChatBubble(speaker: [sender, turn.author],
+                               blocks: [.prose(turn.prompt)], accent: accent, tone: .aside)
         answerBubble = turn.answer.isEmpty
-            ? nil : ChatBubble(blocks: turn.answer, accent: accent,
-                               side: .agent, tone: .aside)
+            ? nil : ChatBubble(speaker: [turn.author, sender], blocks: turn.answer,
+                               accent: accent, tone: .aside)
         workToggle = turn.work.isEmpty
             ? nil : DisclosureLine(text: turn.workSummary, color: ChatStyle.faint)
         super.init(frame: .zero)
 
-        // Na mesma fonte do cabeçalho do turno: é isso que faz a fala se ler como
-        // continuação do cartão, e não como caixa dentro de caixa.
-        let line = NSMutableAttributedString()
-        if let sender = turn.from {
-            line.append(NSAttributedString(string: sender, attributes: [
-                .font: ChatStyle.name, .foregroundColor: AgentColor.of(sender)]))
-            line.append(NSAttributedString(string: "  →  ", attributes: [
-                .font: ChatStyle.meta, .foregroundColor: ChatStyle.faint]))
-        }
-        line.append(NSAttributedString(string: turn.author, attributes: [
-            .font: ChatStyle.name, .foregroundColor: accent]))
-        head.attributedStringValue = line
-        head.isBordered = false
-        head.drawsBackground = false
-        head.isEditable = false
-        addSubview(head)
         if let workToggle {
             workToggle.onClick = { [weak self] in self?.toggleWork() }
             addSubview(workToggle)
@@ -578,7 +575,7 @@ final class ChainEntryView: NSView {
     }
 
     func height(for width: CGFloat) -> CGFloat {
-        var y = 16 + Self.gap
+        var y: CGFloat = 0
         if let askBubble { y += askBubble.height(for: width) + Self.gap }
         if workToggle != nil { y += DisclosureLine.height + Self.gap }
         if workOpen { y += workBlocks.reduce(0) { $0 + $1.height(for: width) + 5 } }
@@ -588,13 +585,10 @@ final class ChainEntryView: NSView {
 
     override func layout() {
         super.layout()
-        head.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 15)
-        var y: CGFloat = 16 + Self.gap
+        var y: CGFloat = 0
         if let askBubble {
             let height = askBubble.height(for: bounds.width)
-            askBubble.frame = NSRect(x: askBubble.originX(in: bounds.width), y: y,
-                                     width: askBubble.widthNeeded(in: bounds.width),
-                                     height: height)
+            askBubble.frame = NSRect(x: 0, y: y, width: bounds.width, height: height)
             y += height + Self.gap
         }
         if let workToggle {
@@ -611,9 +605,7 @@ final class ChainEntryView: NSView {
         }
         if let answerBubble {
             let height = answerBubble.height(for: bounds.width)
-            answerBubble.frame = NSRect(x: answerBubble.originX(in: bounds.width), y: y,
-                                        width: answerBubble.widthNeeded(in: bounds.width),
-                                        height: height)
+            answerBubble.frame = NSRect(x: 0, y: y, width: bounds.width, height: height)
         }
     }
 }

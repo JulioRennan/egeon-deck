@@ -1790,12 +1790,20 @@ casual **cinde em pisos**, e participantes de um piso não se orientam pela troc
 turnos do outro. Um thread linear finge que existe um piso só, e brigar com o fenômeno
 não dá certo. O bloco de turno não cinde: tudo dentro dele é do mesmo par.
 
-Dentro do bloco é **bolha dentro de bolha**: o pedido numa bolha à direita, o caminho
-dobrado no meio, a resposta noutra bolha à esquerda. O cartão mantém o par junto e as
-bolhas dizem de quem é cada metade — e o que as separa é o LADO, não a cor, porque é o
-vocabulário que o resto do chat já usa. Distinguir por cor de texto foi tentado antes
-(pedido apagado, resposta clara) e não basta: as duas metades ficavam do mesmo tamanho,
-encostadas nas mesmas bordas, e o bloco lia como um parágrafo só.
+Dentro do bloco é **bolha dentro de bolha**, e cada bolha leva **o nome de quem falou
+dentro dela** — como mensagem de grupo no WhatsApp. Todas encostam à esquerda, todas
+ocupam a largura do cartão.
+
+O caminho até aqui foi por duas correções. Primeiro tentei distinguir as metades por cor
+de texto (pedido apagado, resposta clara), e não basta: as duas ficavam do mesmo tamanho
+nas mesmas bordas, e o bloco lia como um parágrafo só. Depois pelo LADO — pedido à
+direita, resposta à esquerda —, que funcionou enquanto eram duas pontas, você e o agente.
+Com a cadeia entre agentes no mesmo cartão passaram a existir quatro, e lado só dá para
+duas: `claude → claude-2` e `claude-2 → claude` caíam no mesmo lado e se confundiam.
+
+Com o nome dentro, a bolha se explica sozinha, sem depender de alinhamento nem de rótulo
+acima — e o rótulo que ficava acima das bolhas da cadeia saiu, porque dizia a mesma coisa
+uma linha antes. Sobra o alinhamento único e o TOM para carregar a hierarquia.
 
 O corte entre caminho e resposta é a prosa FINAL do turno, e não a primeira, porque o
 agente narra enquanto trabalha ("vou ler o arquivo") — narração é caminho.
@@ -1828,12 +1836,11 @@ Agora não há recuo, não há seta de aninhamento, e não há bolha própria. A
 usa a MESMA `ChatBubble` da resposta e o mesmo cabeçalho do turno. Um cartão, várias
 falas. A ordem já é a do tempo por construção: uma volta só existe depois da ida.
 
-**O título de uma fala entre agentes nomeia o par**, `claude → claude-2`, com cada nome na
-cor dele. Só quem respondeu não basta: numa cadeia de três, `claude-2` sozinho não diz se
-ele foi acionado pelo `claude` ou pelo `qa`, e é justamente a topologia da conversa que se
-perde. Abaixo do título vão as DUAS bolhas — o que foi mandado à direita, o que voltou à
-esquerda —, e é isso que impede um título de dois nomes de deixar dúvida sobre de quem é
-cada bolha.
+**Cada bolha de uma fala entre agentes leva o par no título**: `claude → claude-2` na que
+saiu, `claude-2 → claude` na que voltou, com cada nome na cor dele. Só quem respondeu não
+basta: numa cadeia de três, `claude-2` sozinho não diz se ele foi acionado pelo `claude`
+ou pelo `qa`, e é justamente a topologia da conversa que se perde. `você` sai em branco —
+você não é um nó da sessão e não tem cor de agente; dar uma faria parecer que tem.
 
 **O contraste carrega a hierarquia da fala.** Três tons: a resposta final para você é a
 superfície mais clara do cartão e a única com fio na cor do agente; o seu pedido fica um
