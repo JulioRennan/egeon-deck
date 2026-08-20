@@ -227,9 +227,14 @@ cartão** e usa a MESMA bolha. Nem seta de aninhamento, nem recuo, nem caixa pr�
 recuar cada volta fazia três voltas virarem uma escada dentro do cartão, e o desenho
 passava a falar da topologia em vez da conversa.
 
-Cada bolha de uma fala entre agentes leva **o par** no título — `claude → claude-2` na
-que saiu, `claude-2 → claude` na que voltou. Numa cadeia de três, só quem respondeu não
-basta: `claude-2` sozinho não conta se ele foi acionado pelo `claude` ou pelo `qa`.
+No título, **direção só onde houve entrega**. O app monta o envelope de toda entrega,
+então de um PEDIDO ele sabe as duas pontas — `você → claude`, `claude → claude-2`. De uma
+RESPOSTA ele sabe só quem falou: o turno acabar não quer dizer que o agente devolveu algo
+a quem o acionou. Se devolveu, aquilo é outra entrega e aparece como o pedido da fala
+seguinte.
+
+Sem o destinatário no pedido, uma cadeia de três não diz quem estava falando com quem:
+`claude-2` sozinho não conta se ele foi acionado pelo `claude` ou pelo `qa`.
 
 **O contraste diz a hierarquia**, e com tudo alinhado é ele que faz esse trabalho. A
 resposta final para você é a superfície mais clara do cartão, com um fio na cor do

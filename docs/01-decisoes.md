@@ -1836,11 +1836,29 @@ Agora não há recuo, não há seta de aninhamento, e não há bolha própria. A
 usa a MESMA `ChatBubble` da resposta e o mesmo cabeçalho do turno. Um cartão, várias
 falas. A ordem já é a do tempo por construção: uma volta só existe depois da ida.
 
-**Cada bolha de uma fala entre agentes leva o par no título**: `claude → claude-2` na que
-saiu, `claude-2 → claude` na que voltou, com cada nome na cor dele. Só quem respondeu não
-basta: numa cadeia de três, `claude-2` sozinho não diz se ele foi acionado pelo `claude`
-ou pelo `qa`, e é justamente a topologia da conversa que se perde. `você` sai em branco —
-você não é um nó da sessão e não tem cor de agente; dar uma faria parecer que tem.
+**No título, direção só onde houve entrega.** Esta regra corrigiu uma mentira que eu
+tinha escrito na tela. A primeira versão punha o par nas duas bolhas — `claude → claude-2`
+no pedido e `claude-2 → claude` na resposta —, inferindo o destinatário da resposta a
+partir de quem havia acionado o turno. A inferência é falsa: o turno acabar não quer dizer
+que o agente devolveu algo a quem o disparou. O caso que denunciou foi este, com o próprio
+texto do agente desmentindo o rótulo:
+
+```
+claude → claude-2                                    ← rótulo errado
+Vizinho respondeu: 42. Confere.
+Cadeia encerrada, sem resposta de volta — nada mais a pedir a ele.
+```
+
+O app sabe as duas pontas de uma ENTREGA, porque é ele que monta o envelope. De uma
+resposta ele sabe só quem falou. Então pedido leva o par (`você → claude`,
+`claude → claude-2`) e resposta leva um nome só. Se o agente de fato devolveu, aquilo é
+outra entrega e aparece como o pedido da fala seguinte — a direção continua na tela, mas
+vinda do fato e não de palpite.
+
+Sem o destinatário no pedido, uma cadeia de três não diz quem estava falando com quem:
+`claude-2` sozinho não conta se ele foi acionado pelo `claude` ou pelo `qa`, e é justamente
+a topologia da conversa que se perde. `você` sai em branco — você não é um nó da sessão e
+não tem cor de agente; dar uma faria parecer que tem.
 
 **O contraste carrega a hierarquia da fala.** Três tons: a resposta final para você é a
 superfície mais clara do cartão e a única com fio na cor do agente; o seu pedido fica um

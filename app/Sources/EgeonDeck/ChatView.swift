@@ -81,7 +81,15 @@ enum ChatStyle {
         return ceil(rect.width) + ceil(font.pointSize * 0.75)
     }
 
-    /// Quem falou, e para quem quando importa: `claude` ou `claude → claude-2`.
+    /// Quem falou, e para quem quando isso é SABIDO: `claude` ou `você → claude`.
+    ///
+    /// A regra é uma: **direção só onde houve entrega**. O app monta o envelope de toda
+    /// entrega, então de um PEDIDO ele sabe as duas pontas. De uma RESPOSTA ele sabe só
+    /// quem falou — o turno acabar não quer dizer que o agente devolveu algo a quem o
+    /// acionou, e inferir isso escrevia mentira na tela: uma resposta endereçada a você
+    /// aparecia rotulada `claude → claude-2` num turno que o `claude-2` só tinha
+    /// disparado. Se ele DE FATO devolveu, aquilo é outra entrega e aparece como o
+    /// pedido da fala seguinte.
     ///
     /// Cada nome na cor do agente. `você` sai em branco de propósito — você não é um nó
     /// da sessão e não tem cor de agente; dar uma faria parecer que tem.
@@ -305,9 +313,9 @@ final class ChatTurnRow: ChatRow {
         fromChip = turn.from.map { AgentChip($0, prefix: "de ") }
         live = running ? ChatStyle.label(note ?? "pensando", font: ChatStyle.meta,
                                          color: ChatStyle.dim) : nil
-        // Quem pediu está no título: `você`, ou o agente que acionou este turno.
+        // Pedido: as duas pontas, porque o app montou a entrega e sabe as duas.
         promptBubble = turn.prompt.isEmpty
-            ? nil : ChatBubble(speaker: [turn.from ?? ChatStyle.you],
+            ? nil : ChatBubble(speaker: [turn.from ?? ChatStyle.you, turn.author],
                                blocks: [.prose(turn.prompt)], accent: accent, tone: .yours)
         answerBubble = turn.answer.isEmpty
             ? nil : ChatBubble(speaker: [turn.author], blocks: turn.answer,
@@ -517,10 +525,12 @@ final class DisclosureLine: NSView {
 /// bolha embaixo da outra e a ordem de leitura é de cima para baixo, como qualquer
 /// conversa.
 ///
-/// Cada bolha leva o PAR no título — `claude → claude-2` na que saiu, `claude-2 →
-/// claude` na que voltou. Numa fala entre agentes as duas pontas importam: sem o
-/// destinatário, uma cadeia de três não diz quem estava falando com quem, e `claude-2`
-/// sozinho não conta se ele foi acionado pelo `claude` ou pelo `qa`.
+/// A bolha do PEDIDO leva as duas pontas — `claude → claude-2` —, porque a entrega tem
+/// direção sabida: o app montou o envelope. A da RESPOSTA leva só quem falou, porque o
+/// destinatário dela não é sabido. Ver `ChatStyle.speaker`.
+///
+/// Sem o destinatário no pedido, uma cadeia de três não diz quem estava falando com
+/// quem: `claude-2` sozinho não conta se ele foi acionado pelo `claude` ou pelo `qa`.
 ///
 /// O rótulo que ficava ACIMA das duas bolhas saiu: com o nome dentro de cada uma, ele
 /// dizia a mesma coisa uma linha antes.
@@ -544,8 +554,10 @@ final class ChainEntryView: NSView {
         askBubble = turn.prompt.isEmpty
             ? nil : ChatBubble(speaker: [sender, turn.author],
                                blocks: [.prose(turn.prompt)], accent: accent, tone: .aside)
+        // Só quem falou. O destinatário da resposta não é sabido — ver
+        // `ChatStyle.speaker`.
         answerBubble = turn.answer.isEmpty
-            ? nil : ChatBubble(speaker: [turn.author, sender], blocks: turn.answer,
+            ? nil : ChatBubble(speaker: [turn.author], blocks: turn.answer,
                                accent: accent, tone: .aside)
         workToggle = turn.work.isEmpty
             ? nil : DisclosureLine(text: turn.workSummary, color: ChatStyle.faint)
