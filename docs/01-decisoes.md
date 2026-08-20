@@ -1814,19 +1814,29 @@ com o cartão sem fechar. Grudar é conferido a cada remedida, e desliga quando 
 para cima: mensagem nova aparece sem você ir buscá-la, e o thread não te arranca do meio
 do que você estava lendo.
 
-**Turno acionado por outro agente não é bloco de primeiro nível.** Ele aninha dentro do
-bloco de quem o acionou, como `↳ acionou claude-2 · 24s`. Solto na linha do tempo, o
-trabalho entre agentes aparecia entre duas perguntas SUAS e afogava a conversa que você
-pediu — que é exatamente o problema que o agrupamento existe para resolver, reaparecendo
-por outra porta.
+**Turno acionado por outro agente não é bloco de primeiro nível.** Ele entra no bloco de
+quem o acionou, como mais uma bolha. Solto na linha do tempo, o trabalho entre agentes
+aparecia entre duas perguntas SUAS e afogava a conversa que você pediu — que é exatamente
+o problema que o agrupamento existe para resolver, reaparecendo por outra porta.
 
-**A dobra tem uma regra só, e ela vale em todo nível: resposta sempre à vista, só o
-caminho dobra.** A sub-conversa nasceu recolhida por inteiro, e o defeito apareceu no
-primeiro uso real: o bloco dizia "perguntei a `nitidez/claude-2`: quanto é 7 vezes 6" e
-a resposta do vizinho — `42` — estava atrás do clique. Quem lê o thread não sabia o que
-o outro agente respondeu, que é justamente o que a sub-conversa existe para contar.
-Agora cada nível mostra o pedido e a resposta, e tem a própria linha `▸ N passos` para o
-caminho DELE. Recursivo, então uma cadeia de três voltas se lê inteira sem um clique.
+**Mas a cadeia é ACHATADA, não aninhada.** Foi construída aninhada primeiro, com cada
+volta recuando um degrau, e o defeito é de leitura: três voltas viravam uma escada dentro
+do cartão, e o desenho passava a falar da topologia em vez da conversa — ficava confuso
+justamente onde precisava ser claro. Achatada, é uma bolha embaixo da outra, todas na
+mesma margem, e quem falou é dito pelo nome e pela cor (`↳ claude-2`). A ordem já é a do
+tempo por construção: uma volta só existe depois da ida.
+
+A pergunta de cada fala não é repetida: ela está na bolha de cima, que é a resposta de
+quem acionou ("perguntei ao vizinho quanto é 7 vezes 6"). Só aparece quando o outro ainda
+não respondeu — aí é a única coisa que existe para mostrar.
+
+**A dobra tem uma regra só: resposta sempre à vista, só o caminho dobra.** A fala do
+vizinho nasceu recolhida por inteiro, e o defeito apareceu no primeiro uso real: o bloco
+dizia "perguntei a `nitidez/claude-2`: quanto é 7 vezes 6" e a resposta dele — `42` —
+estava atrás do clique. Quem lê o thread não sabia o que o outro agente respondeu, que é
+justamente o que a cadeia existe para contar. Agora cada fala mostra a resposta e tem a
+própria linha `▸ N passos` para o caminho DELA — uma cadeia de três voltas se lê inteira
+sem um clique.
 
 A ligação é pelo **remetente e pelo tempo**, não pelo texto: o envelope diz quem falou
 (e o app é quem o monta), e um agente só pode ter acionado alguém durante um turno dele
@@ -1982,11 +1992,10 @@ agentes, lida por `/chat`:
 ```
 
 O turno do `claude-2` **não** aparece no topo, e a volta dele aninha dentro da ida. No
-retrato, a cadeia inteira legível sem um clique: o pedido numa bolha à direita,
-`▸ 2 passos` dobrado, a resposta do `claude` numa bolha à esquerda, e abaixo
-`↳ acionou claude-2 · 24s` com a pergunta, os passos DELE dobrados, a resposta
-`7×6 = 42`, e a volta `↳ acionou claude` com o `42` e o fechamento. Os fios laterais
-saem na cor de quem atendeu cada nível.
+retrato, a cadeia inteira legível sem um clique e sem recuo: o pedido numa bolha à
+direita, `▸ 2 passos` dobrado, a resposta do `claude`, `↳ claude-2` com os passos dele
+dobrados e a resposta `7×6 = 42`, e `↳ claude` com a volta. Todas as bolhas na mesma
+margem, cada rótulo na cor de quem falou.
 
 O adapter e a linha de trabalho foram verificados contra **agente de verdade**, e não
 mais contra fixture: o gancho passou a reportar o transcript real e o thread mostrou a
