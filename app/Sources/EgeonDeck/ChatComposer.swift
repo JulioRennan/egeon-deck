@@ -311,7 +311,13 @@ final class ChatComposer: NSView {
         // A palavra que está sendo digitada antes do cursor. Nada de `@` no meio
         // de e-mail ou de caminho: só vale colado num limite de palavra.
         if let query = input.pendingMention {
-            let items = candidates.filter { $0.lowercased().contains(query.lowercased()) }
+            // `@` sozinho oferece TODOS, e é o caso que mais importa: a lista existe
+            // para descobrir quem existe, e isso se pergunta ANTES da primeira letra.
+            // Filtrar por prefixo vazio devolvia lista vazia porque `contains("")` é
+            // false em Swift — o `@` abria e nada aparecia.
+            let items = query.isEmpty
+                ? candidates
+                : candidates.filter { $0.lowercased().contains(query.lowercased()) }
             if items.isEmpty {
                 mentions.dismiss()
             } else {
