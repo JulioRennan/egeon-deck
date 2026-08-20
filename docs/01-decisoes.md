@@ -1824,10 +1824,28 @@ volta recuando um degrau e uma seta (`↳`) marcando o nível. O defeito é de l
 voltas viravam uma escada dentro do cartão, e o desenho passava a falar da topologia em
 vez da conversa — ficava confuso justamente onde precisava ser claro.
 
-Agora não há recuo, não há seta, e não há bolha própria. A fala do vizinho usa o MESMO
-cabeçalho do turno — nome do agente na cor dele — e a MESMA `ChatBubble` da resposta. Um
-cartão, várias falas, e o que muda entre uma e a seguinte é só quem fala. A ordem já é a
-do tempo por construção: uma volta só existe depois da ida.
+Agora não há recuo, não há seta de aninhamento, e não há bolha própria. A fala do vizinho
+usa a MESMA `ChatBubble` da resposta e o mesmo cabeçalho do turno. Um cartão, várias
+falas. A ordem já é a do tempo por construção: uma volta só existe depois da ida.
+
+**O título de uma fala entre agentes nomeia o par**, `claude → claude-2`, com cada nome na
+cor dele. Só quem respondeu não basta: numa cadeia de três, `claude-2` sozinho não diz se
+ele foi acionado pelo `claude` ou pelo `qa`, e é justamente a topologia da conversa que se
+perde. Abaixo do título vão as DUAS bolhas — o que foi mandado à direita, o que voltou à
+esquerda —, e é isso que impede um título de dois nomes de deixar dúvida sobre de quem é
+cada bolha.
+
+**O contraste carrega a hierarquia da fala.** Três tons: a resposta final para você é a
+superfície mais clara do cartão e a única com fio na cor do agente; o seu pedido fica um
+degrau abaixo; o que os agentes trocaram entre si recua para quase preto, mais escuro que
+o próprio cartão. Sem essa escada, a resposta que o agente te deu e a que ele deu ao
+vizinho pesavam igual na tela, e num cartão com cadeia de três achar a conclusão exigia
+ler tudo — o agrupamento juntava o que era do mesmo par mas não dizia o que era o
+resultado.
+
+Recuar em vez de apagar o texto, de propósito: a letra segue em 0.93 de branco nas três,
+então a bolha recuada continua legível de perto. O que muda é o quanto ela chama de
+longe.
 
 A pergunta de cada fala não é repetida: ela está na bolha de cima, que é a resposta de
 quem acionou ("perguntei ao vizinho quanto é 7 vezes 6"). Só aparece quando o outro ainda
