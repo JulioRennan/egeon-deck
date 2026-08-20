@@ -75,16 +75,16 @@ export EG_SIGN_ID="nome-do-certificado"
 
 ## Primeiro uso
 
-1. `+` na barra da esquerda cria uma sessão — uma pasta e os nós abertos sobre ela.
+1. `+` na barra da esquerda cria uma bancada — uma pasta e os nós abertos sobre ela.
 2. Na barra de baixo, escolha a ferramenta e clique (ou arraste) no canvas para criar
    o nó: terminal, editor, navegador.
-3. O nó de terminal tem um endereço — `sessão/id`, por exemplo `deck/claude-1`. É por
+3. O nó de terminal tem um endereço — `bancada/id`, por exemplo `deck/claude-1`. É por
    ele que se manda prompt de fora.
 4. Arraste a porta `+` de um card até outro para **ligar** dois agentes: dali em
    diante o primeiro pode acionar o segundo com `egeon send`.
 
 Atalhos que valem saber: `⌥⌘1`/`⌥⌘2` trocam canvas e mosaico, `⌘/` recolhe a barra de
-sessões, `⌘1`…`⌘4` escolhem a ferramenta.
+bancadas, `⌘1`…`⌘4` escolhem a ferramenta.
 
 ## Dirigir de fora
 
@@ -100,14 +100,14 @@ curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 
 ## Onde ficam as coisas
 
-Tudo em `~/.egeon/`, e todo arquivo é feito para ser editado à mão: `sessions.json`,
+Tudo em `~/.egeon/`, e todo arquivo é feito para ser editado à mão: `workbenches.json`,
 `agents.json`, `templates.json`, `components.json`, `web-profiles.json`. O log fica em
 `~/egeon.log` e é zerado a cada arranque — é a fonte de verdade quando algo não subiu,
 porque `open -a` descarta stdout.
 
 ## Dois apps lado a lado
 
-O app segura os pty direto, então **todo rebuild mata as sessões de agente em
+O app segura os pty direto, então **todo rebuild mata as bancadas de agente em
 andamento**. Por isso existem dois flavors: o estável, que segura os agentes de
 verdade, e o dev, que é o que se derruba.
 

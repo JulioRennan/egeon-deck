@@ -100,21 +100,28 @@ final class ControlSocket {
             // DAQUI": sem ele a lista é global, e o editor de um projeto
             // oferecia terminal de outro, que não tem nada a ver com o arquivo
             // aberto. `all` acompanha para quem escolhe de propósito atravessar
-            // sessão continuar podendo.
+            // bancada continuar podendo.
             let folder = Self.query(in: route)["folder"] ?? ""
             let payload = DispatchQueue.main.sync { () -> [String: Any] in
                 let all = Dispatcher.shared.activeAddresses
                 guard !folder.isEmpty else { return ["targets": all, "all": all] }
-                let session = AppControl.sessionOwning?(folder) ?? ""
-                return ["targets": session.isEmpty
-                            ? [] : all.filter { $0.hasPrefix(session + "/") },
+                let workbench = AppControl.workbenchOwning?(folder) ?? ""
+                return ["targets": workbench.isEmpty
+                            ? [] : all.filter { $0.hasPrefix(workbench + "/") },
                         "all": all,
-                        "session": session]
+                        "workbench": workbench,
+                        // `session` é o nome antigo da chave. Fica por uma versão: a
+                        // extensão instalada no code-server lê ela, e trocar as duas
+                        // pontas no mesmo commit não atualiza quem já está rodando.
+                        "session": workbench]
             }
             respond(fd, status: "200 OK", json: payload)
 
-        case ("POST", _, _) where route.contains("/session"):
-            // /session?target=sessão/id&id=<uuid>[&transcript=<path>] — o CLI
+        case ("POST", _, _) where route.contains("/conversation") || route.contains("/session"):
+            // /conversation?target=bancada/id&id=<uuid>[&transcript=<path>] — o CLI
+            // relatando qual conversa está aberta. Chamava-se `/session`, que continua
+            // aceito: o gancho vive em disco e um agente já rodando pode postar no
+            // nome antigo antes de o app regravá-lo.
             // relatando qual conversa está aberta e onde a está gravando. Vem do
             // gancho `UserPromptSubmit`, a cada prompt.
             //
@@ -130,7 +137,7 @@ final class ControlSocket {
                 return
             }
             DispatchQueue.main.sync {
-                AppControl.recordSession?(target, id, query["transcript"])
+                AppControl.recordConversation?(target, id, query["transcript"])
                 // Relatar a conversa também prova que o gancho chega aqui — e é
                 // isso que faz o terminal parar de depender de adivinhação sobre
                 // a tela já no primeiro turno (ADR-024).
@@ -139,7 +146,7 @@ final class ControlSocket {
             respond(fd, status: "200 OK", json: ["ok": true])
 
         case ("POST", _, _) where route.contains("/activity"):
-            // /activity?target=sessão/id&event=stop|ask — o CLI relatando que o
+            // /activity?target=bancada/id&event=stop|ask — o CLI relatando que o
             // turno acabou (gancho `Stop`) ou que está pedindo permissão (gancho
             // `Notification`). São os dois únicos avisos que chamam você, e vêm
             // do programa em vez de saírem de heurística sobre o pty (ADR-024).
@@ -155,7 +162,7 @@ final class ControlSocket {
             respond(fd, status: "200 OK", json: ["ok": true])
 
         case ("POST", _, _) where route.contains("/message"):
-            // /message?from=<id>&target=<sessão/id> — corpo é o texto puro.
+            // /message?from=<id>&target=<bancada/id> — corpo é o texto puro.
             //
             // Rota separada do /dispatch porque quem chama aqui é um agente,
             // escrevendo por um heredoc: montar JSON à mão significa escapar
@@ -216,10 +223,10 @@ final class ControlSocket {
             }
             respond(fd, status: result == nil ? "404 Not Found" : "200 OK",
                     json: result ?? ["ok": false,
-                                     "error": "sessão sem chat montado '\(target)'"])
+                                     "error": "bancada sem chat montado '\(target)'"])
 
         case ("GET", _, _) where route.contains("/chat"):
-            // /chat?target=ws — o thread do modo Chat da sessão, como dados.
+            // /chat?target=ws — o thread do modo Chat da bancada, como dados.
             //
             // É a ferramenta de teste do modo, do mesmo jeito que `/peek` é a do
             // terminal: o thread sai de vários transcripts cruzados por tempo, e
@@ -227,7 +234,7 @@ final class ControlSocket {
             let target = Self.query(in: route)["target"] ?? ""
             let payload = DispatchQueue.main.sync { AppControl.chatThread?(target) ?? nil }
             respond(fd, status: payload == nil ? "404 Not Found" : "200 OK",
-                    json: payload ?? ["ok": false, "error": "sessão desconhecida '\(target)'"])
+                    json: payload ?? ["ok": false, "error": "bancada desconhecida '\(target)'"])
 
         case ("GET", _, _) where route.contains("/peek"):
             // /peek?target=ws/id — mostra o que o terminal realmente exibe.
@@ -243,13 +250,13 @@ final class ControlSocket {
         case ("GET", _, _) where route.contains("/activate"):
             // /activate?target=<workspace> — troca a aba ativa.
             let name = Self.target(in: route)
-            let ok = DispatchQueue.main.sync { AppControl.activateSession?(name) ?? false }
+            let ok = DispatchQueue.main.sync { AppControl.activateWorkbench?(name) ?? false }
             respond(fd, status: ok ? "200 OK" : "404 Not Found",
                     json: ["ok": ok, "workspace": name,
-                           "known": DispatchQueue.main.sync { AppControl.sessionNames?() ?? [] }])
+                           "known": DispatchQueue.main.sync { AppControl.workbenchNames?() ?? [] }])
 
         case ("GET", _, _) where route.contains("/worktree"):
-            // /worktree?target=ws[/id]&branch=X — worktree da sessão ou de um
+            // /worktree?target=ws[/id]&branch=X — worktree da bancada ou de um
             // terminal só, sem passar pelo diálogo.
             //
             // `&nodes=back:fix/api,sub:spike` customiza a branch de terminais
@@ -302,26 +309,26 @@ final class ControlSocket {
                     json: payload)
 
         case ("GET", _, _) where route.contains("/remove"):
-            // /remove?target=ws[&worktrees=1] — remove a sessão, e só com
+            // /remove?target=ws[&worktrees=1] — remove a bancada, e só com
             // `worktrees=1` apaga as worktrees dela do disco. O padrão é não
             // apagar: é `worktree remove --force` do outro lado.
             let query = Self.query(in: route)
             let payload = DispatchQueue.main.sync {
-                AppControl.removeSession?(query["target"] ?? "", query["worktrees"] == "1")
+                AppControl.removeWorkbench?(query["target"] ?? "", query["worktrees"] == "1")
                     ?? ["ok": false, "error": "app sem remoção disponível"]
             }
             respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
                     json: payload)
 
         case ("GET", _, _) where route.contains("/layout"):
-            // /layout?mode=canvas|mosaic — troca a visualização da sessão ativa.
+            // /layout?mode=canvas|mosaic — troca a visualização da bancada ativa.
             let mode = Self.query(in: route)["mode"] ?? ""
             let applied = DispatchQueue.main.sync { AppControl.setViewMode?(mode) }
             respond(fd, status: applied == nil ? "404 Not Found" : "200 OK",
                     json: ["ok": applied != nil, "mode": applied ?? mode])
 
         case ("GET", _, _) where route.contains("/sidebar"):
-            // /sidebar?collapsed=0|1|toggle — recolhe a barra de sessões, abre,
+            // /sidebar?collapsed=0|1|toggle — recolhe a barra de bancadas, abre,
             // ou alterna.
             //
             // `toggle` existe para cobrir exatamente o que o ⌘/ e o botão da barra
@@ -445,7 +452,7 @@ final class ControlSocket {
 
         default:
             respond(fd, status: "404 Not Found",
-                    json: ["ok": false, "error": "use GET /targets, POST /dispatch, POST /message ou POST /session"])
+                    json: ["ok": false, "error": "use GET /targets, POST /dispatch, POST /message ou POST /conversation"])
         }
     }
 

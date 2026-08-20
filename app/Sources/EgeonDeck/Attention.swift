@@ -51,8 +51,8 @@ enum Activity: Equatable {
     }
 }
 
-/// Quantos terminais de uma sessão estão em cada situação. É o que a barra
-/// lateral mostra das sessões que não estão na tela.
+/// Quantos terminais de uma bancada estão em cada situação. É o que a barra
+/// lateral mostra das bancadas que não estão na tela.
 struct ActivitySummary: Equatable {
     var working = 0
     var attention = 0

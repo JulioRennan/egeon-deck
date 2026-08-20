@@ -1,7 +1,7 @@
 {
   "name": "spec",
   "displayName": "Egeon Spec",
-  "description": "Editor de markdown com review inline e request changes direto na sessão do agente",
+  "description": "Editor de markdown com review inline e request changes direto no terminal do agente",
   "publisher": "egeon",
   "version": "0.1.0",
   "license": "AGPL-3.0-only",
@@ -26,7 +26,7 @@
       },
       {
         "command": "egeon.pickTarget",
-        "title": "Egeon: Escolher sessão de agente alvo"
+        "title": "Egeon: Escolher terminal de agente alvo"
       }
     ],
     "configuration": {
@@ -35,7 +35,7 @@
         "egeon.target": {
           "type": "string",
           "default": "",
-          "description": "Sessão de agente que recebe os request changes (ex: deck/claude-back). Vazio pergunta na hora."
+          "description": "Terminal de agente que recebe os request changes (ex: deck/claude-back). Vazio pergunta na hora."
         },
         "egeon.socketPath": {
           "type": "string",

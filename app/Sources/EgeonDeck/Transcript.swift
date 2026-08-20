@@ -248,7 +248,7 @@ final class ClaudeCodeTranscript: ChatAdapter {
     /// primeiro. Encadear por `parentUuid` daria o mesmo resultado com mais superfície
     /// para quebrar em conversa compactada.
     private func absorb(_ raw: [String: Any], author: String) {
-        // Sidechain é subagente. O thread é a conversa da sessão, e o trabalho
+        // Sidechain é subagente. O thread é a conversa da bancada, e o trabalho
         // interno de um subagente ali é ruído que abafa o que você precisa ler.
         if raw["isSidechain"] as? Bool == true { return }
         guard let at = Self.date(raw["timestamp"]),
@@ -481,8 +481,8 @@ final class ClaudeCodeTranscript: ChatAdapter {
         let header = "[egeon] mensagem de "
         guard text.hasPrefix(header) else { return nil }
         let line = text.split(separator: "\n", maxSplits: 1)[0].dropFirst(header.count)
-        // Chega como endereço completo (`sessão/id`); o id curto é o que a tela
-        // mostra, porque no thread a sessão é sempre a mesma.
+        // Chega como endereço completo (`bancada/id`); o id curto é o que a tela
+        // mostra, porque no thread a bancada é sempre a mesma.
         let id = String(line.split(separator: "/").last ?? "")
         return id.isEmpty ? nil : id
     }

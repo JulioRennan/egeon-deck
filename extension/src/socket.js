@@ -55,8 +55,8 @@ function request(socketPath, { method = 'GET', route, body }) {
   });
 }
 
-/// `folder` faz o app responder só pelos terminais da sessão dona daquela pasta.
-/// `all` vem junto: quem escolhe atravessar sessão de propósito continua podendo,
+/// `folder` faz o app responder só pelos terminais da bancada dona daquela pasta.
+/// `all` vem junto: quem escolhe atravessar bancada de propósito continua podendo,
 /// e é por ela que se confere se um alvo gravado ainda existe.
 ///
 /// `scoped: false` é app mais antigo que a rota com escopo — ele responde 404 a
@@ -73,14 +73,16 @@ async function listTargets(socketPath, folder) {
         scoped: true,
         targets,
         all: Array.isArray(scoped.body.all) ? scoped.body.all : targets,
-        session: typeof scoped.body.session === 'string' ? scoped.body.session : ''
+        workbench: typeof scoped.body.workbench === 'string' ? scoped.body.workbench
+      // `session` é o nome antigo da chave: app velho, extensão nova.
+      : typeof scoped.body.session === 'string' ? scoped.body.session : ''
       };
     }
   }
 
   const { body } = await request(socketPath, { route: '/targets' });
   const targets = Array.isArray(body.targets) ? body.targets : [];
-  return { scoped: false, targets, all: targets, session: '' };
+  return { scoped: false, targets, all: targets, workbench: '' };
 }
 
 async function dispatch(socketPath, payload) {

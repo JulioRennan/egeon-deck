@@ -6,10 +6,10 @@ import AppKit
 ///
 /// O que o thread precisa é distinguir três agentes numa linha só: quem falou se
 /// lê pela cor antes de se ler o nome. O acento do card não serve — lá ele diz o
-/// TIPO do nó, então dois agentes na mesma sessão têm a mesma cor.
+/// TIPO do nó, então dois agentes na mesma bancada têm a mesma cor.
 ///
-/// Derivada e não configurada: campo de cor no `sessions.json` é mais uma coisa
-/// para você manter, e paleta escolhida à mão em sessão de cinco agentes acaba em
+/// Derivada e não configurada: campo de cor no `workbenches.json` é mais uma coisa
+/// para você manter, e paleta escolhida à mão em bancada de cinco agentes acaba em
 /// dois tons de azul. O hash é próprio porque `hashValue` do Swift tem semente
 /// por processo — com ele a cor de `orquestrador` mudaria a cada arranque.
 enum AgentColor {
@@ -62,16 +62,16 @@ struct ChatNode {
     /// Onde o CLI está gravando esta conversa. Nil em shell e em agente que ainda
     /// não recebeu prompt nenhum.
     let transcript: URL?
-    /// Ids da mesma sessão que este nó pode acionar. É a lista de arestas — no
+    /// Ids da mesma bancada que este nó pode acionar. É a lista de arestas — no
     /// chat ela é só de leitura, e desenhar aresta continua sendo no canvas.
     let reaches: [String]
 }
 
-// MARK: - O thread de uma sessão
+// MARK: - O thread de uma bancada
 
-/// Junta os transcripts dos agentes da sessão num thread só, na ordem do tempo.
+/// Junta os transcripts dos agentes da bancada num thread só, na ordem do tempo.
 ///
-/// Um thread por sessão e não por nó: o que se perde dirigindo vários agentes é a
+/// Um thread por bancada e não por nó: o que se perde dirigindo vários agentes é a
 /// ordem em que as coisas aconteceram, e ela só existe cruzando os transcripts.
 /// O timestamp é do CLI, não do app — então a ordem é a real, mesmo com dois
 /// agentes respondendo ao mesmo tempo.
@@ -93,7 +93,7 @@ final class ChatThread {
     /// O que este nó está fazendo agora, se o adapter dele souber dizer.
     func live(of id: String) -> String? { liveByNode[id] }
 
-    /// Os turnos da sessão, do jeito que o thread mostra: os SEUS no topo, e os que
+    /// Os turnos da bancada, do jeito que o thread mostra: os SEUS no topo, e os que
     /// um agente provocou aninhados dentro de quem os provocou.
     func turns(of participants: [Participant]) -> [ChatTurn] {
         var all: [ChatTurn] = []

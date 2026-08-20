@@ -23,10 +23,10 @@ function socketPath() {
   return socket.resolveSocketPath(config().get('socketPath'));
 }
 
-const OUTRA_SESSAO = 'outra sessão…';
+const OUTRA_BANCADA = 'outra bancada…';
 
 /// Pergunta o alvo uma vez e guarda — mas confere a cada envio se ele ainda
-/// existe, e sugere só terminais vivos da sessão desta pasta.
+/// existe, e sugere só terminais vivos da bancada desta pasta.
 ///
 /// O alvo mora no settings do workspace, e nó apagado ou renomeado deixava ali
 /// um endereço morto: o app respondia "alvo desconhecido" e a extensão insistia
@@ -50,9 +50,9 @@ async function resolveTarget({ folder, interactive = true, force = false } = {})
     return { target: '', detail: error.message };
   }
 
-  // Confere contra a lista INTEIRA, não contra a da sessão: escolher um terminal
-  // de outra sessão é legítimo, e apagar essa escolha a cada envio seria desfazer
-  // na surdina o que o usuário pediu. O escopo da sessão vale para SUGERIR.
+  // Confere contra a lista INTEIRA, não contra a da bancada: escolher um terminal
+  // de outra bancada é legítimo, e apagar essa escolha a cada envio seria desfazer
+  // na surdina o que o usuário pediu. O escopo da bancada vale para SUGERIR.
   if (configured && listing.all.includes(configured)) return { target: configured };
 
   if (configured) {
@@ -68,7 +68,7 @@ async function resolveTarget({ folder, interactive = true, force = false } = {})
   return pickTarget(listing);
 }
 
-/// Mostra a escolha e grava. Primeira lista é a da sessão desta pasta; as outras
+/// Mostra a escolha e grava. Primeira lista é a da bancada desta pasta; as outras
 /// ficam atrás de um segundo passo, para estarem ao alcance sem poluir o caso
 /// normal.
 async function pickTarget(listing) {
@@ -83,29 +83,29 @@ async function pickTarget(listing) {
 
   let escolha;
   if (!listing.scoped) {
-    // App sem escopo por pasta: lista global, e nada a prometer sobre sessão.
+    // App sem escopo por pasta: lista global, e nada a prometer sobre bancada.
     escolha = await vscode.window.showQuickPick(listing.all, {
       title: 'egeon — para qual terminal vão os comentários?',
       placeHolder: 'ex: deck/claude-back'
     });
   } else if (dentro.length) {
-    escolha = await vscode.window.showQuickPick(fora.length ? [...dentro, OUTRA_SESSAO] : dentro, {
-      title: `egeon — terminais de ${listing.session}`,
+    escolha = await vscode.window.showQuickPick(fora.length ? [...dentro, OUTRA_BANCADA] : dentro, {
+      title: `egeon — terminais de ${listing.workbench}`,
       placeHolder: 'quem recebe os comentários deste arquivo'
     });
   } else {
-    // Pasta que não é de nenhuma sessão, ou sessão sem terminal de pé: melhor
+    // Pasta que não é de nenhuma bancada, ou bancada sem terminal de pé: melhor
     // oferecer o resto dizendo por quê do que dar um beco sem saída.
     escolha = await vscode.window.showQuickPick(fora, {
-      title: listing.session
-        ? `egeon — ${listing.session} não tem terminal ativo; outras sessões`
-        : 'egeon — esta pasta não é de nenhuma sessão; terminais ativos'
+      title: listing.workbench
+        ? `egeon — ${listing.workbench} não tem terminal ativo; outras bancadas`
+        : 'egeon — esta pasta não é de nenhuma bancada; terminais ativos'
     });
   }
 
-  if (escolha === OUTRA_SESSAO) {
+  if (escolha === OUTRA_BANCADA) {
     escolha = await vscode.window.showQuickPick(fora, {
-      title: 'egeon — terminais de outras sessões'
+      title: 'egeon — terminais de outras bancadas'
     });
   }
   if (!escolha) return { target: '', detail: 'nenhum alvo escolhido' };
@@ -114,7 +114,7 @@ async function pickTarget(listing) {
   return { target: escolha };
 }
 
-/// Envia os comentários pendentes como UM prompt na sessão viva do agente.
+/// Envia os comentários pendentes como UM prompt na bancada viva do agente.
 /// Mesma função usada pelo botão do preview e pelo autoteste — para o que é
 /// verificado ser exatamente o que o usuário dispara.
 async function sendRequestChanges(documentUri, { interactive = true } = {}) {
@@ -344,7 +344,7 @@ class SpecEditorProvider {
 <body>
   <header id="bar">
     <span id="file"></span>
-    <button id="target" type="button" title="trocar a sessão que recebe">alvo…</button>
+    <button id="target" type="button" title="trocar a bancada que recebe">alvo…</button>
     <span id="status"></span>
     <button id="request" type="button">Request changes</button>
     <button id="source" type="button">Ver fonte</button>

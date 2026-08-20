@@ -66,11 +66,11 @@ final class CodeServer {
     /// workspace abre em Restricted Mode atrás de um diálogo de confiança, e as
     /// pastas aqui são as que o próprio usuário configurou.
     ///
-    /// As duas de git existem porque uma sessão do Egeon é UMA frente de
+    /// As duas de git existem porque uma bancada do Egeon é UMA frente de
     /// trabalho: abrir o repositório principal fazia o VSCode achar todas as
     /// worktrees dele e listar cada uma como um repositório à parte no Source
-    /// Control — a tela enchia de repositório que não é o desta sessão. Quem
-    /// quiser ver outra worktree abre outra sessão, que é o que o worktree do
+    /// Control — a tela enchia de repositório que não é o desta bancada. Quem
+    /// quiser ver outra worktree abre outra bancada, que é o que o worktree do
     /// Egeon faz.
     ///
     /// `egeon.socketPath` é do flavor, e tem de ser: o padrão da extensão é

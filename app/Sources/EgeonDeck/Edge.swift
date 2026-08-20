@@ -1,6 +1,6 @@
 import AppKit
 
-/// Uma ligação dirigida entre dois nós da mesma sessão: `from` pode acionar
+/// Uma ligação dirigida entre dois nós da mesma bancada: `from` pode acionar
 /// `to`.
 ///
 /// Sempre de mão única, e ida e volta continuam sendo DUAS: é o que faz o ciclo de
@@ -12,12 +12,12 @@ struct EdgeConfig: Codable, Equatable {
     var to: String
 
     /// Quantas vezes esta seta pode disparar na mesma conversa. Nil = sem limite
-    /// próprio, vale só o teto da sessão.
+    /// próprio, vale só o teto da bancada.
     ///
     /// Num par ligado nos dois sentidos, este é o número de idas e voltas: com 2,
     /// A fala, B responde, A fala, B responde, e a próxima é cortada.
     ///
-    /// Só aperta, nunca afrouxa. O teto da sessão continua valendo por cima —
+    /// Só aperta, nunca afrouxa. O teto da bancada continua valendo por cima —
     /// e tem de continuar, porque limite por seta não segura `A→B→C→A`: ali cada
     /// seta dispara uma vez só e o contador nunca chega perto.
     var maxSends: Int? = EdgeConfig.defaultSends
@@ -48,7 +48,7 @@ extension EdgeConfig {
     /// nenhum — o oposto do que o padrão quer dizer.
     ///
     /// Chave ausente e `null` explícito são coisas diferentes aqui: ausente herda
-    /// o padrão, `null` desliga o limite desta seta e deixa só o teto da sessão.
+    /// o padrão, `null` desliga o limite desta seta e deixa só o teto da bancada.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         from = try container.decode(String.self, forKey: .from)
@@ -85,7 +85,7 @@ struct EdgeLink: Equatable {
 
     var isBidirectional: Bool { aToB && bToA }
 
-    /// As arestas reais, que são o que vive no `sessions.json` e o que as guardas
+    /// As arestas reais, que são o que vive no `workbenches.json` e o que as guardas
     /// leem.
     var edges: [EdgeConfig] {
         var out: [EdgeConfig] = []
@@ -117,7 +117,7 @@ struct EdgeLink: Equatable {
         x <= y ? (x, y) : (y, x)
     }
 
-    /// Colapsa as arestas de uma sessão em ligações, na ordem em que aparecem.
+    /// Colapsa as arestas de uma bancada em ligações, na ordem em que aparecem.
     static func collapse(_ edges: [EdgeConfig]) -> [EdgeLink] {
         var links: [EdgeLink] = []
         for edge in edges {
@@ -418,7 +418,7 @@ final class EdgeLayerView: NSView {
     /// é onde o nó está agora, não onde o JSON diz que ele estava.
     var frameForNode: ((String) -> NSRect?)?
 
-    /// As arestas como vivem no `sessions.json`. A tela desenha as LIGAÇÕES
+    /// As arestas como vivem no `workbenches.json`. A tela desenha as LIGAÇÕES
     /// derivadas daqui: um par com os dois sentidos é uma linha, não duas.
     var edges: [EdgeConfig] = [] {
         didSet {
@@ -674,7 +674,7 @@ final class EdgeLayerView: NSView {
     }
 
     /// Quantas idas e voltas esta ligação permite. `∞` = sem limite próprio, vale só
-    /// o teto da sessão.
+    /// o teto da bancada.
     private func drawLimitPill(_ link: EdgeLink, in rect: NSRect) {
         NSColor(calibratedWhite: 0.14, alpha: 1).setFill()
         NSBezierPath(roundedRect: rect, xRadius: rect.height / 2,

@@ -61,8 +61,8 @@ class NodeView: NSView {
     static let minSize = NSSize(width: 280, height: 180)
     static let gripSize: CGFloat = 16
 
-    /// `id` dentro da sessão. Vazio nos nós que não vivem no
-    /// sessions.json (placeholder, portal) — a persistência os ignora.
+    /// `id` dentro da bancada. Vazio nos nós que não vivem no
+    /// workbenches.json (placeholder, portal) — a persistência os ignora.
     let nodeID: String
 
     /// Cor do tipo do nó. Guardada porque o alerta troca a borda e precisa
@@ -121,9 +121,9 @@ class NodeView: NSView {
 
     /// "Leve este terminal para uma worktree nova."
     ///
-    /// Por nó, e não só por sessão: uma frente de trabalho costuma ser dois
+    /// Por nó, e não só por bancada: uma frente de trabalho costuma ser dois
     /// repositórios, e levar o card do backend para a branch nova não deveria
-    /// exigir duplicar a sessão inteira.
+    /// exigir duplicar a bancada inteira.
     var onRequestWorktree: ((NodeView) -> Void)?
 
     /// Arrasto pelo cabeçalho quando o card NÃO manda na própria posição — isto é,
@@ -196,7 +196,7 @@ class NodeView: NSView {
             self.onRequestWorktree?(self)
         }
         // Só nós que têm o que configurar. O editor não tem comando nem papel; o
-        // que ele abre vem da pasta da sessão.
+        // que ele abre vem da pasta da bancada.
         editButton.isHidden = !supportsEditing
         // Só quem abre pasta pode ganhar worktree. O nó web não abre nenhuma.
         worktreeButton.isHidden = !supportsWorktree
@@ -244,7 +244,7 @@ class NodeView: NSView {
     ///
     /// No canvas sim. No mosaico não: quem dá o frame é o split view, e arrastar o
     /// cabeçalho lá chamaria `onRequestSpace` — que desloca o mundo do canvas e
-    /// regrava o `sessions.json` com coordenadas que não são de lá. A alça de
+    /// regrava o `workbenches.json` com coordenadas que não são de lá. A alça de
     /// resize e a porta de aresta desaparecem pelo mesmo motivo: brigariam com o
     /// divisor no quadro seguinte.
     var isFreeform = true {
@@ -401,17 +401,17 @@ class NodeView: NSView {
     /// O que o usuário perde ao remover este nó. Cada tipo responde por si —
     /// terminal mata processo, editor não, e o diálogo precisa dizer qual é qual.
     var removalWarning: String {
-        "O nó sai do canvas e do sessions.json."
+        "O nó sai do canvas e do workbenches.json."
     }
 
     /// Chamado antes de sair da hierarquia. Solta o que não morre sozinho:
     /// processo de pty, carga de webview, registro em índice global.
     func prepareForRemoval() {}
 
-    /// A sessão foi renomeada. O endereço de dispatch começa com o nome dela,
+    /// A bancada foi renomeada. O endereço de dispatch começa com o nome dela,
     /// então quem está registrado em algum índice precisa se re-registrar — sem
     /// derrubar o processo que já está rodando.
-    func sessionRenamed(to session: String) {}
+    func workbenchRenamed(to workbench: String) {}
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -552,7 +552,7 @@ final class TerminalNode: NodeView {
          prompt: String? = nil, hooked: Bool = false) {
         self.address = address
         // Só o nome do terminal no título. O endereço inteiro cabia numa linha de
-        // 11pt e não sobrava nada; agora a sessão é a mesma para todos os cards da
+        // 11pt e não sobrava nada; agora a bancada é a mesma para todos os cards da
         // tela, então repeti-la em cada um custa espaço e não informa. O endereço
         // completo e o CLI ficam no tooltip, para quem precisa despachar.
         self.baseTitle = String(address.split(separator: "/").last ?? "")
@@ -646,11 +646,11 @@ final class TerminalNode: NodeView {
     /// um card até outro, e no mosaico não há espaço livre onde soltar.
     override func freeformDidChange() { port.isHidden = !isFreeform }
 
-    override func sessionRenamed(to session: String) {
-        let updated = "\(session)/\(nodeID)"
+    override func workbenchRenamed(to workbench: String) {
+        let updated = "\(workbench)/\(nodeID)"
         Dispatcher.shared.rekey(from: address, to: updated)
         address = updated
-        // O título é o nome do terminal e não muda com a sessão; o tooltip carrega
+        // O título é o nome do terminal e não muda com a bancada; o tooltip carrega
         // o endereço, e esse muda.
         titleLabel.toolTip = updated
         refreshBadge()
@@ -710,9 +710,9 @@ final class TerminalNode: NodeView {
     /// Chamado por um timer, então tudo aqui é barato de propósito: nenhuma
     /// leitura de tela, nenhuma alocação além das strings do rótulo.
     func refreshBadge() {
-        let session = Dispatcher.shared.target(address)
-        let activity = session?.activity ?? .dead
-        let pending = session?.pending ?? 0
+        let workbench = Dispatcher.shared.target(address)
+        let activity = workbench?.activity ?? .dead
+        let pending = workbench?.pending ?? 0
 
         var parts: [String] = []
         if let label = activity.label { parts.append(label) }
@@ -838,7 +838,7 @@ final class CanvasContainer: NSView {
     /// sai o frame — a barra em si é só o conteúdo.
     private lazy var toolbarPanel = GlassPanel(content: toolbar, radius: 14)
 
-    /// De qual template esta sessão nasceu. Repassado à barra, que decide se
+    /// De qual template esta bancada nasceu. Repassado à barra, que decide se
     /// mostra o botão de atualizar.
     var originTemplate: String? {
         didSet { toolbar.showsUpdateTemplate(originTemplate) }
@@ -847,7 +847,7 @@ final class CanvasContainer: NSView {
 
     /// Onde soltar um nó novo: retângulo já em coordenadas do documento.
     var onPlace: ((CanvasTool, NSRect) -> Void)?
-    /// Nó movido, redimensionado ou criado — hora de gravar o sessions.json.
+    /// Nó movido, redimensionado ou criado — hora de gravar o workbenches.json.
     var onLayoutChanged: (() -> Void)?
     /// Clique no X de um nó. Confirmar é responsabilidade de quem escuta.
     var onRequestClose: ((NodeView) -> Void)?
@@ -877,13 +877,13 @@ final class CanvasContainer: NSView {
     /// Aviso a mostrar. O banner mora acima do canvas, e não aqui, porque em modo
     /// mosaico este container está fora da hierarquia — o aviso não apareceria.
     var onBanner: ((String?) -> Void)?
-    /// Todos os nós da sessão, inclusive os que estão no mosaico agora.
+    /// Todos os nós da bancada, inclusive os que estão no mosaico agora.
     ///
     /// `spawnRect` precisa deles: com o mosaico ativo, `doc.subviews` está vazio e
     /// todo nó novo nasceria exatamente no mesmo canto.
     var placedNodes: (() -> [NodeView])?
 
-    /// Ligações da sessão. Só terminal liga: editor e web não têm quem receba
+    /// Ligações da bancada. Só terminal liga: editor e web não têm quem receba
     /// prompt.
     var edges: [EdgeConfig] {
         get { edgeLayer.edges }
@@ -1016,7 +1016,7 @@ final class CanvasContainer: NSView {
         }
     }
 
-    /// Um monitor local vale para o app todo, e existe um canvas por sessão.
+    /// Um monitor local vale para o app todo, e existe um canvas por bancada.
     /// `superview != nil` garante que só o canvas na tela reaja.
     private var isLive: Bool { superview != nil && window != nil }
 

@@ -37,7 +37,7 @@ enum EgeonCLI {
     private static var body: String {
         """
         #!/usr/bin/env bash
-        # Egeon Deck — falar com os outros terminais desta sessão.
+        # Egeon Deck — falar com os outros terminais desta bancada.
         #
         #   egeon peers              quem você pode acionar
         #   egeon send <endereço>    manda o stdin para ele

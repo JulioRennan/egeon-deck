@@ -1,7 +1,7 @@
 import AppKit
 
 // egeon — PoC 04
-// Sidebar de sessões + canvas por sessão com terminais reais.
+// Sidebar de bancadas + canvas por bancada com terminais reais.
 // Terminais do tipo `agent` são alvos endereçáveis do dispatcher, que recebe
 // prompts pelo socket de controle em ~/.egeon/sock.
 //
@@ -14,22 +14,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
     var root: RootView!
 
-    var configs: [SessionConfig] = []
+    var configs: [WorkbenchConfig] = []
     var agents: [String: AgentProfile] = [:]
     /// Criados sob demanda e mantidos vivos: trocar de aba não mata terminal.
-    var shells: [Int: SessionShell] = [:]
+    var shells: [Int: WorkbenchShell] = [:]
     var activeIndex = -1
 
     let control = ControlSocket()
     var badgeTimer: Timer?
-    /// Debounce da gravação do sessions.json.
+    /// Debounce da gravação do workbenches.json.
     var persistTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.reset()
-        configs = SessionStore.load()
+        configs = WorkbenchStore.load()
         agents = AgentStore.load()
-        Log.write("Egeon Deck iniciando — \(configs.count) sessões, "
+        Log.write("Egeon Deck iniciando — \(configs.count) bancadas, "
                   + "\(agents.count) perfis de agente")
 
         // Escrito no arranque, e não na primeira worktree: é um arquivo feito
@@ -46,7 +46,7 @@ EgeonCLI.install()
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.setFrame(screen.visibleFrame, display: false)
-        // Sem texto na barra de título: quem diz a sessão é a barra do app, logo
+        // Sem texto na barra de título: quem diz a bancada é a barra do app, logo
         // abaixo, e o nome do flavor repetido ali só empilhava rótulo. O dev
         // continua reconhecível pelo ícone no Dock.
         window.title = ""
@@ -57,13 +57,13 @@ EgeonCLI.install()
         let sidebar = Sidebar(configs: configs)
         sidebar.onSelect = { [weak self] index in self?.activate(index) }
         sidebar.onToggleCollapse = { [weak self] in self?.root.toggleCollapsed() }
-        sidebar.onCreate = { [weak self] in self?.createSession() }
-        sidebar.onCreateFromWorktree = { [weak self] in self?.createSessionFromWorktree() }
-        sidebar.onRename = { [weak self] index in self?.renameSession(index) }
+        sidebar.onCreate = { [weak self] in self?.createWorkbench() }
+        sidebar.onCreateFromWorktree = { [weak self] in self?.createWorkbenchFromWorktree() }
+        sidebar.onRename = { [weak self] index in self?.renameWorkbench(index) }
         sidebar.onDuplicateAsWorktree = { [weak self] index in
-            self?.duplicateSessionAsWorktree(index)
+            self?.duplicateWorkbenchAsWorktree(index)
         }
-        sidebar.onRemove = { [weak self] index in self?.confirmRemoveSession(index) }
+        sidebar.onRemove = { [weak self] index in self?.confirmRemoveWorkbench(index) }
         sidebar.onEditVisitLimit = { [weak self] index in self?.editVisitLimit(index) }
         root = RootView(sidebar: sidebar)
         window.contentView = root
@@ -75,7 +75,7 @@ EgeonCLI.install()
         // então carrega, evitando WKWebView batendo em porta morta.
         CodeServer.shared.start()
 
-        AppControl.sessionNames = { [weak self] in self?.configs.map(\.name) ?? [] }
+        AppControl.workbenchNames = { [weak self] in self?.configs.map(\.name) ?? [] }
         AppControl.canvasGeometry = { [weak self] in self?.canvasGeometry() ?? [:] }
         AppControl.makeWorktree = { [weak self] target, branch, nodeBranches in
             self?.makeWorktree(target: target, branch: branch, nodeBranches: nodeBranches)
@@ -97,10 +97,10 @@ EgeonCLI.install()
             self.root.setCollapsed(state)
             return self.root.isCollapsed
         }
-        AppControl.sessionEdges = { [weak self] name in
+        AppControl.workbenchEdges = { [weak self] name in
             self?.configs.first { $0.name == name }?.edgeList ?? []
         }
-        AppControl.sessionVisitLimit = { [weak self] name in
+        AppControl.workbenchVisitLimit = { [weak self] name in
             self?.configs.first { $0.name == name }?.visitLimit ?? 3
         }
         AppControl.nodeRole = { [weak self] address in
@@ -109,8 +109,8 @@ EgeonCLI.install()
             return self?.configs.first { $0.name == parts[0] }?
                 .nodes.first { $0.id == parts[1] }?.prompt
         }
-        AppControl.recordSession = { [weak self] target, id, transcript in
-            self?.recordSession(target: target, id: id, transcript: transcript)
+        AppControl.recordConversation = { [weak self] target, id, transcript in
+            self?.recordConversation(target: target, id: id, transcript: transcript)
         }
         AppControl.chatThread = { [weak self] name in
             guard let self,
@@ -130,7 +130,7 @@ EgeonCLI.install()
             // dois seria comparar pixels.
             let nodes = self.shells[index]?.chat.snapshot() ?? []
             return [
-                "session": name,
+                "workbench": name,
                 "mode": (self.shells[index]?.mode ?? config.view ?? .canvas).rawValue,
                 "agents": participants.map { participant -> [String: Any] in
                     var out: [String: Any] = ["id": participant.id]
@@ -149,44 +149,44 @@ EgeonCLI.install()
             else { return nil }
             return shell.chat.compose(text, send: send)
         }
-        AppControl.sessionOwning = { [weak self] folder in
-            self?.sessionOwning(folder: folder)
+        AppControl.workbenchOwning = { [weak self] folder in
+            self?.workbenchOwning(folder: folder)
         }
-        AppControl.setEdgeDirection = { [weak self] session, from, to, direction in
+        AppControl.setEdgeDirection = { [weak self] workbench, from, to, direction in
             guard let self,
-                  let index = self.configs.firstIndex(where: { $0.name == session })
-            else { return ["ok": false, "error": "sessão desconhecida '\(session)'"] }
+                  let index = self.configs.firstIndex(where: { $0.name == workbench })
+            else { return ["ok": false, "error": "bancada desconhecida '\(workbench)'"] }
             return self.applyEdgeDirection(index: index, from: from, to: to,
                                            direction: direction)
         }
 
-        AppControl.swapMosaic = { [weak self] session, first, second in
+        AppControl.swapMosaic = { [weak self] workbench, first, second in
             guard let self,
-                  let index = self.configs.firstIndex(where: { $0.name == session })
-            else { return ["ok": false, "error": "sessão desconhecida '\(session)'"] }
+                  let index = self.configs.firstIndex(where: { $0.name == workbench })
+            else { return ["ok": false, "error": "bancada desconhecida '\(workbench)'"] }
             guard self.shells[index]?.swapInMosaic(first, second) == true else {
                 return ["ok": false,
-                        "error": "não trocou — nó desconhecido, ou a sessão não está em mosaico"]
+                        "error": "não trocou — nó desconhecido, ou a bancada não está em mosaico"]
             }
-            return ["ok": true, "session": session, "swapped": [first, second]]
+            return ["ok": true, "workbench": workbench, "swapped": [first, second]]
         }
         AppControl.cardSnapshot = { [weak self] target, file in
             self?.cardSnapshot(target: target, file: file) ?? "erro: app encerrando"
         }
-        AppControl.removeSession = { [weak self] name, purge in
-            self?.removeSession(named: name, purge: purge)
+        AppControl.removeWorkbench = { [weak self] name, purge in
+            self?.removeWorkbench(named: name, purge: purge)
                 ?? ["ok": false, "error": "app encerrando"]
         }
-        AppControl.activateSession = { [weak self] name in
+        AppControl.activateWorkbench = { [weak self] name in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return false }
             self.activate(index)
             return true
         }
 
-        // Sem sessões, a barra da esquerda explica o + e o canvas fica de fora.
+        // Sem bancadas, a barra da esquerda explica o + e o canvas fica de fora.
         if configs.isEmpty {
-            Log.write("nenhuma sessão configurada — use + na barra lateral")
+            Log.write("nenhuma bancada configurada — use + na barra lateral")
         } else {
             activate(0)
         }
@@ -199,7 +199,7 @@ EgeonCLI.install()
         // escrever, então nó e linha parados não custam redesenho.
         //
         // A barra lateral é atualizada junto e à parte do canvas: ela mostra as
-        // sessões inativas, cujo canvas nem existe na hierarquia de views.
+        // bancadas inativas, cujo canvas nem existe na hierarquia de views.
         badgeTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.shells[self.activeIndex]?.refreshBadges()
@@ -228,7 +228,7 @@ EgeonCLI.install()
         // sair não pode se perder.
         persistTimer?.invalidate()
         for index in shells.keys { syncFrames(index: index) }
-        SessionStore.save(configs)
+        WorkbenchStore.save(configs)
 
         control.stop()
         CodeServer.shared.stop()
@@ -236,7 +236,7 @@ EgeonCLI.install()
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
-    // MARK: - Sessões
+    // MARK: - Bancadas
 
     private func activate(_ index: Int) {
         guard index >= 0, index < configs.count, index != activeIndex else { return }
@@ -244,29 +244,29 @@ EgeonCLI.install()
         let previous = activeIndex
         activeIndex = index
         root.show(shell)
-        // O layout da barra é do MODO, e o modo é por sessão: entrar numa sessão em
+        // O layout da barra é do MODO, e o modo é por bancada: entrar numa bancada em
         // mosaico ou em chat tem de tirar a barra de cima do conteúdo.
         root.setMosaic(shell.mode != .canvas)
         root.sidebar.select(index)
         root.sidebar.markLive(index)
-        // Trocar de sessão dá por visto o "terminou" das DUAS: a que você abre,
+        // Trocar de bancada dá por visto o "terminou" das DUAS: a que você abre,
         // porque chegou nela, e a que você deixa, porque estava na sua frente. É
         // aviso que não pede nada de você — manter o verde aceso depois disso é
         // pedir que você o apague à mão.
         if previous >= 0, previous < configs.count {
-            Dispatcher.shared.sessionOpened(configs[previous].name)
+            Dispatcher.shared.workbenchOpened(configs[previous].name)
         }
-        Dispatcher.shared.sessionOpened(configs[index].name)
-        Log.write("sessão ativa: \(configs[index].name)")
+        Dispatcher.shared.workbenchOpened(configs[index].name)
+        Log.write("bancada ativa: \(configs[index].name)")
     }
 
-    // MARK: - Criar, renomear e remover sessão
+    // MARK: - Criar, renomear e remover bancada
 
     /// Pasta primeiro, nome depois: o nome quase sempre é o da pasta, então
     /// perguntar na ordem inversa faria você digitar o que o app já sabe.
-    private func createSession() {
+    private func createWorkbench() {
         let panel = NSOpenPanel()
-        panel.title = "Pasta da sessão"
+        panel.title = "Pasta da bancada"
         panel.message = "Escolha a pasta — pode ser um repositório ou uma worktree."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -274,12 +274,12 @@ EgeonCLI.install()
         panel.prompt = "Usar esta pasta"
 
         guard panel.runModal() == .OK, let folder = panel.url else { return }
-        guard let (name, template) = askSessionNameAndTemplate(
+        guard let (name, template) = askWorkbenchNameAndTemplate(
             suggested: folder.lastPathComponent) else { return }
 
         let preset = template.flatMap { TemplateStore.template(named: $0) }
-        var config = SessionConfig(
-            name: SessionStore.availableName(basedOn: name, taken: configs.map(\.name)),
+        var config = WorkbenchConfig(
+            name: WorkbenchStore.availableName(basedOn: name, taken: configs.map(\.name)),
             path: (folder.path as NSString).abbreviatingWithTildeInPath,
             nodes: preset?.instantiate() ?? [],
             template: template)
@@ -288,23 +288,23 @@ EgeonCLI.install()
         config.view = preset?.view
         config.mosaic = preset?.mosaic
 
-        // Frames vindos do template já servem; sem template a sessão nasce vazia
+        // Frames vindos do template já servem; sem template a bancada nasce vazia
         // e você monta pela barra.
         if config.nodes.isEmpty { config.nodes = [] }
 
         configs.append(config)
         root.sidebar.reload(configs)
-        Log.write("sessão \"\(config.name)\" criada em \(config.path)"
+        Log.write("bancada \"\(config.name)\" criada em \(config.path)"
                   + (template.map { " a partir do template \"\($0)\"" } ?? " vazia"))
         schedulePersist()
         activate(configs.count - 1)
     }
 
-    /// Cria uma worktree do repositório escolhido e abre uma sessão nela.
+    /// Cria uma worktree do repositório escolhido e abre uma bancada nela.
     ///
     /// O ponto de partida é o HEAD atual, em uma branch nova — o git recusa a
     /// mesma branch em duas worktrees, por design.
-    private func createSessionFromWorktree() {
+    private func createWorkbenchFromWorktree() {
         let panel = NSOpenPanel()
         panel.title = "Repositório de origem"
         panel.message = "Escolha o repositório. A worktree sai do commit em que ele está agora."
@@ -342,8 +342,8 @@ EgeonCLI.install()
             return
         }
 
-        var config = SessionConfig(
-            name: SessionStore.availableName(basedOn: Worktree.sanitize(created.branch),
+        var config = WorkbenchConfig(
+            name: WorkbenchStore.availableName(basedOn: Worktree.sanitize(created.branch),
                                              taken: configs.map(\.name)),
             path: (created.path as NSString).abbreviatingWithTildeInPath,
             nodes: form.template.flatMap { TemplateStore.template(named: $0)?.instantiate() } ?? [],
@@ -355,7 +355,7 @@ EgeonCLI.install()
         schedulePersist()
         activate(configs.count - 1)
 
-        // A cópia do que o git não versiona roda depois de a sessão existir: com
+        // A cópia do que o git não versiona roda depois de a bancada existir: com
         // node_modules e Pods no meio, esperar por ela antes de mostrar qualquer
         // coisa pareceria travamento.
         //
@@ -366,11 +366,11 @@ EgeonCLI.install()
                         into: configs.count - 1)
     }
 
-    /// Duplica a sessão numa worktree nova, com os mesmos nós.
+    /// Duplica a bancada numa worktree nova, com os mesmos nós.
     ///
-    /// Partir da sessão em vez do `+` é o que dispensa escolher template: o que
+    /// Partir da bancada em vez do `+` é o que dispensa escolher template: o que
     /// se quer é "outra igual a esta, em outra branch".
-    private func duplicateSessionAsWorktree(_ index: Int) {
+    private func duplicateWorkbenchAsWorktree(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
         let origin = configs[index]
 
@@ -382,7 +382,7 @@ EgeonCLI.install()
             return
         }
 
-        // Do checkout principal, mesmo que esta sessão já seja uma worktree:
+        // Do checkout principal, mesmo que esta bancada já seja uma worktree:
         // partir da worktree ligada aninharia uma dentro da outra.
         let repoRoot = Worktree.mainRepo(of: origin.url.path) ?? status.repoRoot
         let suggested = Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
@@ -399,7 +399,7 @@ EgeonCLI.install()
     /// A duplicação em si, sem diálogo.
     ///
     /// Separada porque é o que o socket precisa alcançar: um `NSAlert` não é
-    /// dirigível de fora, e sem isto o fluxo inteiro — worktree da sessão, worktree
+    /// dirigível de fora, e sem isto o fluxo inteiro — worktree da bancada, worktree
     /// de cada terminal, reapontamento dos `cwd` — só poderia ser verificado a
     /// olho. Devolve o erro em vez de apresentá-lo: quem chamou sabe se há usuário
     /// olhando.
@@ -419,7 +419,7 @@ EgeonCLI.install()
         }
 
         // As worktrees dos terminais que você marcou, cada uma no repositório
-        // dela. Rodam depois da worktree da sessão porque a falha de uma vizinha
+        // dela. Rodam depois da worktree da bancada porque a falha de uma vizinha
         // não pode impedir a principal de existir.
         var extraWorktrees: [(repo: String, path: String)] = []
         let nodeCwds = NodeWorktreePlanner.materialize(form.nodes) { repo, path in
@@ -431,15 +431,15 @@ EgeonCLI.install()
 
         let alvo: Int
         switch form.target {
-        case .newSession:
+        case .newWorkbench:
             // As ligações vêm junto: elas são parte da montagem, tanto quanto os
             // nós. A aresta guarda id de nó, e a duplicação preserva os ids, então
             // a rede da worktree nasce igual à da origem — quem podia acionar
             // quem continua podendo, no checkout novo.
             // O modo e as proporções vêm junto pelo mesmo motivo que as arestas:
             // é montagem, não estado de conversa.
-            let config = SessionConfig(
-                name: SessionStore.availableName(basedOn: Worktree.sanitize(created.branch),
+            let config = WorkbenchConfig(
+                name: WorkbenchStore.availableName(basedOn: Worktree.sanitize(created.branch),
                                                  taken: configs.map(\.name)),
                 path: worktreePath,
                 nodes: nodes,
@@ -452,7 +452,7 @@ EgeonCLI.install()
             alvo = configs.count - 1
             root.sidebar.reload(configs)
             activate(alvo)
-            Log.write("sessão \"\(origin.name)\" duplicada em \"\(config.name)\" "
+            Log.write("bancada \"\(origin.name)\" duplicada em \"\(config.name)\" "
                       + "(\(nodes.count) nós, worktree \(created.path))")
 
         case .moveCurrent:
@@ -471,7 +471,7 @@ EgeonCLI.install()
             activeIndex = -1
             root.sidebar.reload(configs)
             activate(index)
-            Log.write("sessão \"\(origin.name)\" movida para a worktree \(created.path) "
+            Log.write("bancada \"\(origin.name)\" movida para a worktree \(created.path) "
                       + "— \(nodes.count) nós reiniciados lá")
         }
 
@@ -522,7 +522,7 @@ EgeonCLI.install()
     ///   qualquer checkout, e é o motivo de o `cwd` relativo existir
     /// - **worktree própria criada** → absoluto, apontando para ela
     /// - **fora do repositório, sem worktree** → absoluto, apontando para o lugar
-    ///   original. Repo vizinho não tem equivalente dentro da worktree da sessão, e
+    ///   original. Repo vizinho não tem equivalente dentro da worktree da bancada, e
     ///   jogar o terminal na raiz dela o transforma em cópia do terminal ao lado
     ///
     /// A versão anterior só olhava `cwd` começando com `/` ou `~`, e por isso
@@ -542,7 +542,7 @@ EgeonCLI.install()
             }
             guard let cwd = result[i].cwd else { continue }
 
-            let resolved = SessionConfig.resolve(cwd: cwd, against: root)
+            let resolved = WorkbenchConfig.resolve(cwd: cwd, against: root)
             if resolved == originRoot {
                 result[i].cwd = nil
             } else if resolved.hasPrefix(originRoot + "/") {
@@ -558,9 +558,9 @@ EgeonCLI.install()
 
     /// O que fazer com a worktree recém-criada.
     private enum WorktreeDestination {
-        /// Sessão nova na lista; a de origem continua intacta e rodando.
-        case newSession
-        /// A sessão atual passa a apontar para a worktree. Os terminais são
+        /// Bancada nova na lista; a de origem continua intacta e rodando.
+        case newWorkbench
+        /// A bancada atual passa a apontar para a worktree. Os terminais são
         /// reiniciados lá — não há como trocar o diretório de um pty em curso.
         case moveCurrent
     }
@@ -569,14 +569,14 @@ EgeonCLI.install()
         let branch: String
         let template: String?
         let target: WorktreeDestination
-        /// O que cada terminal faz. Vazio quando não há sessão de origem.
+        /// O que cada terminal faz. Vazio quando não há bancada de origem.
         let nodes: [NodeWorktree]
     }
 
     private func askWorktreeForm(status: Worktree.Status,
                                  repoRoot: String,
                                  suggestedBranch: String,
-                                 inheriting origin: SessionConfig? = nil) -> WorktreeForm? {
+                                 inheriting origin: WorkbenchConfig? = nil) -> WorktreeForm? {
         let alert = NSAlert()
         alert.messageText = "Worktree de \((repoRoot as NSString).lastPathComponent)"
         alert.informativeText = worktreeSummary(status: status)
@@ -584,7 +584,7 @@ EgeonCLI.install()
         alert.addButton(withTitle: "Abrir")
         alert.addButton(withTitle: "Cancelar")
 
-        // Duplicando há duas saídas; a partir do `+`, sem sessão de origem, só
+        // Duplicando há duas saídas; a partir do `+`, sem bancada de origem, só
         // faz sentido abrir uma nova.
         let offersMove = origin != nil
         let width: CGFloat = 460
@@ -617,20 +617,20 @@ EgeonCLI.install()
         // Radio e não popup: as duas saídas são diferentes o bastante para
         // precisarem estar visíveis lado a lado — uma reinicia processos, a outra
         // não.
-        let newSessionRadio = NSButton(radioButtonWithTitle:
-            "Abrir uma sessão nova na worktree", target: nil, action: nil)
+        let newWorkbenchRadio = NSButton(radioButtonWithTitle:
+            "Abrir uma bancada nova na worktree", target: nil, action: nil)
         let moveRadio = NSButton(radioButtonWithTitle:
-            "Mudar esta sessão para a worktree", target: nil, action: nil)
+            "Mudar esta bancada para a worktree", target: nil, action: nil)
 
         // Precisa continuar vivo enquanto o modal roda: é ele quem responde pelos
         // cliques dos radios.
-        let radios = RadioGroup([newSessionRadio, moveRadio])
+        let radios = RadioGroup([newWorkbenchRadio, moveRadio])
 
         if offersMove {
             label("O QUE FAZER")
-            newSessionRadio.frame = NSRect(x: 0, y: y, width: width, height: 18)
-            newSessionRadio.state = .on
-            container.addSubview(newSessionRadio)
+            newWorkbenchRadio.frame = NSRect(x: 0, y: y, width: width, height: 18)
+            newWorkbenchRadio.state = .on
+            container.addSubview(newWorkbenchRadio)
             y += 20
             hint("Nada aqui é reiniciado; você troca entre as duas na barra.")
 
@@ -641,7 +641,7 @@ EgeonCLI.install()
             y += 6
         }
 
-        label("BRANCH DA SESSÃO")
+        label("BRANCH DA BANCADA")
         let branchField = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: 22))
         branchField.stringValue = suggestedBranch
         container.addSubview(branchField)
@@ -684,12 +684,12 @@ EgeonCLI.install()
 
             if case .alreadyCheckedOut(let existing) = plan {
                 pasta.stringValue = NodeWorktreePlanner.short(existing)
-                // Reaproveitar worktree torna fácil cair na pasta de uma sessão
+                // Reaproveitar worktree torna fácil cair na pasta de uma bancada
                 // que já está aberta — dois code-servers vigiando os mesmos
                 // arquivos, e dois agentes editando sem saber um do outro. Não é
                 // proibido; é o tipo de coisa que tem de ser dita antes.
                 if let aberta = configs.first(where: { $0.url.path == existing }) {
-                    verdict.stringValue += " Cuidado: essa pasta já é a sessão \"\(aberta.name)\"."
+                    verdict.stringValue += " Cuidado: essa pasta já é a bancada \"\(aberta.name)\"."
                 }
             } else {
                 pasta.stringValue = branch.isEmpty ? ""
@@ -705,10 +705,10 @@ EgeonCLI.install()
         // para ver, antes de criar, onde cada card vai abrir.
         var rows: [NodeWorktreeRow] = []
         if let origin {
-            let plans = NodeWorktreePlanner.inspect(origin, sessionRoot: origin.url.path,
+            let plans = NodeWorktreePlanner.inspect(origin, workbenchRoot: origin.url.path,
                                                     branch: suggestedBranch)
             label("TERMINAIS")
-            hint("Todos vão. Na mesma branch da sessão, junto com ela; com outra branch, "
+            hint("Todos vão. Na mesma branch da bancada, junto com ela; com outra branch, "
                  + "em worktree própria do repositório dele. Em branco, fica onde está.",
                  indent: 0, lines: 2)
 
@@ -724,7 +724,7 @@ EgeonCLI.install()
                                               height: CGFloat(plans.count) * NodeWorktreeRow.height))
             for (index, plan) in plans.enumerated() {
                 let row = NodeWorktreeRow(plan: plan, width: width - 2,
-                                          sessionBranch: suggestedBranch,
+                                          workbenchBranch: suggestedBranch,
                                           branches: plan.repoRoot.flatMap { indexes[$0] })
                 row.frame.origin.y = CGFloat(index) * NodeWorktreeRow.height
                 list.addSubview(row)
@@ -750,7 +750,7 @@ EgeonCLI.install()
             }
         defer { NotificationCenter.default.removeObserver(branchObserver) }
 
-        // Duplicando, os nós vêm da sessão de origem e não há template a escolher
+        // Duplicando, os nós vêm da bancada de origem e não há template a escolher
         // — mostrar um seletor aqui só ofereceria uma decisão já tomada.
         let picker = NSPopUpButton(frame: NSRect(x: 0, y: y, width: width, height: 22))
         let vazio = "Começar vazia"
@@ -780,13 +780,13 @@ EgeonCLI.install()
 
         if origin != nil {
             return WorktreeForm(branch: branch, template: nil,
-                                target: moveRadio.state == .on ? .moveCurrent : .newSession,
+                                target: moveRadio.state == .on ? .moveCurrent : .newWorkbench,
                                 nodes: rows.map(\.resolved))
         }
         let chosen = picker.titleOfSelectedItem
         return WorktreeForm(branch: branch,
                             template: chosen == vazio ? nil : chosen,
-                            target: .newSession, nodes: [])
+                            target: .newWorkbench, nodes: [])
     }
 
     /// Diz exatamente o que vai junto. "Leva tudo" sem detalhar é o tipo de
@@ -820,10 +820,10 @@ EgeonCLI.install()
     }
 
     /// Um diálogo só para nome e template: são a mesma decisão ("o que é esta
-    /// sessão"), e separar em dois passos só adiciona cliques.
-    private func askSessionNameAndTemplate(suggested: String) -> (String, String?)? {
+    /// bancada"), e separar em dois passos só adiciona cliques.
+    private func askWorkbenchNameAndTemplate(suggested: String) -> (String, String?)? {
         let alert = NSAlert()
-        alert.messageText = "Nova sessão"
+        alert.messageText = "Nova bancada"
         alert.informativeText = "O nome é a primeira parte do endereço de dispatch."
         alert.addButton(withTitle: "Criar")
         alert.addButton(withTitle: "Cancelar")
@@ -832,7 +832,7 @@ EgeonCLI.install()
 
         let field = NSTextField(frame: NSRect(x: 0, y: 30, width: 280, height: 24))
         field.stringValue = suggested
-        field.placeholderString = "nome da sessão"
+        field.placeholderString = "nome da bancada"
         container.addSubview(field)
 
         let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
@@ -856,12 +856,12 @@ EgeonCLI.install()
 
     /// Renomear mexe no endereço de dispatch, então os alvos vivos são
     /// re-registrados — sem derrubar terminal nem recarregar o editor.
-    private func renameSession(_ index: Int) {
+    private func renameWorkbench(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
         let current = configs[index].name
 
         let alert = NSAlert()
-        alert.messageText = "Renomear sessão"
+        alert.messageText = "Renomear bancada"
         alert.informativeText = "\"\(current)\" é a primeira parte do endereço de dispatch "
             + "(\(current)/…). Os alvos abertos passam a atender pelo nome novo."
         alert.addButton(withTitle: "Renomear")
@@ -877,34 +877,34 @@ EgeonCLI.install()
         guard !typed.isEmpty, typed != current else { return }
 
         let taken = configs.enumerated().filter { $0.offset != index }.map(\.element.name)
-        let name = SessionStore.availableName(basedOn: typed, taken: taken)
+        let name = WorkbenchStore.availableName(basedOn: typed, taken: taken)
 
         configs[index].name = name
-        shells[index]?.nodes.forEach { $0.sessionRenamed(to: name) }
+        shells[index]?.nodes.forEach { $0.workbenchRenamed(to: name) }
         root.sidebar.reload(configs)
         root.sidebar.select(activeIndex)
-        markLiveSessions()
-        Log.write("sessão \"\(current)\" renomeada para \"\(name)\"")
+        markLiveWorkbenches()
+        Log.write("bancada \"\(current)\" renomeada para \"\(name)\"")
         schedulePersist()
     }
 
-    private func confirmRemoveSession(_ index: Int) {
+    private func confirmRemoveWorkbench(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
         let config = configs[index]
         let live = shells[index] != nil
-        // TODAS as worktrees da sessão, e não só a pasta dela: desde o worktree por
-        // terminal (ADR-017), uma sessão pode ter aberto worktree em três
-        // repositórios diferentes. Apagar só a da sessão deixava as outras no disco
+        // TODAS as worktrees da bancada, e não só a pasta dela: desde o worktree por
+        // terminal (ADR-017), uma bancada pode ter aberto worktree em três
+        // repositórios diferentes. Apagar só a da bancada deixava as outras no disco
         // e registradas no git, sem nada na tela que lembrasse delas.
         let involved = worktrees(of: config)
         let deletable = involved.filter { $0.usedBy == nil }
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Remover a sessão \"\(config.name)\"?"
+        alert.messageText = "Remover a bancada \"\(config.name)\"?"
         alert.informativeText = live
             ? "Os terminais abertos são encerrados."
-            : "A sessão sai da lista."
+            : "A bancada sai da lista."
         alert.addButton(withTitle: "Remover")
         alert.addButton(withTitle: "Cancelar")
         alert.buttons.first?.hasDestructiveAction = true
@@ -923,7 +923,7 @@ EgeonCLI.install()
                 guard let usedBy = wt.usedBy else {
                     return "\(wt.repo) · \(wt.branch ?? "?") · \(quem)"
                 }
-                return "\(wt.repo) · \(wt.branch ?? "?") · MANTIDA, é a sessão \"\(usedBy)\""
+                return "\(wt.repo) · \(wt.branch ?? "?") · MANTIDA, é a bancada \"\(usedBy)\""
             }
             linhas.append("Desmarcado, as pastas ficam onde estão e você pode reabri-las.")
 
@@ -943,21 +943,21 @@ EgeonCLI.install()
         } else if involved.isEmpty {
             alert.informativeText += " Nenhuma pasta é tocada."
         } else {
-            // Tudo o que ela usa é pasta de outra sessão: apagar levaria trabalho
+            // Tudo o que ela usa é pasta de outra bancada: apagar levaria trabalho
             // de quem não foi consultado.
-            alert.informativeText += " As worktrees dela são de outras sessões e ficam."
+            alert.informativeText += " As worktrees dela são de outras bancadas e ficam."
         }
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         guard checkbox?.state == .on else {
-            removeSession(index)
+            removeWorkbench(index)
             return
         }
         guard confirmWorktreeLosses(deletable) else { return }
 
-        // Apagar antes de tirar a sessão da lista: se o git recusar, você fica com
-        // a sessão e com a pasta, em vez de perder a sessão e ficar com a pasta.
+        // Apagar antes de tirar a bancada da lista: se o git recusar, você fica com
+        // a bancada e com a pasta, em vez de perder a bancada e ficar com a pasta.
         var falhas: [String] = []
         var removidas: [String] = []
         for wt in deletable {
@@ -972,14 +972,14 @@ EgeonCLI.install()
         guard falhas.isEmpty else {
             let alert = NSAlert()
             alert.alertStyle = .critical
-            alert.messageText = "A sessão não foi removida"
+            alert.messageText = "A bancada não foi removida"
             alert.informativeText = (removidas.isEmpty
                 ? "" : "Já apagadas: \(removidas.joined(separator: ", ")).\n\n")
                 + "Não consegui apagar:\n" + falhas.joined(separator: "\n")
             alert.runModal()
             return
         }
-        removeSession(index)
+        removeWorkbench(index)
     }
 
     /// PNG do card de um nó, direto do AppKit.
@@ -1022,10 +1022,10 @@ EgeonCLI.install()
     }
 
     /// Remoção sem diálogo, para o socket. Mesmas regras do formulário: só apaga
-    /// worktree ligada, e nunca a que é pasta de outra sessão.
-    private func removeSession(named name: String, purge: Bool) -> [String: Any] {
+    /// worktree ligada, e nunca a que é pasta de outra bancada.
+    private func removeWorkbench(named name: String, purge: Bool) -> [String: Any] {
         guard let index = configs.firstIndex(where: { $0.name == name })
-        else { return ["ok": false, "error": "sessão desconhecida '\(name)'"] }
+        else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
 
         let involved = worktrees(of: configs[index])
         var removidas: [String] = []
@@ -1046,8 +1046,8 @@ EgeonCLI.install()
             }
         }
 
-        removeSession(index)
-        return ["ok": true, "session": name, "removed": removidas,
+        removeWorkbench(index)
+        return ["ok": true, "workbench": name, "removed": removidas,
                 "kept": involved.filter { $0.usedBy != nil }
                     .map { ["path": $0.path, "usedBy": $0.usedBy ?? ""] },
                 "worktrees": involved.map { ["path": $0.path, "repo": $0.repo,
@@ -1055,29 +1055,29 @@ EgeonCLI.install()
                                              "owners": $0.owners] }]
     }
 
-    /// Uma worktree que esta sessão usa.
-    private struct SessionWorktree {
+    /// Uma worktree que esta bancada usa.
+    private struct WorkbenchWorktree {
         let path: String
         let repo: String
         let branch: String?
-        /// Quem dentro da sessão abre nela: "sessão", ou os ids dos nós.
+        /// Quem dentro da bancada abre nela: "bancada", ou os ids dos nós.
         let owners: [String]
-        /// Outra sessão que abre esta MESMA pasta. Apagar levaria o trabalho dela,
+        /// Outra bancada que abre esta MESMA pasta. Apagar levaria o trabalho dela,
         /// e ela continuaria na lista apontando para o vazio.
         let usedBy: String?
     }
 
-    /// Toda worktree ligada que a sessão usa: a pasta dela e a de cada nó que abre
+    /// Toda worktree ligada que a bancada usa: a pasta dela e a de cada nó que abre
     /// fora dela.
     ///
-    /// Nó dentro da pasta da sessão não entra: é a mesma worktree, e apagá-la duas
+    /// Nó dentro da pasta da bancada não entra: é a mesma worktree, e apagá-la duas
     /// vezes daria erro na segunda. Só worktree LIGADA — oferecer apagar o checkout
     /// principal seria oferecer apagar o repositório.
-    private func worktrees(of config: SessionConfig) -> [SessionWorktree] {
+    private func worktrees(of config: WorkbenchConfig) -> [WorkbenchWorktree] {
         var owners: [String: [String]] = [:]
         let raiz = config.url.path
 
-        if config.exists, Worktree.isLinkedWorktree(raiz) { owners[raiz] = ["sessão"] }
+        if config.exists, Worktree.isLinkedWorktree(raiz) { owners[raiz] = ["bancada"] }
 
         for node in config.nodes where node.type != .web {
             let path = config.resolvedDirectory(for: node)
@@ -1089,7 +1089,7 @@ EgeonCLI.install()
         }
 
         return owners.keys.sorted().map { path in
-            SessionWorktree(
+            WorkbenchWorktree(
                 path: path,
                 repo: ((Worktree.mainRepo(of: path) ?? path) as NSString).lastPathComponent,
                 branch: Worktree.branchOf(path),
@@ -1105,7 +1105,7 @@ EgeonCLI.install()
     /// Uma seção por worktree: com três repositórios envolvidos, somar os números
     /// num total só não diria em qual deles está o trabalho que você não quer
     /// perder.
-    private func confirmWorktreeLosses(_ worktrees: [SessionWorktree]) -> Bool {
+    private func confirmWorktreeLosses(_ worktrees: [WorkbenchWorktree]) -> Bool {
         var linhas: [String] = []
 
         for wt in worktrees {
@@ -1141,20 +1141,20 @@ EgeonCLI.install()
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    private func removeSession(_ index: Int) {
+    private func removeWorkbench(_ index: Int) {
         let name = configs[index].name
 
-        // Solta os processos antes de perder a referência à sessão na tela.
+        // Solta os processos antes de perder a referência à bancada na tela.
         if let shell = shells[index] {
             shell.nodes.forEach { $0.prepareForRemoval() }
             if index == activeIndex { root.show(NSView()) }
         }
 
-        // As sessões na tela são indexadas por posição, e remover do meio desloca
+        // As bancadas na tela são indexadas por posição, e remover do meio desloca
         // todo mundo à direita — reindexar aqui evita uma delas apontando para a
-        // sessão errada.
+        // bancada errada.
         configs.remove(at: index)
-        var reindexed: [Int: SessionShell] = [:]
+        var reindexed: [Int: WorkbenchShell] = [:]
         for (key, shell) in shells where key != index {
             reindexed[key > index ? key - 1 : key] = shell
         }
@@ -1165,26 +1165,26 @@ EgeonCLI.install()
 
         activeIndex = -1
         root.sidebar.reload(configs)
-        Log.write("sessão \"\(name)\" removida")
+        Log.write("bancada \"\(name)\" removida")
         schedulePersist()
 
         if !configs.isEmpty { activate(min(index, configs.count - 1)) }
     }
 
-    private func markLiveSessions() {
+    private func markLiveWorkbenches() {
         root.sidebar.markLive(indices: Set(shells.keys))
     }
 
     // MARK: - Templates
 
-    /// Salva o canvas atual como preset. O que vira template é o `SessionConfig`
+    /// Salva o canvas atual como preset. O que vira template é o `WorkbenchConfig`
     /// já sincronizado, então o layout gravado é o que está na tela.
     private func saveCurrentAsTemplate() {
         guard activeIndex >= 0, activeIndex < configs.count else { return }
         syncFrames(index: activeIndex)
 
-        let session = configs[activeIndex]
-        guard !session.nodes.isEmpty else {
+        let workbench = configs[activeIndex]
+        guard !workbench.nodes.isEmpty else {
             let empty = NSAlert()
             empty.messageText = "Canvas vazio"
             empty.informativeText = "Monte os nós que você quer no preset e salve de novo."
@@ -1194,15 +1194,15 @@ EgeonCLI.install()
 
         let alert = NSAlert()
         alert.messageText = "Salvar como template"
-        alert.informativeText = Self.templateSummary(of: session)
+        alert.informativeText = Self.templateSummary(of: workbench)
         alert.addButton(withTitle: "Salvar")
         alert.addButton(withTitle: "Cancelar")
 
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.placeholderString = "nome do template"
-        // O nome da sessão, e não o do template de origem: este botão cria um
+        // O nome da bancada, e não o do template de origem: este botão cria um
         // preset novo. Atualizar o de origem é o botão ao lado.
-        field.stringValue = session.name
+        field.stringValue = workbench.name
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
 
@@ -1220,15 +1220,15 @@ EgeonCLI.install()
             guard overwrite.runModal() == .alertFirstButtonReturn else { return }
         }
 
-        TemplateStore.put(TemplateStore.capture(from: session), named: name)
+        TemplateStore.put(TemplateStore.capture(from: workbench), named: name)
         configs[activeIndex].template = name
-        // A sessão passa a ter origem: o botão de atualizar aparece agora, sem
+        // A bancada passa a ter origem: o botão de atualizar aparece agora, sem
         // esperar o próximo arranque.
         shells[activeIndex]?.canvas.originTemplate = name
         schedulePersist()
     }
 
-    /// Regrava o template de que esta sessão nasceu, com o canvas de agora.
+    /// Regrava o template de que esta bancada nasceu, com o canvas de agora.
     ///
     /// Botão separado do "salvar como", e não o mesmo com o nome pré-preenchido:
     /// são intenções diferentes. Uma cria um preset novo e pede nome; a outra
@@ -1236,13 +1236,13 @@ EgeonCLI.install()
     /// de errar uma letra e nascer um template gêmeo.
     ///
     /// Editar o template não mexe em quem já nasceu dele: os valores foram
-    /// copiados na criação, e as sessões existentes seguem como estão.
+    /// copiados na criação, e as bancadas existentes seguem como estão.
     private func updateOriginTemplate(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
-        let session = configs[index]
-        guard let name = session.template else { return }
+        let workbench = configs[index]
+        guard let name = workbench.template else { return }
 
-        guard !session.nodes.isEmpty else {
+        guard !workbench.nodes.isEmpty else {
             let empty = NSAlert()
             empty.messageText = "Canvas vazio"
             empty.informativeText = "Um template sem nós não abre nada. "
@@ -1251,7 +1251,7 @@ EgeonCLI.install()
             return
         }
 
-        // O template pode ter sido apagado desde que esta sessão nasceu: aí não
+        // O template pode ter sido apagado desde que esta bancada nasceu: aí não
         // há o que atualizar, e virar um "salvar como" silencioso seria pior.
         guard TemplateStore.template(named: name) != nil else {
             let sumiu = NSAlert()
@@ -1263,21 +1263,21 @@ EgeonCLI.install()
 
         let alert = NSAlert()
         alert.messageText = "Atualizar o template \"\(name)\"?"
-        alert.informativeText = Self.templateSummary(of: session)
-            + "\n\nAs sessões que já nasceram deste template não mudam."
+        alert.informativeText = Self.templateSummary(of: workbench)
+            + "\n\nAs bancadas que já nasceram deste template não mudam."
         alert.addButton(withTitle: "Atualizar")
         alert.addButton(withTitle: "Cancelar")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        TemplateStore.put(TemplateStore.capture(from: session), named: name)
-        Log.write("template \"\(name)\" atualizado a partir da sessão \"\(session.name)\"")
+        TemplateStore.put(TemplateStore.capture(from: workbench), named: name)
+        Log.write("template \"\(name)\" atualizado a partir da bancada \"\(workbench.name)\"")
     }
 
     /// Diz o que está sendo salvo, em uma linha: sem isso o diálogo pede um nome
     /// para algo que o usuário não vê.
-    private static func templateSummary(of session: SessionConfig) -> String {
+    private static func templateSummary(of workbench: WorkbenchConfig) -> String {
         var counts: [NodeKind: Int] = [:]
-        for node in session.nodes { counts[node.type, default: 0] += 1 }
+        for node in workbench.nodes { counts[node.type, default: 0] += 1 }
 
         let rótulos: [(NodeKind, String, String)] = [
             (.editor, "editor", "editores"),
@@ -1292,13 +1292,13 @@ EgeonCLI.install()
 
         return partes.joined(separator: ", ")
             + " — com posição, tamanho, pasta de cada nó e "
-            + "\(session.path) como pasta inicial."
+            + "\(workbench.path) como pasta inicial."
     }
 
     /// Layout de quem ainda não tem frame gravado: editor à esquerda, o resto
     /// empilhado à direita. Um nó só passa por aqui uma vez — na primeira vez o
-    /// resultado é escrito no sessions.json e a partir daí manda o arquivo.
-    private func defaultFrames(for config: SessionConfig) -> [String: NSRect] {
+    /// resultado é escrito no workbenches.json e a partir daí manda o arquivo.
+    private func defaultFrames(for config: WorkbenchConfig) -> [String: NSRect] {
         let size = root.contentFrame.size
         let margin: CGFloat = 40
         let gap: CGFloat = 16
@@ -1350,7 +1350,7 @@ EgeonCLI.install()
     /// O texto é curto de propósito. Ele entra em toda conversa deste terminal, e
     /// é prefixo de cache — quanto menos muda, melhor.
     private static func catalog(for node: NodeConfig,
-                                in config: SessionConfig,
+                                in config: WorkbenchConfig,
                                 agents: [String: AgentProfile]) -> String? {
         guard node.type == .agent else { return nil }
         return """
@@ -1392,14 +1392,14 @@ EgeonCLI.install()
             let report = profile.reportArguments(hookFile: AgentHooks.settingsFile.path)
             if let report { extras += report }
             let flags = " " + extras.map(AppEnvironment.shellQuote).joined(separator: " ")
-            return (sessionCommand(base: base, flags: flags, node: node, profile: profile),
+            return (conversationCommand(base: base, flags: flags, node: node, profile: profile),
                     nil, report != nil)
         }
 
         // CLI sem flag de system prompt (ou `cmd` trocado por outro programa):
         // resta injetar como primeira mensagem. Vale a pena junto de um papel
         // que já ia ser injetado de qualquer jeito; só pelo protocolo, não —
-        // seria gastar um turno em toda sessão para um marcador que se dilui
+        // seria gastar um turno em toda bancada para um marcador que se dilui
         // depois de vinte mensagens. Aí o terminal fica só com o silêncio.
         guard let role = node.prompt, !role.isEmpty else {
             if profile.attentionConfig.activeMarker != nil {
@@ -1424,11 +1424,11 @@ EgeonCLI.install()
     /// gravar — sai com 1, e aí a mesma linha cria a conversa com aquele id em vez
     /// de deixar o terminal morto. Medido nas duas situações no Claude Code
     /// 2.1.229.
-    private static func sessionCommand(base: String, flags: String,
+    private static func conversationCommand(base: String, flags: String,
                                        node: NodeConfig, profile: AgentProfile) -> String {
         guard profile.keepsConversation, let id = node.conversationId,
-              let resume = profile.sessionArguments(profile.resume, id: id),
-              let fresh = profile.sessionArguments(profile.newSession, id: id) else {
+              let resume = profile.conversationArguments(profile.resume, id: id),
+              let fresh = profile.conversationArguments(profile.newSession, id: id) else {
             return base + flags
         }
         func line(_ arguments: [String]) -> String {
@@ -1439,7 +1439,7 @@ EgeonCLI.install()
         return node.hasStartedConversation ? "\(line(resume)) || \(line(fresh))" : line(fresh)
     }
 
-    /// Garante que um nó de agente tenha id de sessão próprio antes de subir.
+    /// Garante que um nó de agente tenha id de bancada próprio antes de subir.
     ///
     /// Ponto único: os cinco lugares que criam nó passam por aqui, então gerar o
     /// id em outro lugar não faz sentido.
@@ -1452,7 +1452,7 @@ EgeonCLI.install()
         if configs[index].nodes[position].conversationId == nil {
             configs[index].nodes[position].conversationId = UUID().uuidString
             schedulePersist()
-            Log.write("sessão \(configs[index].name): nó \"\(node.id)\" ganhou conversa "
+            Log.write("bancada \(configs[index].name): nó \"\(node.id)\" ganhou conversa "
                       + "\(configs[index].nodes[position].conversationId ?? "?")")
         }
         return configs[index].nodes[position]
@@ -1461,8 +1461,8 @@ EgeonCLI.install()
     /// O CLI relatou qual conversa está aberta neste terminal.
     ///
     /// Chamado a cada prompt do agente, então só grava quando o valor muda de
-    /// fato — senão seria uma reescrita do sessions.json por mensagem sua.
-    private func recordSession(target: String, id: String, transcript: String?) {
+    /// fato — senão seria uma reescrita do workbenches.json por mensagem sua.
+    private func recordConversation(target: String, id: String, transcript: String?) {
         let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
         guard parts.count == 2,
               let index = configs.firstIndex(where: { $0.name == parts[0] }),
@@ -1489,14 +1489,14 @@ EgeonCLI.install()
         schedulePersist()
     }
 
-    /// Qual sessão é dona de uma pasta.
+    /// Qual bancada é dona de uma pasta.
     ///
     /// Primeiro pelas pastas que os nós de editor de fato abriram, que é resposta
-    /// exata. Só depois pelo caminho da sessão, e aí o mais específico ganha:
-    /// duas sessões podem apontar para o mesmo repositório em worktrees
+    /// exata. Só depois pelo caminho da bancada, e aí o mais específico ganha:
+    /// duas bancadas podem apontar para o mesmo repositório em worktrees
     /// diferentes, e a worktree é sempre o caminho mais longo — comparar pela
     /// primeira que casa daria a resposta do checkout principal.
-    private func sessionOwning(folder raw: String) -> String? {
+    private func workbenchOwning(folder raw: String) -> String? {
         let folder = URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
             .standardized.path
         for config in configs {
@@ -1510,7 +1510,7 @@ EgeonCLI.install()
             .name
     }
 
-    private func makeNode(_ raw: NodeConfig, in config: SessionConfig, frame: NSRect) -> NodeView {
+    private func makeNode(_ raw: NodeConfig, in config: WorkbenchConfig, frame: NSRect) -> NodeView {
         let index = configs.firstIndex { $0.name == config.name } ?? -1
         let node = index >= 0 ? prepared(raw, index: index) : raw
         let address = config.address(of: node)
@@ -1525,7 +1525,7 @@ EgeonCLI.install()
             let web = WebNode(frame: frame, address: address, title: title,
                               url: node.url, profile: node.profile)
             web.onStateChanged = { [weak self] web in
-                self?.updateWebNode(session: config.name, id: node.id,
+                self?.updateWebNode(workbench: config.name, id: node.id,
                                     url: web.currentURL, profile: web.profileName)
             }
             return web
@@ -1533,7 +1533,7 @@ EgeonCLI.install()
         case .shell, .agent:
             let profile = node.agent.flatMap { agents[$0] }
             if node.type == .agent && profile == nil {
-                Log.write("sessão \(config.name): perfil de agente "
+                Log.write("bancada \(config.name): perfil de agente "
                           + "'\(node.agent ?? "?")' não existe em agents.json")
             }
             let launch = Self.launchPlan(
@@ -1555,25 +1555,25 @@ EgeonCLI.install()
         }
     }
 
-    private func build(_ index: Int) -> SessionShell {
-        let shell = SessionShell(frame: root.contentFrame, mode: configs[index].viewMode)
+    private func build(_ index: Int) -> WorkbenchShell {
+        let shell = WorkbenchShell(frame: root.contentFrame, mode: configs[index].viewMode)
         shells[index] = shell
         wire(shell, index: index)
 
         guard configs[index].exists else {
-            shell.showBanner("Caminho não existe: \(configs[index].path) — edite \(Flavor.current.config("sessions.json").path)")
-            Log.write("sessão \(configs[index].name): caminho inexistente \(configs[index].path)")
+            shell.showBanner("Caminho não existe: \(configs[index].path) — edite \(Flavor.current.config("workbenches.json").path)")
+            Log.write("bancada \(configs[index].name): caminho inexistente \(configs[index].path)")
             return shell
         }
 
         // Pasta de nó que não resolve é dita na hora de montar, e não descoberta
-        // por um `pwd` três horas depois: o terminal abre na raiz da sessão, fica
+        // por um `pwd` três horas depois: o terminal abre na raiz da bancada, fica
         // com a cara do terminal certo, e o agente trabalha no lugar errado.
         let unresolved = configs[index].unresolvedDirectories
         if !unresolved.isEmpty {
             let lista = unresolved.map { "\($0.id) → \($0.tried)" }.joined(separator: ", ")
-            shell.showBanner("Pasta inexistente, abrindo na raiz da sessão: \(lista)")
-            Log.write("sessão \(configs[index].name): \(unresolved.count) nó(s) com cwd que não "
+            shell.showBanner("Pasta inexistente, abrindo na raiz da bancada: \(lista)")
+            Log.write("bancada \(configs[index].name): \(unresolved.count) nó(s) com cwd que não "
                       + "resolve — \(lista)")
         }
 
@@ -1589,7 +1589,7 @@ EgeonCLI.install()
             // era possível antes do arrasto ganhar limite, e o arquivo pode ter
             // ficado com nós lá.
             if frame.minX < 0 || frame.minY < 0 {
-                Log.write("sessão \(configs[index].name): nó \"\(node.id)\" estava fora do "
+                Log.write("bancada \(configs[index].name): nó \"\(node.id)\" estava fora do "
                           + "documento em (\(Int(frame.minX)),\(Int(frame.minY))) — resgatado")
                 frame.origin.x = max(0, frame.minX)
                 frame.origin.y = max(0, frame.minY)
@@ -1609,7 +1609,7 @@ EgeonCLI.install()
 
     // MARK: - Barra de ações
 
-    private func wire(_ shell: SessionShell, index: Int) {
+    private func wire(_ shell: WorkbenchShell, index: Int) {
         // Fechar e configurar nó chegam pelo shell: quem os disparou pode ser o
         // canvas ou o mosaico, e daqui não faz diferença qual.
         shell.onRequestClose = { [weak self] node in self?.confirmRemoval(of: node, index: index) }
@@ -1620,7 +1620,7 @@ EgeonCLI.install()
         shell.onModeChanged = { [weak self] mode in
             guard let self else { return }
             self.recordViewMode(mode, index: index)
-            // Só a sessão na tela manda na barra: as outras trocam de modo pelo
+            // Só a bancada na tela manda na barra: as outras trocam de modo pelo
             // socket sem estar visíveis.
             //
             // Ao lado em tudo que não é canvas: a barra flutua porque o grid corre
@@ -1632,7 +1632,7 @@ EgeonCLI.install()
             self?.recordMosaicLayout(layout, index: index)
         }
         shell.mosaicLayout = configs[index].mosaic
-        shell.setSession(name: configs[index].name, path: configs[index].path)
+        shell.setWorkbench(name: configs[index].name, path: configs[index].path)
 
         wireChat(shell.chat, index: index)
 
@@ -1645,7 +1645,7 @@ EgeonCLI.install()
         canvas.onSaveTemplate = { [weak self] in self?.saveCurrentAsTemplate() }
         canvas.onUpdateTemplate = { [weak self] in self?.updateOriginTemplate(index) }
         canvas.originTemplate = configs[index].template
-        canvas.onNewWorktree = { [weak self] in self?.duplicateSessionAsWorktree(index) }
+        canvas.onNewWorktree = { [weak self] in self?.duplicateWorkbenchAsWorktree(index) }
         canvas.componentNames = { ComponentStore.names }
         canvas.onConfigureTerminal = { [weak self] in self?.configureNewTerminal(index: index) }
         canvas.onCreateEdge = { [weak self] edge in self?.addEdge(edge, index: index) }
@@ -1688,7 +1688,7 @@ EgeonCLI.install()
         }
 
         chat.send = { [weak self] text, id in
-            guard let self, index >= 0, index < self.configs.count else { return "sessão sumiu" }
+            guard let self, index >= 0, index < self.configs.count else { return "bancada sumiu" }
             var request = DispatchRequest(target: "\(self.configs[index].name)/\(id)")
             request.text = text
             do {
@@ -1719,7 +1719,7 @@ EgeonCLI.install()
         guard index >= 0, index < configs.count else { return }
         configs[index].view = mode
         schedulePersist()
-        Log.write("sessão \(configs[index].name): visualização \(mode.rawValue)")
+        Log.write("bancada \(configs[index].name): visualização \(mode.rawValue)")
     }
 
     private func recordMosaicLayout(_ layout: MosaicLayout, index: Int) {
@@ -1732,7 +1732,7 @@ EgeonCLI.install()
         schedulePersist()
     }
 
-    /// Recolher a barra de sessões ao trilho, ou abrir de volta.
+    /// Recolher a barra de bancadas ao trilho, ou abrir de volta.
     @objc func toggleSidebarCollapsed() { root.toggleCollapsed() }
 
     @objc func showCanvasView() { shells[activeIndex]?.show(.canvas) }
@@ -1760,22 +1760,22 @@ EgeonCLI.install()
         canvas.edges = edges
         schedulePersist()
 
-        let session = configs[index].name
-        Log.write("aresta[\(session)]: \(edge.from) ↔ \(edge.to)")
+        let workbench = configs[index].name
+        Log.write("aresta[\(workbench)]: \(edge.from) ↔ \(edge.to)")
 
         // Ciclo é legítimo — revisor e implementador são exatamente isso — mas
         // não pode ser silencioso: é ele que faz duas máquinas conversarem sem
         // você no meio.
         // Par conversando é o padrão agora, e `maxSends` é quem segura ele: avisar
         // em toda ligação criada transformaria o banner em ruído, e ruído não avisa
-        // nada. O que ainda merece aviso é o ciclo que só o teto da sessão segura —
+        // nada. O que ainda merece aviso é o ciclo que só o teto da bancada segura —
         // três nós ou mais, onde cada seta dispara uma vez e nenhum contador de
         // seta chega perto (ADR-012).
         if let cycle = Self.cycle(through: edge, in: edges), cycle.count - 1 >= 3 {
             let limit = configs[index].visitLimit
             canvas.showBanner("Ciclo: \(cycle.joined(separator: " → ")) — "
                               + "cada terminal entra \(limit)× na mesma cadeia, depois recusa")
-            Log.write("aresta[\(session)]: ciclo \(cycle.joined(separator: " → ")), "
+            Log.write("aresta[\(workbench)]: ciclo \(cycle.joined(separator: " → ")), "
                       + "limite de \(limit) visitas")
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak canvas] in
                 canvas?.showBanner(nil)
@@ -1783,7 +1783,7 @@ EgeonCLI.install()
         }
     }
 
-    /// Teto de revisitas da sessão — a rede, não o botão do dia a dia.
+    /// Teto de revisitas da bancada — a rede, não o botão do dia a dia.
     private func editVisitLimit(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
 
@@ -1791,7 +1791,7 @@ EgeonCLI.install()
         alert.messageText = "Limite de conversa — \(configs[index].name)"
         alert.informativeText = "Quantas vezes um mesmo terminal pode entrar numa cadeia de "
             + "mensagens entre agentes antes de o Egeon Deck cortar.\n\n"
-            + "Isto é a rede de segurança da sessão inteira: é o único limite que segura um "
+            + "Isto é a rede de segurança da bancada inteira: é o único limite que segura um "
             + "ciclo de três ou mais terminais, onde cada ligação dispara uma vez só. O ajuste "
             + "do dia a dia é na pastilha da própria seta, no canvas."
         alert.addButton(withTitle: "Salvar")
@@ -1808,12 +1808,12 @@ EgeonCLI.install()
 
         configs[index].maxVisits = max(1, typed)
         schedulePersist()
-        Log.write("sessão \(configs[index].name): teto de visitas = \(configs[index].visitLimit)")
+        Log.write("bancada \(configs[index].name): teto de visitas = \(configs[index].visitLimit)")
     }
 
     /// Quantas idas e voltas esta ligação permite.
     ///
-    /// Vazio = sem limite próprio, sobra o teto da sessão. O diálogo diz isso na
+    /// Vazio = sem limite próprio, sobra o teto da bancada. O diálogo diz isso na
     /// cara porque "vazio" e "zero" são coisas opostas aqui, e errar entre os
     /// dois é a diferença entre liberar e travar.
     private func editEdgeLimit(_ link: EdgeLink, index: Int) {
@@ -1826,7 +1826,7 @@ EgeonCLI.install()
             : (link.aToB ? "\(link.a) → \(link.b)" : "\(link.b) → \(link.a)")
         alert.informativeText = "Quantas vezes esta ligação pode disparar numa mesma conversa. "
             + "Num par ligado nos dois sentidos, é o número de idas e voltas.\n\n"
-            + "Vazio = sem limite próprio; vale só o teto da sessão "
+            + "Vazio = sem limite próprio; vale só o teto da bancada "
             + "(\(configs[index].visitLimit) visitas por terminal)."
         alert.addButton(withTitle: "Salvar")
         alert.addButton(withTitle: "Cancelar")
@@ -1903,7 +1903,7 @@ EgeonCLI.install()
                             maxSends: existente?.maxSends ?? EdgeConfig.defaultSends)
         case "none":
             // O que o X da linha faz. Está aqui pelo mesmo motivo que o resto da
-            // rota: sem desfazer, verificar a criação de fora deixa lixo na sessão.
+            // rota: sem desfazer, verificar a criação de fora deixa lixo na bancada.
             guard let existente else {
                 return ["ok": true, "a": a, "b": b, "direction": "none", "edges": []]
             }
@@ -1937,7 +1937,7 @@ EgeonCLI.install()
 
     /// Reescreve as arestas de um par com o que a ligação diz agora.
     ///
-    /// Na posição da primeira que existia, e não no fim da lista: o `sessions.json`
+    /// Na posição da primeira que existia, e não no fim da lista: o `workbenches.json`
     /// é lido à mão, e uma ligação que salta para o fim do arquivo a cada clique
     /// embaralharia o arquivo sem nada ter mudado de fato.
     private func replace(_ link: EdgeLink, index: Int) {
@@ -1986,7 +1986,7 @@ EgeonCLI.install()
     }
 
     /// Remover é irreversível dentro do app — o nó sai do canvas e do
-    /// sessions.json — então passa por confirmação, com o aviso que o próprio
+    /// workbenches.json — então passa por confirmação, com o aviso que o próprio
     /// tipo de nó dá sobre o que se perde.
     private func confirmRemoval(of node: NodeView, index: Int) {
         guard index >= 0, index < configs.count, let shell = shells[index] else { return }
@@ -1994,7 +1994,7 @@ EgeonCLI.install()
         let name = node.nodeID.isEmpty ? "este nó" : "\"\(node.nodeID)\""
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Remover \(name) do sessão \(configs[index].name)?"
+        alert.messageText = "Remover \(name) do bancada \(configs[index].name)?"
         alert.informativeText = node.removalWarning
         alert.addButton(withTitle: "Remover")
         alert.addButton(withTitle: "Cancelar")
@@ -2012,7 +2012,7 @@ EgeonCLI.install()
         }
     }
 
-    private func remove(_ node: NodeView, index: Int, from shell: SessionShell) {
+    private func remove(_ node: NodeView, index: Int, from shell: WorkbenchShell) {
         let id = node.nodeID
         shell.detach(node)
         if !id.isEmpty {
@@ -2025,15 +2025,15 @@ EgeonCLI.install()
                     $0.from != id && $0.to != id
                 }
                 shell.canvas.edges = configs[index].edgeList
-                Log.write("sessão \(configs[index].name): \(orphans.count) ligação(ões) "
+                Log.write("bancada \(configs[index].name): \(orphans.count) ligação(ões) "
                           + "removida(s) junto com \"\(id)\"")
             }
-            Log.write("sessão \(configs[index].name): nó \"\(id)\" removido")
+            Log.write("bancada \(configs[index].name): nó \"\(id)\" removido")
         }
         schedulePersist()
     }
 
-    /// Cria um nó onde a ferramenta foi solta e grava no sessions.json.
+    /// Cria um nó onde a ferramenta foi solta e grava no workbenches.json.
     private func place(_ tool: CanvasTool, rect: NSRect, index: Int) {
         guard let kind = tool.nodeKind, index >= 0, index < configs.count,
               let shell = shells[index] else { return }
@@ -2072,7 +2072,7 @@ EgeonCLI.install()
 
         configs[index].nodes.append(node)
         shell.attach(makeNode(node, in: configs[index], frame: rect))
-        Log.write("sessão \(configs[index].name): nó \(kind.rawValue) \"\(node.id)\" criado")
+        Log.write("bancada \(configs[index].name): nó \(kind.rawValue) \"\(node.id)\" criado")
         schedulePersist()
     }
 
@@ -2108,7 +2108,7 @@ EgeonCLI.install()
 
         configs[index].nodes.append(node)
         shell.attach(makeNode(node, in: configs[index], frame: rect))
-        Log.write("sessão \(configs[index].name): \(node.type.rawValue) \"\(id)\" criado"
+        Log.write("bancada \(configs[index].name): \(node.type.rawValue) \"\(id)\" criado"
                   + (component.prompt == nil ? "" : " com papel"))
         schedulePersist()
     }
@@ -2164,7 +2164,7 @@ EgeonCLI.install()
         // não ficar órfão.
         shell.detach(node)
         shell.attach(makeNode(updated, in: configs[index], frame: canvasFrame))
-        Log.write("sessão \(configs[index].name): nó \"\(current.id)\" reconfigurado"
+        Log.write("bancada \(configs[index].name): nó \"\(current.id)\" reconfigurado"
                   + (newID == current.id ? "" : " e renomeado para \"\(newID)\""))
         schedulePersist()
     }
@@ -2172,8 +2172,8 @@ EgeonCLI.install()
     /// Leva UM terminal para uma worktree nova do repositório em que ele abre.
     ///
     /// Existe porque uma frente de trabalho raramente é um repositório só: com o
-    /// frontend na sessão e o backend num repo vizinho, a branch nova precisa dos
-    /// dois — e duplicar a sessão inteira para levar um card é caro demais.
+    /// frontend na bancada e o backend num repo vizinho, a branch nova precisa dos
+    /// dois — e duplicar a bancada inteira para levar um card é caro demais.
     ///
     /// O card é reapontado, não clonado: id, papel, arestas e posição continuam os
     /// mesmos. O processo reinicia porque não há como trocar o diretório de um pty
@@ -2253,7 +2253,7 @@ EgeonCLI.install()
         return .success(created)
     }
 
-    /// Worktree pelo socket, sem diálogo. `ws` duplica a sessão levando os
+    /// Worktree pelo socket, sem diálogo. `ws` duplica a bancada levando os
     /// terminais de repo vizinho junto; `ws/id` leva só aquele terminal.
     ///
     /// Existe para o fluxo poder ser verificado de fora: ele cria worktree em
@@ -2262,14 +2262,14 @@ EgeonCLI.install()
     ///
     /// `nodes` customiza a branch por terminal — `back:fix/api,sub:spike` —, que é
     /// a mesma coisa que se digita nas linhas do formulário. Sem ela, todos herdam a
-    /// branch da sessão, que é o padrão do formulário. Branch vazia (`back:`) é o
+    /// branch da bancada, que é o padrão do formulário. Branch vazia (`back:`) é o
     /// "não me leve": o terminal fica no repositório original.
     private func makeWorktree(target: String, branch: String,
                               nodeBranches: [String: String] = [:]) -> [String: Any] {
         let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
-        guard let sessionName = parts.first,
-              let index = configs.firstIndex(where: { $0.name == sessionName })
-        else { return ["ok": false, "error": "sessão desconhecida '\(target)'"] }
+        guard let workbenchName = parts.first,
+              let index = configs.firstIndex(where: { $0.name == workbenchName })
+        else { return ["ok": false, "error": "bancada desconhecida '\(target)'"] }
 
         let nodeID = parts.count == 2 ? parts[1] : nil
         let origin = configs[index]
@@ -2309,10 +2309,10 @@ EgeonCLI.install()
         let name = branch.isEmpty
             ? Worktree.availableBranch(basedOn: status.branch, in: repoRoot)
             : branch
-        // Cada terminal herda a branch da sessão, e `nodes` sobrescreve quem foi
+        // Cada terminal herda a branch da bancada, e `nodes` sobrescreve quem foi
         // pedido — é o mesmo que digitar na linha dele. A decisão de quem ganha
         // worktree própria sai daí, e não de uma marcação separada.
-        let plans = NodeWorktreePlanner.inspect(origin, sessionRoot: origin.url.path,
+        let plans = NodeWorktreePlanner.inspect(origin, workbenchRoot: origin.url.path,
                                                 branch: name)
             .map { plan -> NodeWorktree in
                 var copy = plan
@@ -2320,18 +2320,18 @@ EgeonCLI.install()
                     copy.branch = custom
                     copy.touched = true
                 }
-                return copy.decided(sessionBranch: name)
+                return copy.decided(workbenchBranch: name)
             }
         let form = WorktreeForm(branch: name, template: nil,
-                                target: .newSession, nodes: plans)
+                                target: .newWorkbench, nodes: plans)
         if let error = duplicate(index, repoRoot: repoRoot, status: status, form: form) {
             return ["ok": false, "error": "\(error)"]
         }
-        // A pasta vem da sessão que acabou de nascer, e não do caminho sugerido:
+        // A pasta vem da bancada que acabou de nascer, e não do caminho sugerido:
         // com branch que já existe a worktree pode ser outra, e é justamente isso
         // que quem chamou precisa poder conferir.
-        return ["ok": true, "session": sessionName, "branch": name,
-                "newSession": configs.last?.name ?? "",
+        return ["ok": true, "workbench": workbenchName, "branch": name,
+                "workbench": configs.last?.name ?? "",
                 "path": configs.last?.url.path
                     ?? Worktree.suggestedPath(repoRoot: repoRoot, branch: name),
                 "nodes": plans.filter(\.enabled).map { ["id": $0.nodeID,
@@ -2339,8 +2339,8 @@ EgeonCLI.install()
     }
 
     /// `sh`, `sh-2`, `sh-3`… O id entra no endereço de dispatch, então precisa
-    /// ser único dentro da sessão.
-    private func nextID(prefix: String, in config: SessionConfig) -> String {
+    /// ser único dentro da bancada.
+    private func nextID(prefix: String, in config: WorkbenchConfig) -> String {
         let taken = Set(config.nodes.map(\.id))
         if !taken.contains(prefix) { return prefix }
         var n = 2
@@ -2368,8 +2368,8 @@ EgeonCLI.install()
         }
     }
 
-    private func updateWebNode(session: String, id: String, url: String, profile: String) {
-        guard let index = configs.firstIndex(where: { $0.name == session }),
+    private func updateWebNode(workbench: String, id: String, url: String, profile: String) {
+        guard let index = configs.firstIndex(where: { $0.name == workbench }),
               let node = configs[index].nodes.firstIndex(where: { $0.id == id }) else { return }
         guard configs[index].nodes[node].url != url
                 || configs[index].nodes[node].profile != profile else { return }
@@ -2385,7 +2385,7 @@ EgeonCLI.install()
         persistTimer?.invalidate()
         persistTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { [weak self] _ in
             guard let self else { return }
-            SessionStore.save(self.configs)
+            WorkbenchStore.save(self.configs)
         }
     }
 
@@ -2436,7 +2436,7 @@ EgeonCLI.install()
         // `mode` na frente porque muda o sentido do resto: em mosaico o `docFrame`
         // é o do painel, `grabPoint` não arrasta nada e não há zoom.
         return [
-            "session": activeIndex < configs.count ? configs[activeIndex].name : "?",
+            "workbench": activeIndex < configs.count ? configs[activeIndex].name : "?",
             "mode": shell.mode.rawValue,
             "magnification": shell.mode == .canvas
                 ? Double((canvas.scroll.magnification * 1000).rounded()) / 1000 : 1,
@@ -2451,7 +2451,7 @@ EgeonCLI.install()
 
     // MARK: - Menu
 
-    @objc func nextSession() { activate((activeIndex + 1) % max(1, configs.count)) }
+    @objc func nextWorkbench() { activate((activeIndex + 1) % max(1, configs.count)) }
 
     private var activeCanvas: CanvasContainer? { shells[activeIndex]?.canvas }
 
@@ -2465,7 +2465,7 @@ EgeonCLI.install()
     /// editor no workbench, e ⌘=/⌘− dão zoom no código.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         // Os itens de visualização carregam o estado: a marca diz em que modo a
-        // sessão ativa está, sem precisar olhar a barra.
+        // bancada ativa está, sem precisar olhar a barra.
         if menuItem.action == #selector(toggleSidebarCollapsed) {
             menuItem.state = root.isCollapsed ? .on : .off
             // ⌘/ é "comentar linha" no workbench, e key equivalent de menu é
@@ -2515,7 +2515,7 @@ EgeonCLI.install()
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Próxima sessão", action: #selector(nextSession), keyEquivalent: "]")
+        appMenu.addItem(withTitle: "Próxima bancada", action: #selector(nextWorkbench), keyEquivalent: "]")
         // ⇧⌘T e não ⌘T: o ⌘T agora arma a ferramenta de terminal, e dois itens
         // com o mesmo atalho fazem só o primeiro do menu disparar.
         appMenu.addItem(withTitle: "Copiar alvos de dispatch",
@@ -2568,7 +2568,7 @@ EgeonCLI.install()
                            keyEquivalent: "2").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Ver como chat", action: #selector(showChatView),
                            keyEquivalent: "3").keyEquivalentModifierMask = [.command, .option]
-        canvasMenu.addItem(withTitle: "Recolher a barra de sessões",
+        canvasMenu.addItem(withTitle: "Recolher a barra de bancadas",
                            action: #selector(toggleSidebarCollapsed), keyEquivalent: "/")
         canvasMenu.addItem(.separator())
         // Números, não letras. ⌘V/⌘T/⌘E/⌘W parecem naturais para as ferramentas,
@@ -2600,7 +2600,7 @@ final class FormView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// Raiz: a barra de sessões à esquerda e o conteúdo à direita — flutuando por cima
+/// Raiz: a barra de bancadas à esquerda e o conteúdo à direita — flutuando por cima
 /// dele no canvas, e ao LADO dele no mosaico.
 ///
 /// A diferença é o que cada modo promete. O canvas é uma bancada com sobra de
@@ -2621,7 +2621,7 @@ final class RootView: NSView {
     private let sidebarPanel: GlassPanel
     private var content: NSView?
 
-    /// A sessão na tela está em mosaico. Só muda o LAYOUT: ao lado em vez de por
+    /// A bancada na tela está em mosaico. Só muda o LAYOUT: ao lado em vez de por
     /// cima. Não mexe em recolher.
     private var isMosaic = false
     /// Recolhida ao trilho. Quem muda isso é você — ⌘/ ou o botão da barra — e
@@ -2663,8 +2663,8 @@ final class RootView: NSView {
         guard content !== view else { return }
         content?.removeFromSuperview()
         view.frame = contentFrame
-        // Abaixo da barra: `addSubview` puro empilharia a sessão nova em cima do
-        // vidro, e a barra sumiria na primeira troca de sessão.
+        // Abaixo da barra: `addSubview` puro empilharia a bancada nova em cima do
+        // vidro, e a barra sumiria na primeira troca de bancada.
         addSubview(view, positioned: .below, relativeTo: sidebarPanel)
         content = view
     }
@@ -2677,7 +2677,7 @@ final class RootView: NSView {
     /// que faz a barra parecer flutuando. Mosaico e chat dividem a janela inteira com
     /// conteúdo opaco, e sobreposição ali é terminal — ou mensagem — coberta.
     ///
-    /// Chamado por quem troca de modo e por quem troca de sessão.
+    /// Chamado por quem troca de modo e por quem troca de bancada.
     func setMosaic(_ on: Bool) {
         guard isMosaic != on else { return }
         isMosaic = on

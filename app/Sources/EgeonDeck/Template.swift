@@ -7,30 +7,30 @@ import Foundation
 /// Guarda o caminho do projeto e o caminho que cada nó usa — mas o do projeto
 /// como valor inicial, e o dos nós como `cwd` relativo a ele.
 ///
-/// É essa combinação que faz o template servir para worktree: criar a sessão já
+/// É essa combinação que faz o template servir para worktree: criar a bancada já
 /// vem com a pasta preenchida, e apontar para outro checkout reaproveita todos
 /// os `cwd` sem edição, porque `deck-backend` resolve em qualquer um deles.
 struct Template: Codable {
     var nodes: [NodeConfig]
-    /// Pasta do projeto, usada como valor inicial ao criar a sessão. Trocável no
+    /// Pasta do projeto, usada como valor inicial ao criar a bancada. Trocável no
     /// diálogo, o que é o caminho para a segunda worktree.
     var basePath: String?
 
-    /// Em que modo a sessão abre, e com que proporções se for mosaico. Faz parte
+    /// Em que modo a bancada abre, e com que proporções se for mosaico. Faz parte
     /// da montagem tanto quanto a posição dos nós: um preset de "editor mais
     /// quatro agentes" nasce torto se abrir no canvas quando foi desenhado em
     /// mosaico.
     var view: ViewMode?
     var mosaic: MosaicLayout?
 
-    /// Instancia os nós para uma sessão nova.
+    /// Instancia os nós para uma bancada nova.
     ///
     /// A url dos nós web é reduzida à origem ao salvar, então aqui não há rota
-    /// de outra sessão para herdar.
+    /// de outra bancada para herdar.
     ///
     /// A conversa é zerada de novo, embora `capture` já não a guarde: templates
     /// salvos por uma versão anterior têm o `conversationId` do molde dentro, e sem
-    /// isto continuariam ressuscitando a conversa alheia a cada sessão nova.
+    /// isto continuariam ressuscitando a conversa alheia a cada bancada nova.
     func instantiate() -> [NodeConfig] { nodes.map(\.withoutConversation) }
 }
 
@@ -74,32 +74,32 @@ enum TemplateStore {
 
     // MARK: - Captura
 
-    /// Monta um template a partir dos nós de uma sessão.
+    /// Monta um template a partir dos nós de uma bancada.
     ///
     /// Guarda tudo que define a montagem — tipos, layout, agente, `cwd`, pasta do
-    /// projeto — e descarta o que é estado da sessão que serviu de molde: a rota
+    /// projeto — e descarta o que é estado da bancada que serviu de molde: a rota
     /// em que o nó web estava, da qual sobra a origem, e a conversa de cada
     /// agente.
     ///
     /// A conversa é o que mais dói se escapar: o template guardava o `conversationId`
-    /// junto, e aí toda sessão criada dele subia com `--resume` na MESMA conversa
-    /// do molde — o agente aparecia no meio do assunto de outra sessão, sem o
-    /// papel novo, e duas sessões diferentes escreviam na mesma conversa. Um
+    /// junto, e aí toda bancada criada dele subia com `--resume` na MESMA conversa
+    /// do molde — o agente aparecia no meio do assunto de outra bancada, sem o
+    /// papel novo, e duas bancadas diferentes escreviam na mesma conversa. Um
     /// molde não carrega o que foi dito dentro dele.
-    static func capture(from session: SessionConfig) -> Template {
-        var nodes = session.nodes
+    static func capture(from workbench: WorkbenchConfig) -> Template {
+        var nodes = workbench.nodes
         for i in nodes.indices {
             if nodes[i].type == .web { nodes[i].url = nodes[i].url.flatMap(baseURL(of:)) }
             nodes[i] = nodes[i].withoutConversation
         }
-        return Template(nodes: nodes, basePath: session.path,
-                        view: session.view, mosaic: session.mosaic)
+        return Template(nodes: nodes, basePath: workbench.path,
+                        view: workbench.view, mosaic: workbench.mosaic)
     }
 
     /// `http://localhost:3000/farms/123` → `http://localhost:3000`.
     ///
     /// Um preset que reabrisse a rota exata carregaria o estado de navegação de
-    /// outra sessão, que é justamente o que ninguém quer herdar.
+    /// outra bancada, que é justamente o que ninguém quer herdar.
     static func baseURL(of raw: String) -> String? {
         guard let components = URLComponents(string: raw),
               let scheme = components.scheme,

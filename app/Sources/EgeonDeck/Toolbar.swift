@@ -40,7 +40,7 @@ enum CanvasTool: String, CaseIterable {
     }
 
     /// Base do id do nó novo. Entra no endereço de dispatch, então segue a
-    /// convenção que já está no sessions.json (`sh`, `code`, `web`).
+    /// convenção que já está no workbenches.json (`sh`, `code`, `web`).
     var idPrefix: String {
         switch self {
         case .cursor: return ""
@@ -177,10 +177,10 @@ final class CanvasToolbar: NSView {
     /// Salvar o canvas atual como template NOVO. É ação imediata, não
     /// ferramenta: não arma o próximo clique e não fica selecionada.
     var onSaveTemplate: (() -> Void)?
-    /// Regravar o template de que esta sessão nasceu. Só aparece quando existe
+    /// Regravar o template de que esta bancada nasceu. Só aparece quando existe
     /// um — ver `showsUpdateTemplate`.
     var onUpdateTemplate: (() -> Void)?
-    /// Abrir uma sessão nova numa worktree desta.
+    /// Abrir uma bancada nova numa worktree desta.
     var onNewWorktree: (() -> Void)?
     /// Escolher com que componente o próximo terminal nasce. Nil = shell padrão.
     var onPickComponent: ((String?) -> Void)?
@@ -214,7 +214,7 @@ final class CanvasToolbar: NSView {
             tooltip: "Atualizar o template de origem com este canvas")
         newWorktree = ToolbarButton(
             symbols: ["arrow.triangle.branch", "arrow.branch", "square.on.square"],
-            tooltip: "Nova sessão numa worktree desta — nada aqui é reiniciado")
+            tooltip: "Nova bancada numa worktree desta — nada aqui é reiniciado")
         super.init(frame: frameRect)
 
         // Sem fundo, borda nem sombra próprios: quem dá tudo isso é o
@@ -258,7 +258,7 @@ final class CanvasToolbar: NSView {
         addSubview(saveTemplate)
 
         updateTemplate.onClick = { [weak self] in self?.onUpdateTemplate?() }
-        // Escondido até a sessão dizer de qual template nasceu: um botão de
+        // Escondido até a bancada dizer de qual template nasceu: um botão de
         // "atualizar" sem alvo não tem o que fazer, e explicar isso num alerta
         // depois do clique é pior do que não mostrar.
         updateTemplate.isHidden = true
@@ -280,7 +280,7 @@ final class CanvasToolbar: NSView {
             + tools * 32 + (tools - 1) * Self.gap   // ferramentas
             + 17                                     // separador + folgas
             + 28 + 44 + 28                           // zoom: −, rótulo, +
-            + 17 + 32 + Self.gap + 32 + Self.gap + 32 // separador + ações da sessão
+            + 17 + 32 + Self.gap + 32 + Self.gap + 32 // separador + ações da bancada
         return NSSize(width: width, height: Self.height)
     }
 
@@ -311,7 +311,7 @@ final class CanvasToolbar: NSView {
         x += 9
         saveTemplate.frame = NSRect(x: x, y: y, width: 32, height: 32)
         x += 32 + Self.gap
-        // O botão escondido não reserva espaço: a barra encolhe quando a sessão
+        // O botão escondido não reserva espaço: a barra encolhe quando a bancada
         // não veio de template.
         if !updateTemplate.isHidden {
             updateTemplate.frame = NSRect(x: x, y: y, width: 32, height: 32)
@@ -357,7 +357,7 @@ final class CanvasToolbar: NSView {
     }
     @objc private func configureNew() { onConfigureTerminal?() }
 
-    /// De qual template esta sessão nasceu, ou nil. Governa o botão de atualizar.
+    /// De qual template esta bancada nasceu, ou nil. Governa o botão de atualizar.
     func showsUpdateTemplate(_ template: String?) {
         updateTemplate.isHidden = template == nil
         if let template {
