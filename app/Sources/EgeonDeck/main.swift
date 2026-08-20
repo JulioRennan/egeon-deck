@@ -26,6 +26,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var persistTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Antes de qualquer outra linha, e a ordem é o mecanismo: a linha seguinte
+        // zera o log da instância viva, e a de depois carrega o workbenches.json —
+        // é ter estado em memória que dá a esta cópia o poder de sobrescrever o da
+        // outra, porque a gravação é do array inteiro pelo debounce.
+        //
+        // A ADR-032 já impede o roubo do socket, e com ela a segunda cópia subia
+        // inteira, só sem socket: duas janelas iguais, os mesmos terminais abertos
+        // duas vezes nas mesmas pastas, dois code-servers na mesma porta se matando
+        // por "órfão de execução anterior", e o workbenches.json ficando com o
+        // snapshot de quem gravou por último — aresta e nó da outra sumindo sem log.
+        // A segunda instância não é caso de uso a suportar; é acidente a barrar.
+        //
+        // E acidente comum: bundle em quarentena o macOS executa de uma cópia em
+        // `AppTranslocation`, então todo `.app` com este bundle id em disco — um
+        // `.zip` aberto em Downloads, o `build/` de uma worktree — sobe como se
+        // fosse o instalado, e abrir "Egeon" pelo Spotlight vira sorteio.
+        if let owner = ControlSocket.listenerPID() {
+            Log.write("recusado: já existe \(Flavor.current.displayName) de pé (pid \(owner))"
+                      + " — esta cópia é \(Bundle.main.bundleURL.path)")
+            let alerta = NSAlert()
+            alerta.alertStyle = .warning
+            alerta.messageText = "\(Flavor.current.displayName) já está aberto"
+            alerta.informativeText = """
+                Há uma cópia de pé (pid \(owner)). As duas dividiriam \
+                \(Flavor.current.configDirectory.path), o socket de controle e a porta \
+                \(Flavor.current.codeServerPort) — e a segunda sobrescreve as bancadas da \
+                primeira. Esta vai sair.
+
+                Esta cópia: \(Bundle.main.bundleURL.path)
+                """
+            alerta.addButton(withTitle: "Sair")
+            NSApp.activate(ignoringOtherApps: true)
+            alerta.runModal()
+            // `exit` e não `NSApp.terminate`: terminate passa pelo
+            // `applicationWillTerminate`, que grava o workbenches.json — e aqui ele
+            // está vazio, o que apagaria as bancadas de quem está trabalhando.
+            exit(0)
+        }
+
         Log.reset()
         configs = WorkbenchStore.load()
         agents = AgentStore.load()

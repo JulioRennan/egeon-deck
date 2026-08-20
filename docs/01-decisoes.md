@@ -2210,3 +2210,79 @@ primeira seguindo de pé — e, ao matar a intrusa, o arquivo continuar lá e re
 vir, mas ela decide sozinha fechar uma janela que a pessoa acabou de abrir. O aviso no log
 mais a recusa de roubar o arquivo já tiram o dano; a briga pelo `workbenches.json` entre
 duas instâncias continua aberta e é outro problema.
+
+## ADR-033 — A segunda instância do mesmo flavor não sobe, e um flavor tem um bundle
+
+**Contexto.** A ADR-032 tirou o pior sintoma de duas instâncias: ninguém mais rouba nem
+apaga socket alheio. Mas a segunda cópia continuava subindo — só sem socket de controle.
+E o resto da disputa não é menos caro:
+
+- **o `workbenches.json`** é carregado por cada uma no arranque e reescrito **inteiro**
+  pelo debounce de 0,6s. Quem gravou por último decide, e bancada, nó e aresta criados na
+  outra desaparecem. Foi este o prejuízo que abriu a investigação: arestas somidas do
+  canvas, e no arquivo restaram arestas apontando para nó que já não existia;
+- **o code-server**: cada uma vê a porta tomada, conclui "órfão de execução anterior" — o
+  caso comum, com código para tratá-lo — e mata o processo da outra, em revezamento
+  (medido: quatro trocas em seis segundos);
+- **a tela**: duas janelas idênticas, os mesmos terminais abertos duas vezes nas mesmas
+  pastas, dois pty por agente.
+
+E a duplicidade tinha causa banal. Cinco bundles em disco respondiam por
+`dev.duckcoder.egeondeck`: o instalado, um `.zip` desempacotado direto em `/Applications`,
+uma cópia em `~/Downloads`, e o `build/` de dois checkouts — porque `Worktree` copia todo
+arquivo não versionado para a worktree nova, e `app/build/` está entre eles. Abrir "Egeon"
+pelo Spotlight é sorteio entre eles, e três estavam em quarentena; bundle em quarentena o
+macOS executa de uma cópia em `AppTranslocation`, cujo caminho de processo não é nenhum
+dos que os scripts conhecem. (`Flavor.current` chama de estável todo id que não termina em
+`.dev`, então o `MegaBrain.app` de antes do rename também entra na conta.)
+
+A ADR-032 já tinha esta decisão escrita como **descartada por ora**, com duas razões: ela
+"decide sozinha fechar uma janela que a pessoa acabou de abrir", e a briga pelo
+`workbenches.json` era "outro problema". O outro problema é o que cobrou a conta — arestas
+perdidas —, então ele deixa de esperar. E a objeção da janela se responde no desenho: a
+cópia não sai calada, sai com um alerta que diz qual processo já está de pé e de qual bundle
+ela veio; e a janela que não abre mostraria as mesmas bancadas da que já está aberta.
+
+**Decisão.** A segunda cópia do mesmo flavor **não sobe**.
+`ControlSocket.listenerPID()` — a sonda da ADR-032, agora devolvendo o pid de quem atende —
+é consultada na **primeira linha** de `applicationDidFinishLaunching`, e a ordem é o
+mecanismo: antes de `Log.reset()`, que zeraria o log da instância viva, e antes de
+`WorkbenchStore.load()`, porque é ter estado em memória que dá a esta cópia o poder de
+sobrescrever o da outra. A saída é por `exit`, e não por `NSApp.terminate`, que passaria
+pelo `applicationWillTerminate` e gravaria um arquivo vazio sobre as bancadas de quem está
+trabalhando. O usuário vê um alerta com o pid da instância viva e o caminho do bundle que
+recusou — é o caminho que denuncia a cópia translocada.
+
+O pid vem do socket (`LOCAL_PEERPID`, via `Peer.pid(of:)`) e não de varrer processos, pelo
+mesmo motivo de sempre: o processo translocado não está em nenhum caminho conhecido.
+
+**Do lado do disco**, `install.sh` deixa de ter um segundo destino: sem `/Applications`
+gravável ele falha dizendo como copiar à mão, em vez de instalar em `~/Applications` e
+criar mais um gêmeo. Apaga o `build/EgeonDeck.app` que ele mesmo acabou de gerar — gêmeo ao
+alcance de um duplo clique no Finder — e varre o disco por bundle id (`mdfind` mais os
+lugares que o Spotlight ignora), listando o que sobrou solto e marcando quem está em
+quarentena. Com `EG_PURGE=1`, apaga.
+
+No mesmo caminho saiu o defeito que foi o gatilho de tudo: com `set -euo pipefail`, o
+`grep` de `vivo()` que não acha ninguém derrubava o pipeline, e `antes=$(instancia)`
+propagava o status para o `set -e`. O script morria **depois** de encerrar o app e copiar o
+bundle e **antes** do `open -a`, sem imprimir nada. Instalava, derrubava, não reabria e não
+avisava — e quem abria o Egeon em seguida era o Spotlight, sorteando entre os gêmeos. Ninguém
+de pé é a resposta normal de `vivo`, não erro.
+
+**Descartado: deixar as duas subirem e mediar o acesso** — lock no `workbenches.json`,
+arquivo por instância, porta por instância. Dá para fazer e não resolve o que importa: duas
+janelas iguais com os mesmos terminais nas mesmas pastas não é um modo de trabalho que
+alguém queira. A segunda instância é acidente a barrar, não caso de uso a suportar.
+
+**Descartado: descobrir o irmão pela lista de processos.** É o que o `install.sh` tentava, e
+foi por ali que ele já falhou duas vezes (ADR anteriores do próprio script): `pgrep -f` não
+casa o processo translocado, e `osascript ... to quit` por bundle id atinge um dos gêmeos,
+não todos. O socket é a única identidade que não depende de caminho.
+
+Verificado no flavor dev, com o app de pé: segunda instância recusada, com o pid da viva e o
+próprio bundle no log; inode do socket intacto, `workbenches.json` com o mesmo md5, e o log
+com exatamente uma linha nova — a da recusa. O `install.sh` tem banco de teste próprio, que
+roda o script real num sandbox com `HOME`, `/Applications` e `mdfind`/`open`/`osascript`
+desviados: caminho normal, `EG_PURGE=1`, disco limpo e `/Applications` não gravável — e o
+script anterior, no mesmo banco, sai 1 sem reabrir o app.

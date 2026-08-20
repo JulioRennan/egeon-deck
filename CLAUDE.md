@@ -509,6 +509,15 @@ mais apareciam, sem uma linha de erro. Um watchdog confere o inode de dez em dez
 segundos e religa. O fd de escuta leva `FD_CLOEXEC`, senão vaza para todo pty filho —
 `lsof` mostrava cinco `claude` segurando o socket do app. Ver ADR-032.
 
+E antes disso: **a segunda instância do mesmo flavor não sobe.** `ControlSocket.listenerPID()`
+sonda o caminho e devolve o pid de quem atende, e o arranque recusa ali — na primeira
+linha, antes de zerar o log e antes de carregar o `workbenches.json`, porque é ter estado
+em memória que lhe daria o poder de sobrescrever o da outra. Sai por `exit`, não por
+`NSApp.terminate`, que gravaria o arquivo vazio na saída. Sem essa recusa a segunda subia
+inteira, só sem socket: os mesmos terminais abertos duas vezes nas mesmas pastas, dois
+code-servers na mesma porta se matando por "órfão", e as bancadas ficando com o snapshot
+de quem gravou por último. Ver ADR-033.
+
 ```bash
 curl --unix-socket ~/.egeon/sock http://eg/targets
 curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
@@ -602,6 +611,15 @@ dois apps brigarem pelo mesmo arquivo, e o pior caso não é óbvio: a porta do
 code-server. O segundo a subir acha a porta tomada, conclui que é órfã de execução
 anterior — que é o caso comum, e há código para tratá-lo — e mata o code-server do
 outro app.
+
+**Um flavor, um bundle em disco.** Dois `.app` com o mesmo bundle id fazem abrir "Egeon"
+pelo Spotlight virar sorteio, e bundle em quarentena o macOS executa de uma cópia em
+`AppTranslocation` — que não aparece nos caminhos que os scripts conhecem. Por isso o
+`install.sh` tem um destino só (sem `/Applications` gravável ele falha dizendo como copiar
+à mão, em vez de instalar em `~/Applications`), apaga o `build/EgeonDeck.app` que ele mesmo
+gerou, e varre o disco por bundle id denunciando o que sobrou solto — com `EG_PURGE=1`,
+apaga. Cuidado com worktree: `Worktree` copia todo arquivo não versionado para a pasta
+nova, e `app/build/` vai junto. Ver ADR-033.
 
 ## Desenvolvimento
 
