@@ -216,10 +216,21 @@ ainda em zero, e a posição calculada ali não vale quando o layout de verdade 
 último bloco ficava cortado na borda de baixo.
 
 **Turno acionado por outro agente não é bloco de primeiro nível** — ele entra **no mesmo
-cartão**, com o nome dele em cima e a MESMA bolha. Nem seta, nem recuo, nem caixa
-própria: o que muda entre uma fala e a seguinte é só quem fala. Recuar cada volta fazia
-três voltas virarem uma escada dentro do cartão, e o desenho passava a falar da topologia
-em vez da conversa.
+cartão** e usa a MESMA bolha. Nem seta de aninhamento, nem recuo, nem caixa própria:
+recuar cada volta fazia três voltas virarem uma escada dentro do cartão, e o desenho
+passava a falar da topologia em vez da conversa.
+
+O título de uma fala entre agentes nomeia **o par** — `claude → claude-2`, cada nome na
+cor dele. Numa cadeia de três, só quem respondeu não basta: `claude-2` sozinho não conta
+se ele foi acionado pelo `claude` ou pelo `qa`. Abaixo vão as duas bolhas, o que foi
+mandado à direita e o que voltou à esquerda.
+
+**O contraste diz a hierarquia.** A resposta final para você é a superfície mais clara do
+cartão, com um fio na cor do agente; o seu pedido fica um degrau abaixo; e o que os
+agentes trocaram entre si recua para quase preto. Sem essa escada, a resposta que o
+agente te deu e a que ele deu ao vizinho pesavam igual, e achar a conclusão num cartão
+com cadeia exigia ler tudo. A letra segue clara nas três — o que muda é o quanto a bolha
+chama.
 
 E a regra da dobra é uma só, em todo nível: **resposta sempre à vista, só o caminho
 dobra**. Cada fala da cadeia tem a própria linha `▸ N passos`. Dobrar a fala inteira

@@ -25,9 +25,19 @@ enum ChatStyle {
     /// O fundo do bloco de turno. Um degrau acima do thread, para o bloco se ler como
     /// um cartão sem precisar de borda forte.
     static let turnBackground = NSColor(calibratedWhite: 0.105, alpha: 1)
-    /// O fundo das bolhas DENTRO do bloco. Mais um degrau, para a fala se separar do
-    /// cartão que a contém.
-    static let bubbleBackground = NSColor(calibratedWhite: 0.155, alpha: 1)
+    /// Os três tons de bolha, e a diferença entre eles é a HIERARQUIA da fala.
+    ///
+    /// A resposta final para você é a superfície mais clara do cartão; o seu pedido fica
+    /// um degrau abaixo; e o que é processo entre agentes recua para quase preto. Sem
+    /// essa escada, a resposta que o agente te deu e a que ele deu ao vizinho tinham o
+    /// mesmo peso na tela — e num cartão com uma cadeia de três, achar a conclusão
+    /// exigia ler tudo.
+    ///
+    /// Recuar em vez de apagar o texto: a letra segue em 0.93 de branco nas três, então
+    /// a bolha recuada continua legível de perto. O que muda é o quanto ela chama.
+    static let bubbleAnswer = NSColor(calibratedWhite: 0.19, alpha: 1)
+    static let bubbleYours = NSColor(calibratedWhite: 0.145, alpha: 1)
+    static let bubbleAside = NSColor(calibratedWhite: 0.055, alpha: 1)
 
     /// Largura máxima do texto no thread. Linha de 1400px é ilegível, e o
     /// mosaico já provou que a janela cheia é larga.
@@ -148,10 +158,29 @@ class ChatRow: NSView {
 /// encosta à esquerda.
 final class ChatBubble: NSView {
     enum Side {
-        /// Você pedindo. Encosta à direita e não ocupa a largura toda.
+        /// Quem pede. Encosta à direita e não ocupa a largura toda.
         case yours
-        /// O agente respondendo. Encosta à esquerda.
+        /// Quem responde. Encosta à esquerda.
         case agent
+    }
+
+    /// O peso da fala. O lado diz quem falou; o tom diz o quanto aquilo importa para
+    /// você.
+    enum Tone {
+        /// A resposta final, para você. A mais clara.
+        case answer
+        /// O seu pedido.
+        case yours
+        /// Processo: o que os agentes trocaram entre si. Recua para quase preto.
+        case aside
+
+        var color: NSColor {
+            switch self {
+            case .answer: return ChatStyle.bubbleAnswer
+            case .yours:  return ChatStyle.bubbleYours
+            case .aside:  return ChatStyle.bubbleAside
+            }
+        }
     }
 
     private let side: Side
@@ -162,13 +191,19 @@ final class ChatBubble: NSView {
     /// resposta se alinham nas duas bordas e o lado deixa de dizer qualquer coisa.
     private static let yoursShare: CGFloat = 0.84
 
-    init(blocks source: [ChatBlock], accent: NSColor, side: Side) {
+    init(blocks source: [ChatBlock], accent: NSColor, side: Side, tone: Tone) {
         self.side = side
         blocks = source.map { ChatBlockView(block: $0, accent: accent) }
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = ChatStyle.bubbleBackground.cgColor
+        layer?.backgroundColor = tone.color.cgColor
         layer?.cornerRadius = 6
+        // Só a resposta final ganha o fio na cor do agente. Nas outras ele competiria
+        // com a barra do cartão e o realce deixaria de realçar.
+        if tone == .answer {
+            layer?.borderWidth = 1
+            layer?.borderColor = accent.withAlphaComponent(0.35).cgColor
+        }
         blocks.forEach { addSubview($0) }
     }
 
@@ -256,9 +291,11 @@ final class ChatTurnRow: ChatRow {
         live = running ? ChatStyle.label(note ?? "pensando", font: ChatStyle.meta,
                                          color: ChatStyle.dim) : nil
         promptBubble = turn.prompt.isEmpty
-            ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent, side: .yours)
+            ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent,
+                               side: .yours, tone: .yours)
         answerBubble = turn.answer.isEmpty
-            ? nil : ChatBubble(blocks: turn.answer, accent: accent, side: .agent)
+            ? nil : ChatBubble(blocks: turn.answer, accent: accent,
+                               side: .agent, tone: .answer)
         workToggle = turn.work.isEmpty
             ? nil : DisclosureLine(text: turn.workSummary, color: ChatStyle.faint)
         super.init(frame: .zero)
@@ -466,17 +503,22 @@ final class DisclosureLine: NSView {
 /// bolha embaixo da outra e a ordem de leitura é de cima para baixo, como qualquer
 /// conversa.
 ///
-/// A pergunta desta fala não é repetida: ela está na bolha de cima, que é a resposta de
-/// quem acionou ("perguntei ao vizinho quanto é 7 vezes 6"). Só aparece quando o outro
-/// ainda não respondeu — e aí ela entra do lado do PEDIDO, à direita, que é o que diz
-/// que ninguém respondeu ainda sem precisar de palavra nenhuma.
+/// O título nomeia o PAR — `claude → claude-2` —, e não só quem respondeu. Numa fala
+/// entre agentes as duas pontas importam: sem o destinatário, uma cadeia de três não
+/// diz quem estava falando com quem, e "claude-2" sozinho não conta se ele foi acionado
+/// pelo `claude` ou pelo `qa`. Cada nome sai na cor dele.
+///
+/// Abaixo do título vão as DUAS bolhas: o que foi mandado, à direita, e o que voltou, à
+/// esquerda. É a mesma leitura do turno de fora — pedido de um lado, resposta do outro —
+/// e é o que impede o título de dois nomes de deixar dúvida sobre de quem é cada bolha.
 final class ChainEntryView: NSView {
     var onToggle: (() -> Void)?
 
     private let turn: ChatTurn
     private let accent: NSColor
-    private let head: NSTextField
-    private let bubble: ChatBubble?
+    private let head = NSTextField(labelWithString: "")
+    private let askBubble: ChatBubble?
+    private let answerBubble: ChatBubble?
     private let workToggle: DisclosureLine?
     private var workBlocks: [ChatBlockView] = []
     private var workOpen = false
@@ -486,24 +528,38 @@ final class ChainEntryView: NSView {
     init(turn: ChatTurn) {
         self.turn = turn
         accent = AgentColor.of(turn.author)
-        let pending = turn.answer.isEmpty
-        // O mesmo cabeçalho do turno: nome na cor dele, na mesma fonte. É isso que faz
-        // a fala se ler como continuação do cartão, e não como caixa dentro de caixa.
-        head = ChatStyle.label(turn.author, font: ChatStyle.name, color: accent)
-        bubble = pending
-            ? (turn.prompt.isEmpty
-                ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent, side: .yours))
-            : ChatBubble(blocks: turn.answer, accent: accent, side: .agent)
+        askBubble = turn.prompt.isEmpty
+            ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent,
+                               side: .yours, tone: .aside)
+        answerBubble = turn.answer.isEmpty
+            ? nil : ChatBubble(blocks: turn.answer, accent: accent,
+                               side: .agent, tone: .aside)
         workToggle = turn.work.isEmpty
             ? nil : DisclosureLine(text: turn.workSummary, color: ChatStyle.faint)
         super.init(frame: .zero)
 
+        // Na mesma fonte do cabeçalho do turno: é isso que faz a fala se ler como
+        // continuação do cartão, e não como caixa dentro de caixa.
+        let line = NSMutableAttributedString()
+        if let sender = turn.from {
+            line.append(NSAttributedString(string: sender, attributes: [
+                .font: ChatStyle.name, .foregroundColor: AgentColor.of(sender)]))
+            line.append(NSAttributedString(string: "  →  ", attributes: [
+                .font: ChatStyle.meta, .foregroundColor: ChatStyle.faint]))
+        }
+        line.append(NSAttributedString(string: turn.author, attributes: [
+            .font: ChatStyle.name, .foregroundColor: accent]))
+        head.attributedStringValue = line
+        head.isBordered = false
+        head.drawsBackground = false
+        head.isEditable = false
         addSubview(head)
         if let workToggle {
             workToggle.onClick = { [weak self] in self?.toggleWork() }
             addSubview(workToggle)
         }
-        if let bubble { addSubview(bubble) }
+        if let askBubble { addSubview(askBubble) }
+        if let answerBubble { addSubview(answerBubble) }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -523,9 +579,10 @@ final class ChainEntryView: NSView {
 
     func height(for width: CGFloat) -> CGFloat {
         var y = 16 + Self.gap
+        if let askBubble { y += askBubble.height(for: width) + Self.gap }
         if workToggle != nil { y += DisclosureLine.height + Self.gap }
         if workOpen { y += workBlocks.reduce(0) { $0 + $1.height(for: width) + 5 } }
-        if let bubble { y += bubble.height(for: width) }
+        if let answerBubble { y += answerBubble.height(for: width) }
         return y
     }
 
@@ -533,6 +590,13 @@ final class ChainEntryView: NSView {
         super.layout()
         head.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 15)
         var y: CGFloat = 16 + Self.gap
+        if let askBubble {
+            let height = askBubble.height(for: bounds.width)
+            askBubble.frame = NSRect(x: askBubble.originX(in: bounds.width), y: y,
+                                     width: askBubble.widthNeeded(in: bounds.width),
+                                     height: height)
+            y += height + Self.gap
+        }
         if let workToggle {
             workToggle.frame = NSRect(x: 0, y: y, width: bounds.width,
                                       height: DisclosureLine.height)
@@ -545,10 +609,11 @@ final class ChainEntryView: NSView {
                 y += height + 5
             }
         }
-        if let bubble {
-            let height = bubble.height(for: bounds.width)
-            bubble.frame = NSRect(x: bubble.originX(in: bounds.width), y: y,
-                                  width: bubble.widthNeeded(in: bounds.width), height: height)
+        if let answerBubble {
+            let height = answerBubble.height(for: bounds.width)
+            answerBubble.frame = NSRect(x: answerBubble.originX(in: bounds.width), y: y,
+                                        width: answerBubble.widthNeeded(in: bounds.width),
+                                        height: height)
         }
     }
 }
