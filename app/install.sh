@@ -65,7 +65,15 @@ gemeos() {
 # ninguém", o app seguia de pé, o `rm -rf` apagava o bundle debaixo dele e o
 # `open -a` do fim subia uma SEGUNDA instância disputando ~/.egeon, o socket e a
 # porta 8391.
-vivo() { ps ax -o pid=,command= | grep -F "$1" | grep -v grep | awk '{print $1}' | head -1; }
+#
+# O `|| true` do fim não é gosto: com `pipefail`, o `grep` que não acha ninguém
+# derruba o pipeline, e `antes=$(instancia)` propaga esse status para o `set -e`.
+# O script morria ali — depois de encerrar o app e copiar o bundle, e ANTES do
+# `open -a`. Ninguém de pé é a resposta normal desta função, não erro. Este foi o
+# install que instalou, matou o app, não reabriu nada e não imprimiu uma linha:
+# quem abriu o Egeon depois foi o Spotlight, que sorteia entre bundles de mesmo
+# id — e o sorteado estava em quarentena, rodando translocado.
+vivo() { ps ax -o pid=,command= | grep -F "$1" | grep -v grep | awk '{print $1}' | head -1 || true; }
 
 encerrar() {
   local padrao="$1" nome="$2"
@@ -163,7 +171,10 @@ agora=$(instancia)
 echo
 if [ -z "$agora" ]; then
   echo "instalado: $DESTINO"
-  echo "AVISO: nenhum processo de pé — abra por Spotlight e confira ~/egeon.log"
+  # Pelo caminho, e não por Spotlight: ele resolve por bundle id, e com um gêmeo
+  # solto em disco quem abre é sorteio — foi assim que uma cópia em quarentena
+  # subiu translocada ao lado da instalada.
+  echo "AVISO: nenhum processo de pé — abra \"$DESTINO\" e confira ~/egeon.log"
 elif [ -n "$antes" ] && [ "$agora" = "$antes" ]; then
   echo "AVISO: o app de pé (pid $agora) é o mesmo de antes da instalação — ele não"
   echo "       reiniciou, então segue executando o build anterior. ⌘Q e reabra."
