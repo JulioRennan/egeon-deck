@@ -103,6 +103,35 @@ final class ChatContainer: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Clique no fundo do thread também devolve o teclado à caixa: aqui não há
+    /// outro lugar para escrever, e o gesto de clicar na conversa é o de responder.
+    override func mouseDown(with event: NSEvent) {
+        composer.focus()
+        super.mouseDown(with: event)
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    /// Quem tem o teclado, para quem confere de fora.
+    ///
+    /// "Clico e não digito" não se investiga na tela: o ladrão do foco é invisível —
+    /// um WKWebView de editor coberto pelo chat responde igual a uma caixa vazia.
+    func focusReport() -> [String: Any] {
+        let responder = window?.firstResponder
+        var view = responder as? NSView
+        var inChat = false
+        while let current = view {
+            if current === self { inChat = true; break }
+            view = current.superview
+        }
+        return [
+            "holder": responder.map { String(describing: type(of: $0)) } ?? "nenhum",
+            "inChat": inChat,
+            "inComposer": composer.hasKeyboard,
+            "windowIsKey": window?.isKeyWindow ?? false
+        ]
+    }
+
     func setPanelCollapsed(_ collapsed: Bool) {
         panel.setCollapsed(collapsed)
         needsLayout = true
@@ -318,7 +347,9 @@ final class ChatContainer: NSView {
         // Esc fecha a gaveta. Só ela: no chat o Esc não tem outro dono, e a caixa
         // de texto não o consome.
         if event.keyCode == 53, openProcess != nil { closeDrawer(); return }
-        super.keyDown(with: event)
+        // O resto é tecla que ninguém quis — foco perdido num rebuild, ou janela que
+        // voltou com o responder no vazio. Vai para a caixa em vez de virar beep.
+        composer.take(event)
     }
 
     // MARK: Layout

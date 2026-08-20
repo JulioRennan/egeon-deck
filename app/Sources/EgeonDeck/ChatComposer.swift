@@ -170,6 +170,27 @@ final class ChatComposer: NSView {
 
     func focus() { window?.makeFirstResponder(input) }
 
+    /// O teclado está na caixa agora.
+    var hasKeyboard: Bool { window?.firstResponder === input }
+
+    /// Tecla que chegou em outra view do chat. Traz o foco e entrega a tecla, em vez
+    /// de deixar o beep: quem digitou queria escrever na caixa.
+    func take(_ event: NSEvent) {
+        focus()
+        input.keyDown(with: event)
+    }
+
+    /// Clique em QUALQUER lugar da caixa põe o teclado no texto.
+    ///
+    /// O recuo, a linha do destinatário e a faixa do botão são `NSView` comum, que
+    /// não aceita foco: clicar ali não devolvia o teclado, e quem tinha roubado
+    /// continuava com ele. Daí o "clico no chat e não consigo digitar" — o clique
+    /// acertava a caixa e o teclado seguia num terminal coberto pelo chat.
+    override func mouseDown(with event: NSEvent) {
+        focus()
+        super.mouseDown(with: event)
+    }
+
     /// Escreve na caixa sem enviar, como se você tivesse digitado.
     ///
     /// É a mesma história do `/mosaic?swap=` e do `/edge?direction=`: o que só existe

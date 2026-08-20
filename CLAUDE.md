@@ -297,6 +297,15 @@ Quem pede o frame novo é a caixa, e ela compara a altura que quer com a altura 
 tecla dá sempre igual, o container nunca era avisado, e o vidro crescia dentro do frame
 de uma linha: passava da borda de baixo e a caixa parecia crescer para BAIXO.
 
+**Clique em qualquer lugar da caixa põe o teclado no texto**, e clique no fundo do
+thread também. O recuo, a linha do destinatário e a faixa do botão são `NSView` comum,
+que não aceita foco: clicar ali não devolvia o teclado, e quem tivesse roubado
+continuava com ele — daí "clico no chat e não consigo digitar", com o teclado num
+terminal coberto pelo chat. Tecla que chega ao container, e não à caixa, é foco perdido
+num rebuild: vai para a caixa em vez de virar beep. `/chat` devolve `focus` — quem tem o
+teclado, se está dentro do chat e se a janela é key — porque ladrão de foco é invisível
+na tela.
+
 `POST /compose?target=ws[&send=1]` escreve na caixa — e com `send=1` aperta o Enter —
 devolvendo a geometria. É a única forma de conferir de fora que ela cresce para cima,
 para no teto e devolve a área ao histórico, porque tecla sintética exige
