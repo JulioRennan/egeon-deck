@@ -83,11 +83,15 @@ final class ChatComposer: NSView {
     /// borda da caixa.
     private static let lineHeight: CGFloat = ChatStyle.height("Ag", font: ChatStyle.body,
                                                               width: 9999)
-    /// Uma linha de texto. É o mínimo, e é o que a caixa mostra vazia.
+    /// Uma linha de texto. É o piso absoluto, para janela baixa.
     private static var oneLine: CGFloat { lineHeight }
-    /// Teto do texto: daí para cima rola por dentro. Oito linhas cobre um prompt
+    /// O que a caixa mostra vazia. Duas linhas e não uma: a caixa de mensagem é o
+    /// lugar onde se escreve um prompt, e uma fresta de uma linha faz ela parecer
+    /// campo de busca.
+    private static var minText: CGFloat { lineHeight * 2 }
+    /// Teto do texto: daí para cima rola por dentro. Seis linhas cobre um prompt
     /// escrito à mão; mais que isso é arquivo, não mensagem.
-    private static var maxText: CGFloat { lineHeight * 8 }
+    private static var maxText: CGFloat { lineHeight * 6 }
     /// Largura do botão de enviar, mais o vão até o texto.
     private static let sendLane: CGFloat = 38
     /// Margem entre a lista de menção e o vidro.
@@ -127,7 +131,7 @@ final class ChatComposer: NSView {
         input.textContainerInset = NSSize(width: 0, height: 1)
         // O arranjo canônico de campo que cresce: o container acompanha a largura da
         // view e é infinito na altura, e a view cresce na vertical dentro do scroll.
-        input.minSize = NSSize(width: 0, height: Self.oneLine)
+        input.minSize = NSSize(width: 0, height: Self.minText)
         input.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                                height: CGFloat.greatestFiniteMagnitude)
         input.isVerticallyResizable = true
@@ -240,7 +244,7 @@ final class ChatComposer: NSView {
         // em linhas inteiras, senão o teto relativo reintroduz a linha partida.
         let budget = max(Self.oneLine, ceiling - Self.chrome)
         let roof = Self.floorToLine(min(Self.maxText, budget))
-        return min(roof, max(Self.oneLine, measured))
+        return min(roof, max(Self.minText, measured))
     }
 
     /// A maior altura em linhas inteiras que cabe em `height`.
@@ -283,7 +287,6 @@ final class ChatComposer: NSView {
 
     private func textChanged() {
         placeholder.isHidden = !input.string.isEmpty
-        let before = height(forWidth: bounds.width)
         // A palavra que está sendo digitada antes do cursor. Nada de `@` no meio
         // de e-mail ou de caminho: só vale colado num limite de palavra.
         if let query = input.pendingMention {
@@ -300,7 +303,19 @@ final class ChatComposer: NSView {
         // Linha nova ou lista abrindo mudam a altura, e quem dá o frame é o
         // container: sem avisar, a caixa cresce por dentro do frame antigo e o
         // texto passa a ser escrito atrás do thread.
-        if height(forWidth: bounds.width) != before { onHeightChanged?() }
+        requestFrameIfNeeded()
+    }
+
+    /// Pede frame novo quando a altura desejada deixou de ser a que o container já
+    /// deu.
+    ///
+    /// Compara contra a altura EM USO e não contra uma segunda medida: `didChangeText`
+    /// chega depois de o texto já ter mudado, então medir duas vezes ali dava sempre
+    /// o mesmo número e o container nunca era avisado. O vidro então crescia dentro
+    /// do frame de uma linha, passava da borda de baixo e a caixa parecia crescer
+    /// para BAIXO — o oposto do que ela faz quando o frame acompanha.
+    private func requestFrameIfNeeded() {
+        if height(forWidth: bounds.width) != bounds.height { onHeightChanged?() }
     }
 
     private func insertMention(_ id: String) {
