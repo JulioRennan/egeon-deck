@@ -444,6 +444,15 @@ aborta o processo. Segurar espaço não pede nada do terminal — o CLI conta os
 do auto-repeat e usa timeout de silêncio como "soltou". A permissão morre a cada
 build ad-hoc; `EG_SIGN_ID` com certificado fixo resolve. Ver ADR-027.
 
+**Toda permissão do macOS morre no build ad-hoc**, não só a do microfone: sem
+certificado a identidade de código é o hash do binário, e mudar um byte faz o TCC
+tratar o app como um que nunca viu — Documentos, Mesa, Transferências e microfone
+outra vez. É por isso que só o dev incomoda: ele é reconstruído a cada mudança.
+O `make.sh` usa um certificado local chamado **`egeon-dev`** quando ele existe no
+keychain, sem precisar de `export` — a variável esquecida caía em ad-hoc em
+silêncio, e o preço só aparecia no diálogo do build seguinte. `EG_SIGN_ID` continua
+mandando mais, para outro nome.
+
 ## Dispatch
 
 Um prompt entra pelo socket, vira texto, entra numa fila, e só é entregue quando o

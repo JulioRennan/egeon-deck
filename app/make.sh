@@ -146,12 +146,25 @@ PLIST
 #
 #   security find-identity -v -p codesigning     # ver identidades disponíveis
 #   export EG_SIGN_ID="egeon-dev"                # nome do certificado
-SIGN_ID="${EG_SIGN_ID:--}"
+#
+# E se existir um certificado chamado `egeon-dev`, ele é usado sem precisar de
+# export nenhum. A variável esquecida caía em ad-hoc **em silêncio**, e o preço só
+# aparecia no diálogo de permissão do build seguinte — que no caso do microfone
+# não é diálogo: o processo é abortado pelo sistema (ADR-027).
+SIGN_ID="${EG_SIGN_ID:-}"
+if [ -z "$SIGN_ID" ]; then
+  SIGN_ID=$(security find-identity -v -p codesigning 2>/dev/null \
+            | awk -F'"' '/"egeon-dev"/ { print $2; exit }')
+fi
+SIGN_ID="${SIGN_ID:--}"
 
 if codesign --force --sign "$SIGN_ID" "$APP" >/dev/null 2>&1; then
   if [ "$SIGN_ID" = "-" ]; then
-    echo "aviso: assinado ad-hoc — permissões do macOS serão pedidas de novo a cada build"
-    echo "       defina EG_SIGN_ID com um certificado de code signing para parar com isso"
+    echo "aviso: assinado ad-hoc — o macOS pedirá as permissões de novo a cada build,"
+    echo "       porque sem certificado a identidade do app é o hash do binário."
+    echo "       Crie um certificado local de assinatura de código chamado 'egeon-dev'"
+    echo "       (Acesso às Chaves › Assistente de Certificado, raiz autoassinada) e"
+    echo "       ele passa a ser usado sozinho."
   else
     echo "assinado com: $SIGN_ID"
   fi
