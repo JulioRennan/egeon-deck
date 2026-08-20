@@ -203,12 +203,19 @@ conversas, e a resposta do A cai no meio da sua terceira pergunta ao B — a an�
 conversa chama isso de **cisma de piso**, e quem está num piso não se orienta pela
 troca de turnos do outro. O bloco não cinde.
 
-Dentro do bloco, **bolha dentro de bolha**: seu pedido numa bolha encostada à direita,
-o **caminho** dobrado no meio (`▸ 12 passos · 3 arquivos`), e a **resposta** noutra
-bolha encostada à esquerda. O que separa as duas é o lado, não a cor — é o mesmo
-vocabulário do resto do chat. O caminho nasce dobrado: turno de trinta ferramentas
-viraria um cartão que não cabe na tela. O corte da resposta é na prosa FINAL do turno,
-e não na primeira, porque o agente narra enquanto trabalha e narração é caminho.
+Dentro do bloco, **bolha dentro de bolha**: seu pedido, o **caminho** dobrado no meio
+(`▸ 12 passos · 3 arquivos`), e a **resposta**. Todas as bolhas encostam à esquerda e
+levam **o nome de quem falou dentro delas**, como mensagem de grupo no WhatsApp —
+`você`, `claude`, ou o par `claude → claude-2` quando a fala é entre agentes. Cada nome
+na cor do agente; `você` em branco, porque você não é um nó da sessão.
+
+O lado dizia quem falava enquanto eram duas pontas; com a cadeia entre agentes no mesmo
+cartão passaram a ser quatro, e aí `claude → claude-2` e `claude-2 → claude` caíam no
+mesmo lado e se confundiam. Com o nome dentro, a bolha se explica sozinha.
+
+O caminho nasce dobrado: turno de trinta ferramentas viraria um cartão que não cabe na
+tela. O corte da resposta é na prosa FINAL do turno, e não na primeira, porque o agente
+narra enquanto trabalha e narração é caminho.
 
 O thread **gruda no fim** até você rolar para cima, e volta a grudar quando você volta.
 Não dá para resolver rolando depois de montar: a primeira medida acontece com a largura
@@ -220,14 +227,14 @@ cartão** e usa a MESMA bolha. Nem seta de aninhamento, nem recuo, nem caixa pr�
 recuar cada volta fazia três voltas virarem uma escada dentro do cartão, e o desenho
 passava a falar da topologia em vez da conversa.
 
-O título de uma fala entre agentes nomeia **o par** — `claude → claude-2`, cada nome na
-cor dele. Numa cadeia de três, só quem respondeu não basta: `claude-2` sozinho não conta
-se ele foi acionado pelo `claude` ou pelo `qa`. Abaixo vão as duas bolhas, o que foi
-mandado à direita e o que voltou à esquerda.
+Cada bolha de uma fala entre agentes leva **o par** no título — `claude → claude-2` na
+que saiu, `claude-2 → claude` na que voltou. Numa cadeia de três, só quem respondeu não
+basta: `claude-2` sozinho não conta se ele foi acionado pelo `claude` ou pelo `qa`.
 
-**O contraste diz a hierarquia.** A resposta final para você é a superfície mais clara do
-cartão, com um fio na cor do agente; o seu pedido fica um degrau abaixo; e o que os
-agentes trocaram entre si recua para quase preto. Sem essa escada, a resposta que o
+**O contraste diz a hierarquia**, e com tudo alinhado é ele que faz esse trabalho. A
+resposta final para você é a superfície mais clara do cartão, com um fio na cor do
+agente; o seu pedido fica um degrau abaixo; e o que os agentes trocaram entre si recua
+para quase preto. Sem essa escada, a resposta que o
 agente te deu e a que ele deu ao vizinho pesavam igual, e achar a conclusão num cartão
 com cadeia exigia ler tudo. A letra segue clara nas três — o que muda é o quanto a bolha
 chama.
