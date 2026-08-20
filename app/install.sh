@@ -120,10 +120,29 @@ fi
 
 mkdir -p "$(dirname "$DESTINO")"
 
-encerrar "$DESTINO/Contents/MacOS/EgeonDeck" "Egeon Deck"
+# A troca é em dois `mv`, e não em `rm -rf` seguido de `cp -R`.
+#
+# O `cp -R` do bundle inteiro leva segundos, e ele acontecia com o destino JÁ
+# apagado: script morto ali — e ele morre, porque encerrar o app mata o terminal de
+# quem o disparou — deixava a máquina sem `/Applications/Egeon Deck.app` nenhum. Isto
+# não é hipótese: uma instalação já morreu no meio, e só não custou o app porque
+# calhou de morrer antes do `rm`.
+#
+# Aqui a cópia é feita ao lado, com o app ainda de pé e trabalhando, e a troca no
+# fim são dois `mv` dentro do mesmo volume: renomear é instantâneo e não copia
+# nada. Morrer entre os dois deixa o antigo em `.antigo`, que o bloco de reparo
+# abaixo devolve na próxima execução.
+NOVO="$DESTINO.novo"
+ANTIGO="$DESTINO.antigo"
 
-rm -rf "$DESTINO"
-cp -R "build/EgeonDeck.app" "$DESTINO"
+# Reparo de uma execução anterior que morreu no meio da troca.
+if [ ! -e "$DESTINO" ] && [ -e "$ANTIGO" ]; then
+  echo "aviso: instalação anterior morreu no meio da troca — devolvendo o bundle antigo"
+  mv "$ANTIGO" "$DESTINO"
+fi
+
+rm -rf "$NOVO"
+cp -R "build/EgeonDeck.app" "$NOVO"
 
 # Tirar a quarentena ANTES de abrir, e não depois.
 #
@@ -132,7 +151,15 @@ cp -R "build/EgeonDeck.app" "$DESTINO"
 # procura um caminho que não existe no processo e conclui "nenhum processo de pé"
 # num install que deu certo — e a próxima reinstalação cai no buraco do `pgrep`
 # descrito acima.
-xattr -dr com.apple.quarantine "$DESTINO" 2>/dev/null || true
+xattr -dr com.apple.quarantine "$NOVO" 2>/dev/null || true
+
+# Só agora o app cai: tudo que era demorado já aconteceu.
+encerrar "$DESTINO/Contents/MacOS/EgeonDeck" "Egeon Deck"
+
+rm -rf "$ANTIGO"
+[ -e "$DESTINO" ] && mv "$DESTINO" "$ANTIGO"
+mv "$NOVO" "$DESTINO"
+rm -rf "$ANTIGO"
 
 # O bundle que o `make.sh` acabou de gerar em `build/` é gêmeo do instalado:
 # mesmo id, mesmo `~/.egeon`, mesma porta. Deixá-lo em disco é deixar um segundo
