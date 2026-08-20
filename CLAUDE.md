@@ -215,11 +215,16 @@ Não dá para resolver rolando depois de montar: a primeira medida acontece com 
 ainda em zero, e a posição calculada ali não vale quando o layout de verdade chega — o
 último bloco ficava cortado na borda de baixo.
 
-**Turno acionado por outro agente não é bloco de primeiro nível** — ele aninha dentro
-do bloco de quem o acionou, como `↳ acionou claude-2 · 24s`. E a regra da dobra é uma
-só, em todo nível: **resposta sempre à vista, só o caminho dobra**. Dobrar a
-sub-conversa inteira escondia exatamente o que faltava saber — o agente dizia "perguntei
-ao vizinho quanto é 7 vezes 6" e a resposta dele ficava atrás do clique.
+**Turno acionado por outro agente não é bloco de primeiro nível** — ele entra no bloco
+de quem o acionou, como mais uma bolha, com `↳ claude-2` dizendo de quem é. **Sem
+recuo**: a cadeia é achatada, todas as bolhas na mesma margem, na ordem do tempo. Recuar
+cada volta fazia três voltas virarem uma escada dentro do cartão, e o desenho passava a
+falar da topologia em vez da conversa.
+
+E a regra da dobra é uma só, em todo nível: **resposta sempre à vista, só o caminho
+dobra**. Cada fala da cadeia tem a própria linha `▸ N passos`. Dobrar a fala inteira
+escondia exatamente o que faltava saber — o agente dizia "perguntei ao vizinho quanto é
+7 vezes 6" e a resposta dele ficava atrás do clique.
 
 A ligação é pelo remetente e pelo tempo, não pelo texto: o envelope diz quem falou, e um
 agente só pode ter acionado alguém durante um turno dele que já tinha começado. É

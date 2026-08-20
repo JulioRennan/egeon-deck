@@ -61,6 +61,18 @@ struct ChatTurn {
     /// mais um turno provocado, e o ciclo de dois é o mesmo mecanismo do de três.
     var replies: [ChatTurn] = []
 
+    /// A cadeia inteira que este turno provocou, ACHATADA em ordem de tempo.
+    ///
+    /// Achatada e não aninhada, e é uma decisão de leitura. Aninhada, cada volta da
+    /// cadeia recuava mais um degrau, e três voltas viravam uma escada dentro do
+    /// cartão — o desenho ficava sobre a topologia em vez de sobre a conversa. Aqui
+    /// tudo fica no mesmo nível, uma bolha embaixo da outra, e quem falou é dito pelo
+    /// nome e pela cor. A ordem já é a do tempo: uma volta só existe depois da ida.
+    var chain: [ChatTurn] {
+        replies.flatMap { [$0] + $0.chain }
+            .sorted { $0.at == $1.at ? $0.id < $1.id : $0.at < $1.at }
+    }
+
     /// Quantas falas esta sub-conversa tem, contando as de dentro.
     var conversationCount: Int {
         1 + replies.reduce(0) { $0 + $1.conversationCount }

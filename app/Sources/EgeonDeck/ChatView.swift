@@ -233,7 +233,7 @@ final class ChatTurnRow: ChatRow {
     private let workToggle: DisclosureLine?
     private var workBlocks: [ChatBlockView] = []
     private let answerBubble: ChatBubble?
-    private var subConversations: [SubConversationView] = []
+    private var chainEntries: [ChainEntryView] = []
     /// O caminho nasce DOBRADO. Turno de trinta ferramentas viraria um cartão que não
     /// cabe na tela, e aí o agrupamento pioraria a leitura em vez de melhorá-la. O que
     /// fica sempre à vista é o par que importa: o pedido e a resposta, cada um na sua
@@ -294,8 +294,8 @@ final class ChatTurnRow: ChatRow {
         }
         if let answerBubble { addSubview(answerBubble) }
 
-        subConversations = turn.replies.map { reply in
-            let view = SubConversationView(turn: reply)
+        chainEntries = turn.chain.map { entry in
+            let view = ChainEntryView(turn: entry)
             view.onToggle = { [weak self] in self?.onToggle?() }
             addSubview(view)
             return view
@@ -330,7 +330,7 @@ final class ChatTurnRow: ChatRow {
             y += workBlocks.reduce(0) { $0 + $1.height(for: inner) + 6 }
         }
         if let answerBubble { y += answerBubble.height(for: inner) + Self.gap }
-        y += subConversations.reduce(0) { $0 + $1.height(for: inner) + 6 }
+        y += chainEntries.reduce(0) { $0 + $1.height(for: inner) + Self.gap }
         return y + Self.pad - Self.gap
     }
 
@@ -408,10 +408,10 @@ final class ChatTurnRow: ChatRow {
                                         width: answerBubble.widthNeeded(in: inner), height: height)
             y += height + Self.gap
         }
-        for sub in subConversations {
-            let height = sub.height(for: inner)
-            sub.frame = NSRect(x: Self.gutter, y: y, width: inner, height: height)
-            y += height + 6
+        for entry in chainEntries {
+            let height = entry.height(for: inner)
+            entry.frame = NSRect(x: Self.gutter, y: y, width: inner, height: height)
+            y += height + Self.gap
         }
     }
 }
@@ -454,66 +454,51 @@ final class DisclosureLine: NSView {
     }
 }
 
-/// A conversa que um agente teve com outro, dentro do bloco de quem acionou.
+/// Uma fala da cadeia entre agentes, dentro do bloco de quem a começou.
 ///
-/// **A resposta está sempre à vista.** Dobrada por inteiro, ela escondia justamente o
-/// que você precisava saber: o agente dizia "perguntei ao vizinho quanto é 7 vezes 6" e
-/// a resposta dele ficava atrás do clique. A regra é a mesma de fora, e vale em todo
-/// nível — o pedido e a resposta aparecem, só o CAMINHO dobra.
+/// Sem recuo. Aninhada, cada volta da cadeia entrava mais um degrau e três voltas
+/// viravam uma escada dentro do cartão — o desenho passava a falar da topologia em vez
+/// da conversa, e ficava confuso justamente onde precisava ser claro. Aqui é uma bolha
+/// embaixo da outra, todas na mesma margem, e quem falou é dito pelo nome e pela cor.
 ///
-/// Recursiva: a volta de B para A é mais uma sub-conversa dentro desta, e o ciclo de
-/// dois se desenha com o mesmo mecanismo do de três.
-final class SubConversationView: NSView {
+/// A pergunta desta fala não é repetida: ela está na bolha de cima, que é a resposta de
+/// quem acionou ("perguntei ao vizinho quanto é 7 vezes 6"). Só aparece quando o outro
+/// ainda não respondeu — aí é a única coisa que existe para mostrar.
+final class ChainEntryView: NSView {
     var onToggle: (() -> Void)?
 
     private let turn: ChatTurn
     private let accent: NSColor
     private let head: NSTextField
-    private let rail = NSView()
-    private let promptBubble: ChatBubble?
-    private let answerBubble: ChatBubble?
+    private let bubble: ChatBubble?
     private let workToggle: DisclosureLine?
     private var workBlocks: [ChatBlockView] = []
-    private var nested: [SubConversationView] = []
     private var workOpen = false
 
-    private static let indent: CGFloat = 14
     private static let gap: CGFloat = 6
 
     init(turn: ChatTurn) {
         self.turn = turn
         accent = AgentColor.of(turn.author)
-        // O rótulo é o verbo da aresta: no Egeon, `from` PODE ACIONAR `to`. Presente
-        // enquanto o outro ainda não respondeu, passado depois.
-        let verb = turn.answer.isEmpty ? "acionando" : "acionou"
-        let span = Int(turn.conversationSpan.rounded())
-        var label = "↳ \(verb) \(turn.author)"
-        if span > 0 { label += " · \(span)s" }
-        head = ChatStyle.label(label, font: ChatStyle.meta, color: accent)
-        promptBubble = turn.prompt.isEmpty
-            ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent, side: .yours)
-        answerBubble = turn.answer.isEmpty
-            ? nil : ChatBubble(blocks: turn.answer, accent: accent, side: .agent)
+        // O verbo da aresta: no Egeon, `from` PODE ACIONAR `to`. Presente enquanto o
+        // outro ainda não respondeu, passado depois.
+        let pending = turn.answer.isEmpty
+        head = ChatStyle.label("↳ " + (pending ? "acionando " : "") + turn.author,
+                               font: ChatStyle.meta, color: accent)
+        bubble = pending
+            ? (turn.prompt.isEmpty
+                ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent, side: .yours))
+            : ChatBubble(blocks: turn.answer, accent: accent, side: .agent)
         workToggle = turn.work.isEmpty
             ? nil : DisclosureLine(text: turn.workSummary, color: ChatStyle.faint)
         super.init(frame: .zero)
 
         addSubview(head)
-        rail.wantsLayer = true
-        rail.layer?.backgroundColor = accent.withAlphaComponent(0.35).cgColor
-        addSubview(rail)
-        if let promptBubble { addSubview(promptBubble) }
         if let workToggle {
             workToggle.onClick = { [weak self] in self?.toggleWork() }
             addSubview(workToggle)
         }
-        if let answerBubble { addSubview(answerBubble) }
-        nested = turn.replies.map { reply in
-            let view = SubConversationView(turn: reply)
-            view.onToggle = { [weak self] in self?.onToggle?() }
-            addSubview(view)
-            return view
-        }
+        if let bubble { addSubview(bubble) }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -531,57 +516,35 @@ final class SubConversationView: NSView {
         onToggle?()
     }
 
-    private func innerWidth(_ width: CGFloat) -> CGFloat { max(80, width - Self.indent) }
-
     func height(for width: CGFloat) -> CGFloat {
-        let inner = innerWidth(width)
         var y = 15 + Self.gap
-        if let promptBubble { y += promptBubble.height(for: inner) + Self.gap }
         if workToggle != nil { y += DisclosureLine.height + Self.gap }
-        if workOpen { y += workBlocks.reduce(0) { $0 + $1.height(for: inner) + 5 } }
-        if let answerBubble { y += answerBubble.height(for: inner) + Self.gap }
-        y += nested.reduce(0) { $0 + $1.height(for: inner) + Self.gap }
+        if workOpen { y += workBlocks.reduce(0) { $0 + $1.height(for: width) + 5 } }
+        if let bubble { y += bubble.height(for: width) }
         return y
     }
 
     override func layout() {
         super.layout()
-        let inner = innerWidth(bounds.width)
         head.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 14)
         var y: CGFloat = 15 + Self.gap
-
-        if let promptBubble {
-            let height = promptBubble.height(for: inner)
-            promptBubble.frame = NSRect(x: Self.indent + promptBubble.originX(in: inner), y: y,
-                                        width: promptBubble.widthNeeded(in: inner), height: height)
-            y += height + Self.gap
-        }
         if let workToggle {
-            workToggle.frame = NSRect(x: Self.indent, y: y, width: inner,
+            workToggle.frame = NSRect(x: 0, y: y, width: bounds.width,
                                       height: DisclosureLine.height)
             y += DisclosureLine.height + Self.gap
         }
         if workOpen {
             for block in workBlocks {
-                let height = block.height(for: inner)
-                block.frame = NSRect(x: Self.indent, y: y, width: inner, height: height)
+                let height = block.height(for: bounds.width)
+                block.frame = NSRect(x: 0, y: y, width: bounds.width, height: height)
                 y += height + 5
             }
         }
-        if let answerBubble {
-            let height = answerBubble.height(for: inner)
-            answerBubble.frame = NSRect(x: Self.indent + answerBubble.originX(in: inner), y: y,
-                                        width: answerBubble.widthNeeded(in: inner), height: height)
-            y += height + Self.gap
+        if let bubble {
+            let height = bubble.height(for: bounds.width)
+            bubble.frame = NSRect(x: bubble.originX(in: bounds.width), y: y,
+                                  width: bubble.widthNeeded(in: bounds.width), height: height)
         }
-        for sub in nested {
-            let height = sub.height(for: inner)
-            sub.frame = NSRect(x: Self.indent, y: y, width: inner, height: height)
-            y += height + Self.gap
-        }
-        // Na cor de quem atendeu, e da altura do que ele produziu: é o fio que diz até
-        // onde esta sub-conversa vai, num cartão que pode ter três delas aninhadas.
-        rail.frame = NSRect(x: 3, y: 16, width: 1, height: max(0, y - 20))
     }
 }
 
