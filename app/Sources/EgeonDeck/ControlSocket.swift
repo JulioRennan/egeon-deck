@@ -50,8 +50,8 @@ final class ControlSocket {
         // levava o arquivo — e a primeira, viva, ficava com um socket que ninguém
         // alcança. Nada na tela dizia isso: o app parecia inteiro e só os ganchos do
         // CLI morriam, então nenhum agente avisava mais que tinha terminado.
-        if Self.someoneAnswers(at: Self.path) {
-            Log.write("socket: JÁ TEM outra instância deste flavor escutando em "
+        if let owner = Self.listenerPID() {
+            Log.write("socket: JÁ TEM outra instância deste flavor (pid \(owner)) escutando em "
                       + "\(Self.path) — este processo segue sem socket de controle. "
                       + "Feche uma das duas: elas também disputam o \(Flavor.current.config("workbenches.json").lastPathComponent).")
             return
@@ -130,16 +130,23 @@ final class ControlSocket {
         watchdog = timer
     }
 
-    /// Alguém aceita conexão neste caminho agora.
+    /// O pid de quem aceita conexão neste caminho agora, ou `nil` se ninguém aceita.
+    /// Zero quando alguém atende mas o pid não veio.
     ///
     /// Conectar e não escrever nada: é o único teste que separa "instância viva" de
     /// "arquivo de socket órfão", e o órfão é o caso comum depois de um crash.
-    private static func someoneAnswers(at path: String) -> Bool {
+    ///
+    /// O pid sai do próprio socket (`LOCAL_PEERPID`), e não de varrer a lista de
+    /// processos: bundle em quarentena o macOS executa de uma cópia em
+    /// `AppTranslocation`, e ali o caminho do processo não é nenhum dos que este
+    /// código — ou o `install.sh` — conhece. É o que permite ao arranque dizer QUAL
+    /// processo já está de pé em vez de só "tem alguém".
+    static func listenerPID(at path: String = ControlSocket.path) -> pid_t? {
         var isSocket = stat()
-        guard stat(path, &isSocket) == 0 else { return false }
+        guard stat(path, &isSocket) == 0 else { return nil }
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
+        guard fd >= 0 else { return nil }
         defer { close(fd) }
 
         var addr = sockaddr_un()
@@ -150,9 +157,11 @@ final class ControlSocket {
             }
         }
         let size = socklen_t(MemoryLayout<sockaddr_un>.size)
-        return withUnsafePointer(to: &addr) { raw in
+        let connected = withUnsafePointer(to: &addr) { raw in
             raw.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, size) == 0 }
         }
+        guard connected else { return nil }
+        return Peer.pid(of: fd) ?? 0
     }
 
     private static func inode(of path: String) -> (dev: Int32, ino: UInt64)? {
