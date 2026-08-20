@@ -319,7 +319,7 @@ struct AgentProfile: Codable {
     }
 
     /// O CLI sabe retomar conversa por id que escolhemos?
-    var keepsSession: Bool { resume != nil && newSession != nil }
+    var keepsConversation: Bool { resume != nil && newSession != nil }
 
     /// Argumentos que instalam o gancho de relato. Nil quando o perfil não o
     /// declara — aí o app fica só com a conversa que ele mesmo criou.

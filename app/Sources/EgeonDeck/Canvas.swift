@@ -605,14 +605,14 @@ final class TerminalNode: NodeView {
         let line = "cd \(shellQuote(cwd)); clear; \(command)"
         term.startProcess(executable: "/bin/zsh", args: ["-lc", line], environment: env, execName: nil)
 
-        Dispatcher.shared.register(Session(address: address, profile: profile,
+        Dispatcher.shared.register(Target(address: address, profile: profile,
                                            view: term, hooked: hooked))
 
         // O papel do terminal entra na fila em vez de ser escrito no pty agora: a
         // TUI acabou de ser lançada e ainda não tem quem leia stdin. O Dispatcher
         // já espera o `warmupMs` do perfil e o silêncio antes de entregar.
         if let prompt, !prompt.isEmpty, profile != nil {
-            Dispatcher.shared.session(address)?.enqueue(prompt)
+            Dispatcher.shared.target(address)?.enqueue(prompt)
             Log.write("terminal[\(address)]: papel enfileirado (\(prompt.count) caracteres)")
         }
     }
@@ -710,7 +710,7 @@ final class TerminalNode: NodeView {
     /// Chamado por um timer, então tudo aqui é barato de propósito: nenhuma
     /// leitura de tela, nenhuma alocação além das strings do rótulo.
     func refreshBadge() {
-        let session = Dispatcher.shared.session(address)
+        let session = Dispatcher.shared.target(address)
         let activity = session?.activity ?? .dead
         let pending = session?.pending ?? 0
 

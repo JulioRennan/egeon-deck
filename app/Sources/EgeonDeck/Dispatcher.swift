@@ -106,7 +106,7 @@ struct DispatchRequest: Codable {
 // MARK: - Sessão
 
 /// Um alvo endereçável: terminal que aceita prompt injetado.
-final class Session {
+final class Target {
     /// `sessão/id`. Muda quando a sessão é renomeada — ver `Dispatcher.rekey`.
     fileprivate(set) var address: String
     let profile: AgentProfile?
@@ -772,18 +772,18 @@ final class Session {
 final class Dispatcher {
     static let shared = Dispatcher()
 
-    private var sessions: [String: Session] = [:]
+    private var targets: [String: Target] = [:]
     private var timer: Timer?
     private var keyMonitor: Any?
 
     private init() {}
 
-    func register(_ session: Session) {
-        sessions[session.address] = session
-        Log.write("dispatcher: alvo registrado \(session.address) (\(session.displayName))")
+    func register(_ target: Target) {
+        targets[target.address] = target
+        Log.write("dispatcher: alvo registrado \(target.address) (\(target.displayName))")
     }
 
-    func unregister(address: String) { sessions.removeValue(forKey: address) }
+    func unregister(address: String) { targets.removeValue(forKey: address) }
 
     /// Troca o endereço de um alvo vivo, sem derrubar o pty.
     ///
@@ -791,22 +791,22 @@ final class Dispatcher {
     /// o `/dispatch` da extensão continuaria procurando o nome antigo e não
     /// acharia mais ninguém.
     func rekey(from old: String, to new: String) {
-        guard old != new, let session = sessions.removeValue(forKey: old) else { return }
-        session.address = new
-        sessions[new] = session
+        guard old != new, let target = targets.removeValue(forKey: old) else { return }
+        target.address = new
+        targets[new] = target
         Log.write("dispatcher: alvo \(old) → \(new)")
     }
 
-    var addresses: [String] { sessions.keys.sorted() }
+    var addresses: [String] { targets.keys.sorted() }
 
     /// Endereços de pé. O terminal cujo processo morreu continua registrado,
     /// porque o card continua na tela e você pode reviver — mas oferecê-lo como
     /// destino é oferecer um buraco: a fila enche e ninguém lê.
     var activeAddresses: [String] {
-        sessions.filter { $0.value.activity != .dead }.keys.sorted()
+        targets.filter { $0.value.activity != .dead }.keys.sorted()
     }
 
-    func session(_ address: String) -> Session? { sessions[address] }
+    func target(_ address: String) -> Target? { targets[address] }
 
     /// Você abriu esta sessão: o "terminou" dos terminais dela já foi visto.
     ///
@@ -814,8 +814,8 @@ final class Dispatcher {
     /// trocar de sessão não é ler a pergunta que ele te fez.
     func sessionOpened(_ name: String) {
         let prefix = name + "/"
-        for (address, session) in sessions where address.hasPrefix(prefix) {
-            session.markDoneSeen()
+        for (address, target) in targets where address.hasPrefix(prefix) {
+            target.markDoneSeen()
         }
     }
 
@@ -824,9 +824,9 @@ final class Dispatcher {
     /// Nil significa "não veio de terminal nenhum" — a extensão do VSCode, um
     /// `curl` seu, um teste. Esse caso é VOCÊ, e é o único que entrega sem as
     /// guardas de cadeia.
-    func session(callingOn fd: Int32) -> Session? {
+    func target(callingOn fd: Int32) -> Target? {
         guard let caller = Peer.pid(of: fd) else { return nil }
-        let byPid = Dictionary(sessions.values.map { ($0.shellPid, $0) }) { first, _ in first }
+        let byPid = Dictionary(targets.values.map { ($0.shellPid, $0) }) { first, _ in first }
         guard let owner = Peer.owner(of: caller, known: { byPid[$0] != nil }) else { return nil }
         return byPid[owner]
     }
@@ -869,10 +869,10 @@ final class Dispatcher {
     /// O agente conhece o vizinho pelo endereço que está no catálogo dele, mas
     /// escrever só o id é o erro natural — e barrar por isso seria pedantismo.
     private func resolve(_ name: String, siblingOf address: String) -> String? {
-        if sessions[name] != nil { return name }
+        if targets[name] != nil { return name }
         let session = String(address.split(separator: "/").first ?? "")
         let qualified = "\(session)/\(name)"
-        return sessions[qualified] != nil ? qualified : nil
+        return targets[qualified] != nil ? qualified : nil
     }
 
     /// `origin` é o terminal de onde a conexão partiu, resolvido pelo kernel —
@@ -882,16 +882,16 @@ final class Dispatcher {
     /// deixava as quatro guardas penduradas em texto que o próprio agente
     /// escrevia. Omitindo o campo ele passava por você e não encontrava guarda
     /// nenhuma; preenchendo com o nome de um vizinho, usava as arestas do outro.
-    func dispatch(_ request: DispatchRequest, from origin: Session?) throws -> String {
-        guard let session = sessions[request.target] else {
+    func dispatch(_ request: DispatchRequest, from origin: Target?) throws -> String {
+        guard let destination = targets[request.target] else {
             throw DispatchError.unknownTarget(request.target, available: addresses)
         }
 
         // Não partiu de um terminal: é você, cadeia nova, entrega direto.
         guard let origin else {
             guard let prompt = request.buildPrompt() else { throw DispatchError.emptyPrompt }
-            session.enqueue(prompt, mode: request.inject)
-            return "enfileirado para \(session.address); \(session.pending) na fila"
+            destination.enqueue(prompt, mode: request.inject)
+            return "enfileirado para \(destination.address); \(destination.pending) na fila"
         }
 
         let sender = origin.address
@@ -900,8 +900,8 @@ final class Dispatcher {
         var request = request
         request.from = sender
         guard let prompt = request.buildPrompt() else { throw DispatchError.emptyPrompt }
-        guard let edge = link(from: sender, to: session.address) else {
-            throw DispatchError.notLinked(from: sender, to: session.address)
+        guard let edge = link(from: sender, to: destination.address) else {
+            throw DispatchError.notLinked(from: sender, to: destination.address)
         }
 
         // Fila cheia é a outra guarda, e ela não é redundante com as de baixo.
@@ -914,47 +914,47 @@ final class Dispatcher {
         // A Anthropic põe o mesmo teto na mensageria entre sessões do Claude
         // Code, pelo mesmo motivo. Aqui o número é bem menor porque o destino é
         // um terminal que atende um prompt por vez.
-        guard session.pending < Self.maxPendingFromAgents else {
-            Log.write("cadeia[\(sender) → \(session.address)]: RECUSADA, "
-                      + "fila do destino com \(session.pending) mensagens")
-            throw DispatchError.targetBacklogged(target: session.address,
-                                                 pending: session.pending)
+        guard destination.pending < Self.maxPendingFromAgents else {
+            Log.write("cadeia[\(sender) → \(destination.address)]: RECUSADA, "
+                      + "fila do destino com \(destination.pending) mensagens")
+            throw DispatchError.targetBacklogged(target: destination.address,
+                                                 pending: destination.pending)
         }
 
         // A cadeia herda o caminho que o remetente estava atendendo. Se ele foi
         // acionado por você, começa nele.
         var chain = origin.chain.isEmpty ? [sender] : origin.chain
-        chain.append(session.address)
+        chain.append(destination.address)
 
         // Duas guardas, e elas não são a mesma coisa. O limite da seta é o botão
         // que você regula: "este par pode conversar N vezes". O da sessão é rede,
         // e é o único que segura ciclo de três ou mais — ali cada seta dispara uma
         // vez só e o limite dela nunca chega perto.
-        let sends = sendCount(from: sender, to: session.address, in: chain)
+        let sends = sendCount(from: sender, to: destination.address, in: chain)
         if let allowed = edge.maxSends, sends > allowed {
-            Log.write("cadeia[\(sender) → \(session.address)]: RECUSADA, "
+            Log.write("cadeia[\(sender) → \(destination.address)]: RECUSADA, "
                       + "\(sends)º envio nesta ligação (limite \(allowed)) "
                       + "— \(chain.joined(separator: " → "))")
-            throw DispatchError.tooManySends(from: sender, to: session.address,
+            throw DispatchError.tooManySends(from: sender, to: destination.address,
                                              limit: allowed, chain: chain)
         }
 
-        let ceiling = visitLimit(forSessionOf: session.address)
-        let visits = chain.filter { $0 == session.address }.count
+        let ceiling = visitLimit(forSessionOf: destination.address)
+        let visits = chain.filter { $0 == destination.address }.count
         guard visits <= ceiling else {
-            Log.write("cadeia[\(sender) → \(session.address)]: RECUSADA, "
+            Log.write("cadeia[\(sender) → \(destination.address)]: RECUSADA, "
                       + "\(visits)ª visita (teto da sessão \(ceiling)) "
                       + "— \(chain.joined(separator: " → "))")
-            throw DispatchError.tooManyVisits(target: session.address, limit: ceiling, chain: chain)
+            throw DispatchError.tooManyVisits(target: destination.address, limit: ceiling, chain: chain)
         }
 
-        session.enqueue(prompt, mode: request.inject, chain: chain)
+        destination.enqueue(prompt, mode: request.inject, chain: chain)
         // Passou o bastão: o fim de turno DELE não te chama mais.
         origin.handedOff = true
         let budget = edge.maxSends.map { "envio \(sends)/\($0)" } ?? "visita \(visits)/\(ceiling)"
-        Log.write("cadeia[\(sender) → \(session.address)]: \(budget) "
+        Log.write("cadeia[\(sender) → \(destination.address)]: \(budget) "
                   + "— \(chain.joined(separator: " → "))")
-        return "enfileirado para \(session.address); \(session.pending) na fila; \(budget)"
+        return "enfileirado para \(destination.address); \(destination.pending) na fila; \(budget)"
     }
 
     /// Teto de mensagens de agente esperando leitura num terminal.
@@ -986,7 +986,7 @@ final class Dispatcher {
             .filter { $0.from == id(address) }
             .compactMap { edge -> (address: String, cli: String, role: String?)? in
                 let peer = "\(session)/\(edge.to)"
-                guard let target = sessions[peer] else { return nil }
+                guard let target = targets[peer] else { return nil }
                 return (peer, target.profile?.displayName ?? "shell", AppControl.nodeRole?(peer))
             }
     }
@@ -1010,10 +1010,10 @@ final class Dispatcher {
     /// e não desenha nada — mas o pty continua rodando.
     func activitySummary() -> [String: ActivitySummary] {
         var out: [String: ActivitySummary] = [:]
-        for (address, session) in sessions {
+        for (address, target) in targets {
             let name = String(address.split(separator: "/").first ?? "")
             var entry = out[name] ?? ActivitySummary()
-            switch session.activity {
+            switch target.activity {
             case .starting, .working: entry.working += 1
             case .asking:             entry.attention += 1
             case .waiting:            entry.done += 1
@@ -1036,7 +1036,7 @@ final class Dispatcher {
     private func installKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            self?.sessions.values.first { $0.isFocused }?.userTyped()
+            self?.targets.values.first { $0.isFocused }?.userTyped()
             return event
         }
     }
@@ -1045,7 +1045,7 @@ final class Dispatcher {
         installKeyMonitor()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            self?.sessions.values.forEach {
+            self?.targets.values.forEach {
                 $0.drain()
                 // Depois de `drain`: entregar um prompt muda o estado, e ler o
                 // estado antes deixaria a UI um tick atrás do que aconteceu.

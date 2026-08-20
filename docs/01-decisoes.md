@@ -2056,3 +2056,54 @@ depende de tecla ou clique** — o Tab, a lista do `@`, a gaveta abrindo. O Ente
 a ser verificável pelo `&send=1`. `screencapture` do shell é negado por Gravação de Tela e
 `System Events keystroke` por Acessibilidade; as duas medidas, as duas negadas. O
 `/shot` de dentro do app cobre o desenho estático.
+
+## ADR-030 — Uma palavra por coisa: `Target` para o terminal, `conversationId` para a conversa
+
+**Contexto.** "Sessão" queria dizer três coisas dentro do mesmo código: a frente de
+trabalho (`SessionConfig`, `SessionShell`), o **terminal endereçável** do Dispatcher
+(`Session`, registrado por endereço, com fila e pty) e a **conversa do CLI**
+(`NodeConfig.sessionId`). Ler `session.enqueue(prompt)` exigia descobrir que ali era um
+pty, e não uma bancada. A colisão não era estética: `Dispatcher.session(_:)` devolvia
+terminal, `AppControl.sessionEdges` falava de bancada, e os dois estavam a dez linhas um
+do outro.
+
+**Decisão.** Duas das três trocam de nome, e a terceira fica para depois:
+
+- o terminal endereçável do Dispatcher é **`Target`** — que é a palavra que o socket já
+  usava (`/dispatch {"target": …}`, `?target=ws`) e a que o doc já usava em prosa
+  ("alvo endereçável"). A tabela virou `targets`, e `session(_:)`/`session(callingOn:)`
+  viraram `target(_:)`/`target(callingOn:)`;
+- a conversa do CLI é **`conversationId`** / `conversationStarted` /
+  `hasStartedConversation`, e a capacidade do perfil é `keepsConversation`;
+- a **frente de trabalho continua "sessão"**, por ora. Ver abaixo.
+
+**O que o token `{sessionId}` mantém.** O placeholder de `agents.json` e as flags
+`--resume` / `--session-id` continuam como estão: ali a palavra é do CLI, que de fato
+chama a conversa de sessão, e renomear o token quebraria silenciosamente o
+`agents.json` que o usuário já tem — o agente subiria sem retomar, sem erro à vista.
+
+**Migração.** `NodeConfig` guarda `sessionId`/`sessionStarted` como campos legados, lidos
+e absorvidos por `migratingLegacyNames` na carga do `sessions.json` e nunca escritos de
+volta (o encoder sintetizado omite opcional nulo). Sem isso, o primeiro arranque desta
+versão daria conversa nova a todo agente: o terminal subiria limpo e o thread do chat
+nasceria vazio numa conversa cheia. Os dois campos são internos e não `private` porque
+propriedade privada torna privado o init membro-a-membro sintetizado, que é por onde
+todo nó nasce.
+
+Verificado plantando o `sessions.json` do dev em formato antigo: sete nós com
+`sessionId` viraram sete com `conversationId`, **os mesmos UUIDs**, nenhuma chave velha
+sobrando, e zero linhas de "ganhou conversa" no log — que é o que apareceria para cada
+agente se a migração tivesse falhado.
+
+**Descartado: renomear a frente de trabalho agora.** Duas palavras foram consideradas e
+recusadas. **`workspace`** carrega a conotação de Slack e VSCode — a organização, o
+projeto inteiro —, e a unidade aqui é mais fina: duas tarefas no mesmo repositório são
+duas frentes, não dois workspaces. **`workflow`** promete etapas em ordem que rodam e
+terminam, com status e retry; o objeto é o oposto disso, um lugar que fica de pé, e as
+arestas são permissão ("pode acionar"), não passo de pipeline — além de a palavra estar
+tomada por GitHub Actions e n8n. As candidatas vivas são **`bancada`** (a metáfora que o
+próprio CLAUDE.md abre, com o custo de hoje "bancada" nomear o canvas) e **`frente`** (que
+é literalmente a definição escrita no doc, com o custo de ser o primeiro tipo em
+português). A decisão fica aberta porque ela mexe no endereço de dispatch, que está na
+memória muscular de quem usa e nos prompts que os agentes já trocam — e essa parte não
+se desfaz com rename automático.

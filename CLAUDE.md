@@ -37,7 +37,7 @@ poc/          protótipos descartados
 | `ChatComposer.swift` | a caixa de escrever: destinatário, Tab, `@` e a lista de menção |
 | `ChatPanel.swift` | "na sessão" — agentes, processos e a gaveta de saída |
 | `ChatContainer.swift` | o modo montado: thread, caixa, painel e o laço de leitura |
-| `Dispatcher.swift` | `Session` (alvo endereçável) e `Dispatcher` — fila, injeção, ociosidade, estado, cadeia |
+| `Dispatcher.swift` | `Target` (o terminal endereçável) e `Dispatcher` — fila, injeção, ociosidade, estado, cadeia |
 | `Attention.swift` | `Activity`, `Spinner`, `AttentionSound` — vocabulário de "carregando / precisa de você" |
 | `Edge.swift` | `EdgeConfig`, traçado das ligações (`EdgeCurve`, `EdgeLayerView`) e a porta `+` do card |
 | `AgentProfile.swift` | perfis de agente e `agents.json` |
@@ -68,8 +68,11 @@ sessões podem apontar para o mesmo repositório em worktrees diferentes. O nome
 **Endereço de dispatch** — `sessão/id`, ex. `deck/revisor`. Estável: independe de
 título de janela, posição na tela ou ordem. `shell` e `agent` são endereçáveis.
 
-**Conversa** — cada nó `agent` tem um `sessionId` próprio, gerado na primeira
-subida, que sobrevive ao rebuild. Ao lado dele mora o `transcript`, o caminho do JSONL
+**Conversa** — cada nó `agent` tem um `conversationId` próprio, gerado na primeira
+subida, que sobrevive ao rebuild. O CLI chama isso de sessão; aqui não, porque "sessão"
+já é a frente de trabalho e já era o terminal endereçável do Dispatcher — que agora é
+`Target` (ADR-030). Arquivo gravado antes disso trazia `sessionId`, e é absorvido na
+carga. Ao lado dele mora o `transcript`, o caminho do JSONL
 que o CLI grava — é dele que o modo chat monta o thread (ADR-029). Se você trocar de conversa dentro da TUI
 (`/resume`, `/clear`, fork), o CLI avisa o app por um gancho `UserPromptSubmit` e o
 `sessionId` acompanha. Ver ADR-014.
@@ -82,7 +85,7 @@ origem, e só aparece quando existe um).
 
 Copiar um nó — por template ou duplicando a sessão numa worktree — copia a
 montagem e **nunca a conversa**: `NodeConfig.withoutConversation` zera o
-`sessionId`. Com ele junto, duas sessões apontam para a mesma conversa e a
+`conversationId`. Com ele junto, duas sessões apontam para a mesma conversa e a
 segunda a subir não consegue abri-la — o card fica com a TUI desenhada e o
 processo morto, sem erro à vista. Duplicar para worktree leva também as arestas e
 o `maxVisits`: a rede é parte da montagem.

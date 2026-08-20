@@ -134,7 +134,7 @@ final class ControlSocket {
                 // Relatar a conversa também prova que o gancho chega aqui — e é
                 // isso que faz o terminal parar de depender de adivinhação sobre
                 // a tela já no primeiro turno (ADR-024).
-                Dispatcher.shared.session(target)?.hookReported("prompt")
+                Dispatcher.shared.target(target)?.hookReported("prompt")
             }
             respond(fd, status: "200 OK", json: ["ok": true])
 
@@ -151,7 +151,7 @@ final class ControlSocket {
                         json: ["ok": false, "error": "target e event são obrigatórios"])
                 return
             }
-            DispatchQueue.main.sync { Dispatcher.shared.session(target)?.hookReported(event) }
+            DispatchQueue.main.sync { Dispatcher.shared.target(target)?.hookReported(event) }
             respond(fd, status: "200 OK", json: ["ok": true])
 
         case ("POST", _, _) where route.contains("/message"):
@@ -171,7 +171,7 @@ final class ControlSocket {
             // /peers — quem QUEM PERGUNTA pode acionar. Sem parâmetro de
             // identidade: o remetente sai do processo do outro lado do socket.
             let peers = DispatchQueue.main.sync { () -> [[String: Any]] in
-                guard let origin = Dispatcher.shared.session(callingOn: fd) else { return [] }
+                guard let origin = Dispatcher.shared.target(callingOn: fd) else { return [] }
                 return Dispatcher.shared.peers(of: origin.address).map { peer in
                     var entry: [String: Any] = ["address": peer.address, "cli": peer.cli]
                     if let role = peer.role { entry["role"] = role }
@@ -183,7 +183,7 @@ final class ControlSocket {
         case ("GET", _, _) where route.contains("/status"):
             // /status — este terminal, do ponto de vista do app.
             let payload = DispatchQueue.main.sync { () -> [String: Any] in
-                guard let origin = Dispatcher.shared.session(callingOn: fd) else {
+                guard let origin = Dispatcher.shared.target(callingOn: fd) else {
                     return ["detail": "esta conexão não veio de um terminal"]
                 }
                 return ["address": origin.address,
@@ -232,7 +232,7 @@ final class ControlSocket {
         case ("GET", _, _) where route.contains("/peek"):
             // /peek?target=ws/id — mostra o que o terminal realmente exibe.
             let target = Self.target(in: route)
-            let lines = DispatchQueue.main.sync { Dispatcher.shared.session(target)?.peek() }
+            let lines = DispatchQueue.main.sync { Dispatcher.shared.target(target)?.peek() }
             if let lines {
                 respond(fd, status: "200 OK", json: ["target": target, "lines": lines])
             } else {
@@ -454,7 +454,7 @@ final class ControlSocket {
             // Quem chamou sai do kernel, não do pedido: é o `fd` que identifica
             // o processo do outro lado, e por ele o terminal de origem.
             let result = try DispatchQueue.main.sync {
-                let origin = Dispatcher.shared.session(callingOn: fd)
+                let origin = Dispatcher.shared.target(callingOn: fd)
                 return try Dispatcher.shared.dispatch(request, from: origin)
             }
             respond(fd, status: "200 OK", json: ["ok": true, "detail": result])
