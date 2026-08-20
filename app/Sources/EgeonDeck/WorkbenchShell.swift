@@ -83,7 +83,7 @@ final class ModeButton: NSView {
     }
 }
 
-/// Barra superior: de que jeito você está olhando a sessão.
+/// Barra superior: de que jeito você está olhando a bancada.
 ///
 /// Separada da barra do canvas — que é flutuante, mora no rodapé e trata do que
 /// você está FAZENDO: ferramenta armada, zoom, template. Esta trata de onde os
@@ -125,7 +125,7 @@ final class ViewToolbar: NSView {
             buttons[mode] = button
         }
 
-        // Qual sessão está na tela. Repetido da barra lateral de propósito: lá é
+        // Qual bancada está na tela. Repetido da barra lateral de propósito: lá é
         // uma lista e o que diz a ativa é um realce; aqui é afirmação.
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.textColor = NSColor(calibratedWhite: 1, alpha: 0.92)
@@ -144,8 +144,8 @@ final class ViewToolbar: NSView {
         addSubview(hint)
     }
 
-    /// Que sessão a barra está anunciando.
-    func setSession(name: String, path: String) {
+    /// Que bancada a barra está anunciando.
+    func setWorkbench(name: String, path: String) {
         title.stringValue = name
         subtitle.stringValue = path
         needsLayout = true
@@ -164,7 +164,7 @@ final class ViewToolbar: NSView {
 
         // A pílula primeiro: ela manda no centro, e os dois lados se acomodam ao
         // que sobrar. Centrada na JANELA e não no espaço livre — se dependesse do
-        // texto da esquerda, ela andaria a cada troca de sessão.
+        // texto da esquerda, ela andaria a cada troca de bancada.
         var largura = padding
         for mode in ViewMode.all {
             largura += (buttons[mode]?.fittingSize.width ?? 0) + padding
@@ -222,7 +222,7 @@ final class ViewToolbar: NSView {
         }
     }
 
-    /// Rótulo é texto, não botão: sobre o nome e o caminho da sessão o clique tem
+    /// Rótulo é texto, não botão: sobre o nome e o caminho da bancada o clique tem
     /// de continuar sendo clique na barra. `NSTextField` é `NSControl` e responde
     /// ao hit test mesmo sem ser editável nem selecionável.
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -249,17 +249,17 @@ final class ViewToolbar: NSView {
     }
 }
 
-// MARK: - A sessão na tela
+// MARK: - A bancada na tela
 
-/// Uma sessão: a barra de visualização em cima e, embaixo, o canvas, o mosaico ou
+/// Uma bancada: a barra de visualização em cima e, embaixo, o canvas, o mosaico ou
 /// o chat — os dois primeiros com os MESMOS nós.
 ///
 /// É o dono dos nós, e é por isso que existe. Antes quem os guardava era o
 /// canvas, na forma de `doc.subviews`; com dois containers disputando o mesmo
 /// card, a lista tem de viver acima dos dois — senão entrar no mosaico faz a
-/// sessão parecer vazia para todo mundo que contava nós pelo canvas: spinner do
+/// bancada parecer vazia para todo mundo que contava nós pelo canvas: spinner do
 /// cabeçalho, geometria do socket, persistência.
-final class SessionShell: NSView {
+final class WorkbenchShell: NSView {
     let canvas = CanvasContainer(frame: .zero)
 
     private let bar = ViewToolbar()
@@ -268,7 +268,7 @@ final class SessionShell: NSView {
     /// containers usam como referência de z-order.
     private lazy var bannerPanel = GlassPanel(content: banner, radius: 8, tint: .systemOrange)
     private var mosaic: MosaicContainer?
-    /// O modo chat. Criado junto com a sessão e não sob demanda como o mosaico: ele
+    /// O modo chat. Criado junto com a bancada e não sob demanda como o mosaico: ele
     /// não guarda geometria de card nenhum, então nasce barato, e main.swift precisa
     /// dele para ligar as fontes de dados uma vez só.
     let chat = ChatContainer()
@@ -276,7 +276,7 @@ final class SessionShell: NSView {
     private(set) var nodes: [NodeView] = []
     private(set) var mode: ViewMode
 
-    /// Você trocou de modo — hora de gravar no sessions.json.
+    /// Você trocou de modo — hora de gravar no workbenches.json.
     var onModeChanged: ((ViewMode) -> Void)?
     /// Divisor do mosaico arrastado.
     var onMosaicLayoutChanged: ((MosaicLayout) -> Void)?
@@ -290,12 +290,12 @@ final class SessionShell: NSView {
     ///
     /// O mosaico sobrescreve o frame do card no primeiro layout, então sem este
     /// retrato voltar para o canvas empilharia todos no mesmo canto — e o
-    /// `sessions.json`, que é gravado a partir do que está na tela, levaria a
+    /// `workbenches.json`, que é gravado a partir do que está na tela, levaria a
     /// pilha junto.
     private var canvasFrames: [String: NSRect] = [:]
 
-    /// Que sessão a barra de cima anuncia.
-    func setSession(name: String, path: String) { bar.setSession(name: name, path: path) }
+    /// Que bancada a barra de cima anuncia.
+    func setWorkbench(name: String, path: String) { bar.setWorkbench(name: name, path: path) }
 
     /// Troca dois cards de painel no mosaico, por id. Nada acontece no canvas —
     /// lá a posição é livre e não há painel para trocar.
@@ -347,7 +347,7 @@ final class SessionShell: NSView {
 
     func attach(_ node: NodeView) {
         nodes.append(node)
-        // O frame com que o nó chega é sempre o do canvas: vem do `sessions.json`
+        // O frame com que o nó chega é sempre o do canvas: vem do `workbenches.json`
         // ou do retângulo que você acabou de desenhar.
         if !node.nodeID.isEmpty { canvasFrames[node.nodeID] = node.frame }
 
@@ -365,7 +365,7 @@ final class SessionShell: NSView {
         }
     }
 
-    /// Tira o nó da sessão depois de alguém já ter confirmado. Encerra o que não
+    /// Tira o nó da bancada depois de alguém já ter confirmado. Encerra o que não
     /// morre sozinho — pty, carga de webview, registro no dispatcher.
     func detach(_ node: NodeView) {
         nodes.removeAll { $0 === node }
@@ -377,7 +377,7 @@ final class SessionShell: NSView {
     }
 
     /// Onde este nó fica no canvas, mesmo que agora esteja num painel do mosaico.
-    /// Quem grava geometria no `sessions.json` pergunta aqui.
+    /// Quem grava geometria no `workbenches.json` pergunta aqui.
     func canvasFrame(of nodeID: String) -> NSRect? {
         if mode == .canvas, let node = nodes.first(where: { $0.nodeID == nodeID }) {
             return node.frame
@@ -462,7 +462,7 @@ final class SessionShell: NSView {
             // O canvas CONTINUA montado, com os nós nele, e o chat entra opaco por
             // cima. Não é preguiça: um `NodeView` fora da hierarquia nunca recebe
             // passe de layout, e sem layout o SwiftTerm não tem colunas para
-            // informar ao pty. Medido — sessão que ABRE em chat sobe os terminais
+            // informar ao pty. Medido — bancada que ABRE em chat sobe os terminais
             // com tamanho zero, a TUI não tem onde desenhar, e a tela fica vazia
             // para sempre: `SIGWINCH` depois não faz o shell reimprimir o prompt.
             //
@@ -505,11 +505,11 @@ final class SessionShell: NSView {
 
     override func layout() {
         super.layout()
-        // Quem decide o recuo do título é a POSIÇÃO, e não o modo: se a sessão
+        // Quem decide o recuo do título é a POSIÇÃO, e não o modo: se a bancada
         // começa na borda esquerda da janela — o que acontece no canvas, onde o
         // grid corre por baixo da barra flutuante —, os botões da janela ficam em
         // cima do título. Perguntar a geometria evita combinar por convenção com o
-        // `RootView`, que é quem escolhe onde a sessão começa.
+        // `RootView`, que é quem escolhe onde a bancada começa.
         bar.titleInset = convert(NSPoint.zero, to: nil).x < 40 ? 82 : 16
         bar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: ViewToolbar.height)
         let content = contentFrame

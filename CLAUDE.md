@@ -26,16 +26,16 @@ poc/          protótipos descartados
 
 | arquivo | o que é |
 |---|---|
-| `main.swift` | `AppDelegate`, menu, ciclo de vida, criação/edição de sessão, worktree, laço de UI |
-| `Session.swift` | modelos `SessionConfig` / `NodeConfig`, persistência, `AppControl` |
+| `main.swift` | `AppDelegate`, menu, ciclo de vida, criação/edição de bancada, worktree, laço de UI |
+| `Workbench.swift` | modelos `WorkbenchConfig` / `NodeConfig`, persistência, `AppControl` |
 | `Canvas.swift` | `NodeView` (card base), `TerminalNode`, `CanvasContainer` (pan/zoom/grid), `MBTerminalView` |
-| `SessionShell.swift` | a sessão na tela: barra superior de visualização e o dono dos nós |
+| `WorkbenchShell.swift` | a bancada na tela: barra superior de visualização e o dono dos nós |
 | `Mosaic.swift` | o modo mosaico — `ViewMode`, `MosaicLayout` e o split view com mínimo por painel |
 | `Chat.swift` | o modo chat por dentro — `AgentColor`, `ChatNode` e a junção dos transcripts |
 | `Transcript.swift` | leitor do JSONL do CLI: mensagem, bloco de código, diff |
 | `ChatView.swift` | o thread — vocabulário visual, chip de agente e as linhas |
 | `ChatComposer.swift` | a caixa de escrever: destinatário, Tab, `@` e a lista de menção |
-| `ChatPanel.swift` | "na sessão" — agentes, processos e a gaveta de saída |
+| `ChatPanel.swift` | "na bancada" — agentes, processos e a gaveta de saída |
 | `ChatContainer.swift` | o modo montado: thread, caixa, painel e o laço de leitura |
 | `Dispatcher.swift` | `Target` (o terminal endereçável) e `Dispatcher` — fila, injeção, ociosidade, estado, cadeia |
 | `Attention.swift` | `Activity`, `Spinner`, `AttentionSound` — vocabulário de "carregando / precisa de você" |
@@ -44,11 +44,11 @@ poc/          protótipos descartados
 | `ControlSocket.swift` | socket unix de controle |
 | `Editor.swift` / `CodeServer.swift` | nó de editor (WKWebView) e o processo do code-server |
 | `WebNode.swift` | nó de navegador, com perfil de navegação isolado |
-| `Sidebar.swift` / `Toolbar.swift` | lista de sessões e barra de ferramentas do canvas |
+| `Sidebar.swift` / `Toolbar.swift` | lista de bancadas e barra de ferramentas do canvas |
 | `Glass.swift` | `GlassPanel` — o vidro das barras flutuantes, e o interruptor dele |
 | `Drop.swift` | arrastar arquivo para o terminal: o que o arrasto trouxe, virado em caminho |
-| `Component.swift` / `Template.swift` | presets de nó e de sessão |
-| `Worktree.swift` | criar worktree do git e abrir sessão nela |
+| `Component.swift` / `Template.swift` | presets de nó e de bancada |
+| `Worktree.swift` | criar worktree do git e abrir bancada nela |
 | `NodeWorktree.swift` | worktree por terminal: o plano de cada nó e a lista do formulário |
 | `Environment.swift` | PATH e env dos processos filhos |
 | `Flavor.swift` | estável vs dev: diretório de config, log, socket, porta |
@@ -58,34 +58,35 @@ poc/          protótipos descartados
 
 ## Conceitos
 
-**Sessão** — uma frente de trabalho: uma pasta e os nós abertos sobre ela. Duas
-sessões podem apontar para o mesmo repositório em worktrees diferentes. O nome é
+**Bancada** — uma frente de trabalho: uma pasta e os nós abertos sobre ela. Chamava-se
+sessão até a ADR-031. Duas
+bancadas podem apontar para o mesmo repositório em worktrees diferentes. O nome é
 único porque é a primeira parte do endereço de dispatch.
 
 **Nó** — um card no canvas. Quatro tipos: `editor` (code-server em WKWebView),
 `shell` (terminal comum), `agent` (shell rodando um agente CLI) e `web`.
 
-**Endereço de dispatch** — `sessão/id`, ex. `deck/revisor`. Estável: independe de
+**Endereço de dispatch** — `bancada/id`, ex. `deck/revisor`. Estável: independe de
 título de janela, posição na tela ou ordem. `shell` e `agent` são endereçáveis.
 
 **Conversa** — cada nó `agent` tem um `conversationId` próprio, gerado na primeira
-subida, que sobrevive ao rebuild. O CLI chama isso de sessão; aqui não, porque "sessão"
-já é a frente de trabalho e já era o terminal endereçável do Dispatcher — que agora é
-`Target` (ADR-030). Arquivo gravado antes disso trazia `sessionId`, e é absorvido na
-carga. Ao lado dele mora o `transcript`, o caminho do JSONL
+subida, que sobrevive ao rebuild. O CLI chama isso de sessão, e o app não usa mais essa
+palavra para nada: o que era "sessão" virou bancada — o lugar — e `Target` — o terminal
+endereçável. Ver ADR-030 e ADR-031. Arquivo gravado antes disso trazia `sessionId`, e é
+absorvido na carga. Ao lado dele mora o `transcript`, o caminho do JSONL
 que o CLI grava — é dele que o modo chat monta o thread (ADR-029). Se você trocar de conversa dentro da TUI
 (`/resume`, `/clear`, fork), o CLI avisa o app por um gancho `UserPromptSubmit` e o
-`sessionId` acompanha. Ver ADR-014.
+`conversationId` acompanha. Ver ADR-014.
 
 **Componente** — preset de nó (agente, comando, pasta, papel). **Template** —
-preset de sessão inteira. Os dois copiam valores no momento da criação; editar o
+preset de bancada inteira. Os dois copiam valores no momento da criação; editar o
 preset depois não mexe em quem já nasceu — por isso a barra tem duas ações
 separadas, "salvar como template" (cria) e "atualizar template" (regrava o de
 origem, e só aparece quando existe um).
 
-Copiar um nó — por template ou duplicando a sessão numa worktree — copia a
+Copiar um nó — por template ou duplicando a bancada numa worktree — copia a
 montagem e **nunca a conversa**: `NodeConfig.withoutConversation` zera o
-`conversationId`. Com ele junto, duas sessões apontam para a mesma conversa e a
+`conversationId`. Com ele junto, duas bancadas apontam para a mesma conversa e a
 segunda a subir não consegue abri-la — o card fica com a TUI desenhada e o
 processo morto, sem erro à vista. Duplicar para worktree leva também as arestas e
 o `maxVisits`: a rede é parte da montagem.
@@ -103,18 +104,18 @@ linha cicla ida → ida e volta → volta, e o X ao lado leva os dois. Ver ADR-0
 ## Worktree
 
 Uma frente de trabalho raramente é um repositório só: o card do frontend abre no
-repo da sessão, e o do backend abre num repo vizinho. Então a worktree é **por
-sessão e por terminal**.
+repo da bancada, e o do backend abre num repo vizinho. Então a worktree é **por
+bancada e por terminal**.
 
-Duplicar a sessão para worktree abre um formulário que lista **todos os
-terminais** com o repositório de cada um. No topo, a branch da sessão; mudá-la
+Duplicar a bancada para worktree abre um formulário que lista **todos os
+terminais** com o repositório de cada um. No topo, a branch da bancada; mudá-la
 re-sugere o nome para as linhas que você não editou à mão.
 
 Na linha de cada terminal só existe **a branch**, e é ela que decide: igual à da
-sessão, ele vai junto pelo `cwd` relativo; outra branch, ele ganha worktree própria
+bancada, ele vai junto pelo `cwd` relativo; outra branch, ele ganha worktree própria
 no repositório dele; em branco, fica no repositório original. Vale para shell,
 agente e editor sem distinção — quem abre pasta está na lista. Terminal dentro do
-repo da sessão com branch própria ganha worktree própria do mesmo repo: é a tarefa
+repo da bancada com branch própria ganha worktree própria do mesmo repo: é a tarefa
 no front que precisa de um ajuste no back. **Não há campo de pasta** — ela sai da
 branch pela convenção de sempre e aparece como texto, para conferir. Ver ADR-020.
 
@@ -123,10 +124,10 @@ O ícone de ramificação no cabeçalho de um terminal — ou o botão direito n
 posição continuam; o processo reinicia, porque não há como trocar o diretório de
 um pty em curso, e a conversa é zerada porque era da pasta antiga.
 
-Remover a sessão oferece apagar **todas** as worktrees dela — a da sessão e a de
+Remover a bancada oferece apagar **todas** as worktrees dela — a da bancada e a de
 cada terminal que abre fora dela —, numa caixinha só, listando repositório · branch
-· quem usa. Worktree que é pasta de outra sessão fica, marcada como MANTIDA: apagar
-levaria trabalho de quem não foi consultado. Falha em qualquer uma e a sessão não
+· quem usa. Worktree que é pasta de outra bancada fica, marcada como MANTIDA: apagar
+levaria trabalho de quem não foi consultado. Falha em qualquer uma e a bancada não
 sai da lista. Ver ADR-021.
 
 A worktree nasce em `<pai do repo>/worktrees/<repo>/<branch>` — fora do
@@ -142,7 +143,7 @@ O `cwd` de um nó aceita três formas, e todas têm motivo: relativo (o caso nor
 é o que faz o nó valer em qualquer checkout), absoluto (repo vizinho, que não tem
 equivalente dentro da worktree) e relativo saindo da raiz com `..` — este último
 é onde mora a armadilha, porque o mesmo texto significa pastas diferentes em
-checkouts diferentes. `cwd` que não resolve cai na raiz da sessão **falando**: log
+checkouts diferentes. `cwd` que não resolve cai na raiz da bancada **falando**: log
 e banner. Ver ADR-017, que registra o dia que o silêncio custou.
 
 O nome de branch que você escreve vale como escrito, e é ele que decide o que
@@ -156,17 +157,17 @@ ADR-018.
 
 ## Visualização
 
-Três maneiras de olhar a mesma sessão, na barra de cima (⌥⌘1 / ⌥⌘2 / ⌥⌘3):
+Três maneiras de olhar a mesma bancada, na barra de cima (⌥⌘1 / ⌥⌘2 / ⌥⌘3):
 
-**Canvas** — a bancada livre: posição, tamanho, zoom, arestas desenhadas.
+**Canvas** — a mesa solta: posição, tamanho, zoom, arestas desenhadas.
 **Mosaico** — os mesmos nós dividindo a janela inteira, sem sobreposição e sem
 zoom. Colunas empilhadas, divisores arrastáveis, coluna sem nó não aparece.
-**Chat** — a sessão como conversa, sem card nenhum. Ver a seção abaixo.
+**Chat** — a bancada como conversa, sem card nenhum. Ver a seção abaixo.
 
 No mosaico o arranjo é seu: **arraste o cabeçalho de um card sobre outro e os dois
 trocam de painel**, em qualquer direção, inclusive entre colunas. O painel que vai
 receber acende antes de você soltar. Quem nunca arrastou nada vê o arranjo por tipo
-— editor · terminais · web, na ordem do `sessions.json` —, e é dele que o resto
+— editor · terminais · web, na ordem do `workbenches.json` —, e é dele que o resto
 parte. O que você montou vive em `mosaic.slots`, ids de nó por coluna; nó criado
 depois entra na coluna de quem é do mesmo tipo, sem desfazer o resto. Ver ADR-023.
 
@@ -174,14 +175,14 @@ depois entra na coluna de quem é do mesmo tipo, sem desfazer o resto. Ver ADR-0
 que muda é quem lhe dá o frame. Reparentar uma view não toca no processo — o pty
 segue ligado ao SwiftTerm e o WKWebView não recarrega —, então dá para trocar de
 modo com cinco agentes trabalhando. É por isso que o dono dos nós é o
-`SessionShell` e não o canvas: com dois containers disputando o mesmo card, a
+`WorkbenchShell` e não o canvas: com dois containers disputando o mesmo card, a
 lista tem de viver acima dos dois.
 
 O que o mosaico desliga no card, por `NodeView.isFreeform`: arrasto pelo
 cabeçalho, alça de resize e porta de aresta. Ali quem dá a posição é o split view,
 e o arrasto chamaria `onRequestSpace`, que desloca o mundo do canvas.
 
-Modo e proporções são **por sessão**, gravados no `sessions.json` (`view`,
+Modo e proporções são **por bancada**, gravados no `workbenches.json` (`view`,
 `mosaic`) e copiados por template e por duplicação em worktree. A geometria dos
 nós no arquivo continua sendo sempre a do canvas: `syncFrames` só roda em canvas,
 senão a montagem inteira seria regravada com o tamanho dos painéis.
@@ -194,9 +195,9 @@ Canvas e mosaico mostram a **montagem**. Com cinco agentes ela é a parte que j�
 pronta, e o que falta é o **fio**: o que aconteceu, e em que ordem. Cada card só sabe
 do próprio turno, então esse fio não está em nenhum deles.
 
-O chat é um thread por sessão. Ele sai do **transcript JSONL que o CLI grava** — o
+O chat é um thread por bancada. Ele sai do **transcript JSONL que o CLI grava** — o
 caminho vem no payload do gancho (`transcript_path`) e fica em `NodeConfig.transcript`,
-ao lado do `sessionId`. A tela do terminal não serve para isso: ela é TUI e mente
+ao lado do `conversationId`. A tela do terminal não serve para isso: ela é TUI e mente
 (ADR-011). Como o thread é remontado dos arquivos, ele **volta inteiro no arranque
 seguinte** e o app não guarda mensagem nenhuma.
 
@@ -210,7 +211,7 @@ Dentro do bloco, **bolha dentro de bolha**: seu pedido, o **caminho** dobrado no
 (`▸ 12 passos · 3 arquivos`), e a **resposta**. Todas as bolhas encostam à esquerda e
 levam **o nome de quem falou dentro delas**, como mensagem de grupo no WhatsApp —
 `você`, `claude`, ou o par `claude → claude-2` quando a fala é entre agentes. Cada nome
-na cor do agente; `você` em branco, porque você não é um nó da sessão.
+na cor do agente; `você` em branco, porque você não é um nó da bancada.
 
 O lado dizia quem falava enquanto eram duas pontas; com a cadeia entre agentes no mesmo
 cartão passaram a ser quatro, e aí `claude → claude-2` e `claude-2 → claude` caíam no
@@ -329,13 +330,13 @@ apontar para o terminal, e aviso duplicado que não age é ruído.
 
 E o **canvas continua montado por baixo**, coberto pelo chat opaco. Não é preguiça:
 nó fora da hierarquia nunca recebe passe de layout, e sem layout o pty sobe com zero
-colunas — sessão que abre em chat ficava com os terminais em branco para sempre.
+colunas — bancada que abre em chat ficava com os terminais em branco para sempre.
 
 Ver ADR-029.
 
 ## As barras
 
-A barra de sessões é de vidro (`NSGlassEffectView`, macOS 26), e onde ela pousa
+A barra de bancadas é de vidro (`NSGlassEffectView`, macOS 26), e onde ela pousa
 depende do modo: **no canvas flutua** sobre o grid, **fora dele fica ao lado** do
 container — mosaico e chat.
 
@@ -343,10 +344,10 @@ As três superfícies do chat — painel da direita, caixa de escrever e gaveta 
 processo — são o **mesmo `GlassPanel`**, com o mesmo raio, a mesma borda, o mesmo
 recuo de 12pt e a mesma saída por `EGEON_GLASS=0`. Elas não pintam fundo próprio:
 fundo no `contentView` deixa o vidro invisível, porque ele reamostra o que está
-ATRÁS. O botão de recolher o painel é o `ToolbarButton` da barra de sessões, com os
+ATRÁS. O botão de recolher o painel é o `ToolbarButton` da barra de bancadas, com os
 mesmos símbolos espelhados — `sidebar.trailing` de um lado, `sidebar.leading` do
 outro. A largura do painel é **cedida**; a da caixa, **não**: à direita haveria
-mensagem coberta o tempo todo, e embaixo o thread já reserva a folga. A bancada do canvas tem sobra de espaço e a barra por cima dele é o efeito
+mensagem coberta o tempo todo, e embaixo o thread já reserva a folga. O canvas tem sobra de espaço e a barra por cima dele é o efeito
 desejado; no mosaico os cards dividem a janela inteira, e sobreposição ali é terminal
 coberto. A barra do canvas e o banner de aviso usam o mesmo `GlassPanel`. A barra de
 visualização, no topo, segue opaca e encostada.
@@ -361,11 +362,11 @@ A barra de visualização faz o que a barra de título faria, porque é ela que 
 aquela faixa: **arrastar move a janela** e **duplo clique maximiza** — respeitando a
 escolha em Ajustes › Área de Trabalho e Dock, que também pode ser minimizar ou nada.
 Sem isso a faixa do topo do app era a única do sistema onde os dois gestos morriam. O
-nome e o caminho da sessão saem do hit test para não roubar o clique: rótulo é
+nome e o caminho da bancada saem do hit test para não roubar o clique: rótulo é
 `NSControl` mesmo sem ser editável.
 
 A barra começa abaixo da barra de visualização, que corre de borda a borda e é ela que
-passa por baixo dos botões da janela — por isso o título dela recua quando a sessão
+passa por baixo dos botões da janela — por isso o título dela recua quando a bancada
 encosta na esquerda (`ViewToolbar.titleInset`, decidido pela posição e não pelo modo).
 
 Recolher é **só sua escolha**: `⌘/` ou o botão no cabeçalho da barra. Nem o modo nem o
@@ -379,7 +380,7 @@ dono, e ali a barra responde.
 No trilho o `+` sai (menu saindo de uma faixa de 52pt cai sobre os cards) e as **bolinhas
 continuam** — os três avisos em 10pt sob a pastilha, mais o aro da pastilha, onde
 laranja de "te espera" vence o verde de "está de pé". O que a largura tira é o nome,
-que vira a inicial: sessão inativa não desenha nada na tela, e essa linha é a única
+que vira a inicial: bancada inativa não desenha nada na tela, e essa linha é a única
 pista que ela tem.
 
 `EGEON_GLASS=0` volta as três para o fundo semiopaco, sem rebuild — vidro reamostra
@@ -402,7 +403,7 @@ arranque congelava a topologia daquele instante, e aresta criada depois nunca
 chegava — a seta aparecia no canvas e a ligação estava morta.
 
 Quatro guardas, todas no app: aresta obrigatória, `maxSends` por aresta,
-`maxVisits` por sessão, e teto de fila no destino. A cadeia zera quando **você**
+`maxVisits` por bancada, e teto de fila no destino. A cadeia zera quando **você**
 digita no terminal.
 
 **Nenhuma delas depende do que o agente escreve.** Quem falou vem do
@@ -479,12 +480,12 @@ glifos diferentes obrigam a ler o cabeçalho, a cor se reconhece de longe. `aski
 
 Na barra lateral os três convivem, encostados na direita da linha e sempre na
 mesma ordem: spinner do que está rodando, `●` laranja do que te espera, `●` verde
-do que acabou, com a contagem quando é mais de um. Uma sessão tem vários nós e os
+do que acabou, com a contagem quando é mais de um. Uma bancada tem vários nós e os
 três são fatos independentes; escolher um para mostrar escondia os outros dois.
 
-O verde some quando você **entra na sessão ou sai dela** — é aviso que não pede
+O verde some quando você **entra na bancada ou sai dela** — é aviso que não pede
 nada, e chegar ali já é ter visto. O laranja não some assim: ele espera que você
-olhe o TERMINAL, e passar pela sessão não é ler a pergunta que ele te fez.
+olhe o TERMINAL, e passar pela bancada não é ler a pergunta que ele te fez.
 
 E **fim de turno de quem acabou de acionar um vizinho não avisa nada**: o trabalho
 seguiu para o outro card, e te chamar ali é te puxar para o meio de uma conversa
@@ -506,7 +507,7 @@ curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 
 Rotas: `/targets` `/dispatch` `/peek` `/chat` `/compose` `/geometry` `/layout` `/mosaic`
 `/sidebar` `/edge` `/worktree` `/remove` `/activate` `/open` `/view` `/file` `/change`
-`/activity` `/message` `/peers` `/status`. As três últimas
+`/activity` `/conversation` `/message` `/peers` `/status`. As três últimas
 respondem sobre **quem perguntou**, resolvido pelo processo do outro lado da
 conexão — uma chamada sua pelo terminal não é terminal nenhum, e entrega sem as
 guardas de cadeia. **`/peek` e `/dispatch` são as ferramentas de teste** — dá
@@ -518,7 +519,7 @@ da caixa mostram. Existe pelo mesmo motivo do `/peek`: o thread é montado de v�
 transcripts cruzados por tempo, e conferir isso na tela é conferir o resultado sem ver
 a conta (ADR-029).
 
-`/layout?mode=canvas|mosaic|chat` troca a visualização da sessão ativa, e `/geometry`
+`/layout?mode=canvas|mosaic|chat` troca a visualização da bancada ativa, e `/geometry`
 começa dizendo em que modo está: em mosaico o `docFrame` é o do painel e o
 `grabPoint` não arrasta nada. `/mosaic?target=ws&swap=id1,id2` troca dois cards de
 painel — o mesmo que arrastar um cabeçalho sobre o outro, e a única forma de
@@ -536,13 +537,15 @@ linha; `none` é o X.
 
 `/targets` lista só terminais **de pé** — nó com processo morto continua no canvas
 mas não é destino. Com `?folder=<path>` responde `{targets, all, session}`: quem é
-da sessão dona daquela pasta, quem existe no app inteiro, e qual sessão casou. É
+da bancada dona daquela pasta, quem existe no app inteiro, e qual bancada casou. É
 como a extensão do editor sabe o que sugerir sem oferecer terminal de outro
-projeto; a pasta vira sessão pelas pastas que os nós de editor abriram, e só
-depois por prefixo do caminho da sessão (o mais longo ganha, senão worktree perde
-para o checkout principal). Ver ADR-019.
+projeto; a pasta vira bancada pelas pastas que os nós de editor abriram, e só
+depois por prefixo do caminho da bancada (o mais longo ganha, senão worktree perde
+para o checkout principal). A chave da bancada na resposta chama-se `workbench`;
+`session`, o nome antigo, vai junto por uma versão, porque a extensão instalada no
+code-server lê ela. Ver ADR-019 e ADR-031.
 
-`/worktree?target=ws[/id]&branch=X` abre worktree da sessão — levando os terminais
+`/worktree?target=ws[/id]&branch=X` abre worktree da bancada — levando os terminais
 junto — ou de um terminal só. `&nodes=back:fix/api,sub:spike` customiza a branch de
 terminais específicos, e `back:` sem nome deixa aquele terminal onde está; é o
 mesmo que digitar nas linhas do formulário (ADR-020). Existe porque o fluxo passa por
@@ -551,14 +554,14 @@ cada terminal foi para a pasta certa, que é justamente o defeito do ADR-017. A
 resposta traz `path` e `reused`, e o `path` é o da worktree que de fato ficou —
 com branch que já existia, ela pode não ser a que o app sugeriu (ADR-018).
 
-`/remove?target=ws[&worktrees=1]` remove a sessão, e só com `worktrees=1` apaga as
+`/remove?target=ws[&worktrees=1]` remove a bancada, e só com `worktrees=1` apaga as
 worktrees dela do disco — o padrão é não apagar, porque do outro lado é `worktree
 remove --force`. Responde o que apagou, o que manteve e por quê (ADR-021).
 
 ## Configuração
 
 Tudo em `~/.egeon/`, e todo arquivo é feito para ser editado à mão:
-`sessions.json`, `agents.json`, `templates.json`, `components.json`,
+`workbenches.json`, `agents.json`, `templates.json`, `components.json`,
 `web-profiles.json`. Log em `~/egeon.log` (zerado a cada arranque).
 
 O app também escreve ali o que os processos filhos precisam: `bin/egeon`,
@@ -568,7 +571,7 @@ não quebra nada.
 ## Flavors
 
 Dois apps instalados lado a lado, porque o app segura os pty direto e **todo
-rebuild mata as sessões de agente em andamento** (ADR-010). O estável segura os
+rebuild mata as bancadas de agente em andamento** (ADR-010). O estável segura os
 agentes de verdade e é de lá que se pede a mudança; o dev é o que se derruba.
 
 | | estável | dev |
@@ -602,7 +605,7 @@ outro app.
 
 **Encerre o app antes de tocar no bundle dele.** `make.sh` faz `rm -rf`, e apagar
 o executável de um app vivo o mata na validação de assinatura, pulando o
-`applicationWillTerminate` — que é onde o sessions.json é gravado e o code-server
+`applicationWillTerminate` — que é onde o workbenches.json é gravado e o code-server
 encerrado. `dev.sh` e `install.sh` já fazem isso na ordem certa; script novo que
 mexa em bundle precisa fazer também.
 

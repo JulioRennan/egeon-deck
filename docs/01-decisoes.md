@@ -2107,3 +2107,53 @@ próprio CLAUDE.md abre, com o custo de hoje "bancada" nomear o canvas) e **`fre
 português). A decisão fica aberta porque ela mexe no endereço de dispatch, que está na
 memória muscular de quem usa e nos prompts que os agentes já trocam — e essa parte não
 se desfaz com rename automático.
+
+## ADR-031 — Bancada, não sessão: `Workbench` no código e "bancada" na prosa
+
+**Contexto.** A ADR-030 tirou duas das três coisas que se chamavam sessão — o terminal
+endereçável virou `Target`, a conversa do CLI virou `conversationId` — e deixou a
+terceira, a frente de trabalho, com o nome antigo, porque a palavra certa ainda não
+estava decidida. "Sessão" descrevia mal o objeto de qualquer jeito: uma sessão começa e
+termina, e isto é um lugar que fica de pé por semanas.
+
+**Decisão.** A frente de trabalho é uma **bancada** — `Workbench` no código,
+`WorkbenchConfig` / `WorkbenchShell` / `WorkbenchStore`, `workbenches.json` no disco,
+"bancada" na UI e na prosa. Código em inglês e prosa em português passam a usar **a
+mesma palavra**, o que `session`/`sessão` nunca deu: bancada é workbench traduzida.
+
+O que a palavra promete e entrega: um **lugar com ferramentas montadas**. Aceita duas no
+mesmo repositório sem estranheza — duas tarefas no mesmo projeto são duas bancadas —,
+cobre tanto a tarefa curta quanto o projeto que vive meses, e não promete etapa nenhuma.
+
+**Descartado: `workspace`.** Slack e VSCode fixaram a conotação de *organização, projeto
+inteiro*, e a unidade aqui é mais fina: duas tarefas no mesmo repositório não são dois
+workspaces. **Descartado: `workflow`** — promete etapas em ordem que rodam e terminam,
+com status e retry, e o objeto é o oposto: as arestas são permissão ("pode acionar"), não
+passo de pipeline; além de a palavra estar tomada por GitHub Actions e n8n.
+**Descartado: `tarefa`** — mente na metade dos casos, porque bancada de projeto longo não
+é tarefa. O custo aceito de "bancada" é que ela nomeava o canvas na prosa antiga; o canvas
+agora é *a mesa solta*, um dos três jeitos de olhar uma bancada.
+
+**O que NÃO mudou, e por quê.** O vocabulário do CLI fica: `--session-id`, `--resume`, o
+token `{sessionId}` do `agents.json` e as chaves `newSession` / `reportSession` do mesmo
+arquivo. Ali sessão é palavra de quem grava a conversa, e renomear as chaves quebraria em
+silêncio o `agents.json` que o usuário já tem. O **valor** do endereço de dispatch também
+não muda: `nitidez/claude` continua sendo `nitidez/claude`; o que mudou é a palavra que
+explica a primeira parte.
+
+**Três compatibilidades**, cada uma com um jeito diferente de falhar se faltar:
+
+- **arquivo**: `WorkbenchStore` lê `workbenches.json` e, se ele não existir, o
+  `sessions.json` antigo — e a primeira gravação já sai com o nome novo. Sem isso o app
+  subiria com zero bancadas e a pessoa acharia que perdeu a montagem inteira;
+- **chave de resposta**: `/targets?folder=` devolve `workbench` **e** `session`, o nome
+  antigo. A extensão instalada no code-server lê `session`, e trocar as duas pontas no
+  mesmo commit não atualiza quem já está rodando. A extensão nova prefere `workbench` e
+  cai para `session`, então as quatro combinações de velho e novo funcionam;
+- **rota**: o gancho que relata a conversa posta em `/conversation`, e `/session`
+  continua aceito — o gancho vive em disco e um agente já rodando pode postar no nome
+  antigo antes de o app regravar o script.
+
+As ADRs anteriores a esta ficam **como foram escritas**, falando "sessão": são registro
+do que se decidiu quando se decidiu, e reescrevê-las apagaria o rastro de que a palavra
+mudou.

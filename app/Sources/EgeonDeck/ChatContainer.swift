@@ -1,20 +1,20 @@
 import AppKit
 
-/// O modo Chat: a sessão inteira como uma conversa.
+/// O modo Chat: a bancada inteira como uma conversa.
 ///
-/// Terceira forma de olhar a mesma sessão, e a única em que os cards não aparecem.
+/// Terceira forma de olhar a mesma bancada, e a única em que os cards não aparecem.
 /// O motivo é o que a montagem não resolve: com cinco agentes o canvas obriga a
 /// varrer cinco cards para saber o que aconteceu, e a ordem em que aconteceu não
 /// está em nenhum deles. Aqui a ordem é o eixo — os transcripts dos agentes viram
 /// um thread só — e o que se perde de vista, a montagem, é justamente o que já
 /// está pronto e não muda mais.
 ///
-/// Não desenha nó nenhum, mas os cards não saem da hierarquia: o `SessionShell`
+/// Não desenha nó nenhum, mas os cards não saem da hierarquia: o `WorkbenchShell`
 /// mantém o canvas montado e põe esta view opaca por cima. Sem isso os terminais
 /// nunca recebem passe de layout, o pty sobe com zero colunas e a TUI não tem onde
 /// desenhar. Ver ADR-029.
 final class ChatContainer: NSView {
-    /// Os terminais da sessão, remontados a cada leitura.
+    /// Os terminais da bancada, remontados a cada leitura.
     var nodes: (() -> [ChatNode])?
     /// Entrega o texto. Devolve o erro quando a entrega não passa.
     var send: ((_ text: String, _ target: String) -> String?)?
@@ -28,7 +28,7 @@ final class ChatContainer: NSView {
     private let panel = ChatSidePanel()
     private let drawer = ProcessDrawer()
     /// Painel e gaveta entram em vidro, como as barras flutuantes do app: as três
-    /// superfícies do chat falam a mesma língua da barra de sessões e da barra do
+    /// superfícies do chat falam a mesma língua da barra de bancadas e da barra do
     /// canvas — mesmo raio, mesma borda, mesmo `EGEON_GLASS=0` como saída (ADR-025).
     /// A caixa de escrever traz o vidro dela por dentro, porque a lista de menção
     /// precisa nascer encostada nele.
@@ -83,7 +83,7 @@ final class ChatContainer: NSView {
         composer.onSend = { [weak self] text, target in self?.deliver(text, to: target) }
         composer.statusOf = { [weak self] id in
             guard let node = self?.lastNodes.first(where: { $0.id == id }) else {
-                return id == ChatComposer.everyone ? "a sessão inteira" : ""
+                return id == ChatComposer.everyone ? "a bancada inteira" : ""
             }
             return node.activity == .ready ? (node.role ?? "de pé") : (node.activity.label ?? "")
         }
@@ -141,7 +141,7 @@ final class ChatContainer: NSView {
 
     /// O laço só roda com o chat na tela.
     ///
-    /// Ler transcript é I/O de arquivo, e em sessão com cinco agentes são cinco
+    /// Ler transcript é I/O de arquivo, e em bancada com cinco agentes são cinco
     /// arquivos. Deixar isso rodando enquanto você está no canvas é custo por nada
     /// — o thread é remontado ao entrar, e o que ele lê está gravado em disco.
     override func viewDidMoveToWindow() {
@@ -189,9 +189,9 @@ final class ChatContainer: NSView {
         // Só terminal DE PÉ é destino: nó com processo morto continua na lista para
         // você ver que morreu, mas mandar prompt para ele é encher fila que ninguém
         // lê — a mesma regra do `/targets`.
-        // Agentes primeiro, e não na ordem do `sessions.json`: o primeiro da lista é
+        // Agentes primeiro, e não na ordem do `workbenches.json`: o primeiro da lista é
         // o destinatário padrão, e cair num shell faz a caixa abrir dizendo "escreva
-        // pra t1" numa sessão cujo trabalho é com os agentes.
+        // pra t1" numa bancada cujo trabalho é com os agentes.
         let live = nodes.filter { $0.activity != .dead }
         var candidates = live.filter(\.isAgent).map(\.id) + live.filter { !$0.isAgent }.map(\.id)
         if live.filter(\.isAgent).count > 1 { candidates.append(ChatComposer.everyone) }
@@ -216,14 +216,14 @@ final class ChatContainer: NSView {
 
     /// O que dizer quando o thread está vazio, e são três motivos diferentes.
     ///
-    /// Separados porque "ninguém falou ainda" numa sessão só de shell é mentira por
+    /// Separados porque "ninguém falou ainda" numa bancada só de shell é mentira por
     /// omissão: ali não vai aparecer conversa nunca, e ficar esperando é perder a
     /// tarde. O que falta é dito com o nome de quem falta.
     private static func placeholder(nodes: [ChatNode], turns: [ChatTurn]) -> String? {
         guard turns.isEmpty else { return nil }
         let agents = nodes.filter(\.isAgent)
         if agents.isEmpty {
-            return "Esta sessão não tem nó de agente. O thread do chat sai do transcript "
+            return "Esta bancada não tem nó de agente. O thread do chat sai do transcript "
                 + "que o CLI grava — terminal comum não gera nenhum, então aqui não vai "
                 + "aparecer conversa. Os processos continuam na lista à direita."
         }

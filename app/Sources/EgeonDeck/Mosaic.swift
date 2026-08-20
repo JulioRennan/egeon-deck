@@ -1,6 +1,6 @@
 import AppKit
 
-/// De que jeito você está olhando a sessão.
+/// De que jeito você está olhando a bancada.
 ///
 /// Nos dois modos que desenham cards não são duas cópias do nó: o card é o MESMO
 /// `NodeView`, e o que muda é quem lhe dá o frame. Tirar uma view de um pai e pôr
@@ -14,7 +14,7 @@ enum ViewMode: String, Codable {
     case canvas
     /// A janela inteira dividida entre os nós, sem sobreposição e sem zoom.
     case mosaic
-    /// A sessão como conversa: os transcripts dos agentes num thread só.
+    /// A bancada como conversa: os transcripts dos agentes num thread só.
     case chat
 
     /// Os modos na ordem em que aparecem na barra e nas teclas ⌥⌘1..3.
@@ -40,7 +40,7 @@ enum ViewMode: String, Codable {
         switch self {
         case .canvas: return "Canvas — nós soltos, com zoom e ligações (⌥⌘1)"
         case .mosaic: return "Mosaico — os mesmos nós dividindo a janela (⌥⌘2)"
-        case .chat:   return "Chat — a sessão como conversa, sem os cards (⌥⌘3)"
+        case .chat:   return "Chat — a bancada como conversa, sem os cards (⌥⌘3)"
         }
     }
 }
@@ -62,8 +62,8 @@ struct MosaicLayout: Codable, Equatable {
     ///
     /// Existe porque o arranjo deixou de ser derivado do tipo do nó. Derivado, não
     /// havia como trocar dois cards de lugar — a única ordem possível era
-    /// editores, terminais, web, e dentro da coluna a do `sessions.json`. Nulo, ou
-    /// com id que não está mais na sessão, cai de volta na regra de tipo, que
+    /// editores, terminais, web, e dentro da coluna a do `workbenches.json`. Nulo, ou
+    /// com id que não está mais na bancada, cai de volta na regra de tipo, que
     /// continua sendo o arranjo de quem nunca arrastou nada.
     var slots: [[String]]?
 }
@@ -168,7 +168,7 @@ final class MosaicSplit: NSSplitView, NSSplitViewDelegate {
     /// O retângulo de um painel que começa em `position` e mede `size` no eixo.
     ///
     /// O ramo não-flipped não é hipótese: sem ele o painel 0 de um split
-    /// horizontal iria para BAIXO, e a ordem do `sessions.json` apareceria de
+    /// horizontal iria para BAIXO, e a ordem do `workbenches.json` apareceria de
     /// cabeça para baixo na tela.
     private func frame(at position: CGFloat, size: CGFloat) -> NSRect {
         if isVertical {
@@ -235,10 +235,10 @@ final class MosaicDropHint: NSView {
 
 // MARK: - Mosaico
 
-/// A sessão dividindo a janela: colunas por tipo de nó, cada coluna empilhada.
+/// A bancada dividindo a janela: colunas por tipo de nó, cada coluna empilhada.
 ///
 /// A ordem é fixa — editores, terminais, web — e dentro da coluna é a do
-/// `sessions.json`. Reordenar é editar o arquivo, que é como todo o resto da
+/// `workbenches.json`. Reordenar é editar o arquivo, que é como todo o resto da
 /// configuração do app funciona. Coluna sem nó não aparece.
 final class MosaicContainer: NSView {
     /// Sobra em volta, para o card não nascer encostado na borda da janela.
@@ -315,7 +315,7 @@ final class MosaicContainer: NSView {
 
     // MARK: Montagem
 
-    /// Recebe os nós da sessão e remonta as colunas.
+    /// Recebe os nós da bancada e remonta as colunas.
     func arrange(_ list: [NodeView]) {
         nodes = list
         rebuild()
@@ -390,7 +390,7 @@ final class MosaicContainer: NSView {
     }
 
     /// O arranjo de quem nunca arrastou nada: editores, terminais, web — e dentro
-    /// da coluna, a ordem do `sessions.json`.
+    /// da coluna, a ordem do `workbenches.json`.
     private static func byType(_ list: [NodeView]) -> [[NodeView]] {
         var byColumn: [Int: [NodeView]] = [:]
         for node in list { byColumn[column(of: node), default: []].append(node) }
@@ -408,7 +408,7 @@ final class MosaicContainer: NSView {
     /// Prepara o card para viver num layout que não é o dele.
     ///
     /// Desligar os ganchos de geometria não é zelo: `onRequestSpace` desloca o
-    /// mundo do canvas e `onFrameChanged` grava a posição no `sessions.json` —
+    /// mundo do canvas e `onFrameChanged` grava a posição no `workbenches.json` —
     /// aqui o frame vem do split view, e deixá-los ligados regravaria a montagem
     /// do canvas com as coordenadas do mosaico.
     private func adopt(_ node: NodeView) {
@@ -517,7 +517,7 @@ final class MosaicContainer: NSView {
     /// Proporção salva que dá para usar, ou nada.
     ///
     /// Recusa fração degenerada. O arrasto não consegue produzir uma — o mínimo
-    /// por painel barra antes —, mas o `sessions.json` é feito para ser editado à
+    /// por painel barra antes —, mas o `workbenches.json` é feito para ser editado à
     /// mão, e um zero ali esconde um card sem dizer para onde ele foi. Foi
     /// exatamente esse o estrago de uma versão anterior deste arquivo: gravou
     /// `columns: [0, 1]` e escondia o editor a cada arranque.
@@ -542,7 +542,7 @@ final class MosaicContainer: NSView {
                                   rows: rows.map { $0.fractions },
                                   slots: grouped().map { $0.map(\.nodeID) })
         // O resize da janela também dispara o aviso do split view, e sem esta
-        // guarda o `sessions.json` seria reescrito a cada pixel de arrasto da
+        // guarda o `workbenches.json` seria reescrito a cada pixel de arrasto da
         // borda.
         guard layout != lastPublished else { return }
         lastPublished = layout

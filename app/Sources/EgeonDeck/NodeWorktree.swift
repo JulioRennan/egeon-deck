@@ -1,9 +1,9 @@
 import AppKit
 
-/// O que acontece com a pasta de um terminal quando a sessão vira worktree.
+/// O que acontece com a pasta de um terminal quando a bancada vira worktree.
 ///
 /// Existe porque uma frente de trabalho raramente é um repositório só: o card do
-/// frontend abre no repo da sessão, e o do backend abre num repo vizinho. Uma
+/// frontend abre no repo da bancada, e o do backend abre num repo vizinho. Uma
 /// branch nova precisa dos DOIS em worktree, senão o agente do backend continua
 /// commitando no checkout principal enquanto o do frontend trabalha na branch
 /// nova.
@@ -14,52 +14,52 @@ struct NodeWorktree {
     /// Raiz do repositório em que `currentPath` cai. Nulo quando não é git.
     let repoRoot: String?
 
-    /// A pasta está dentro da pasta da sessão?
+    /// A pasta está dentro da pasta da bancada?
     ///
     /// Quem está dentro e fica na MESMA branch não precisa de worktree própria: o
-    /// `cwd` relativo já o leva para a pasta equivalente da worktree da sessão, e é
+    /// `cwd` relativo já o leva para a pasta equivalente da worktree da bancada, e é
     /// justamente isso que o `cwd` relativo existe para fazer.
     ///
     /// Por contenção de caminho, e não por identidade de repositório: é essa a
     /// regra que `repointed` de fato aplica, e duas worktrees do MESMO repo são
-    /// pastas diferentes — dizer "segue a sessão" ali esconderia a escolha.
-    let insideSession: Bool
+    /// pastas diferentes — dizer "segue a bancada" ali esconderia a escolha.
+    let insideWorkbench: Bool
 
     /// Criar worktree própria para este terminal?
     ///
     /// Derivado da branch, não escolhido em caixinha: o que decide é o nome que
-    /// você escreveu na linha. Ver `decided(sessionBranch:)`.
+    /// você escreveu na linha. Ver `decided(workbenchBranch:)`.
     var enabled: Bool
-    /// Branch deste terminal. Nasce igual à da sessão.
+    /// Branch deste terminal. Nasce igual à da bancada.
     ///
-    /// Igual à da sessão significa "vai junto com ela". Diferente significa
+    /// Igual à da bancada significa "vai junto com ela". Diferente significa
     /// worktree própria, no repositório deste terminal. Vazia significa "não me
     /// leve" — o terminal fica apontando para o repositório original.
     var branch: String
     /// Você editou a branch deste terminal à mão?
     ///
-    /// Governa o re-sugerir: mudar a branch da sessão reescreve as linhas que você
+    /// Governa o re-sugerir: mudar a branch da bancada reescreve as linhas que você
     /// não tocou, e deixa em paz as que você customizou.
     var touched = false
 
     var repoName: String { ((repoRoot ?? currentPath) as NSString).lastPathComponent }
 
-    /// Onde a worktree deste terminal nasce. Mesma convenção da sessão.
+    /// Onde a worktree deste terminal nasce. Mesma convenção da bancada.
     var destination: String? {
         guard let repoRoot, enabled else { return nil }
         return Worktree.suggestedPath(repoRoot: repoRoot, branch: branch)
     }
 
-    /// O plano deste terminal depois de saber a branch da sessão.
+    /// O plano deste terminal depois de saber a branch da bancada.
     ///
     /// Uma regra só, e é a branch que a diz: repositório outro, ou branch outra,
-    /// pede worktree própria. Dentro da sessão e na mesma branch, ir junto é o
+    /// pede worktree própria. Dentro da bancada e na mesma branch, ir junto é o
     /// suficiente — criar uma segunda worktree ali seriam duas pastas para a mesma
     /// branch do mesmo repo, e o git recusa a segunda.
-    func decided(sessionBranch: String) -> NodeWorktree {
+    func decided(workbenchBranch: String) -> NodeWorktree {
         var copy = self
         copy.enabled = repoRoot != nil && !branch.isEmpty
-            && (!insideSession || branch != sessionBranch)
+            && (!insideWorkbench || branch != workbenchBranch)
         return copy
     }
 }
@@ -70,14 +70,14 @@ enum NodeWorktreePlanner {
     /// Nó `web` fica fora: ele não abre pasta nenhuma. Editor entra junto dos
     /// terminais — ele também resolve `cwd`, e um editor apontado para o repo
     /// vizinho tem o mesmo problema.
-    static func inspect(_ config: SessionConfig,
-                        sessionRoot: String,
+    static func inspect(_ config: WorkbenchConfig,
+                        workbenchRoot: String,
                         branch: String) -> [NodeWorktree] {
         config.nodes.compactMap { node in
             guard node.type != .web else { return nil }
 
             let path = config.resolvedDirectory(for: node)
-            let inside = path == sessionRoot || path.hasPrefix(sessionRoot + "/")
+            let inside = path == workbenchRoot || path.hasPrefix(workbenchRoot + "/")
             // Pasta que não existe não tem repositório para inspecionar, e chamar
             // o git nela só produziria erro. O nó aparece na lista de qualquer
             // jeito: é a chance de você ver que ele está quebrado.
@@ -92,9 +92,9 @@ enum NodeWorktreePlanner {
                 nodeID: node.id,
                 currentPath: path,
                 repoRoot: root,
-                insideSession: inside,
+                insideWorkbench: inside,
                 // Todo terminal com repositório vai: repo vizinho ganha worktree
-                // própria, e quem está dentro da sessão vai junto com ela. Nenhum
+                // própria, e quem está dentro da bancada vai junto com ela. Nenhum
                 // fica atrás por ser shell ou por ser agente.
                 enabled: !inside && root != nil,
                 branch: branch)
@@ -148,7 +148,7 @@ enum NodeWorktreePlanner {
         return cwdByNode
     }
 
-    /// `/Users/você/x` → `~/x`. O que vai para o `sessions.json` é feito para ser
+    /// `/Users/você/x` → `~/x`. O que vai para o `workbenches.json` é feito para ser
     /// lido e editado à mão.
     static func short(_ path: String) -> String {
         let home = NSHomeDirectory()
@@ -168,7 +168,7 @@ enum NodeWorktreePlanner {
 
     /// Pergunta a branch e a pasta da worktree de UM terminal.
     ///
-    /// Existe à parte do formulário da sessão porque é outro momento: a sessão já
+    /// Existe à parte do formulário da bancada porque é outro momento: a bancada já
     /// está montada, e o que você quer é levar um card — o do backend, quase
     /// sempre — para uma branch nova sem mexer no resto.
     static func ask(nodeID: String, repoRoot: String, currentPath: String,
@@ -267,11 +267,11 @@ enum NodeWorktreePlanner {
 ///
 /// A branch é o único controle da linha, e não havia como não ser: com uma
 /// caixinha "criar worktree própria" ao lado, o mesmo estado tinha duas
-/// representações — marcado com a branch da sessão não quer dizer nada, e
+/// representações — marcado com a branch da bancada não quer dizer nada, e
 /// desmarcado com outra branch escrita mente sobre o que vai acontecer.
 final class NodeWorktreeRow: NSView {
     let plan: NodeWorktree
-    /// Você mexeu na branch desta linha — a sugestão da sessão não a reescreve mais.
+    /// Você mexeu na branch desta linha — a sugestão da bancada não a reescreve mais.
     private(set) var touched = false
 
     private let branchField = NSTextField()
@@ -281,15 +281,15 @@ final class NodeWorktreeRow: NSView {
     /// As branches do repositório DESTE terminal — cada linha pode estar em um
     /// repositório diferente, e é o que torna a resposta por linha diferente.
     private let branches: Worktree.BranchIndex?
-    /// A branch da sessão, para saber se esta linha diverge dela.
-    private var sessionBranch: String
+    /// A branch da bancada, para saber se esta linha diverge dela.
+    private var workbenchBranch: String
 
     static let height: CGFloat = 40
 
-    init(plan: NodeWorktree, width: CGFloat, sessionBranch: String,
+    init(plan: NodeWorktree, width: CGFloat, workbenchBranch: String,
          branches: Worktree.BranchIndex?) {
         self.plan = plan
-        self.sessionBranch = sessionBranch
+        self.workbenchBranch = workbenchBranch
         self.branches = branches
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.height))
 
@@ -330,7 +330,7 @@ final class NodeWorktreeRow: NSView {
             }
     }
 
-    /// O que vai acontecer com a branch escrita nesta linha: ir junto com a sessão,
+    /// O que vai acontecer com a branch escrita nesta linha: ir junto com a bancada,
     /// abrir worktree própria — criando a branch, entrando na que já existe, ou
     /// usando a worktree que já a tem aberta (ADR-018) — ou ficar onde está.
     private func describePlan() {
@@ -343,7 +343,7 @@ final class NodeWorktreeRow: NSView {
             return
         }
         guard resolved.enabled else {
-            detail.stringValue = "\(plan.repoName) · vai junto com a sessão"
+            detail.stringValue = "\(plan.repoName) · vai junto com a bancada"
             detail.textColor = .secondaryLabelColor
             return
         }
@@ -369,12 +369,12 @@ final class NodeWorktreeRow: NSView {
                                    width: branchWidth, height: 22)
     }
 
-    /// A branch da sessão mudou. Reescreve só quem você não customizou.
+    /// A branch da bancada mudou. Reescreve só quem você não customizou.
     func suggest(branch: String) {
-        sessionBranch = branch
+        workbenchBranch = branch
         guard !touched, !branchField.isHidden else {
             // Linha customizada não muda de texto, mas muda de significado: a
-            // branch dela pode ter deixado de divergir da sessão.
+            // branch dela pode ter deixado de divergir da bancada.
             describePlan()
             return
         }
@@ -388,6 +388,6 @@ final class NodeWorktreeRow: NSView {
         var copy = plan
         copy.branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.touched = touched
-        return copy.decided(sessionBranch: sessionBranch)
+        return copy.decided(workbenchBranch: workbenchBranch)
     }
 }

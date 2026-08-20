@@ -8,14 +8,14 @@ struct IdleConfig: Codable {
     var strategy: String = "silence"
     var ms: Int = 1500
 
-    /// Tempo mínimo desde o start do processo antes de considerar a sessão
+    /// Tempo mínimo desde o start do processo antes de considerar a bancada
     /// utilizável. Sem isso, uma pausa durante o boot da TUI passa por
     /// ociosidade e o prompt é entregue antes de existir quem o leia — some
     /// sem deixar rastro.
     var warmupMs: Int = 4000
 }
 
-/// Como entregar um prompt na sessão.
+/// Como entregar um prompt na bancada.
 struct InjectConfig: Codable {
     /// `bracketed-paste` para TUI (senão cada \n vira um submit separado),
     /// `plain` para CLI que lê linha a linha.
@@ -226,7 +226,7 @@ struct AgentProfile: Codable {
     ///
     /// Ambiente e não `cmd` porque `cmd` com prefixo `VAR=valor` deixa de casar
     /// com `runsOwnBinary`, e aí o nó perde system prompt, gancho de conversa e
-    /// retomada de sessão sem dizer nada.
+    /// retomada de bancada sem dizer nada.
     var env: [String: String]?
 
     /// A variável com que este CLI troca de conjunto de configuração — plugins,
@@ -311,9 +311,9 @@ struct AgentProfile: Codable {
         return systemPrompt.map { $0.replacingOccurrences(of: "{prompt}", with: prompt) }
     }
 
-    /// Argumentos de sessão prontos para a linha de comando, com `{sessionId}`
+    /// Argumentos da conversa prontos para a linha de comando, com `{sessionId}`
     /// substituído. Nil quando o perfil não declara a forma pedida.
-    func sessionArguments(_ template: [String]?, id: String) -> [String]? {
+    func conversationArguments(_ template: [String]?, id: String) -> [String]? {
         guard let template, !template.isEmpty else { return nil }
         return template.map { $0.replacingOccurrences(of: "{sessionId}", with: id) }
     }
@@ -430,7 +430,7 @@ enum AgentStore {
 
     private static func defaultProfiles() -> [String: AgentProfile] {
         [
-            // `--append-system-prompt` vale em sessão interativa, não só com
+            // `--append-system-prompt` vale em bancada interativa, não só com
             // `--print`, e funciona com login normal — não é exclusivo de quem
             // usa API key. Verificado no help da 2.1.228, na referência de CLI e
             // executando.

@@ -1,6 +1,6 @@
 import AppKit
 
-/// O painel da direita: quem está na sessão e o que está rodando.
+/// O painel da direita: quem está na bancada e o que está rodando.
 ///
 /// Existe porque o chat esconde os cards, e com eles some a única coisa que o
 /// canvas dava de graça: dá para ver de relance que `dev-backend` está trabalhando
@@ -23,9 +23,9 @@ final class ChatSidePanel: NSView {
     static let width: CGFloat = 300
     static let collapsedWidth: CGFloat = 30
 
-    private let title = ChatStyle.label("NA SESSÃO", font: ChatStyle.sectionTitle,
+    private let title = ChatStyle.label("NA BANCADA", font: ChatStyle.sectionTitle,
                                         color: ChatStyle.dim)
-    /// O MESMO botão da barra de sessões, com os mesmos símbolos — espelhados,
+    /// O MESMO botão da barra de bancadas, com os mesmos símbolos — espelhados,
     /// porque este painel mora do outro lado: recolher aqui empurra para a direita.
     /// Dois glifos diferentes para o mesmo gesto obrigariam a reaprender a barra.
     private let toggle = ToolbarButton(symbols: ["sidebar.trailing", "chevron.right"],
@@ -109,7 +109,7 @@ final class ChatSidePanel: NSView {
     override func layout() {
         super.layout()
         if isCollapsed {
-            // Centrado no trilho, como o da barra de sessões faz quando recolhida.
+            // Centrado no trilho, como o da barra de bancadas faz quando recolhida.
             toggle.frame = NSRect(x: ((bounds.width - 22) / 2).rounded(), y: 10,
                                   width: 22, height: 22)
             return

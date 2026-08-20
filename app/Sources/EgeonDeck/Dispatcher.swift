@@ -103,11 +103,11 @@ struct DispatchRequest: Codable {
     }
 }
 
-// MARK: - Sessão
+// MARK: - Bancada
 
 /// Um alvo endereçável: terminal que aceita prompt injetado.
 final class Target {
-    /// `sessão/id`. Muda quando a sessão é renomeada — ver `Dispatcher.rekey`.
+    /// `bancada/id`. Muda quando a bancada é renomeada — ver `Dispatcher.rekey`.
     fileprivate(set) var address: String
     let profile: AgentProfile?
     private(set) weak var view: MBTerminalView?
@@ -206,9 +206,9 @@ final class Target {
     private var turnInFlight = false
     /// Você já viu que este terminal terminou.
     ///
-    /// Vale só para o "terminou": abrir a sessão basta para dar por visto algo
+    /// Vale só para o "terminou": abrir a bancada basta para dar por visto algo
     /// que não pede nada de você. A PERGUNTA não cai assim — ela espera que você
-    /// olhe o terminal, e passar os olhos pela sessão não é ler o que ele
+    /// olhe o terminal, e passar os olhos pela bancada não é ler o que ele
     /// perguntou. Cai com byte novo, junto do `acknowledged`.
     private var doneSeen = false
 
@@ -262,7 +262,7 @@ final class Target {
     private var idleWindow: TimeInterval { profile?.idleInterval ?? 1.0 }
     private var warmupWindow: TimeInterval { profile?.warmupInterval ?? 0 }
 
-    /// Sessão pronta para receber = já escreveu algo, passou do aquecimento, e
+    /// Bancada pronta para receber = já escreveu algo, passou do aquecimento, e
     /// está em silêncio pelo tempo do perfil (ADR-008).
     ///
     /// As duas primeiras condições existem porque silêncio sozinho mente: uma
@@ -336,7 +336,7 @@ final class Target {
             // Rajada que começou dentro do aquecimento é o boot da TUI, não
             // trabalho: o banner do agente sai sozinho, sem ninguém ter pedido
             // nada, e dura mais que o `minWorkMs`. Sem descartar, todo arranque
-            // do app — e toda sessão materializada — avisa que "terminou".
+            // do app — e toda bancada materializada — avisa que "terminou".
             let warmedUpAt = startedAt.addingTimeInterval(warmupWindow)
             if start < warmedUpAt {
                 lastBurst = 0
@@ -408,7 +408,7 @@ final class Target {
         }
     }
 
-    /// Você abriu a sessão deste terminal. Só apaga o "terminou".
+    /// Você abriu a bancada deste terminal. Só apaga o "terminou".
     fileprivate func markDoneSeen() {
         doneSeen = true
         guard activity == .waiting else { return }
@@ -646,7 +646,7 @@ final class Target {
     /// que você deixou focado nunca mais avisaria nada — que é justamente o caso
     /// de uso principal, sair do app e ser chamado de volta.
     ///
-    /// O canvas de uma sessão inativa sai da hierarquia de views, então lá
+    /// O canvas de uma bancada inativa sai da hierarquia de views, então lá
     /// `window` é nil e a resposta já é não.
     fileprivate var isFocused: Bool {
         guard NSApp.isActive, let view, let window = view.window, window.isKeyWindow,
@@ -659,7 +659,7 @@ final class Target {
         return false
     }
 
-    /// Chamado pelo laço do Dispatcher. Só solta quando a sessão está quieta,
+    /// Chamado pelo laço do Dispatcher. Só solta quando a bancada está quieta,
     /// senão o prompt entra no meio de uma edição e embaralha o agente.
     func drain() {
         // Antes de tudo: um texto colado sem Enter ainda não é uma entrega.
@@ -787,7 +787,7 @@ final class Dispatcher {
 
     /// Troca o endereço de um alvo vivo, sem derrubar o pty.
     ///
-    /// Renomear a sessão muda a primeira parte do endereço. Sem re-chavear aqui,
+    /// Renomear a bancada muda a primeira parte do endereço. Sem re-chavear aqui,
     /// o `/dispatch` da extensão continuaria procurando o nome antigo e não
     /// acharia mais ninguém.
     func rekey(from old: String, to new: String) {
@@ -808,11 +808,11 @@ final class Dispatcher {
 
     func target(_ address: String) -> Target? { targets[address] }
 
-    /// Você abriu esta sessão: o "terminou" dos terminais dela já foi visto.
+    /// Você abriu esta bancada: o "terminou" dos terminais dela já foi visto.
     ///
     /// Só o verde. O laranja continua esperando que você olhe o TERMINAL —
-    /// trocar de sessão não é ler a pergunta que ele te fez.
-    func sessionOpened(_ name: String) {
+    /// trocar de bancada não é ler a pergunta que ele te fez.
+    func workbenchOpened(_ name: String) {
         let prefix = name + "/"
         for (address, target) in targets where address.hasPrefix(prefix) {
             target.markDoneSeen()
@@ -864,14 +864,14 @@ final class Dispatcher {
         }
     }
 
-    /// Resolve um id de nó para endereço completo dentro da mesma sessão.
+    /// Resolve um id de nó para endereço completo dentro da mesma bancada.
     ///
     /// O agente conhece o vizinho pelo endereço que está no catálogo dele, mas
     /// escrever só o id é o erro natural — e barrar por isso seria pedantismo.
     private func resolve(_ name: String, siblingOf address: String) -> String? {
         if targets[name] != nil { return name }
-        let session = String(address.split(separator: "/").first ?? "")
-        let qualified = "\(session)/\(name)"
+        let workbench = String(address.split(separator: "/").first ?? "")
+        let qualified = "\(workbench)/\(name)"
         return targets[qualified] != nil ? qualified : nil
     }
 
@@ -911,7 +911,7 @@ final class Dispatcher {
         // "envio 1" e o limite de profundidade nem é consultado. Achei isto
         // testando — profundidade não segura volume.
         //
-        // A Anthropic põe o mesmo teto na mensageria entre sessões do Claude
+        // A Anthropic põe o mesmo teto na mensageria entre bancadas do Claude
         // Code, pelo mesmo motivo. Aqui o número é bem menor porque o destino é
         // um terminal que atende um prompt por vez.
         guard destination.pending < Self.maxPendingFromAgents else {
@@ -927,7 +927,7 @@ final class Dispatcher {
         chain.append(destination.address)
 
         // Duas guardas, e elas não são a mesma coisa. O limite da seta é o botão
-        // que você regula: "este par pode conversar N vezes". O da sessão é rede,
+        // que você regula: "este par pode conversar N vezes". O da bancada é rede,
         // e é o único que segura ciclo de três ou mais — ali cada seta dispara uma
         // vez só e o limite dela nunca chega perto.
         let sends = sendCount(from: sender, to: destination.address, in: chain)
@@ -939,11 +939,11 @@ final class Dispatcher {
                                              limit: allowed, chain: chain)
         }
 
-        let ceiling = visitLimit(forSessionOf: destination.address)
+        let ceiling = visitLimit(forWorkbenchOf: destination.address)
         let visits = chain.filter { $0 == destination.address }.count
         guard visits <= ceiling else {
             Log.write("cadeia[\(sender) → \(destination.address)]: RECUSADA, "
-                      + "\(visits)ª visita (teto da sessão \(ceiling)) "
+                      + "\(visits)ª visita (teto da bancada \(ceiling)) "
                       + "— \(chain.joined(separator: " → "))")
             throw DispatchError.tooManyVisits(target: destination.address, limit: ceiling, chain: chain)
         }
@@ -979,34 +979,34 @@ final class Dispatcher {
     /// terminal subiu, então uma aresta criada depois não chegava nunca — a seta
     /// aparecia no canvas e a ligação estava morta até você recriar o nó.
     func peers(of address: String) -> [(address: String, cli: String, role: String?)] {
-        let session = String(address.split(separator: "/").first ?? "")
+        let workbench = String(address.split(separator: "/").first ?? "")
         func id(_ address: String) -> String { String(address.split(separator: "/").last ?? "") }
 
-        return (AppControl.sessionEdges?(session) ?? [])
+        return (AppControl.workbenchEdges?(workbench) ?? [])
             .filter { $0.from == id(address) }
             .compactMap { edge -> (address: String, cli: String, role: String?)? in
-                let peer = "\(session)/\(edge.to)"
+                let peer = "\(workbench)/\(edge.to)"
                 guard let target = targets[peer] else { return nil }
                 return (peer, target.profile?.displayName ?? "shell", AppControl.nodeRole?(peer))
             }
     }
 
     private func link(from: String, to: String) -> EdgeConfig? {
-        let session = String(from.split(separator: "/").first ?? "")
+        let workbench = String(from.split(separator: "/").first ?? "")
         func id(_ address: String) -> String { String(address.split(separator: "/").last ?? "") }
-        return (AppControl.sessionEdges?(session) ?? [])
+        return (AppControl.workbenchEdges?(workbench) ?? [])
             .first { $0.from == id(from) && $0.to == id(to) }
     }
 
-    private func visitLimit(forSessionOf address: String) -> Int {
-        let session = String(address.split(separator: "/").first ?? "")
-        return AppControl.sessionVisitLimit?(session) ?? 3
+    private func visitLimit(forWorkbenchOf address: String) -> Int {
+        let workbench = String(address.split(separator: "/").first ?? "")
+        return AppControl.workbenchVisitLimit?(workbench) ?? 3
     }
 
-    /// Quanto cada sessão tem de trabalho em curso e de espera por você.
+    /// Quanto cada bancada tem de trabalho em curso e de espera por você.
     ///
     /// Vive aqui, e não no canvas, porque a barra lateral precisa disso das
-    /// sessões INATIVAS também: o canvas delas está fora da hierarquia de views
+    /// bancadas INATIVAS também: o canvas delas está fora da hierarquia de views
     /// e não desenha nada — mas o pty continua rodando.
     func activitySummary() -> [String: ActivitySummary] {
         var out: [String: ActivitySummary] = [:]

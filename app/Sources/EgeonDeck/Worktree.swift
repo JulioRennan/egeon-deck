@@ -150,7 +150,7 @@ enum Worktree {
 
         readWorktrees()
         // Pasta apagada à mão deixa o registro do git para trás, e reaproveitá-lo
-        // mandaria a sessão para um caminho que não existe. `prune` é idempotente.
+        // mandaria a bancada para um caminho que não existe. `prune` é idempotente.
         if stale {
             _ = try? run(["worktree", "prune"], in: repo)
             readWorktrees()
@@ -199,7 +199,7 @@ enum Worktree {
     ///
     /// Os três últimos faltavam. O app só sabia criar branch nova, e da recusa do
     /// git em ter a mesma branch em dois lugares concluía "escolha outro nome" —
-    /// quando "já está aberta ali" é justamente a resposta útil. Sessão na
+    /// quando "já está aberta ali" é justamente a resposta útil. Bancada na
     /// `develop` não tinha como ir para uma `AGROS-3323` que já existia: o nome
     /// digitado era silenciosamente trocado por `AGROS-3323-2`, uma branch que
     /// ninguém pediu, sem o trabalho que estava na de verdade.

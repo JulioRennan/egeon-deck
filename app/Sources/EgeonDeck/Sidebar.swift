@@ -2,15 +2,15 @@ import AppKit
 
 final class SidebarRow: NSView {
     let index: Int
-    /// Nome da sessão. É a chave do resumo de atividade do Dispatcher —
+    /// Nome da bancada. É a chave do resumo de atividade do Dispatcher —
     /// o índice da linha não serve, porque o endereço de dispatch é por nome.
     let name: String
     private let nameLabel = NSTextField(labelWithString: "")
     private let pathLabel = NSTextField(labelWithString: "")
     private let dot = NSView()
     private let statusLabel = NSTextField(labelWithString: "")
-    /// Pastilha com a inicial da sessão, só no trilho recolhido. Nome inteiro não
-    /// cabe em 52pt, e uma coluna de bolinhas iguais não diz QUAL sessão é.
+    /// Pastilha com a inicial da bancada, só no trilho recolhido. Nome inteiro não
+    /// cabe em 52pt, e uma coluna de bolinhas iguais não diz QUAL bancada é.
     private let tile = NSView()
     private let initial = NSTextField(labelWithString: "")
 
@@ -21,10 +21,10 @@ final class SidebarRow: NSView {
     var onEditVisitLimit: ((Int) -> Void)?
 
     var isSelected = false { didSet { needsDisplay = true; restyle() } }
-    /// Sessão já materializada (terminais rodando, editor carregado).
+    /// Bancada já materializada (terminais rodando, editor carregado).
     var isLive = false { didSet { restyle() } }
 
-    /// Alguma coisa nesta sessão está te esperando. Guardado porque no trilho
+    /// Alguma coisa nesta bancada está te esperando. Guardado porque no trilho
     /// quem grita isso é o ARO da pastilha, e `restyle` não vê o resumo.
     private var wantsAttention = false
 
@@ -46,7 +46,7 @@ final class SidebarRow: NSView {
         }
     }
 
-    init(index: Int, config: SessionConfig) {
+    init(index: Int, config: WorkbenchConfig) {
         self.index = index
         self.name = config.name
         super.init(frame: .zero)
@@ -98,7 +98,7 @@ final class SidebarRow: NSView {
     /// Largura que o badge de fato ocupa, medida do conteúdo.
     ///
     /// Reservar o pior caso — `⠙9 ●9 ●9`, três avisos com contagem — custaria
-    /// 66pt em TODA linha, e a barra tem 220: um terço do nome da sessão pago
+    /// 66pt em TODA linha, e a barra tem 220: um terço do nome da bancada pago
     /// para um caso que quase nunca acontece. O comum é uma bolinha só.
     private var badgeWidth: CGFloat = 0
 
@@ -112,7 +112,7 @@ final class SidebarRow: NSView {
                                    width: side, height: 16)
             // Badge embaixo da pastilha, em fonte miúda: no trilho os três avisos
             // continuam convivendo (ADR-024) porque é o único lugar onde uma
-            // sessão inativa se anuncia — o que a largura não dá é o nome.
+            // bancada inativa se anuncia — o que a largura não dá é o nome.
             statusLabel.frame = NSRect(x: 0, y: 30, width: bounds.width, height: 12)
             return
         }
@@ -128,11 +128,11 @@ final class SidebarRow: NSView {
                                    width: badgeWidth, height: 18)
     }
 
-    /// A sessão que precisa de você quase nunca é a que está na tela: o canvas
+    /// A bancada que precisa de você quase nunca é a que está na tela: o canvas
     /// das outras sai da hierarquia de views e não desenha nada. Esta linha é a
     /// única pista que elas têm.
     ///
-    /// Os três avisos convivem, e é o caso normal de uma sessão com vários nós:
+    /// Os três avisos convivem, e é o caso normal de uma bancada com vários nós:
     /// um agente rodando, outro te perguntando algo, um terceiro que já acabou.
     /// Escolher um para mostrar escondia os outros dois — e como a laranja
     /// ganhava sempre, o escondido era justamente o que dizia se ainda há
@@ -174,7 +174,7 @@ final class SidebarRow: NSView {
 
         // Ordem fixa, na sequência do ciclo: rodando, parou te perguntando,
         // parou pronto. Ordenar por urgência faria a bolinha trocar de lugar
-        // conforme a sessão anda, e badge que se move é badge que se procura em
+        // conforme a bancada anda, e badge que se move é badge que se procura em
         // vez de se reconhecer.
         // Mais claro no trilho: ali o spinner tem 10pt e concorre com o card que
         // passa por trás do vidro.
@@ -192,7 +192,7 @@ final class SidebarRow: NSView {
             restyle()
         }
 
-        // O nome da sessão fica com o que sobra, então a caixa acompanha o
+        // O nome da bancada fica com o que sobra, então a caixa acompanha o
         // conteúdo em vez de reservar o pior caso.
         let width = badge.length == 0 ? 0 : ceil(badge.size().width) + 2
         if width != badgeWidth {
@@ -250,14 +250,14 @@ final class SidebarRow: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
         menu.addItem(withTitle: "Renomear…", action: #selector(renameFromMenu), keyEquivalent: "")
-        // Duplicar mora aqui, e não no +, porque a sessão já diz qual é o
+        // Duplicar mora aqui, e não no +, porque a bancada já diz qual é o
         // repositório e quais nós replicar — no + você teria de informar os dois.
         menu.addItem(withTitle: "Duplicar em nova worktree…",
                      action: #selector(duplicateFromMenu), keyEquivalent: "")
         menu.addItem(withTitle: "Limite de conversa entre agentes…",
                      action: #selector(visitLimitFromMenu), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Remover sessão…", action: #selector(removeFromMenu), keyEquivalent: "")
+        menu.addItem(withTitle: "Remover bancada…", action: #selector(removeFromMenu), keyEquivalent: "")
         menu.items.forEach { $0.target = self }
         return menu
     }
@@ -286,7 +286,7 @@ final class Sidebar: NSView {
             rows.forEach { $0.isCompact = isCompact }
             title.isHidden = isCompact
             emptyLabel.isHidden = isCompact || !rows.isEmpty
-            // O + sai do trilho: criar sessão abre um menu, e menu saindo de uma
+            // O + sai do trilho: criar bancada abre um menu, e menu saindo de uma
             // faixa de 52pt cai por cima dos cards. Você abre a barra e cria.
             addButton.isHidden = isCompact
             collapseButton.setSymbols(
@@ -298,8 +298,8 @@ final class Sidebar: NSView {
     }
 
     private var rows: [SidebarRow] = []
-    private let title = NSTextField(labelWithString: "SESSÕES")
-    private let addButton = ToolbarButton(symbols: ["plus"], tooltip: "Nova sessão", size: 22)
+    private let title = NSTextField(labelWithString: "BANCADAS")
+    private let addButton = ToolbarButton(symbols: ["plus"], tooltip: "Nova bancada", size: 22)
     /// Recolher e abrir. Existe além do ⌘/ porque atalho não se descobre olhando
     /// a tela, e uma barra que recolhe sem dizer como voltar é uma barra que
     /// alguém vai achar que quebrou.
@@ -316,7 +316,7 @@ final class Sidebar: NSView {
     var onRemove: ((Int) -> Void)?
     var onEditVisitLimit: ((Int) -> Void)?
 
-    init(configs: [SessionConfig]) {
+    init(configs: [WorkbenchConfig]) {
         super.init(frame: .zero)
         wantsLayer = true
         // Sem fundo próprio: quem pinta é o `GlassPanel` que a envolve. Chapa
@@ -328,7 +328,7 @@ final class Sidebar: NSView {
         addSubview(title)
 
         // Menu, e não ação direta: as duas rotas terminam no mesmo lugar (uma
-        // sessão nova na lista), então elas pertencem ao mesmo botão.
+        // bancada nova na lista), então elas pertencem ao mesmo botão.
         addButton.onClick = { [weak self] in self?.showCreateMenu() }
         addSubview(addButton)
 
@@ -337,7 +337,7 @@ final class Sidebar: NSView {
 
         emptyLabel.font = .systemFont(ofSize: 11)
         emptyLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.45)
-        emptyLabel.stringValue = "Nenhuma sessão.\nUse + para criar,\nvazia ou de um template."
+        emptyLabel.stringValue = "Nenhuma bancada.\nUse + para criar,\nvazia ou de um template."
         emptyLabel.maximumNumberOfLines = 0
         addSubview(emptyLabel)
 
@@ -348,9 +348,9 @@ final class Sidebar: NSView {
 
     override var isFlipped: Bool { true }
 
-    /// Recria as linhas. Sessões são criadas e removidas em tempo de execução,
+    /// Recria as linhas. Bancadas são criadas e removidas em tempo de execução,
     /// então a barra não pode ser montada só uma vez no init.
-    func reload(_ configs: [SessionConfig]) {
+    func reload(_ configs: [WorkbenchConfig]) {
         rows.forEach { $0.removeFromSuperview() }
         rows = configs.enumerated().map { index, config in
             let row = SidebarRow(index: index, config: config)
@@ -391,8 +391,8 @@ final class Sidebar: NSView {
 
     private func showCreateMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Nova sessão…", action: #selector(createPlain), keyEquivalent: "")
-        menu.addItem(withTitle: "Nova sessão a partir de worktree…",
+        menu.addItem(withTitle: "Nova bancada…", action: #selector(createPlain), keyEquivalent: "")
+        menu.addItem(withTitle: "Nova bancada a partir de worktree…",
                      action: #selector(createFromWorktree), keyEquivalent: "")
         menu.items.forEach { $0.target = self }
         menu.popUp(positioning: nil,
@@ -407,7 +407,7 @@ final class Sidebar: NSView {
         for row in rows { row.isSelected = (row.index == index) }
     }
 
-    /// Chamado pelo laço da UI com o resumo de TODAS as sessões vivas, não só a
+    /// Chamado pelo laço da UI com o resumo de TODAS as bancadas vivas, não só a
     /// que está na tela.
     func showActivity(_ summaries: [String: ActivitySummary]) {
         for row in rows { row.show(summaries[row.name] ?? ActivitySummary()) }

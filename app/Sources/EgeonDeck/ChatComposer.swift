@@ -20,7 +20,7 @@ final class ChatComposer: NSView {
             // lista, e não fixado na primeira. Fixado, ele grudava no shell: os
             // alvos entram no Dispatcher na ordem em que os nós sobem, e na primeira
             // leitura só o terminal comum estava registrado — a caixa abria dizendo
-            // "escreva pra t1" numa sessão de três agentes, e nunca se corrigia.
+            // "escreva pra t1" numa bancada de três agentes, e nunca se corrigia.
             if !chosen || !candidates.contains(target) { target = candidates.first ?? "" }
             restyle()
         }
@@ -286,7 +286,7 @@ final class ChatComposer: NSView {
         target = candidates[(index + step + candidates.count) % candidates.count]
     }
 
-    /// `todos` não tem cor de agente — é a sessão inteira, e pintá-la com a cor de
+    /// `todos` não tem cor de agente — é a bancada inteira, e pintá-la com a cor de
     /// alguém sugeriria que a mensagem é dele.
     private var targetColor: NSColor {
         target == ChatComposer.everyone ? ChatStyle.text : AgentColor.of(target)
@@ -299,7 +299,7 @@ final class ChatComposer: NSView {
         name.textColor = targetColor
         dot.layer?.backgroundColor = targetColor.cgColor
         placeholder.stringValue = target.isEmpty
-            ? "nenhum terminal de pé nesta sessão"
+            ? "nenhum terminal de pé nesta bancada"
             : "escreva pra \(target)"
         needsLayout = true
     }

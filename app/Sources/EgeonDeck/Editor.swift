@@ -47,7 +47,7 @@ final class EditorNode: NodeView {
 
         let config = WKWebViewConfiguration()
         // O workbench usa storage próprio; um datastore persistente mantém
-        // layout, arquivos abertos e estado da sessão entre reinícios do app.
+        // layout, arquivos abertos e estado da bancada entre reinícios do app.
         config.websiteDataStore = .default()
         self.webView = WKWebView(frame: .zero, configuration: config)
 
@@ -79,9 +79,9 @@ final class EditorNode: NodeView {
 
     /// Re-registra sob o endereço novo. O workbench não recarrega: a página
     /// depende da pasta, e a pasta não mudou.
-    override func sessionRenamed(to session: String) {
+    override func workbenchRenamed(to workbench: String) {
         EditorRegistry.unregister(address)
-        address = "\(session)/\(nodeID)"
+        address = "\(workbench)/\(nodeID)"
         EditorRegistry.register(self)
         titleLabel.toolTip = address
     }

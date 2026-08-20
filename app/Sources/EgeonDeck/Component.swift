@@ -27,10 +27,10 @@ struct Component: Codable {
     /// não nosso. Nulo é o padrão dela.
     ///
     /// Absoluto ao contrário do `cwd`, e é a diferença que importa: `cwd` é
-    /// dentro da sessão, e o mesmo componente tem de valer em qualquer worktree;
-    /// a configuração é da máquina, e a mesma pasta vale para todas as sessões.
+    /// dentro da bancada, e o mesmo componente tem de valer em qualquer worktree;
+    /// a configuração é da máquina, e a mesma pasta vale para todas as bancadas.
     var config: String?
-    /// Relativo à raiz da sessão — nunca absoluto. É o que faz o mesmo
+    /// Relativo à raiz da bancada — nunca absoluto. É o que faz o mesmo
     /// componente valer em qualquer worktree.
     var cwd: String?
     /// Mensagem entregue ao agente quando ele sobe. Vai pela fila do Dispatcher,
@@ -116,7 +116,7 @@ enum ComponentStore {
                   prompt: node.prompt)
     }
 
-    /// Instancia o componente como nó, com id único dentro da sessão.
+    /// Instancia o componente como nó, com id único dentro da bancada.
     static func instantiate(_ component: Component, id: String) -> NodeConfig {
         var node = NodeConfig(type: component.kind, id: id)
         node.agent = component.agent

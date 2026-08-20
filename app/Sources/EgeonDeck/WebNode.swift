@@ -4,9 +4,9 @@ import WebKit
 // MARK: - Perfis de navegação
 //
 // Um perfil é um `WKWebsiteDataStore` persistente identificado por UUID:
-// cookies, localStorage e sessão isolados por nome, sobrevivendo a reinícios.
+// cookies, localStorage e bancada isolados por nome, sobrevivendo a reinícios.
 //
-// Não é o perfil do Chrome. WKWebView é WebKit; o Chrome guarda a sessão dele
+// Não é o perfil do Chrome. WKWebView é WebKit; o Chrome guarda a bancada dele
 // em SQLite cifrado com uma chave do Keychain, e as duas pilhas não conversam.
 // Login é feito uma vez por perfil daqui.
 
@@ -77,7 +77,7 @@ final class WebNode: NodeView {
     private(set) var profileName: String
     private(set) var currentURL: String
 
-    /// URL ou perfil mudaram — quem escuta grava no sessions.json.
+    /// URL ou perfil mudaram — quem escuta grava no workbenches.json.
     var onStateChanged: ((WebNode) -> Void)?
 
     private var webView: WKWebView!
@@ -142,7 +142,7 @@ final class WebNode: NodeView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var removalWarning: String {
-        "A sessão fica salva no perfil \"\(profileName)\" — reabrir um nó web "
+        "A bancada fica salva no perfil \"\(profileName)\" — reabrir um nó web "
         + "com esse perfil volta logado."
     }
 
@@ -152,8 +152,8 @@ final class WebNode: NodeView {
     }
 
     /// Só o rótulo: o nó web não está em índice nenhum, e a página segue carregada.
-    override func sessionRenamed(to session: String) {
-        address = "\(session)/\(nodeID)"
+    override func workbenchRenamed(to workbench: String) {
+        address = "\(workbench)/\(nodeID)"
         titleLabel.toolTip = address
     }
 
@@ -218,7 +218,7 @@ final class WebNode: NodeView {
         profilePicker.menu?.addItem(.separator())
         profilePicker.addItem(withTitle: Self.newProfileItem)
         profilePicker.selectItem(withTitle: profileName)
-        profilePicker.toolTip = "Perfil de navegação (cookies e sessão isolados)"
+        profilePicker.toolTip = "Perfil de navegação (cookies e bancada isolados)"
     }
 
     @objc private func profilePicked() {
@@ -252,7 +252,7 @@ final class WebNode: NodeView {
     private func askForProfileName() -> String? {
         let alert = NSAlert()
         alert.messageText = "Novo perfil de navegação"
-        alert.informativeText = "Cookies e sessão ficam isolados por perfil."
+        alert.informativeText = "Cookies e bancada ficam isolados por perfil."
         alert.addButton(withTitle: "Criar")
         alert.addButton(withTitle: "Cancelar")
 

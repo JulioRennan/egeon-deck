@@ -92,7 +92,7 @@ enum ChatStyle {
     /// pedido da fala seguinte.
     ///
     /// Cada nome na cor do agente. `você` sai em branco de propósito — você não é um nó
-    /// da sessão e não tem cor de agente; dar uma faria parecer que tem.
+    /// da bancada e não tem cor de agente; dar uma faria parecer que tem.
     static func speaker(_ names: [String]) -> NSAttributedString {
         let line = NSMutableAttributedString()
         for name in names {
@@ -987,7 +987,7 @@ final class ChatThreadView: NSView {
         }.joined(separator: ",")
     }
 
-    /// Vazio significa duas coisas diferentes, e a mensagem separa: sessão sem
+    /// Vazio significa duas coisas diferentes, e a mensagem separa: bancada sem
     /// agente com gancho não vai ter thread nunca, e dizer "ninguém falou" ali
     /// seria mentira por omissão.
     var placeholder: String? {

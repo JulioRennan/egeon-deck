@@ -53,7 +53,7 @@ enum AppEnvironment {
     /// Ambiente completo para um processo filho.
     ///
     /// As variáveis `CLAUDE_CODE*` saem porque, herdadas, fazem um agente aberto
-    /// aqui se julgar sessão filha de outro — e desligar transcript, entre outras
+    /// aqui se julgar bancada filha de outro — e desligar transcript, entre outras
     /// esquisitices.
     static func forChildProcess() -> [String: String] {
         var environment = ProcessInfo.processInfo.environment

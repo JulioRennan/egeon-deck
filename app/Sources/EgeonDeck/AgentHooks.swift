@@ -99,7 +99,7 @@ enum AgentHooks {
         print("" if not i else "id="+u.quote(i)+"&transcript="+u.quote(d.get("transcript_path") or ""))' \\
               2>/dev/null)
             [ -n "$q" ] || exit 0
-            post "/session?target=$EGEON_TARGET&$q"
+            post "/conversation?target=$EGEON_TARGET&$q"
             ;;
           stop|ask)
             post "/activity?target=$EGEON_TARGET&event=$event"

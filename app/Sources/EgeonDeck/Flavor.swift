@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Existe para o app poder ser desenvolvido enquanto é usado: o estável segura os
 /// seus agentes de verdade, e o dev é o que eu derrubo e reconstruo. Sem isso todo
-/// rebuild mata a sessão em que você está trabalhando — foi assim a sessão
+/// rebuild mata a bancada em que você está trabalhando — foi assim a bancada
 /// inteira em que isto foi construído.
 ///
 /// Resolvido do bundle e não de flag de compilação: é um binário só, e o que muda
@@ -34,7 +34,7 @@ enum Flavor {
 
     /// Tudo que o app guarda. Separado por flavor de propósito: com um diretório
     /// só, o dev subiria os MESMOS terminais do estável nas mesmas pastas, e os
-    /// dois brigariam para gravar o sessions.json.
+    /// dois brigariam para gravar o workbenches.json.
     var configDirectory: URL {
         URL(fileURLWithPath: NSString(string: isDev ? "~/.egeon-dev" : "~/.egeon")
             .expandingTildeInPath)
