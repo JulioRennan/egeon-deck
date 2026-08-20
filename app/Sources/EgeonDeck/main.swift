@@ -138,6 +138,7 @@ EgeonCLI.install()
                     return out
                 },
                 "nodes": nodes,
+                "focus": self.shells[index]?.chat.focusReport() ?? [:],
                 "turns": turns.map(\.payload)
             ]
         }
