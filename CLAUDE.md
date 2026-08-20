@@ -285,11 +285,17 @@ destinatários: um envio para `todos` é gravado em cada transcript, e sem junta
 pergunta apareceria três vezes seguidas.
 
 Na caixa de escrever o destinatário está na tela porque aqui ele não é implícito:
-**Tab cicla**, `@` oferece quem existe, Enter envia, Shift+Enter quebra linha. Ela é
-**ancorada embaixo e cresce para cima**, até oito linhas, e daí em diante rola por
-dentro — prompt de dez linhas não se escreve às cegas numa fresta de uma linha. Quem
-cede área é o **histórico**: o thread termina onde a caixa começa. O teto é o menor
-entre oito linhas e 38% da altura útil, sempre em linhas inteiras.
+**Tab cicla**, `@` oferece quem existe, Enter envia, Shift+Enter quebra linha. Ela
+nasce com **duas linhas** — vazia com uma só ela parece campo de busca, e o que se
+escreve aqui é prompt —, é **ancorada embaixo e cresce para cima** até seis linhas, e
+daí em diante rola por dentro. Quem cede área é o **histórico**: o thread termina onde
+a caixa começa. O teto é o menor entre seis linhas e 38% da altura útil, sempre em
+linhas inteiras.
+
+Quem pede o frame novo é a caixa, e ela compara a altura que quer com a altura que
+**está usando** — não com uma segunda medida do texto. Medir duas vezes depois da
+tecla dá sempre igual, o container nunca era avisado, e o vidro crescia dentro do frame
+de uma linha: passava da borda de baixo e a caixa parecia crescer para BAIXO.
 
 `POST /compose?target=ws[&send=1]` escreve na caixa — e com `send=1` aperta o Enter —
 devolvendo a geometria. É a única forma de conferir de fora que ela cresce para cima,
@@ -338,6 +344,13 @@ vidro — é isso que faz a barra parecer flutuando. Reservar uma faixa ali pint
 com o fundo da `RootView`, cinza neutro 0.09, mais claro que o azulado do canvas: dava
 uma moldura cinza em volta do vidro com cara de resto da barra antiga. No mosaico o
 conteúdo cede a largura de verdade, e recolher devolve 180pt aos cards.
+
+A barra de visualização faz o que a barra de título faria, porque é ela que ocupa
+aquela faixa: **arrastar move a janela** e **duplo clique maximiza** — respeitando a
+escolha em Ajustes › Área de Trabalho e Dock, que também pode ser minimizar ou nada.
+Sem isso a faixa do topo do app era a única do sistema onde os dois gestos morriam. O
+nome e o caminho da sessão saem do hit test para não roubar o clique: rótulo é
+`NSControl` mesmo sem ser editável.
 
 A barra começa abaixo da barra de visualização, que corre de borda a borda e é ela que
 passa por baixo dos botões da janela — por isso o título dela recua quando a sessão
