@@ -148,7 +148,12 @@ final class AgentRow: NSView {
     private let dot = NSView()
     private let name: NSTextField
     private let state: NSTextField
-    private let badge: NSTextField?
+    /// Este é o destinatário da caixa de escrever.
+    ///
+    /// Dito só pela barra na cor dele e pelo realce da linha, sem pastilha escrita: o
+    /// `para:` da caixa já anuncia o destinatário em texto, e repetir a palavra aqui
+    /// gastava a largura da linha para dizer duas vezes a mesma coisa.
+    private let aimed: Bool
     private let reachLabel: NSTextField?
     private var chips: [AgentChip] = []
     private let accent: NSColor
@@ -158,7 +163,7 @@ final class AgentRow: NSView {
         name = ChatStyle.label(node.id, font: ChatStyle.name, color: ChatStyle.text)
         state = ChatStyle.label(AgentRow.label(for: node),
                                 font: ChatStyle.meta, color: AgentRow.color(for: node))
-        badge = aimed ? ChatStyle.label("PARA", font: ChatStyle.meta, color: accent) : nil
+        self.aimed = aimed
         reachLabel = node.reaches.isEmpty
             ? nil : ChatStyle.label("alcança", font: ChatStyle.meta, color: ChatStyle.faint)
         super.init(frame: .zero)
@@ -172,10 +177,6 @@ final class AgentRow: NSView {
         addSubview(dot)
         addSubview(name)
         addSubview(state)
-        if let badge {
-            badge.alignment = .right
-            addSubview(badge)
-        }
         if let reachLabel { addSubview(reachLabel) }
         for id in node.reaches {
             let chip = AgentChip(id)
@@ -222,10 +223,6 @@ final class AgentRow: NSView {
         super.layout()
         dot.frame = NSRect(x: 16, y: 11, width: 8, height: 8)
         name.frame = NSRect(x: 30, y: 7, width: name.measured, height: 15)
-        if let badge {
-            let width = badge.measured
-            badge.frame = NSRect(x: bounds.width - width - 14, y: 8, width: width, height: 13)
-        }
         state.frame = NSRect(x: 30, y: 24, width: bounds.width - 44, height: 13)
 
         guard let reachLabel else { return }
@@ -246,7 +243,7 @@ final class AgentRow: NSView {
     /// mesmo vocabulário do card selecionado na barra lateral.
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard badge != nil else { return }
+        guard aimed else { return }
         accent.setFill()
         NSRect(x: 0, y: 0, width: 2, height: bounds.height).fill()
     }

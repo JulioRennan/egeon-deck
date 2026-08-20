@@ -57,7 +57,7 @@ final class ChatContainer: NSView {
     /// Existe pelo intervalo: a entrega passa por fila, injeção e Enter, e a mensagem
     /// só volta a existir quando o CLI a grava. Sem esta lista o thread fica parado
     /// nesse intervalo e parece ter engolido o que você escreveu.
-    private var inFlight: [(entry: ChatEntry, at: Date)] = []
+    private var inFlight: [(turn: ChatTurn, at: Date)] = []
     /// Quanto tempo uma entrega pode ficar sem aparecer antes de ser esquecida.
     ///
     /// O Dispatcher desiste depois de três tentativas, coisa de 6s. O dobro disso com
@@ -146,15 +146,16 @@ final class ChatContainer: NSView {
             .map { ChatThread.Participant(id: $0.id, agent: $0.agentKey,
                                           transcript: $0.transcript) }
         content.forget(except: participants)
-        let entries = content.entries(of: participants)
+        var turns = content.turns(of: participants)
 
-        // A bolha apagada sai quando a de verdade chega — casada pelo texto, que é o
-        // que atravessa o socket sem alteração num dispatch cru. Ou por tempo, se
-        // nunca chegar.
-        let seen = Set(entries.filter { $0.kind == .user }.map(\.text))
+        // O bloco apagado sai quando o de verdade chega — casado pelo par
+        // destinatário-mais-texto, que é o que atravessa o socket sem alteração num
+        // dispatch cru. Ou por tempo, se nunca chegar.
+        let seen = Set(turns.map { $0.author + "\u{1}" + $0.prompt })
         let now = Date()
-        inFlight.removeAll { seen.contains($0.entry.text)
+        inFlight.removeAll { seen.contains($0.turn.author + "\u{1}" + $0.turn.prompt)
             || now.timeIntervalSince($0.at) > Self.inFlightTimeout }
+        turns += inFlight.map(\.turn)
 
         // Só terminal DE PÉ é destino: nó com processo morto continua na lista para
         // você ver que morreu, mas mandar prompt para ele é encher fila que ninguém
@@ -174,8 +175,8 @@ final class ChatContainer: NSView {
         let working = nodes
             .filter { $0.isAgent && ($0.activity == .working || $0.activity == .starting) }
             .map { (id: $0.id, note: content.live(of: $0.id)) }
-        thread.show(entries, working: working, inFlight: inFlight.map(\.entry))
-        thread.placeholder = Self.placeholder(nodes: nodes, entries: entries)
+        thread.show(turns, working: working)
+        thread.placeholder = Self.placeholder(nodes: nodes, turns: turns)
 
         if let openProcess {
             let node = nodes.first { $0.id == openProcess }
@@ -189,8 +190,8 @@ final class ChatContainer: NSView {
     /// Separados porque "ninguém falou ainda" numa sessão só de shell é mentira por
     /// omissão: ali não vai aparecer conversa nunca, e ficar esperando é perder a
     /// tarde. O que falta é dito com o nome de quem falta.
-    private static func placeholder(nodes: [ChatNode], entries: [ChatEntry]) -> String? {
-        guard entries.isEmpty else { return nil }
+    private static func placeholder(nodes: [ChatNode], turns: [ChatTurn]) -> String? {
+        guard turns.isEmpty else { return nil }
         let agents = nodes.filter(\.isAgent)
         if agents.isEmpty {
             return "Esta sessão não tem nó de agente. O thread do chat sai do transcript "
@@ -280,10 +281,12 @@ final class ChatContainer: NSView {
         // de verdade: quando o CLI gravar, a leitura seguinte traz a definitiva e esta
         // sai, casada pelo texto. Entrar como definitiva aqui seria afirmar que
         // chegou antes de ter chegado.
-        if !delivered.isEmpty {
-            inFlight.append((ChatEntry(id: "flight-\(delivered.joined())-\(text.hashValue)",
-                                       kind: .user, recipients: delivered,
-                                       at: Date(), text: text), Date()))
+        // Um bloco apagado por destinatário: um envio para três agentes são três
+        // turnos, e é assim que eles vão voltar do transcript.
+        for id in delivered {
+            inFlight.append((ChatTurn(id: "flight-\(id)-\(text.hashValue)",
+                                      author: id, at: Date(), prompt: text, inFlight: true),
+                             Date()))
         }
         refresh()
         thread.scrollToBottom()

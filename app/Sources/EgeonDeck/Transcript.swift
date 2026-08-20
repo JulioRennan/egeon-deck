@@ -28,39 +28,81 @@ enum ChatBlock {
     case tool(String)
 }
 
-/// Uma entrada do thread.
+/// Um TURNO: o que você pediu e tudo o que o agente fez a respeito.
 ///
-/// `id` é o uuid do transcript, e é por ele que a view sabe o que já desenhou:
-/// o thread é remontado a cada leitura, e sem identidade estável a rolagem
-/// pularia a cada turno novo.
-struct ChatEntry {
-    enum Kind {
-        /// Fato do app: terminal subiu, processo morreu, gancho relatou.
-        case system
-        /// Você falando com um agente.
-        case user
-        /// O agente respondendo.
-        case agent
-        /// Um agente acionando outro — o envelope `[egeon] mensagem de X`.
-        case link
+/// É a unidade do thread, e não a mensagem, porque a mensagem solta não sobrevive a
+/// dois agentes. Ordenadas por tempo, as mensagens de duas conversas se intercalam e a
+/// resposta do A cai no meio da sua terceira pergunta ao B — a análise de conversa
+/// chama isso de cisma de piso, e quem está em um piso não se orienta pela troca de
+/// turnos do outro. O turno é o bloco que não cinde: dentro dele tudo é do mesmo par.
+struct ChatTurn {
+    /// O uuid do prompt que abriu o turno. Estável entre leituras, e é por ele que a
+    /// view sabe o que já desenhou.
+    var id: String
+    /// O nó que atendeu.
+    var author: String
+    var at: Date
+    /// O que foi pedido. Vazio num turno cuja abertura ficou fora da cauda lida.
+    var prompt: String = ""
+    /// Quem pediu. Nil = você. Preenchido quando veio de outro agente, pelo envelope
+    /// `[egeon] mensagem de X`.
+    var from: String?
+    /// Tudo o que ele fez e disse, na ordem em que produziu.
+    var blocks: [ChatBlock] = []
+    /// Você mandou e o CLI ainda não gravou.
+    var inFlight = false
+
+    /// Os turnos que ESTE turno provocou: outro agente atendendo o que ele acionou.
+    ///
+    /// Aninhado e não solto na linha do tempo, e é aqui que mora a diferença. Solto,
+    /// o turno do vizinho aparece entre duas perguntas SUAS, e a conversa que você
+    /// não pediu afoga a que você pediu. Aninhado, ele é uma linha dobrada dentro do
+    /// bloco de quem o acionou — e recursivo, porque a volta (B respondendo a A) é
+    /// mais um turno provocado, e o ciclo de dois é o mesmo mecanismo do de três.
+    var replies: [ChatTurn] = []
+
+    /// Quantas falas esta sub-conversa tem, contando as de dentro.
+    var conversationCount: Int {
+        1 + replies.reduce(0) { $0 + $1.conversationCount }
     }
 
-    var id: String
-    var kind: Kind
-    /// Nó que produziu — id curto, sem o nome da sessão. Nil em `.user`.
-    var author: String?
-    /// Nó que recebeu. Preenchido em `.user` e em `.link`.
-    var recipients: [String] = []
-    var at: Date
-    var text: String = ""
-    var blocks: [ChatBlock] = []
-    /// Fato ruim: processo caiu, comando saiu diferente de zero.
-    var alert = false
+    /// Do começo desta sub-conversa até a última fala dela.
+    var conversationSpan: TimeInterval {
+        let ends = [at] + replies.map { $0.at.addingTimeInterval($0.conversationSpan) }
+        return (ends.max() ?? at).timeIntervalSince(at)
+    }
 
     var timeLabel: String {
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
         return f.string(from: at)
+    }
+
+    /// A RESPOSTA: a prosa do fim do turno.
+    ///
+    /// Separada do resto porque é o que você quer ler; o meio é como ele chegou lá. O
+    /// corte é no fim e não na primeira prosa, porque ele narra enquanto trabalha
+    /// ("vou ler o arquivo") e essa narração é trabalho, não resposta.
+    var answer: [ChatBlock] {
+        var out: [ChatBlock] = []
+        for block in blocks.reversed() {
+            guard case .prose = block else { break }
+            out.insert(block, at: 0)
+        }
+        return out
+    }
+
+    /// O caminho até a resposta. É o que nasce dobrado.
+    var work: [ChatBlock] { Array(blocks.dropLast(answer.count)) }
+
+    /// Resumo do que está dobrado: "12 passos · 3 arquivos".
+    var workSummary: String {
+        let steps = work.count
+        var files = Set<String>()
+        for block in work { if case .edit(let edit) = block { files.insert(edit.file) } }
+        var parts = ["\(steps) passo" + (steps == 1 ? "" : "s")]
+        if !files.isEmpty { parts.append("\(files.count) arquivo" + (files.count == 1 ? "" : "s")) }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -76,8 +118,8 @@ struct ChatEntry {
 /// Um adapter novo precisa responder duas perguntas, e a segunda é a que faz o chat
 /// deixar de ser mudo enquanto o agente trabalha.
 protocol ChatAdapter: AnyObject {
-    /// O que a conversa tem, do início da cauda lida até agora.
-    func read(author: String) -> [ChatEntry]
+    /// Os turnos da conversa, do início da cauda lida até agora.
+    func read(author: String) -> [ChatTurn]
 
     /// O que ele está fazendo NESTE instante — "lendo Canvas.swift", "$ npx vitest",
     /// a linha de raciocínio em curso. `nil` quando o CLI não dá como saber.
@@ -123,7 +165,7 @@ final class ClaudeCodeTranscript: ChatAdapter {
     /// Até onde já foi lido. Turno novo são bytes no fim do arquivo — reler o
     /// arquivo inteiro a cada 0,5s num transcript de 20 MB trava a UI.
     private var offset: UInt64 = 0
-    private var entries: [ChatEntry] = []
+    private var turns: [ChatTurn] = []
     /// Sobra de uma leitura que pegou o arquivo no meio de uma linha.
     private var pending = Data()
 
@@ -142,23 +184,23 @@ final class ClaudeCodeTranscript: ChatAdapter {
     /// Chamado pelo laço do modo Chat. Devolve tudo o que já foi lido, não só o
     /// novo: quem monta o thread junta vários transcripts e precisa da lista
     /// inteira para ordenar por tempo.
-    func read(author: String) -> [ChatEntry] {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return entries }
+    func read(author: String) -> [ChatTurn] {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return turns }
         defer { try? handle.close() }
 
         let size = (try? handle.seekToEnd()) ?? 0
 
         // Arquivo encolheu: só acontece se a conversa foi trocada por baixo dos
         // panos. Recomeça, senão o offset antigo cai no meio de uma linha nova.
-        if size < offset { offset = 0; entries = []; pending = Data() }
+        if size < offset { offset = 0; turns = []; pending = Data() }
 
         // Primeira leitura de um arquivo grande começa pela cauda. A linha
         // partida do começo é descartada abaixo, no split.
         if offset == 0, size > Self.tailLimit { offset = size - Self.tailLimit }
 
-        guard size > offset else { return entries }
+        guard size > offset else { return turns }
         try? handle.seek(toOffset: offset)
-        guard let chunk = try? handle.readToEnd(), !chunk.isEmpty else { return entries }
+        guard let chunk = try? handle.readToEnd(), !chunk.isEmpty else { return turns }
         offset = size
 
         var buffer = pending + chunk
@@ -171,7 +213,7 @@ final class ClaudeCodeTranscript: ChatAdapter {
                 buffer = Data(buffer[..<cut])
             } else {
                 pending = buffer
-                return entries
+                return turns
             }
         }
 
@@ -181,10 +223,83 @@ final class ClaudeCodeTranscript: ChatAdapter {
             guard let entry = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else {
                 continue
             }
-            entries.append(contentsOf: Self.parse(entry, author: author))
+            absorb(entry, author: author)
             note(entry)
         }
-        return entries
+        return turns
+    }
+
+    /// Encaixa uma linha do JSONL no turno a que ela pertence.
+    ///
+    /// A fronteira do turno é o PRÓXIMO prompt, e não precisa de mais nada: dentro de
+    /// um transcript a ordem é a real, e tudo entre dois prompts é resposta ao
+    /// primeiro. Encadear por `parentUuid` daria o mesmo resultado com mais superfície
+    /// para quebrar em conversa compactada.
+    private func absorb(_ raw: [String: Any], author: String) {
+        // Sidechain é subagente. O thread é a conversa da sessão, e o trabalho
+        // interno de um subagente ali é ruído que abafa o que você precisa ler.
+        if raw["isSidechain"] as? Bool == true { return }
+        guard let at = Self.date(raw["timestamp"]),
+              let message = raw["message"] as? [String: Any] else { return }
+        let uuid = raw["uuid"] as? String ?? UUID().uuidString
+
+        switch raw["type"] as? String {
+        case "user":
+            // Só conteúdo em TEXTO abre turno. Array é devolução de ferramenta, e ela
+            // pertence ao turno em curso — não abre outro.
+            guard let text = message["content"] as? String else { return }
+            let clean = Self.strip(text)
+            guard !clean.isEmpty else { return }
+            // Maquinaria do CLI escrita no transcript como se fosse você: eco de
+            // comando de barra, aviso de comando local, aviso de tarefa em segundo
+            // plano. Nada disso é alguém falando, e como prompt cada um abriria um
+            // bloco no thread.
+            //
+            // A lista é fechada de propósito. Uma regra ampla — "começa com `<`" —
+            // engoliria mensagem sua que começa com uma tag, e o prejuízo de errar
+            // para esse lado é perder o que você escreveu.
+            for noise in ["<command-name>", "<command-message>", "<local-command",
+                          "<task-notification>"] where clean.hasPrefix(noise) { return }
+
+            if let sender = Self.envelopeSender(clean) {
+                turns.append(ChatTurn(id: uuid, author: author, at: at,
+                                      prompt: Self.envelopeBody(clean), from: sender))
+            } else {
+                turns.append(ChatTurn(id: uuid, author: author, at: at,
+                                      prompt: Self.dispatchBody(clean)))
+            }
+
+        case "assistant":
+            guard let content = message["content"] as? [[String: Any]] else { return }
+            var blocks: [ChatBlock] = []
+            for block in content {
+                switch block["type"] as? String {
+                case "text":
+                    let text = (block["text"] as? String ?? "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    // Marcador de protocolo é conversa do app com o app.
+                    let visible = text.replacingOccurrences(
+                        of: "\\[\\[ED:(ok|ask)\\]\\]", with: "", options: .regularExpression)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !visible.isEmpty { blocks.append(.prose(visible)) }
+                // Raciocínio não entra no histórico: é rascunho, é longo, e não foi
+                // dito a você. Enquanto o turno corre ele aparece no `live`.
+                case "thinking": continue
+                case "tool_use":
+                    if let block = Self.toolBlock(block) { blocks.append(block) }
+                default: continue
+                }
+            }
+            guard !blocks.isEmpty else { return }
+            // Turno cuja abertura ficou fora da cauda: nasce sem prompt em vez de
+            // fazer os blocos desaparecerem.
+            if turns.isEmpty {
+                turns.append(ChatTurn(id: "orfao-" + uuid, author: author, at: at))
+            }
+            turns[turns.count - 1].blocks += blocks
+
+        default: return
+        }
     }
 
     /// Mantém o `live` com o último sinal de vida do turno.
@@ -257,78 +372,6 @@ final class ClaudeCodeTranscript: ChatAdapter {
         case "WebSearch", "WebFetch": return "pesquisando"
         default:      return "usando " + name
         }
-    }
-
-    // MARK: Uma linha do JSONL
-
-    private static func parse(_ raw: [String: Any], author: String) -> [ChatEntry] {
-        // Sidechain é subagente. O thread é a conversa da sessão, e o trabalho
-        // interno de um subagente ali é ruído que abafa o que você precisa ler.
-        if raw["isSidechain"] as? Bool == true { return [] }
-        guard let at = date(raw["timestamp"]) else { return [] }
-        let uuid = raw["uuid"] as? String ?? UUID().uuidString
-        guard let message = raw["message"] as? [String: Any] else { return [] }
-
-        switch raw["type"] as? String {
-        case "user":   return [userEntry(message, id: uuid, at: at, author: author)].compactMap { $0 }
-        case "assistant": return assistantEntries(message, id: uuid, at: at, author: author)
-        default: return []
-        }
-    }
-
-    /// Uma entrada `user` do transcript é uma de quatro coisas, e só duas viram
-    /// mensagem.
-    ///
-    /// `content` em array é devolução de ferramenta — resultado de `Bash`, de
-    /// `Read` —, e não é ninguém falando. `content` em texto pode ser: você
-    /// digitando, um dispatch do app, o envelope de outro agente, ou o eco de um
-    /// comando de barra da TUI, que é interface e não conversa.
-    private static func userEntry(_ message: [String: Any], id: String, at: Date,
-                                  author: String) -> ChatEntry? {
-        guard let text = message["content"] as? String else { return nil }
-        let clean = strip(text)
-        guard !clean.isEmpty else { return nil }
-
-        // Eco de comando de barra e aviso de comando local: a TUI escreve isso no
-        // transcript, mas não é mensagem de ninguém.
-        if clean.hasPrefix("<command-name>") || clean.hasPrefix("<local-command")
-            || clean.hasPrefix("<command-message>") { return nil }
-
-        // Envelope de agente para agente. O prefixo é montado pelo app em
-        // `DispatchRequest.agentEnvelope`, então é ele quem diz quem falou — o
-        // texto não é palavra do agente sobre a própria identidade.
-        if let sender = envelopeSender(clean) {
-            return ChatEntry(id: id, kind: .link, author: sender, recipients: [author],
-                             at: at, text: envelopeBody(clean))
-        }
-
-        return ChatEntry(id: id, kind: .user, recipients: [author], at: at,
-                         text: dispatchBody(clean))
-    }
-
-    private static func assistantEntries(_ message: [String: Any], id: String, at: Date,
-                                         author: String) -> [ChatEntry] {
-        guard let content = message["content"] as? [[String: Any]] else { return [] }
-        var blocks: [ChatBlock] = []
-        for block in content {
-            switch block["type"] as? String {
-            case "text":
-                let text = (block["text"] as? String ?? "")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                // Marcador de protocolo é conversa do app com o app.
-                let visible = text.replacingOccurrences(
-                    of: "\\[\\[ED:(ok|ask)\\]\\]", with: "", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !visible.isEmpty { blocks.append(.prose(visible)) }
-            // Raciocínio não entra: é rascunho, é longo, e não foi dito a você.
-            case "thinking": continue
-            case "tool_use":
-                if let block = toolBlock(block) { blocks.append(block) }
-            default: continue
-            }
-        }
-        guard !blocks.isEmpty else { return [] }
-        return [ChatEntry(id: id, kind: .agent, author: author, at: at, blocks: blocks)]
     }
 
     // MARK: Ferramenta virando bloco

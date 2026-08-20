@@ -124,7 +124,7 @@ EgeonCLI.install()
                     transcript: $0.transcript.map(URL.init(fileURLWithPath:))) }
             // Leitor novo a cada chamada: a rota é ferramenta de teste, e reusar o
             // do container faria a resposta depender de o modo já ter sido aberto.
-            let entries = ChatThread().entries(of: participants)
+            let turns = ChatThread().turns(of: participants)
             // O estado de cada nó vai junto: o painel da direita e o destinatário
             // padrão da caixa saem daqui, e sem isto a única forma de conferir os
             // dois seria comparar pixels.
@@ -138,7 +138,7 @@ EgeonCLI.install()
                     return out
                 },
                 "nodes": nodes,
-                "messages": entries.map(\.payload)
+                "turns": turns.map(\.payload)
             ]
         }
         AppControl.chatCompose = { [weak self] name, text, send in

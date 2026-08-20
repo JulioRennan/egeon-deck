@@ -93,8 +93,10 @@ final class ChatThread {
     /// O que este nó está fazendo agora, se o adapter dele souber dizer.
     func live(of id: String) -> String? { liveByNode[id] }
 
-    func entries(of participants: [Participant]) -> [ChatEntry] {
-        var all: [ChatEntry] = []
+    /// Os turnos da sessão, do jeito que o thread mostra: os SEUS no topo, e os que
+    /// um agente provocou aninhados dentro de quem os provocou.
+    func turns(of participants: [Participant]) -> [ChatTurn] {
+        var all: [ChatTurn] = []
         liveByNode = [:]
         for participant in participants {
             guard let url = participant.transcript else { continue }
@@ -113,45 +115,48 @@ final class ChatThread {
             if first.at != second.at { return first.at < second.at }
             return first.id < second.id
         }
-        return fold(all)
+        return nest(all)
     }
 
     /// Esquece transcripts que não são de ninguém mais. Sem isto, trocar de
-    /// conversa num nó dez vezes deixa dez leitores com o arquivo antigo aberto.
+    /// conversa num nó dez vezes deixa dez adapters com o arquivo antigo aberto.
     func forget(except participants: [Participant]) {
         let alive = Set(participants.compactMap { $0.transcript?.path })
         adapters = adapters.filter { alive.contains($0.key) }
     }
 
-    /// Junta o que é uma mensagem só aparecendo em vários transcripts.
+    /// Põe cada turno acionado dentro do turno que o acionou.
     ///
-    /// Mandar para `todos` entrega o MESMO texto a cada agente, e cada um grava no
-    /// próprio arquivo. Sem juntar, uma frase sua aparece três vezes seguidas — e
-    /// o que você quer ver é uma pergunta com três destinatários.
+    /// A ligação é pelo REMETENTE e pelo tempo, não pelo texto: o envelope diz quem
+    /// falou, e um agente só pode ter acionado alguém durante um turno dele que já
+    /// tinha começado. Então o turno de B com `from: A` entra no último turno de A
+    /// que abriu antes dele. Casar por texto seria mais frágil de graça — o mesmo
+    /// pedido repetido duas vezes na mesma cadeia não se distingue.
     ///
-    /// A janela é de segundos porque as entregas são enfileiradas e drenadas por
-    /// um laço de 0,25s: o mesmo prompt chega a dois terminais com diferença de
-    /// tempo, e comparar timestamp exato não juntaria nada.
-    private func fold(_ entries: [ChatEntry]) -> [ChatEntry] {
-        var out: [ChatEntry] = []
-        for entry in entries {
-            guard entry.kind == .user else { out.append(entry); continue }
-            if let last = out.indices.last(where: { out[$0].kind == .user }),
-               out[last].text == entry.text,
-               entry.at.timeIntervalSince(out[last].at) < Self.foldWindow,
-               // Só junta o que está encostado: mensagem igual repetida depois de
-               // uma resposta é você mandando de novo, e virou outra mensagem.
-               last == out.count - 1 {
-                out[last].recipients += entry.recipients
-                continue
-            }
-            out.append(entry)
-        }
-        return out
-    }
+    /// Turno acionado cujo provocador ficou FORA da cauda lida sobe para o topo em vez
+    /// de desaparecer: mostrar meia conversa é melhor que engolir metade dela.
+    private func nest(_ turns: [ChatTurn]) -> [ChatTurn] {
+        // Índice de trás para frente: para cada turno, quem é o pai.
+        var children: [String: [ChatTurn]] = [:]
+        var roots: [ChatTurn] = []
 
-    /// Quanto tempo separa "a mesma mensagem para vários" de "mandei de novo".
-    private static let foldWindow: TimeInterval = 20
+        for turn in turns {
+            guard let sender = turn.from else { roots.append(turn); continue }
+            let parent = turns.last { $0.author == sender && $0.at <= turn.at }
+            if let parent {
+                children[parent.id, default: []].append(turn)
+            } else {
+                roots.append(turn)
+            }
+        }
+
+        func attach(_ turn: ChatTurn) -> ChatTurn {
+            var copy = turn
+            copy.replies = (children[turn.id] ?? []).map(attach)
+            return copy
+        }
+        return roots.map(attach)
+    }
 }
 
 // MARK: - O thread como dados
@@ -170,19 +175,22 @@ extension ChatBlock {
     }
 }
 
-extension ChatEntry {
+extension ChatTurn {
+    /// Forma de dados, para a rota `/chat`. Recursiva, porque o aninhamento é o que
+    /// precisa ser conferido: turno acionado dentro de quem o acionou.
     var payload: [String: Any] {
         var out: [String: Any] = [
             "id": id,
-            "kind": String(describing: kind),
+            "author": author,
             "at": ISO8601DateFormatter().string(from: at),
             "time": timeLabel
         ]
-        if let author { out["author"] = author }
-        if !recipients.isEmpty { out["to"] = recipients }
-        if !text.isEmpty { out["text"] = text }
-        if !blocks.isEmpty { out["blocks"] = blocks.map(\.payload) }
-        if alert { out["alert"] = true }
+        if !prompt.isEmpty { out["prompt"] = prompt }
+        if let from { out["from"] = from }
+        if inFlight { out["inFlight"] = true }
+        if !work.isEmpty { out["work"] = work.map(\.payload) }
+        if !answer.isEmpty { out["answer"] = answer.map(\.payload) }
+        if !replies.isEmpty { out["replies"] = replies.map(\.payload) }
         return out
     }
 }
