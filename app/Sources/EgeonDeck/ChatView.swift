@@ -456,14 +456,20 @@ final class DisclosureLine: NSView {
 
 /// Uma fala da cadeia entre agentes, dentro do bloco de quem a começou.
 ///
-/// Sem recuo. Aninhada, cada volta da cadeia entrava mais um degrau e três voltas
-/// viravam uma escada dentro do cartão — o desenho passava a falar da topologia em vez
-/// da conversa, e ficava confuso justamente onde precisava ser claro. Aqui é uma bolha
-/// embaixo da outra, todas na mesma margem, e quem falou é dito pelo nome e pela cor.
+/// **É o mesmo cartão, com outro nome em cima.** Nem bolha própria nem seta de
+/// aninhamento: o cabeçalho é o do turno — nome do agente na cor dele — e a bolha é a
+/// mesma `ChatBubble` da resposta. Quem fala muda; o desenho, não.
+///
+/// Chegou a ter recuo e seta (`↳`), e as duas foram embora pela mesma razão: três voltas
+/// viravam uma escada dentro do cartão, e o desenho passava a falar da topologia em vez
+/// da conversa — ficava confuso justamente onde precisava ser claro. Achatado, é uma
+/// bolha embaixo da outra e a ordem de leitura é de cima para baixo, como qualquer
+/// conversa.
 ///
 /// A pergunta desta fala não é repetida: ela está na bolha de cima, que é a resposta de
 /// quem acionou ("perguntei ao vizinho quanto é 7 vezes 6"). Só aparece quando o outro
-/// ainda não respondeu — aí é a única coisa que existe para mostrar.
+/// ainda não respondeu — e aí ela entra do lado do PEDIDO, à direita, que é o que diz
+/// que ninguém respondeu ainda sem precisar de palavra nenhuma.
 final class ChainEntryView: NSView {
     var onToggle: (() -> Void)?
 
@@ -480,11 +486,10 @@ final class ChainEntryView: NSView {
     init(turn: ChatTurn) {
         self.turn = turn
         accent = AgentColor.of(turn.author)
-        // O verbo da aresta: no Egeon, `from` PODE ACIONAR `to`. Presente enquanto o
-        // outro ainda não respondeu, passado depois.
         let pending = turn.answer.isEmpty
-        head = ChatStyle.label("↳ " + (pending ? "acionando " : "") + turn.author,
-                               font: ChatStyle.meta, color: accent)
+        // O mesmo cabeçalho do turno: nome na cor dele, na mesma fonte. É isso que faz
+        // a fala se ler como continuação do cartão, e não como caixa dentro de caixa.
+        head = ChatStyle.label(turn.author, font: ChatStyle.name, color: accent)
         bubble = pending
             ? (turn.prompt.isEmpty
                 ? nil : ChatBubble(blocks: [.prose(turn.prompt)], accent: accent, side: .yours))
@@ -517,7 +522,7 @@ final class ChainEntryView: NSView {
     }
 
     func height(for width: CGFloat) -> CGFloat {
-        var y = 15 + Self.gap
+        var y = 16 + Self.gap
         if workToggle != nil { y += DisclosureLine.height + Self.gap }
         if workOpen { y += workBlocks.reduce(0) { $0 + $1.height(for: width) + 5 } }
         if let bubble { y += bubble.height(for: width) }
@@ -526,8 +531,8 @@ final class ChainEntryView: NSView {
 
     override func layout() {
         super.layout()
-        head.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 14)
-        var y: CGFloat = 15 + Self.gap
+        head.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 15)
+        var y: CGFloat = 16 + Self.gap
         if let workToggle {
             workToggle.frame = NSRect(x: 0, y: y, width: bounds.width,
                                       height: DisclosureLine.height)
