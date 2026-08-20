@@ -2157,3 +2157,56 @@ explica a primeira parte.
 As ADRs anteriores a esta ficam **como foram escritas**, falando "sessão": são registro
 do que se decidiu quando se decidiu, e reescrevê-las apagaria o rastro de que a palavra
 mudou.
+
+## ADR-032 — O socket de controle é dono do arquivo dele, e confere se continua sendo
+
+**Contexto.** O sistema de aviso parou de funcionar no estável: nenhum agente mais
+anunciava "terminou", o verde na barra não aparecia e o laranja de permissão também não.
+A investigação começou pela máquina de estado e ela estava certa — em dev, gancho `Stop`
+chegando, `waiting` entrando e persistindo, verde desenhado na linha da bancada. O log do
+estável explicou por que: **zero linhas de `gancho`** em 502. O CLI não estava relatando
+nada.
+
+`lsof` fechou a conta: o processo do estável tinha o socket ligado, e o caminho
+`~/.egeon/sock` **não existia mais no disco**. Socket ligado a um inode sem nome não
+recebe conexão nova — o `curl` do gancho falha com ENOENT, e o gancho é escrito para
+falhar calado (ele bloqueia a TUI; não pode reclamar).
+
+Como o arquivo sumiu: `start()` fazia `unlink` do caminho antes de ligar, e `stop()`
+fazia `unlink` na saída, os dois sem perguntar de quem era o arquivo. Duas instâncias do
+mesmo flavor rodando — o que acontece com um clique a mais no Dock — e a segunda apagava
+o socket da primeira para pôr o dela; quando a segunda saía, o `unlink` do encerramento
+levava o arquivo, e a primeira ficava viva e inalcançável.
+
+**O que fez isso custar horas** não foi a raiz, foi o silêncio: o app continuava inteiro.
+Janela, canvas, agentes trabalhando, dispatch pela UI funcionando. O que morre quando o
+socket cai é só o que vem de FORA — os ganchos do CLI, o `egeon` dos vizinhos, a extensão
+do editor. E o que os ganchos carregam é justamente o aviso.
+
+**Decisão.** Três regras, uma para cada modo de falhar:
+
+- **não apagar o que não é seu**: `start()` só faz `unlink` depois de confirmar que
+  ninguém atende no caminho (conecta e desconecta — é o único teste que separa instância
+  viva de arquivo órfão de crash). Se alguém atende, este processo segue **sem** socket de
+  controle e diz isso no log, alto, incluindo que as duas também disputam o
+  `workbenches.json`. `stop()` guarda o inode do bind e só apaga se o arquivo no caminho
+  ainda for aquele;
+- **conferir que continua seu**: um watchdog de 10s compara o inode do caminho com o do
+  bind e religa quando difere. É `stat` num arquivo, e transforma "morreu de manhã,
+  descoberto de tarde" em oito segundos. A fila dele é própria, e não a do `accept` — essa
+  fica bloqueada dentro do `accept()` a vida inteira, e timer agendado ali nunca dispara
+  (medido: o primeiro teste não religou);
+- **não vazar o fd**: `FD_CLOEXEC` no descritor de escuta. Sem ele todo pty filho herda o
+  socket do app — o `lsof` do estável mostrava processos `claude` segurando o socket —, e
+  fd de escuta em processo que não atende é justamente o que faz um teste de "tem alguém
+  vivo aí?" mentir.
+
+**Verificado no dev**, os três: apagar o `sock` na cara do app e ele voltar em ~8s com a
+linha de religamento no log; subir uma segunda instância e ela recusar o bind, com a
+primeira seguindo de pé — e, ao matar a intrusa, o arquivo continuar lá e respondendo; e
+`lsof` passando a mostrar **um** processo com o socket aberto, o app.
+
+**Descartado: matar a segunda instância no arranque.** É a defesa mais forte e ainda pode
+vir, mas ela decide sozinha fechar uma janela que a pessoa acabou de abrir. O aviso no log
+mais a recusa de roubar o arquivo já tiram o dano; a briga pelo `workbenches.json` entre
+duas instâncias continua aberta e é outro problema.
