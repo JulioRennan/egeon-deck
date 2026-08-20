@@ -148,7 +148,6 @@ final class ViewToolbar: NSView {
     func setSession(name: String, path: String) {
         title.stringValue = name
         subtitle.stringValue = path
-        subtitle.toolTip = path
         needsLayout = true
     }
 
@@ -190,6 +189,46 @@ final class ViewToolbar: NSView {
         let direita = max(0, bounds.width - pill.frame.maxX - margem * 2)
         hint.frame = NSRect(x: pill.frame.maxX + margem, y: (bounds.height - 13) / 2,
                             width: direita, height: 13)
+
+        // O caminho é truncado no meio e a dica é a única forma de ler inteiro.
+        // Vive numa região da barra porque o campo saiu do hit test.
+        removeAllToolTips()
+        if !subtitle.stringValue.isEmpty {
+            addToolTip(subtitle.frame, owner: subtitle.stringValue as NSString, userData: nil)
+        }
+    }
+
+    // MARK: A barra faz o que a titlebar faria
+
+    /// A janela é `fullSizeContentView`, então esta view cobre a faixa da barra de
+    /// título e come os cliques que iriam para ela. Quem trata o arrasto e o duplo
+    /// clique ali é a titlebar; sem isto, a faixa do topo do app é a única do
+    /// sistema onde arrastar não move e duplo clique não maximiza.
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.clickCount == 2 else {
+            // `performDrag` roda o laço de arrasto do próprio AppKit — com snap às
+            // bordas e a outros monitores, que um `setFrameOrigin` à mão não tem.
+            window?.performDrag(with: event)
+            return
+        }
+        // A ação é escolha do usuário em Ajustes › Área de Trabalho e Dock, e o
+        // padrão de fábrica (chave ausente) é maximizar.
+        switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+        case "Minimize": window?.performMiniaturize(nil)
+        case "None":     break
+        default:         window?.performZoom(nil)
+        }
+    }
+
+    /// Rótulo é texto, não botão: sobre o nome e o caminho da sessão o clique tem
+    /// de continuar sendo clique na barra. `NSTextField` é `NSControl` e responde
+    /// ao hit test mesmo sem ser editável nem selecionável.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let alvo = super.hitTest(point)
+        if alvo === title || alvo === subtitle || alvo === hint { return self }
+        return alvo
     }
 
     /// Fio embaixo em vez de sombra: a barra é fixa e encostada no conteúdo, e
