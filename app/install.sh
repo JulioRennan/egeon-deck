@@ -92,8 +92,23 @@ encerrar() {
   echo "encerrado: $nome"
 }
 
-# O de `build/` cai antes do make: é ele que o `make.sh` apaga.
-encerrar "build/EgeonDeck.app/Contents/MacOS/EgeonDeck" "EgeonDeck"
+# O de `build/` cai antes do make: é ele que o `make.sh` apaga. Mas SÓ se ele
+# estiver de pé — e essa condição não é detalhe.
+#
+# `encerrar` pede quit por bundle id, que é o mesmo nos dois bundles, então chamá-lo
+# aqui às cegas derrubava o app INSTALADO — com os agentes dentro dele — antes de a
+# compilação começar, e não depois, quebrando a promessa de três parágrafos abaixo.
+# Custou uma instalação inteira: o app caiu no primeiro comando, o terminal que tinha
+# disparado o script morreu com ele, e o script morreu no meio do build de release,
+# antes do `cp -R`. Ficou o bundle antigo em disco e o app fechado.
+#
+# Com o de `build/` de pé a chamada volta a ser correta, porque a ADR-033 garante que
+# só existe uma instância estável viva — se é a de `build/`, não é a instalada.
+if [ -n "$(vivo "build/EgeonDeck.app/Contents/MacOS/EgeonDeck")" ]; then
+  encerrar "build/EgeonDeck.app/Contents/MacOS/EgeonDeck" "EgeonDeck"
+else
+  echo "nada de pé em build/ — o app instalado segue trabalhando durante a compilação"
+fi
 
 # Compila ANTES de encerrar o instalado. O build não toca no bundle de
 # /Applications, então o app — e os agentes dentro dele — continuam de pé pelos
