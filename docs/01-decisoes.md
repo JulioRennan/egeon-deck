@@ -1790,16 +1790,29 @@ casual **cinde em pisos**, e participantes de um piso não se orientam pela troc
 turnos do outro. Um thread linear finge que existe um piso só, e brigar com o fenômeno
 não dá certo. O bloco de turno não cinde: tudo dentro dele é do mesmo par.
 
-Dentro do bloco: o pedido em cima, apagado; o caminho no meio; a resposta no fim. O
-corte entre caminho e resposta é a prosa FINAL do turno, e não a primeira, porque o
+Dentro do bloco é **bolha dentro de bolha**: o pedido numa bolha à direita, o caminho
+dobrado no meio, a resposta noutra bolha à esquerda. O cartão mantém o par junto e as
+bolhas dizem de quem é cada metade — e o que as separa é o LADO, não a cor, porque é o
+vocabulário que o resto do chat já usa. Distinguir por cor de texto foi tentado antes
+(pedido apagado, resposta clara) e não basta: as duas metades ficavam do mesmo tamanho,
+encostadas nas mesmas bordas, e o bloco lia como um parágrafo só.
+
+O corte entre caminho e resposta é a prosa FINAL do turno, e não a primeira, porque o
 agente narra enquanto trabalha ("vou ler o arquivo") — narração é caminho.
 
-O caminho **nasce aberto**. Nasceu recolhido, pela razão certa: turno de trinta
-ferramentas viraria um cartão que não cabe na tela, e aí o agrupamento pioraria a
-leitura em vez de melhorá-la. Mas acompanhar o agente trabalhando é metade do motivo de
-olhar o chat, e recolhido era preciso abrir a cada turno. A linha continua ali para
-dobrar o que já não interessa — o teto do problema é a dobra existir, não ela começar
-fechada.
+O caminho **nasce dobrado**, e o motivo é o teto: turno de trinta ferramentas viraria um
+cartão que não cabe na tela, e aí o agrupamento pioraria a leitura em vez de melhorá-la.
+Chegou a nascer aberto por um passo — acompanhar o agente é metade do motivo de olhar o
+chat —, e com as bolhas o par pedido-resposta ficou legível sem precisar do caminho à
+vista. Ele abre com um clique quando você quiser acompanhar, e é montado só então: turno
+longo constrói dezenas de views que, dobrado, ninguém pediu para ver.
+
+**O thread gruda no fim**, e não por rolar depois de montar. A primeira medida acontece
+com a largura ainda em zero, as alturas saem enormes, e a posição calculada ali não vale
+mais quando o layout de verdade chega — o último bloco ficava cortado na borda de baixo,
+com o cartão sem fechar. Grudar é conferido a cada remedida, e desliga quando você rola
+para cima: mensagem nova aparece sem você ir buscá-la, e o thread não te arranca do meio
+do que você estava lendo.
 
 **Turno acionado por outro agente não é bloco de primeiro nível.** Ele aninha dentro do
 bloco de quem o acionou, recolhido, como `▸ acionou claude-2 · 2 mensagens · 24s`. Solto
