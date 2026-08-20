@@ -203,10 +203,17 @@ conversas, e a resposta do A cai no meio da sua terceira pergunta ao B — a an�
 conversa chama isso de **cisma de piso**, e quem está num piso não se orienta pela
 troca de turnos do outro. O bloco não cinde.
 
-Dentro do bloco: seu pedido em cima, apagado; o **caminho** (`▾ 12 passos · 3
-arquivos`), que nasce aberto e dobra com um clique; e a **resposta** no fim, que é a
-prosa do último trecho do turno. O corte da resposta é no fim e não na primeira prosa
-porque o agente narra enquanto trabalha, e narração é caminho.
+Dentro do bloco, **bolha dentro de bolha**: seu pedido numa bolha encostada à direita,
+o **caminho** dobrado no meio (`▸ 12 passos · 3 arquivos`), e a **resposta** noutra
+bolha encostada à esquerda. O que separa as duas é o lado, não a cor — é o mesmo
+vocabulário do resto do chat. O caminho nasce dobrado: turno de trinta ferramentas
+viraria um cartão que não cabe na tela. O corte da resposta é na prosa FINAL do turno,
+e não na primeira, porque o agente narra enquanto trabalha e narração é caminho.
+
+O thread **gruda no fim** até você rolar para cima, e volta a grudar quando você volta.
+Não dá para resolver rolando depois de montar: a primeira medida acontece com a largura
+ainda em zero, e a posição calculada ali não vale quando o layout de verdade chega — o
+último bloco ficava cortado na borda de baixo.
 
 **Turno acionado por outro agente não é bloco de primeiro nível** — ele aninha dentro
 do bloco de quem o acionou, como `▸ acionou claude-2 · 2 mensagens · 24s`, recolhido. A
