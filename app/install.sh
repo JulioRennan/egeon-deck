@@ -24,15 +24,30 @@ DESTINO="/Applications/Egeon Deck.app"
 #
 # Vale para os dois lugares: o de `build/` e o já instalado. Ambos são o flavor
 # estável, dividem `~/.egeon`, o socket e a porta 8391.
+# `vivo` usa `ps ax | grep`, e não `pgrep -f`.
+#
+# Isto custou um install que não instalou nada: com o bundle em quarentena o macOS
+# roda o app de uma cópia em `AppTranslocation`, e ali o `pgrep -f` NÃO acha o
+# processo — o `ps ax` acha. O `pgrep` no topo do `encerrar` devolvia "não tem
+# ninguém", o app seguia de pé, o `rm -rf` apagava o bundle debaixo dele e o
+# `open -a` do fim subia uma SEGUNDA instância disputando ~/.egeon, o socket e a
+# porta 8391.
+vivo() { ps ax -o pid=,command= | grep -F "$1" | grep -v grep | awk '{print $1}' | head -1; }
+
 encerrar() {
   local padrao="$1" nome="$2"
-  pgrep -f "$padrao" >/dev/null || return 0
+  # Pelo BUNDLE ID antes de tudo: é o único jeito que não depende do caminho nem
+  # do nome de exibição, e é o que alcança a cópia translocada. Pedir quit dá ao
+  # app o `applicationWillTerminate`, onde o sessions.json é gravado e o
+  # code-server encerrado.
+  osascript -e 'tell application id "dev.duckcoder.egeondeck" to quit' >/dev/null 2>&1 || true
   osascript -e "tell application \"$nome\" to quit" >/dev/null 2>&1 || true
+  [ -n "$(vivo "$padrao")" ] || { echo "encerrado: $nome"; return 0; }
   for _ in $(seq 1 50); do
-    pgrep -f "$padrao" >/dev/null || break
+    [ -n "$(vivo "$padrao")" ] || break
     sleep 0.2
   done
-  pgrep -f "$padrao" >/dev/null && pkill -f "$padrao" || true
+  [ -n "$(vivo "$padrao")" ] && pkill -f "$padrao" || true
   echo "encerrado: $nome"
 }
 
@@ -54,11 +69,20 @@ encerrar "$DESTINO/Contents/MacOS/EgeonDeck" "Egeon Deck"
 rm -rf "$DESTINO"
 cp -R "build/EgeonDeck.app" "$DESTINO"
 
+# Tirar a quarentena ANTES de abrir, e não depois.
+#
+# É ela que faz o macOS rodar o app de uma cópia translocada em vez do bundle de
+# /Applications. Com o app translocado, a checagem de pid do fim deste script
+# procura um caminho que não existe no processo e conclui "nenhum processo de pé"
+# num install que deu certo — e a próxima reinstalação cai no buraco do `pgrep`
+# descrito acima.
+xattr -dr com.apple.quarantine "$DESTINO" 2>/dev/null || true
+
 # Reabrir é parte da instalação, não sugestão de fim: instalado sem trocar o
 # processo é o mesmo que não instalado. E encerra de novo antes, porque `open -a`
 # com instância viva não abre nada — só traz para frente a que já está lá.
 BIN="$DESTINO/Contents/MacOS/EgeonDeck"
-instancia() { ps ax -o pid=,command= | grep -F "$BIN" | grep -v grep | awk '{print $1}' | head -1; }
+instancia() { vivo "$BIN"; }
 
 antes=$(instancia)
 encerrar "$BIN" "Egeon Deck"
