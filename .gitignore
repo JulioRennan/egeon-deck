@@ -9,8 +9,12 @@ extension/node_modules/
 .mega-brain/
 .egeon/
 **/.omc/
-**/.claude/
 poc/.state/
+
+# `.claude/` NÃO entra aqui: skill é fonte do projeto, não estado de máquina.
+# Ela diz onde código novo vai e quais são as leis de dependência — perder isso no
+# clone é perder a regra junto. Só o settings LOCAL é da máquina.
+.claude/settings.local.json
 
 # Configuração de workspace escrita pela própria extensão (megabrain.target),
 # específica da máquina
