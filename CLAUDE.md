@@ -18,7 +18,7 @@ distribuição.
 ```
 app/          executável Swift (SPM) empacotado em EgeonDeck.app
 extension/    extensão do VSCode/code-server — review inline de markdown
-docs/         00-prior-art · 01-decisoes (ADRs) · 02-mvp
+docs/         00-prior-art · 01-decisoes (ADRs) · 02-mvp · 03-arquitetura
 poc/          protótipos descartados
 ```
 
