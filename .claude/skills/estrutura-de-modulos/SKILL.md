@@ -32,9 +32,9 @@ app/Sources/
 │   └── Shell/                       casca da janela · troca de modo
 │
 ├── Core/
-│   ├── Kit/                      base · ZERO dependência
+│   ├── Config/                   flavor · log · ZERO dependência
 │   ├── Core/                     modelo · store · parsing        [iOS ✓]
-│   ├── Runtime/                  processo · dispatch · socket    [macOS]
+│   ├── Runtime/                  processo · dispatch · socket · env  [macOS]
 │   └── Common/
 │       ├── Tokens/                  valor cru · Foundation
 │       └── Materialization/         NSColor · vidro · AppKit
@@ -50,7 +50,7 @@ app/Sources/
 ```
 
 Cada caixa é um **target**. `Features/` e `Core/` são só agrupamento — o compilador nem
-os vê. Os nomes reais levam prefixo: `EgeonKit`, `EgeonCore`, `EgeonRuntime`,
+os vê. Os nomes reais levam prefixo: `EgeonConfig`, `EgeonCore`, `EgeonRuntime`,
 `EgeonCommon`, `EgeonNodes`, `EgeonApp`, e as features `EgeonChat`, `EgeonCanvas`,
 `EgeonMosaic`, `EgeonDialogs`.
 
@@ -65,7 +65,7 @@ Responda de cima para baixo e pare na primeira que der sim.
 |---|---|
 | lança processo, abre pty, ou serve socket? | **`EgeonRuntime`** |
 | é tipo de dado, persistência, ou parsing? | **`EgeonCore`** |
-| é `Log`, `Flavor` ou `Environment`? | **`EgeonKit`** |
+| é `Log` ou `Flavor`? | **`EgeonConfig`** |
 | é cor, fonte, medida, ou peça de UI reusada por mais de uma feature? | **`EgeonCommon`** |
 | é `NodeView` ou subclasse dele — terminal, editor, web? | **`EgeonNodes`** |
 | compõe features, é menu, ou é a casca da janela? | **`EgeonApp`** |

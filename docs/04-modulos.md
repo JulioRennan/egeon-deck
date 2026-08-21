@@ -71,7 +71,7 @@ app/
     │       └── Sidebar.swift
     │
     ├── Core/
-    │   ├── EgeonKit/                 Log · Flavor · Environment
+    │   ├── EgeonConfig/              Flavor · Log
     │   ├── EgeonCore/                modelo · store · parsing  ← compila para iOS
     │   │   ├── Model/
     │   │   ├── Store/
@@ -108,7 +108,7 @@ A linha de corte é exatamente a portabilidade, que é a única que se verifica:
 |---|---|
 | `WorkbenchConfig` · `NodeConfig` · `EdgeConfig` | `Dispatcher` · fila · guardas · cadeia |
 | `AgentProfile` · `Component` · `Template` | `CodeServer` · `Worktree` · `AgentHooks` |
-| `WorkbenchStore` · `Flavor` | `ControlSocket` · `Peer` · `EgeonCLI` |
+| `WorkbenchStore` | `ControlSocket` · `Peer` · `EgeonCLI` · `Environment` |
 | `ChatTurn` · `ChatBlock` · `ChatAdapter` · parsing | |
 
 Dentro do `Runtime` as pastas `Process/`, `Dispatch/` e `Control/` separam à vista.
@@ -137,7 +137,7 @@ flowchart TB
     runtime["EgeonRuntime<br/><i>macOS</i>"]
     core["EgeonCore<br/><i>iOS ✓</i>"]
     common["EgeonCommon"]
-    kit["EgeonKit"]
+    cfg["EgeonConfig"]
 
     app --> chat
     app --> canvas
@@ -153,8 +153,8 @@ flowchart TB
     dialogs --> core
     dialogs --> common
     runtime --> core
-    core --> kit
-    common --> kit
+    core --> cfg
+    common --> cfg
 ```
 
 O `EgeonChat` **não** aponta para `EgeonNodes` nem para `EgeonRuntime`. É o que o
@@ -166,9 +166,9 @@ torna a única feature portável para iOS hoje.
 
 | target | arquivos de hoje |
 |---|---|
-| `EgeonKit` | `Log` · `Flavor` · `Environment` |
+| `EgeonConfig` | `Flavor` · `Log` |
 | `EgeonCore` | `Workbench` · `AgentProfile` · `Component` · `Template` · `Transcript` · `Chat` (modelo) · `Activity` (de `Attention`) |
-| `EgeonRuntime` | `Dispatcher` · `CodeServer` · `Worktree` · `AgentHooks` · `ControlSocket` · `Peer` · `EgeonCLI` |
+| `EgeonRuntime` | `Dispatcher` · `CodeServer` · `Worktree` · `AgentHooks` · `Environment` · `ControlSocket` · `Peer` · `EgeonCLI` |
 | `EgeonCommon` | `Glass` · `ToolbarButton` · `ChatStyle` · `AgentChip` · `DisclosureLine` · `Spinner` · `AttentionSound` |
 | `EgeonNodes` | `NodeView` e `TerminalNode` (de `Canvas`) · `Editor` · `WebNode` · `Drop` |
 | `EgeonCanvas` | `CanvasContainer` (de `Canvas`) · `Edge` |
@@ -263,7 +263,7 @@ Cada passo é **um commit que compila**. E o primeiro risco não é código, é 
 |---|---|---|
 | 0 | quebrar `Dispatcher` → view com `TerminalSurface`, **sem mover arquivo** | é o acoplamento que impede qualquer separação; verde e commitado antes de mexer em estrutura |
 | 1 | `Package.swift` multi-target com **um piloto barato**: `Transcript` | fan-out 0 medido. Valida `make.sh`, assinatura e flavors com churn mínimo |
-| 2 | `EgeonKit` e `EgeonCommon` | folhas, sem domínio |
+| 2 | `EgeonConfig` e `EgeonCommon` | folhas, sem domínio |
 | 3 | `EgeonCore`, e o CI de iOS junto | a portabilidade nasce verificada |
 | 4 | `EgeonRuntime` | depende do passo 0 |
 | 5 | `EgeonChat` | cluster mais isolado |
