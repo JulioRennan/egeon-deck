@@ -22,6 +22,41 @@ caixa? Nomeie e comente pensando nisso.
 
 Razão completa em [docs/04-modulos.md](../../../docs/04-modulos.md).
 
+## A forma
+
+```
+app/Sources/
+│
+├── App/                          entry point · o único executável
+│   ├── Composition/                 fiação · conformidade do socket
+│   └── Shell/                       casca da janela · troca de modo
+│
+├── Core/
+│   ├── Kit/                      base · ZERO dependência
+│   ├── Core/                     modelo · store · parsing        [iOS ✓]
+│   ├── Runtime/                  processo · dispatch · socket    [macOS]
+│   └── Common/
+│       ├── Tokens/                  valor cru · Foundation
+│       └── Materialization/         NSColor · vidro · AppKit
+│
+├── Nodes/                        CAMADA · não é feature
+│
+└── Features/
+    └── <Feature>/
+        ├── Model/                   o que persiste
+        ├── Data/                    [opcional] só se lê fonte externa
+        ├── ViewModel/               [opcional] só se traduz modelo → tela
+        └── View/
+```
+
+Cada caixa é um **target**. `Features/` e `Core/` são só agrupamento — o compilador nem
+os vê. Os nomes reais levam prefixo: `EgeonKit`, `EgeonCore`, `EgeonRuntime`,
+`EgeonCommon`, `EgeonNodes`, `EgeonApp`, e as features `EgeonChat`, `EgeonCanvas`,
+`EgeonMosaic`, `EgeonDialogs`.
+
+Só a `App` pode conhecer todas as features. É o papel de raiz de composição, e por isso
+fan-out alto ali não é sintoma de nada.
+
 ## A decisão, em ordem
 
 Responda de cima para baixo e pare na primeira que der sim.
