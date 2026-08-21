@@ -313,3 +313,31 @@ reiniciar.
 
 *Resolvida:* `agents.json` prometia `resume` e ninguém lia. Implementado no
 ADR-014.
+
+**O Egeon escreve em dois lugares fora da casa dele.** Prioridade secundária —
+levantado e adiado em 20/08/2026, nenhum dos dois quebra nada hoje.
+
+O primeiro é a extensão: ela grava `egeon.target` com
+`ConfigurationTarget.Workspace`, e isso vira `<pasta aberta>/.vscode/settings.json`
+— o repositório de quem usa. Quatro lugares em `extension/src/extension.js`
+escrevem: a escolha do QuickPick, duas limpezas quando o alvo morre, e o
+autoteste. O escopo por pasta está certo (repo A fala com um terminal, repo B com
+outro); o lugar é que não é. `context.workspaceState` tem a mesma semântica e vive
+no `user-data` do code-server. A divisão honesta seria: o **setting** é a sua
+intenção explícita e a extensão só o LÊ; a memória da última escolha vai para o
+`workspaceState`. Medido: o `.vscode/settings.json` deste repositório ficou com
+`nitidez/t1`, que é bancada do flavor **dev**.
+
+O segundo é o `~/.config/code-server/config.yaml`, que é seu e global. O
+code-server do app o lê por conta própria. Hoje não morde porque a linha de
+comando ganha do arquivo e o app já cobre o que importa — `--auth none`,
+`--bind-addr 127.0.0.1`, `--disable-telemetry`, `--disable-update-check` —, mas o
+que você puser ali e o app não sobrescrever entra no editor dele. Fecha com
+`--config` apontando para dentro do diretório do flavor, que é a regra que o
+CLAUDE.md já cobra para todo caminho novo.
+
+Nada disso vale para as `managedSettings` do `CodeServer.swift`: elas moram no
+perfil isolado do app (`~/.egeon/code-server/user-data/User/settings.json`) e não
+tocam o VSCode de ninguém. Das nove chaves, quatro se pagam — `egeon.socketPath`,
+`security.workspace.trust.enabled`, e o par de `git.detectWorktrees` /
+`git.openRepositoryInParentFolders`. As outras cinco são opinião.
