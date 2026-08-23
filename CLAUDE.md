@@ -18,45 +18,29 @@ distribuição.
 ```
 app/          executável Swift (SPM) empacotado em EgeonDeck.app
 extension/    extensão do VSCode/code-server — review inline de markdown
-docs/         00-prior-art · 01-decisoes (ADRs) · 02-mvp · 03-arquitetura
+docs/         00-prior-art · 01-decisoes (ADRs) · 02-mvp
 poc/          protótipos descartados
 ```
 
-O retrato do que existe hoje está em [03-arquitetura](docs/03-arquitetura.md).
+O código é **modular, com MVC dentro de cada módulo**. Todo módulo mora em
+`Features/`; dentro de módulo é sempre `Models/` · `Views/` · `Controllers/` ·
+`Features/` (submódulos, recursivo). O `Core` fica fora de `Features/`: é o que
+as features dividem, não uma delas.
 
-`app/Sources/EgeonDeck/`, por responsabilidade:
+```
+app/Sources/EgeonDeck/
+├── Core/            infra: Flavor, Log, ControlSocket, Peer, AppControl,
+│                    Glass, ToolbarButton · Features/EgeonCLI
+├── Features/
+│   ├── Canvas/  Chat/  Dispatch/  Home/  Mosaic/  Notifications/  Workbench/
+│   └── Nodes/   + Features/AgentNode (→ Features/ClaudeCode) · Features/EditorNode
+└── main.swift       o AppDelegate — único fora de módulo; vira App aos poucos
+```
 
-| arquivo | o que é |
-|---|---|
-| `main.swift` | `AppDelegate`, menu, ciclo de vida, criação/edição de bancada, worktree, laço de UI |
-| `Workbench.swift` | modelos `WorkbenchConfig` / `NodeConfig`, persistência, `AppControl` |
-| `Canvas.swift` | `NodeView` (card base), `TerminalNode`, `CanvasContainer` (pan/zoom/grid), `MBTerminalView` |
-| `WorkbenchShell.swift` | a bancada na tela: barra superior de visualização e o dono dos nós |
-| `Mosaic.swift` | o modo mosaico — `ViewMode`, `MosaicLayout` e o split view com mínimo por painel |
-| `Chat.swift` | o modo chat por dentro — `AgentColor`, `ChatNode` e a junção dos transcripts |
-| `Transcript.swift` | leitor do JSONL do CLI: mensagem, bloco de código, diff |
-| `ChatView.swift` | o thread — vocabulário visual, chip de agente e as linhas |
-| `ChatComposer.swift` | a caixa de escrever: destinatário, Tab, `@` e a lista de menção |
-| `ChatPanel.swift` | "na bancada" — agentes, processos e a gaveta de saída |
-| `ChatContainer.swift` | o modo montado: thread, caixa, painel e o laço de leitura |
-| `Dispatcher.swift` | `Target` (o terminal endereçável) e `Dispatcher` — fila, injeção, ociosidade, estado, cadeia |
-| `Attention.swift` | `Activity`, `Spinner`, `AttentionSound` — vocabulário de "carregando / precisa de você" |
-| `Edge.swift` | `EdgeConfig`, traçado das ligações (`EdgeCurve`, `EdgeLayerView`) e a porta `+` do card |
-| `AgentProfile.swift` | perfis de agente e `agents.json` |
-| `ControlSocket.swift` | socket unix de controle |
-| `Editor.swift` / `CodeServer.swift` | nó de editor (WKWebView) e o processo do code-server |
-| `WebNode.swift` | nó de navegador, com perfil de navegação isolado |
-| `Sidebar.swift` / `Toolbar.swift` | lista de bancadas e barra de ferramentas do canvas |
-| `Glass.swift` | `GlassPanel` — o vidro das barras flutuantes, e o interruptor dele |
-| `Drop.swift` | arrastar arquivo para o terminal: o que o arrasto trouxe, virado em caminho |
-| `Component.swift` / `Template.swift` | presets de nó e de bancada |
-| `Worktree.swift` | criar worktree do git e abrir bancada nela |
-| `NodeWorktree.swift` | worktree por terminal: o plano de cada nó e a lista do formulário |
-| `Environment.swift` | PATH e env dos processos filhos |
-| `Flavor.swift` | estável vs dev: diretório de config, log, socket, porta |
-| `AgentHooks.swift` | gancho que faz o CLI relatar qual conversa está aberta |
-| `Peer.swift` | quem está do outro lado do socket, pelo pid do processo |
-| `EgeonCLI.swift` | o comando `egeon`, que o agente usa para achar e acionar vizinhos |
+**Onde código novo vai é decidido pela skill `estrutura-de-modulos`**
+(`.claude/skills/`), não por aqui: ela tem o mapa completo, as regras de
+colocação e o processo de mudança. Consulte-a antes de criar arquivo ou mover
+código.
 
 ## Conceitos
 
