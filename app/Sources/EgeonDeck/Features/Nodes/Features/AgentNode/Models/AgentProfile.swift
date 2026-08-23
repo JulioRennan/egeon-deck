@@ -430,19 +430,8 @@ enum AgentStore {
 
     private static func defaultProfiles() -> [String: AgentProfile] {
         [
-            // `--append-system-prompt` vale em bancada interativa, não só com
-            // `--print`, e funciona com login normal — não é exclusivo de quem
-            // usa API key. Verificado no help da 2.1.228, na referência de CLI e
-            // executando.
-            "claude": AgentProfile(
-                displayName: "Claude Code", command: ["claude"],
-                idle: IdleConfig(), inject: InjectConfig(),
-                resume: ["--resume", "{sessionId}"],
-                newSession: ["--session-id", "{sessionId}"],
-                reportSession: ["--settings", "{file}"],
-                systemPrompt: ["--append-system-prompt", "{prompt}"],
-                attention: AttentionConfig(),
-                configEnv: "CLAUDE_CONFIG_DIR", configGlob: "~/.claude*"),
+            // O que é do Claude mora no submódulo ClaudeCode; aqui só a chave.
+            "claude": .claudeCode,
             "codex": AgentProfile(
                 displayName: "Codex CLI", command: ["codex"],
                 idle: IdleConfig(), inject: InjectConfig(), resume: nil,

@@ -115,7 +115,7 @@ final class TerminalNode: NodeView {
         //
         // Só em nó com agente: shell não tem conversa para rastrear, e a variável
         // ali seria lixo no ambiente de tudo que você rodar à mão.
-        if profile != nil { environment[AgentHooks.targetVariable] = address }
+        if profile != nil { environment[ClaudeHooks.targetVariable] = address }
 
         let env: [String] = environment.map { "\($0.key)=\($0.value)" }
 

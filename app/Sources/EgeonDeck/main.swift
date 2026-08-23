@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Escrito no arranque, e não na primeira worktree: é um arquivo feito
         // para ser lido e ajustado, e para isso precisa existir antes.
         Worktree.installCopyScript()
-        AgentHooks.install()
+        ClaudeHooks.install()
 EgeonCLI.install()
 
         buildMenu()
@@ -1434,7 +1434,7 @@ EgeonCLI.install()
             // O gancho de relato entra junto: é o que faz o app saber quando VOCÊ
             // troca de conversa dentro da TUI, e é por ele que chegam o fim de
             // turno e o pedido de permissão (ADR-024).
-            let report = profile.reportArguments(hookFile: AgentHooks.settingsFile.path)
+            let report = profile.reportArguments(hookFile: ClaudeHooks.settingsFile.path)
             if let report { extras += report }
             let flags = " " + extras.map(AppEnvironment.shellQuote).joined(separator: " ")
             return (conversationCommand(base: base, flags: flags, node: node, profile: profile),

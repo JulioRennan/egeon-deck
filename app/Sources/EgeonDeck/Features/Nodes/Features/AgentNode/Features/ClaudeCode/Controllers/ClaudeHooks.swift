@@ -21,7 +21,7 @@ import Foundation
 /// O arquivo de settings é nosso e vai por `--settings`. Nada é escrito no
 /// `~/.claude/settings.json` do usuário — a config dele não é lugar para o app
 /// mexer.
-enum AgentHooks {
+enum ClaudeHooks {
     static var directory: URL { Flavor.current.configDirectory }
     static var settingsFile: URL { directory.appendingPathComponent("claude-hooks.json") }
     static var script: URL { directory.appendingPathComponent("agent-hook.sh") }
