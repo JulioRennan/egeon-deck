@@ -18,18 +18,11 @@ distribuição.
 ```
 app/          executável Swift (SPM) empacotado em EgeonDeck.app
 extension/    extensão do VSCode/code-server — review inline de markdown
-docs/         00-prior-art · 01-decisoes (ADRs) · 02-mvp · 03-arquitetura · 04-modulos
+docs/         00-prior-art · 01-decisoes (ADRs) · 02-mvp · 03-arquitetura
 poc/          protótipos descartados
 ```
 
-**Onde código novo vai é decidido pela skill `estrutura-de-modulos`**
-(`.claude/skills/`), não por aqui. Ela responde em qual módulo o arquivo vive e traz as
-leis de dependência; o porquê de cada uma está em [04-modulos](docs/04-modulos.md), e o
-retrato do que existe hoje em [03-arquitetura](docs/03-arquitetura.md).
-
-Enquanto `app/Sources/` tiver só `EgeonDeck/`, a migração não começou e arquivo novo
-continua indo no diretório plano — a skill diz isso na primeira linha, e é ela que
-manda.
+O retrato do que existe hoje está em [03-arquitetura](docs/03-arquitetura.md).
 
 `app/Sources/EgeonDeck/`, por responsabilidade:
 
