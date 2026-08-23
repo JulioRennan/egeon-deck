@@ -10,7 +10,7 @@ import Foundation
 /// É essa combinação que faz o template servir para worktree: criar a bancada já
 /// vem com a pasta preenchida, e apontar para outro checkout reaproveita todos
 /// os `cwd` sem edição, porque `deck-backend` resolve em qualquer um deles.
-struct Template: Codable {
+struct WorkbenchTemplate: Codable {
     var nodes: [NodeConfig]
     /// Pasta do projeto, usada como valor inicial ao criar a bancada. Trocável no
     /// diálogo, o que é o caminho para a segunda worktree.
@@ -34,13 +34,13 @@ struct Template: Codable {
     func instantiate() -> [NodeConfig] { nodes.map(\.withoutConversation) }
 }
 
-enum TemplateStore {
+enum WorkbenchTemplateStore {
     static let configURL = URL(fileURLWithPath:
         Flavor.current.config("templates.json").path)
 
-    static func load() -> [String: Template] {
+    static func load() -> [String: WorkbenchTemplate] {
         guard let data = try? Data(contentsOf: configURL),
-              let map = try? JSONDecoder().decode([String: Template].self, from: data)
+              let map = try? JSONDecoder().decode([String: WorkbenchTemplate].self, from: data)
         else { return [:] }
         return map
     }
@@ -49,7 +49,7 @@ enum TemplateStore {
     /// templates ficaria se embaralhando sozinho.
     static var names: [String] { load().keys.sorted() }
 
-    static func save(_ map: [String: Template]) {
+    static func save(_ map: [String: WorkbenchTemplate]) {
         try? FileManager.default.createDirectory(
             at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
@@ -57,9 +57,9 @@ enum TemplateStore {
         try? encoder.encode(map).write(to: configURL)
     }
 
-    static func template(named name: String) -> Template? { load()[name] }
+    static func template(named name: String) -> WorkbenchTemplate? { load()[name] }
 
-    static func put(_ template: Template, named name: String) {
+    static func put(_ template: WorkbenchTemplate, named name: String) {
         var map = load()
         map[name] = template
         save(map)
@@ -86,13 +86,13 @@ enum TemplateStore {
     /// do molde — o agente aparecia no meio do assunto de outra bancada, sem o
     /// papel novo, e duas bancadas diferentes escreviam na mesma conversa. Um
     /// molde não carrega o que foi dito dentro dele.
-    static func capture(from workbench: WorkbenchConfig) -> Template {
+    static func capture(from workbench: WorkbenchConfig) -> WorkbenchTemplate {
         var nodes = workbench.nodes
         for i in nodes.indices {
             if nodes[i].type == .web { nodes[i].url = nodes[i].url.flatMap(baseURL(of:)) }
             nodes[i] = nodes[i].withoutConversation
         }
-        return Template(nodes: nodes, basePath: workbench.path,
+        return WorkbenchTemplate(nodes: nodes, basePath: workbench.path,
                         view: workbench.view, mosaic: workbench.mosaic)
     }
 

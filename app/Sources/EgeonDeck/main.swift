@@ -322,7 +322,7 @@ EgeonCLI.install()
         guard let (name, template) = askWorkbenchNameAndTemplate(
             suggested: folder.lastPathComponent) else { return }
 
-        let preset = template.flatMap { TemplateStore.template(named: $0) }
+        let preset = template.flatMap { WorkbenchTemplateStore.template(named: $0) }
         var config = WorkbenchConfig(
             name: WorkbenchStore.availableName(basedOn: name, taken: configs.map(\.name)),
             path: (folder.path as NSString).abbreviatingWithTildeInPath,
@@ -391,7 +391,7 @@ EgeonCLI.install()
             name: WorkbenchStore.availableName(basedOn: Worktree.sanitize(created.branch),
                                              taken: configs.map(\.name)),
             path: (created.path as NSString).abbreviatingWithTildeInPath,
-            nodes: form.template.flatMap { TemplateStore.template(named: $0)?.instantiate() } ?? [],
+            nodes: form.template.flatMap { WorkbenchTemplateStore.template(named: $0)?.instantiate() } ?? [],
             template: form.template)
         if config.nodes.isEmpty { config.nodes = [] }
 
@@ -801,7 +801,7 @@ EgeonCLI.install()
         let vazio = "Começar vazia"
         if origin == nil {
             picker.addItem(withTitle: vazio)
-            let templates = TemplateStore.names
+            let templates = WorkbenchTemplateStore.names
             if !templates.isEmpty {
                 picker.menu?.addItem(.separator())
                 picker.addItems(withTitles: templates)
@@ -883,7 +883,7 @@ EgeonCLI.install()
         let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         let vazio = "Começar vazia"
         picker.addItem(withTitle: vazio)
-        let templates = TemplateStore.names
+        let templates = WorkbenchTemplateStore.names
         if !templates.isEmpty {
             picker.menu?.addItem(.separator())
             picker.addItems(withTitles: templates)
@@ -1255,7 +1255,7 @@ EgeonCLI.install()
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
 
-        if TemplateStore.template(named: name) != nil {
+        if WorkbenchTemplateStore.template(named: name) != nil {
             let overwrite = NSAlert()
             overwrite.alertStyle = .warning
             overwrite.messageText = "Já existe um template \"\(name)\""
@@ -1265,7 +1265,7 @@ EgeonCLI.install()
             guard overwrite.runModal() == .alertFirstButtonReturn else { return }
         }
 
-        TemplateStore.put(TemplateStore.capture(from: workbench), named: name)
+        WorkbenchTemplateStore.put(WorkbenchTemplateStore.capture(from: workbench), named: name)
         configs[activeIndex].template = name
         // A bancada passa a ter origem: o botão de atualizar aparece agora, sem
         // esperar o próximo arranque.
@@ -1298,7 +1298,7 @@ EgeonCLI.install()
 
         // O template pode ter sido apagado desde que esta bancada nasceu: aí não
         // há o que atualizar, e virar um "salvar como" silencioso seria pior.
-        guard TemplateStore.template(named: name) != nil else {
+        guard WorkbenchTemplateStore.template(named: name) != nil else {
             let sumiu = NSAlert()
             sumiu.messageText = "O template \"\(name)\" não existe mais"
             sumiu.informativeText = "Use \"salvar como template\" para criá-lo de novo."
@@ -1314,7 +1314,7 @@ EgeonCLI.install()
         alert.addButton(withTitle: "Cancelar")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        TemplateStore.put(TemplateStore.capture(from: workbench), named: name)
+        WorkbenchTemplateStore.put(WorkbenchTemplateStore.capture(from: workbench), named: name)
         Log.write("template \"\(name)\" atualizado a partir da bancada \"\(workbench.name)\"")
     }
 
