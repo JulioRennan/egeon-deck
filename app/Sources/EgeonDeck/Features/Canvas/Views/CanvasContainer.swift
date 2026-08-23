@@ -96,7 +96,7 @@ final class CanvasContainer: NSView {
     /// Formulário para montar um terminal do zero.
     var onConfigureTerminal: (() -> Void)?
     /// Componentes salvos, para o menu da ferramenta de terminal.
-    var componentNames: (() -> [String])?
+    var nodeTemplateNames: (() -> [String])?
     /// Gesto de criar: dirigido, de quem você arrastou para quem recebeu. Quantos
     /// sentidos isso vira é política de quem grava, não do gesto.
     var onCreateEdge: ((EdgeConfig) -> Void)?
@@ -189,7 +189,7 @@ final class CanvasContainer: NSView {
         toolbar.onSelect = { [weak self] tool in self?.tool = tool }
         toolbar.onSaveTemplate = { [weak self] in self?.onSaveTemplate?() }
         toolbar.onNewWorktree = { [weak self] in self?.onNewWorktree?() }
-        toolbar.componentNames = { [weak self] in self?.componentNames?() ?? [] }
+        toolbar.nodeTemplateNames = { [weak self] in self?.nodeTemplateNames?() ?? [] }
         toolbar.onConfigureTerminal = { [weak self] in self?.onConfigureTerminal?() }
         toolbar.onUpdateTemplate = { [weak self] in self?.onUpdateTemplate?() }
         toolbar.onPickComponent = { [weak self] name in

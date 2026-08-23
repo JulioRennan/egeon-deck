@@ -8,7 +8,7 @@ import Foundation
 /// - `templates.json` diz o ARRANJO dos nós no canvas
 ///
 /// O componente referencia um perfil de agente; não o substitui.
-struct Component: Codable {
+struct NodeTemplate: Codable {
     /// Nome que virou o id do nó, e por isso aparece no endereço de dispatch:
     /// `deck/revisor`.
     var name: String
@@ -46,13 +46,16 @@ struct Component: Codable {
     }
 }
 
-enum ComponentStore {
+enum NodeTemplateStore {
+    // O arquivo continua components.json: é editado à mão e já existe nas duas
+    // casas (~/.egeon e ~/.egeon-dev). O tipo virou NodeTemplate no código; o
+    // disco não precisou acompanhar, e a chave `component` do NodeConfig idem.
     static let configURL = URL(fileURLWithPath:
         Flavor.current.config("components.json").path)
 
-    static func load() -> [String: Component] {
+    static func load() -> [String: NodeTemplate] {
         guard let data = try? Data(contentsOf: configURL),
-              let map = try? JSONDecoder().decode([String: Component].self, from: data)
+              let map = try? JSONDecoder().decode([String: NodeTemplate].self, from: data)
         else { return [:] }
         return map
     }
@@ -61,7 +64,7 @@ enum ComponentStore {
     /// componentes ficaria se embaralhando sozinho.
     static var names: [String] { load().keys.sorted() }
 
-    static func save(_ map: [String: Component]) {
+    static func save(_ map: [String: NodeTemplate]) {
         try? FileManager.default.createDirectory(
             at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
@@ -69,9 +72,9 @@ enum ComponentStore {
         try? encoder.encode(map).write(to: configURL)
     }
 
-    static func component(named name: String) -> Component? { load()[name] }
+    static func component(named name: String) -> NodeTemplate? { load()[name] }
 
-    static func put(_ component: Component) {
+    static func put(_ component: NodeTemplate) {
         var map = load()
         map[component.name] = component
         save(map)
@@ -106,8 +109,8 @@ enum ComponentStore {
 
     /// Converte um nó já existente em componente, para "salvar este terminal
     /// como componente".
-    static func capture(from node: NodeConfig, name: String) -> Component {
-        Component(name: name,
+    static func capture(from node: NodeConfig, name: String) -> NodeTemplate {
+        NodeTemplate(name: name,
                   kind: node.type,
                   agent: node.agent,
                   cmd: node.cmd,
@@ -117,7 +120,7 @@ enum ComponentStore {
     }
 
     /// Instancia o componente como nó, com id único dentro da bancada.
-    static func instantiate(_ component: Component, id: String) -> NodeConfig {
+    static func instantiate(_ component: NodeTemplate, id: String) -> NodeConfig {
         var node = NodeConfig(type: component.kind, id: id)
         node.agent = component.agent
         node.cmd = component.cmd

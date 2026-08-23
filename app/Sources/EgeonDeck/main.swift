@@ -1691,7 +1691,7 @@ EgeonCLI.install()
         canvas.onUpdateTemplate = { [weak self] in self?.updateOriginTemplate(index) }
         canvas.originTemplate = configs[index].template
         canvas.onNewWorktree = { [weak self] in self?.duplicateWorkbenchAsWorktree(index) }
-        canvas.componentNames = { ComponentStore.names }
+        canvas.nodeTemplateNames = { NodeTemplateStore.names }
         canvas.onConfigureTerminal = { [weak self] in self?.configureNewTerminal(index: index) }
         edgeController(for: index)?.wire()
     }
@@ -1893,7 +1893,7 @@ EgeonCLI.install()
             // agente, comando, pasta e papel — perguntar de novo seria repetir
             // uma decisão já tomada.
             if let name = shell.canvas.pendingComponent,
-               let component = ComponentStore.component(named: name) {
+               let component = NodeTemplateStore.component(named: name) {
                 place(component: component, rect: rect, index: index)
                 return
             }
@@ -1901,14 +1901,14 @@ EgeonCLI.install()
             // Sem componente, o terminal é configurado antes de existir. O
             // retângulo que você acabou de marcar é preservado, então o formulário
             // não custa a posição nem o tamanho.
-            let dialog = ComponentDialog(
+            let dialog = NodeTemplateDialog(
                 title: "Novo terminal",
                 confirmLabel: "Criar",
                 agents: agents,
-                initial: Component(name: "", kind: .agent, agent: "claude"),
+                initial: NodeTemplate(name: "", kind: .agent, agent: "claude"),
                 root: configs[index].url)
             guard let result = dialog.run() else { return }
-            if result.saveAsComponent { ComponentStore.put(result.component) }
+            if result.saveAsNodeTemplate { NodeTemplateStore.put(result.component) }
             place(component: result.component, rect: rect, index: index)
             return
         }
@@ -1932,15 +1932,15 @@ EgeonCLI.install()
     private func configureNewTerminal(index: Int) {
         guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
 
-        let dialog = ComponentDialog(
+        let dialog = NodeTemplateDialog(
             title: "Novo terminal",
             confirmLabel: "Criar",
             agents: agents,
-            initial: Component(name: "", kind: .agent, agent: "claude"),
+            initial: NodeTemplate(name: "", kind: .agent, agent: "claude"),
             root: configs[index].url)
         guard let result = dialog.run() else { return }
 
-        if result.saveAsComponent { ComponentStore.put(result.component) }
+        if result.saveAsNodeTemplate { NodeTemplateStore.put(result.component) }
 
         let rect = canvas.spawnRect(size: CanvasTool.terminal.defaultNodeSize)
         place(component: result.component, rect: rect, index: index)
@@ -1948,12 +1948,12 @@ EgeonCLI.install()
 
     /// Materializa um componente como nó. O id vem do nome, então o endereço de
     /// dispatch fica legível: `deck/revisor`.
-    private func place(component: Component, rect: NSRect, index: Int) {
+    private func place(component: NodeTemplate, rect: NSRect, index: Int) {
         guard index >= 0, index < configs.count, let shell = shells[index] else { return }
 
-        let id = nextID(prefix: ComponentStore.identifier(from: component.name),
+        let id = nextID(prefix: NodeTemplateStore.identifier(from: component.name),
                         in: configs[index])
-        var node = ComponentStore.instantiate(component, id: id)
+        var node = NodeTemplateStore.instantiate(component, id: id)
         node.setFrame(rect)
 
         configs[index].nodes.append(node)
@@ -1974,18 +1974,18 @@ EgeonCLI.install()
         else { return }
 
         let current = configs[index].nodes[position]
-        let dialog = ComponentDialog(
+        let dialog = NodeTemplateDialog(
             title: "Configurar \(current.id)",
             confirmLabel: "Aplicar",
             agents: agents,
-            initial: ComponentStore.capture(from: current, name: current.component ?? current.id),
+            initial: NodeTemplateStore.capture(from: current, name: current.component ?? current.id),
             root: configs[index].url)
         guard let result = dialog.run() else { return }
 
-        if result.saveAsComponent { ComponentStore.put(result.component) }
+        if result.saveAsNodeTemplate { NodeTemplateStore.put(result.component) }
 
         let component = result.component
-        let renamed = ComponentStore.identifier(from: component.name)
+        let renamed = NodeTemplateStore.identifier(from: component.name)
         let newID = renamed == current.id
             ? current.id
             : nextID(prefix: renamed, in: configs[index])
@@ -1993,7 +1993,7 @@ EgeonCLI.install()
         // Em modo mosaico o frame da view é o do painel, e gravá-lo destruiria a
         // posição que o nó tem no canvas. Quem sabe qual é ela é o shell.
         let canvasFrame = shell.canvasFrame(of: current.id) ?? node.frame
-        var updated = ComponentStore.instantiate(component, id: newID)
+        var updated = NodeTemplateStore.instantiate(component, id: newID)
         updated.setFrame(canvasFrame)
 
         let sameProcess = updated.type == current.type

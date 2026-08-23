@@ -4,18 +4,18 @@ import AppKit
 ///
 /// Um formulário só, e não dois parecidos, porque as perguntas são idênticas:
 /// que papel é este, o que roda, em que pasta, com qual instrução.
-final class ComponentDialog {
+final class NodeTemplateDialog {
 
     struct Result {
-        let component: Component
+        let component: NodeTemplate
         /// Marcado "salvar como componente": o preset vai para components.json.
-        let saveAsComponent: Bool
+        let saveAsNodeTemplate: Bool
     }
 
     private let agents: [String: AgentProfile]
     private let title: String
     private let confirmLabel: String
-    private let initial: Component
+    private let initial: NodeTemplate
 
     /// Raiz da bancada, quando o formulário é de um nó dela.
     ///
@@ -36,7 +36,7 @@ final class ComponentDialog {
     private var lastConfig: String?
 
     init(title: String, confirmLabel: String,
-         agents: [String: AgentProfile], initial: Component, root: URL? = nil) {
+         agents: [String: AgentProfile], initial: NodeTemplate, root: URL? = nil) {
         self.title = title
         self.confirmLabel = confirmLabel
         self.agents = agents
@@ -73,7 +73,7 @@ final class ComponentDialog {
     /// Preenche o formulário a partir de um componente salvo e leva para a aba de
     /// detalhes. Os campos seguem editáveis: o preset é ponto de partida, não
     /// camisa de força.
-    private func apply(_ component: Component) {
+    private func apply(_ component: NodeTemplate) {
         nameField.stringValue = component.name
         kindPicker.selectItem(withTitle: component.kind == .agent ? Self.agentOption
                                                                   : Self.shellOption)
@@ -115,7 +115,7 @@ final class ComponentDialog {
         let cwd = cwdField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt = promptField.string.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let component = Component(
+        let component = NodeTemplate(
             name: name,
             kind: isAgent ? .agent : .shell,
             agent: isAgent ? selectedAgentKey : nil,
@@ -124,7 +124,7 @@ final class ComponentDialog {
             cwd: cwd.isEmpty ? nil : Self.normalizedFolder(cwd),
             prompt: (isAgent && !prompt.isEmpty) ? prompt : nil)
 
-        return Result(component: component, saveAsComponent: saveBox.state == .on)
+        return Result(component: component, saveAsNodeTemplate: saveBox.state == .on)
     }
 
     /// Duas abas: montar do zero, ou partir de um componente salvo.
@@ -257,7 +257,7 @@ final class ComponentDialog {
         let height = Self.formHeight
         let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
-        let saved = ComponentStore.names.compactMap { ComponentStore.component(named: $0) }
+        let saved = NodeTemplateStore.names.compactMap { NodeTemplateStore.component(named: $0) }
 
         guard !saved.isEmpty else {
             let vazio = NSTextField(labelWithString:
@@ -285,7 +285,7 @@ final class ComponentDialog {
         let content = NSView(frame: NSRect(x: 0, y: 0, width: width, height: contentHeight))
 
         for (index, component) in saved.enumerated() {
-            let card = ComponentCard(component: component,
+            let card = NodeTemplateCard(component: component,
                                      subtitle: component.displayAgent(using: agents) ?? "Shell")
             card.onClick = { [weak self] in self?.apply(component) }
 
@@ -536,7 +536,7 @@ final class RadioGroup: NSObject {
 ///
 /// Um botão desenhado à mão em vez de linha de lista porque a escolha é visual —
 /// você reconhece "revisor" pelo formato antes de ler o nome.
-final class ComponentCard: NSView {
+final class NodeTemplateCard: NSView {
     var onClick: (() -> Void)?
 
     private let icon = NSImageView()
@@ -545,7 +545,7 @@ final class ComponentCard: NSView {
     private var hovering = false { didSet { restyle() } }
     private var trackingArea: NSTrackingArea?
 
-    init(component: Component, subtitle: String) {
+    init(component: NodeTemplate, subtitle: String) {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 10

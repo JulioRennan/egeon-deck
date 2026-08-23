@@ -19,7 +19,7 @@ final class CanvasToolbar: NSView {
     /// Abrir o formulário para montar um terminal do zero.
     var onConfigureTerminal: (() -> Void)?
     /// Nomes dos componentes salvos, para montar o menu na hora de abrir.
-    var componentNames: (() -> [String])?
+    var nodeTemplateNames: (() -> [String])?
 
     private static let height: CGFloat = 44
     private static let padding: CGFloat = 8
@@ -164,7 +164,7 @@ final class CanvasToolbar: NSView {
         let menu = NSMenu()
         menu.addItem(withTitle: "Shell simples", action: #selector(pickShell), keyEquivalent: "")
 
-        let names = componentNames?() ?? []
+        let names = nodeTemplateNames?() ?? []
         if !names.isEmpty {
             menu.addItem(.separator())
             for name in names {
