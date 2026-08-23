@@ -243,7 +243,7 @@ final class ControlSocket {
                 // Relatar a conversa também prova que o gancho chega aqui — e é
                 // isso que faz o terminal parar de depender de adivinhação sobre
                 // a tela já no primeiro turno (ADR-024).
-                Dispatcher.shared.target(target)?.hookReported("prompt")
+                Dispatcher.shared.target(target)?.hookReported(.prompt)
             }
             respond(fd, status: "200 OK", json: ["ok": true])
 
@@ -254,10 +254,15 @@ final class ControlSocket {
             // do programa em vez de saírem de heurística sobre o pty (ADR-024).
             let query = Self.query(in: route)
             let target = query["target"] ?? ""
-            let event = query["event"] ?? ""
-            guard !target.isEmpty, !event.isEmpty else {
+            guard !target.isEmpty, let raw = query["event"], !raw.isEmpty else {
                 respond(fd, status: "400 Bad Request",
                         json: ["ok": false, "error": "target e event são obrigatórios"])
+                return
+            }
+            guard let event = HookEvent(rawValue: raw) else {
+                respond(fd, status: "400 Bad Request",
+                        json: ["ok": false,
+                               "error": "evento desconhecido '\(raw)'; use \(HookEvent.expected)"])
                 return
             }
             DispatchQueue.main.sync { Dispatcher.shared.target(target)?.hookReported(event) }

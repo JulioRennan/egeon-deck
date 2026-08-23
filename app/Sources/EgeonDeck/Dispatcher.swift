@@ -437,23 +437,23 @@ final class Target {
     /// pedindo permissão). O segundo é o caso que marcador nenhum alcança: o
     /// diálogo de permissão é desenhado pelo programa, não é mensagem do modelo
     /// (ADR-024).
-    func hookReported(_ event: String) {
+    func hookReported(_ event: HookEvent) {
         // Dois por turno, e é o que responde "o CLI está mesmo relatando?" e em
         // que ordem — a pergunta que o recap obrigou a fazer.
-        Log.write("gancho[\(address)]: \(event)")
+        Log.write("gancho[\(address)]: \(event.rawValue)")
         speaksHooks = true
         switch event {
-        case "stop":
+        case .stop:
             turnInFlight = false
             // O gancho diz QUANDO; o marcador na tela diz QUAL dos dois é.
             let asked = verdict(from: screen()).outcome == .asked
-            attend(asked ? .asking : .waiting, via: "gancho Stop", stop: hookToken(event))
-        case "prompt":
+            attend(asked ? .asking : .waiting, via: "gancho Stop", stop: hookToken(event.rawValue))
+        case .prompt:
             // O relato de conversa (`UserPromptSubmit`) não é aviso nenhum: ele
             // diz qual conversa está aberta (ADR-014), e de quebra confirma que
             // o gancho chega neste terminal.
             turnInFlight = true
-        case "ask":
+        case .ask:
             // `Notification` são dois avisos num: o pedido de permissão e o
             // "você sumiu há 60s". O segundo não traz notícia nenhuma — o fim do
             // turno já veio pelo `Stop`, e ali já se decidiu se valia te chamar.
@@ -469,9 +469,7 @@ final class Target {
             // duas dizem que acabou: o turno em curso cobre o agente calado no
             // meio do trabalho, e o estado cobre o `prompt` que se perdeu.
             guard turnInFlight || activity == .working || activity == .starting else { return }
-            attend(.asking, via: "gancho Notification", stop: hookToken(event))
-        default:
-            Log.write("atenção[\(address)]: gancho com evento desconhecido '\(event)'")
+            attend(.asking, via: "gancho Notification", stop: hookToken(event.rawValue))
         }
     }
 
