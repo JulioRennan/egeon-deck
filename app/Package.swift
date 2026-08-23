@@ -13,6 +13,10 @@ let package = Package(
         .executableTarget(
             name: "EgeonDeck",
             dependencies: ["SwiftTerm"]
+        ),
+        .testTarget(
+            name: "EgeonDeckTests",
+            dependencies: ["EgeonDeck"]
         )
     ]
 )
