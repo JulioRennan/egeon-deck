@@ -12,6 +12,8 @@ struct ChatParticipant: Equatable {
     /// O que aparece embaixo do nome: papel do agente ou comando do shell.
     let role: String?
     var activity: Activity
+    /// Onde o CLI grava a conversa deste agente — de onde as respostas saem.
+    var transcript: URL? = nil
 
     var color: NSColor { isAgent ? AgentPalette.color(for: id) : AgentPalette.shell }
     var glyph: String { isAgent ? "✦" : "❯" }
@@ -27,7 +29,8 @@ struct ChatParticipant: Equatable {
             return ChatParticipant(id: node.id, address: address,
                                    isAgent: node.type == .agent,
                                    role: role,
-                                   activity: activity(address) ?? .dead)
+                                   activity: activity(address) ?? .dead,
+                                   transcript: node.transcript.map(URL.init(fileURLWithPath:)))
         }
     }
 }

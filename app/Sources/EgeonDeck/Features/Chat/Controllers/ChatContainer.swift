@@ -6,9 +6,9 @@ import AppKit
 /// embaixo. Fechaduras de leitura, como o EdgeController: quem sabe dos nós e
 /// de enviar é o dono lá fora; aqui só se desenha e se coordena.
 ///
-/// Nesta primeira fase a thread mostra o que VOCÊ mandou (o envio é real, via
-/// Dispatcher). As bolhas de resposta — transcript, passos, sub-conversas —
-/// são a fase seguinte.
+/// A thread sai dos transcripts dos agentes, cruzados por tempo, relidos a
+/// cada segundo (só quando o arquivo mudou). O que você acabou de mandar
+/// aparece como eco até o transcript confirmar o prompt.
 final class ChatContainer: NSView {
     /// Os nós da bancada como participantes, lidos na hora.
     var participants: (() -> [ChatParticipant])?
@@ -21,9 +21,19 @@ final class ChatContainer: NSView {
     private let composer = ChatComposer()
     private let popup = ChatListPopup()
     private let emptyThread = NSTextField(labelWithString:
-        "Enter envia — a resposta do agente continua no terminal dele por enquanto")
+        "Sem conversa ainda — Enter envia para o agente em foco")
 
-    private var bubbles: [ChatBubbleView] = []
+    /// Só o Claude Code grava transcript hoje; quando outro CLI entrar, o
+    /// leitor vem do perfil do agente.
+    private let reader: TranscriptReader = ClaudeTranscript()
+    private var transcriptCache: [URL: (size: UInt64, modified: Date, turns: [ChatTurn])] = [:]
+
+    private var bubbles: [ThreadBubble] = []
+    private var messages: [ChatMessage] = []
+    private var pending: [(text: String, target: String)] = []
+    /// Pilhas de passos abertas, por "agente|instante do prompt".
+    private var expandedSteps: Set<String> = []
+    private var threadSignature = ""
     private var focusedId: String?
     private enum PopupMode { case none, switcher, mention }
     private var popupMode = PopupMode.none
@@ -85,9 +95,75 @@ final class ChatContainer: NSView {
         }
         column.update(all, focused: focusedId)
         composer.setTarget(alive.first { $0.id == focusedId })
+        rebuildThread(all)
     }
 
     private var userChoseFocus = false
+
+    // MARK: Thread
+
+    private func turns(of participant: ChatParticipant) -> [ChatTurn] {
+        guard let url = participant.transcript,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        else { return [] }
+        let size = (attributes[.size] as? UInt64) ?? 0
+        let modified = (attributes[.modificationDate] as? Date) ?? .distantPast
+        if let cached = transcriptCache[url], cached.size == size, cached.modified == modified {
+            return cached.turns
+        }
+        let parsed = reader.turns(at: url)
+        transcriptCache[url] = (size, modified, parsed)
+        return parsed
+    }
+
+    private func rebuildThread(_ all: [ChatParticipant]) {
+        messages = ChatThread.build(participants: all) { [weak self] in
+            self?.turns(of: $0) ?? []
+        }
+        pending = ChatThread.stillPending(pending, given: messages)
+        let typing = all.filter {
+            $0.isAgent && ($0.activity == .working || $0.activity == .starting)
+        }
+
+        // Remontar view a cada segundo faria a thread piscar: só quando o que
+        // se desenha mudou de fato.
+        let signature = "\(messages.count)|\(messages.last?.at.timeIntervalSince1970 ?? 0)|"
+            + "\(messages.last.map { "\($0)" }.hashValue)|\(pending.count)|"
+            + typing.map(\.id).joined(separator: ",") + "|\(expandedSteps.count)|\(Spinner.current)"
+        guard signature != threadSignature else { return }
+        threadSignature = signature
+
+        bubbles.forEach { $0.removeFromSuperview() }
+        bubbles = messages.map { message -> ThreadBubble in
+            switch message {
+            case .prompt(let to, let text, let at):
+                return ChatBubbleView(text: text, target: to, at: at)
+            case .reply(let from, let turn):
+                let key = "\(from.id)|\(turn.promptAt.timeIntervalSince1970)"
+                let bubble = AgentBubbleView(from: from, turn: turn,
+                                             expanded: expandedSteps.contains(key))
+                bubble.onToggleSteps = { [weak self] in
+                    guard let self else { return }
+                    if self.expandedSteps.contains(key) { self.expandedSteps.remove(key) }
+                    else { self.expandedSteps.insert(key) }
+                    self.threadSignature = ""
+                    self.refresh()
+                }
+                return bubble
+            }
+        }
+        for item in pending {
+            guard let target = all.first(where: { $0.id == item.target }) else { continue }
+            bubbles.append(ChatBubbleView(text: item.text, target: target, pending: true))
+        }
+        for agent in typing { bubbles.append(AgentBubbleView(typing: agent)) }
+        bubbles.forEach(threadDoc.addSubview)
+
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        threadDoc.scroll(NSPoint(x: 0, y: max(0, threadDoc.frame.height
+                                              - threadScroll.contentSize.height)))
+    }
 
     /// Quem o Tab e o alternador percorrem: só agentes. Shell continua na
     /// coluna e entra por clique — ciclar por ele no meio de uma conversa entre
@@ -118,13 +194,8 @@ final class ChatContainer: NSView {
             Log.write("chat: envio para \(target.address) falhou: \(error)")
             return
         }
-        let bubble = ChatBubbleView(text: text, target: target)
-        bubbles.append(bubble)
-        threadDoc.addSubview(bubble)
-        needsLayout = true
-        layoutSubtreeIfNeeded()
-        threadDoc.scroll(NSPoint(x: 0, y: max(0, threadDoc.frame.height
-                                              - threadScroll.contentSize.height)))
+        pending.append((text, target.id))
+        refresh()
     }
 
     // MARK: Rota de teste
@@ -156,7 +227,16 @@ final class ChatContainer: NSView {
                          "textHeight": composer.currentTextHeight,
                          "height": composer.desiredHeight],
             "popup": popupInfo,
-            "sent": bubbles.count
+            "pending": pending.count,
+            "messages": messages.map { message -> [String: Any] in
+                switch message {
+                case .prompt(let to, let text, _):
+                    return ["kind": "prompt", "to": to.id, "text": text]
+                case .reply(let from, let turn):
+                    return ["kind": "reply", "from": from.id, "text": turn.replyText,
+                            "steps": turn.steps.map { "\($0.glyph) \($0.text)" }]
+                }
+            }
         ]
     }
 
@@ -280,8 +360,8 @@ final class ChatContainer: NSView {
         for bubble in bubbles {
             let bubbleWidth = bubble.width(for: width - 36)
             let height = bubble.height(for: bubbleWidth)
-            bubble.frame = NSRect(x: width - bubbleWidth - 18, y: y,
-                                  width: bubbleWidth, height: height)
+            bubble.frame = NSRect(x: bubble.alignsRight ? width - bubbleWidth - 18 : 18,
+                                  y: y, width: bubbleWidth, height: height)
             y += height + 12
         }
         threadDoc.frame = NSRect(x: 0, y: 0, width: width,

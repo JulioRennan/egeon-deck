@@ -3,17 +3,18 @@ import AppKit
 // MARK: - Bolha de mensagem enviada
 
 /// Uma mensagem SUA na thread: cabeçalho "→ ✦ destino · hora" e o texto.
-/// As bolhas de resposta dos agentes (transcript, passos, sub-conversas)
-/// entram na fase seguinte do modo.
-final class ChatBubbleView: NSView {
+final class ChatBubbleView: NSView, ThreadBubble {
     private let header = NSTextField(labelWithString: "")
     private let time = NSTextField(labelWithString: "")
     private let body = NSTextField(wrappingLabelWithString: "")
 
     static let maxWidth: CGFloat = 560
+    let alignsRight = true
 
-    init(text: String, target: ChatParticipant) {
+    init(text: String, target: ChatParticipant, at: Date = Date(), pending: Bool = false) {
         super.init(frame: .zero)
+        // Eco local ainda sem confirmação do transcript: meio apagado.
+        if pending { alphaValue = 0.6 }
         wantsLayer = true
         layer?.cornerRadius = 14
         layer?.backgroundColor = NSColor(srgbRed: 0.184, green: 0.498, blue: 0.965,
@@ -30,7 +31,7 @@ final class ChatBubbleView: NSView {
         formatter.dateFormat = "HH:mm"
         time.font = .systemFont(ofSize: 10.5)
         time.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
-        time.stringValue = formatter.string(from: Date())
+        time.stringValue = formatter.string(from: at)
 
         body.font = .systemFont(ofSize: 13.5)
         body.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
