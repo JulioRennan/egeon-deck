@@ -12,6 +12,9 @@ struct ChatStep: Equatable {
 /// Seu prompt e o que o agente fez com ele. O contrato é genérico: quem sabe
 /// ler o arquivo do CLI é o `TranscriptReader` do agente.
 struct ChatTurn: Equatable {
+    /// Identidade do turno — o `uuid` que o CLI grava na linha do prompt. Dois
+    /// "oi" seguidos são dois turnos; texto e hora não bastam para separá-los.
+    let id: String
     let prompt: String
     let promptAt: Date
     var steps: [ChatStep] = []

@@ -33,7 +33,8 @@ struct ClaudeTranscript: TranscriptReader {
             case "user":
                 guard let prompt = Self.promptText(message["content"]),
                       entry["isMeta"] as? Bool != true else { continue }
-                turns.append(ChatTurn(prompt: prompt, promptAt: at))
+                let id = entry["uuid"] as? String ?? "t-\(at.timeIntervalSince1970)-\(turns.count)"
+                turns.append(ChatTurn(id: id, prompt: prompt, promptAt: at))
             case "assistant":
                 guard !turns.isEmpty,
                       let blocks = message["content"] as? [[String: Any]] else { continue }

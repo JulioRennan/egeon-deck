@@ -173,7 +173,7 @@ final class ChatContainer: NSView {
         bubbles = messages.suffix(Self.drawnMessages).map { message -> ThreadBubble in
             let bubble: ThreadBubble
             switch message {
-            case .prompt(let to, let text, let at, let quote):
+            case .prompt(let to, _, let text, let at, let quote):
                 let view = ChatBubbleView(text: text, target: to, at: at, quote: quote)
                 if let quote {
                     view.onQuoteClick = { [weak self] in self?.scrollTo(key: quote.targetKey) }
@@ -245,7 +245,8 @@ final class ChatContainer: NSView {
             Log.write("chat: envio para \(target.address) falhou: \(error)")
             return
         }
-        pending.append(.init(text: text, target: target.id, sentAt: Date()))
+        pending.append(.init(text: text, target: target.id, sentAt: Date(),
+                             knownTurnIds: Set(turns(of: target).map(\.id))))
         refresh()
     }
 
@@ -293,11 +294,11 @@ final class ChatContainer: NSView {
             "messages": messages.map { message -> [String: Any] in
                 let quote = message.quote.map { ["author": $0.authorId ?? "você", "text": $0.text] }
                 switch message {
-                case .prompt(let to, let text, _, _):
-                    return ["kind": "prompt", "to": to.id, "text": text,
+                case .prompt(let to, let turnId, let text, _, _):
+                    return ["kind": "prompt", "id": turnId, "to": to.id, "text": text,
                             "quote": quote ?? [:]]
                 case .reply(let from, let turn, _):
-                    return ["kind": "reply", "from": from.id, "text": turn.replyText,
+                    return ["kind": "reply", "id": turn.id, "from": from.id, "text": turn.replyText,
                             "steps": turn.steps.map { "\($0.glyph) \($0.text)" },
                             "quote": quote ?? [:]]
                 }

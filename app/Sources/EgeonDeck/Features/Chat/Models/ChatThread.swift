@@ -14,12 +14,12 @@ struct ChatQuote: Equatable {
 
 /// Uma linha da thread: seu prompt para alguém, ou a resposta de alguém.
 enum ChatMessage: Equatable {
-    case prompt(to: ChatParticipant, text: String, at: Date, quote: ChatQuote? = nil)
+    case prompt(to: ChatParticipant, turnId: String, text: String, at: Date, quote: ChatQuote? = nil)
     case reply(from: ChatParticipant, turn: ChatTurn, quote: ChatQuote? = nil)
 
     var at: Date {
         switch self {
-        case .prompt(_, _, let at, _): return at
+        case .prompt(_, _, _, let at, _): return at
         case .reply(_, let turn, _):   return turn.replyAt ?? turn.promptAt
         }
     }
@@ -27,29 +27,33 @@ enum ChatMessage: Equatable {
     /// Identidade estável da mensagem entre remontagens — alvo de citação.
     var key: String {
         switch self {
-        case .prompt(let to, _, let at, _):
-            return "p|\(to.id)|\(at.timeIntervalSince1970)"
-        case .reply(let from, let turn, _):
-            return "r|\(from.id)|\(turn.promptAt.timeIntervalSince1970)"
+        case .prompt(_, let turnId, _, _, _): return "p|\(turnId)"
+        case .reply(_, let turn, _):          return "r|\(turn.id)"
         }
     }
 
     var participantId: String {
         switch self {
-        case .prompt(let to, _, _, _): return to.id
+        case .prompt(let to, _, _, _, _): return to.id
         case .reply(let from, _, _):   return from.id
         }
     }
 
+    var promptText: String? {
+        if case .prompt(_, _, let text, _, _) = self { return text }
+        return nil
+    }
+
     var quote: ChatQuote? {
         switch self {
-        case .prompt(_, _, _, let quote), .reply(_, _, let quote): return quote
+        case .prompt(_, _, _, _, let quote), .reply(_, _, let quote): return quote
         }
     }
 
     private func with(quote: ChatQuote?) -> ChatMessage {
         switch self {
-        case .prompt(let to, let text, let at, _): return .prompt(to: to, text: text, at: at, quote: quote)
+        case .prompt(let to, let turnId, let text, let at, _):
+            return .prompt(to: to, turnId: turnId, text: text, at: at, quote: quote)
         case .reply(let from, let turn, _):        return .reply(from: from, turn: turn, quote: quote)
         }
     }
@@ -67,7 +71,8 @@ enum ChatMessage: Equatable {
         var messages: [ChatMessage] = []
         for participant in participants where participant.isAgent {
             for turn in turns(participant) {
-                messages.append(.prompt(to: participant, text: turn.prompt, at: turn.promptAt))
+                messages.append(.prompt(to: participant, turnId: turn.id, text: turn.prompt,
+                                        at: turn.promptAt))
                 if turn.hasReply { messages.append(.reply(from: participant, turn: turn)) }
             }
         }
@@ -85,16 +90,14 @@ enum ChatMessage: Equatable {
             let previous = index > 0 ? sorted[index - 1] : nil
             switch message {
             case .reply(let from, let turn, _):
-                if case .prompt(let to, let text, _, _)? = previous,
-                   to.id == from.id, text == turn.prompt {
+                if case .prompt(_, let turnId, _, _, _)? = previous, turnId == turn.id {
                     out.append(message)
                 } else {
-                    let promptKey = "p|\(from.id)|\(turn.promptAt.timeIntervalSince1970)"
                     out.append(message.with(quote: ChatQuote(
                         authorId: nil, text: turn.prompt, at: turn.promptAt,
-                        targetKey: promptKey)))
+                        targetKey: "p|\(turn.id)")))
                 }
-            case .prompt(let to, _, _, _):
+            case .prompt(let to, _, _, _, _):
                 if previous?.participantId == to.id || previous == nil {
                     out.append(message)
                 } else if let last = sorted[..<index].last(where: {
@@ -124,21 +127,32 @@ enum ChatThread {
         let text: String
         let target: String
         let sentAt: Date
+        /// Os turnos que o agente JÁ tinha quando este envio saiu — e os que
+        /// foram aparecendo depois sem ser este eco.
+        var knownTurnIds: Set<String>
     }
 
     /// O eco local de um envio só vale até o transcript mostrar o prompt: daí
-    /// a mensagem de verdade entra e o eco sairia duplicado. Só conta prompt
-    /// gravado DEPOIS do envio — um "oi" de ontem não confirma o "oi" de agora,
-    /// e sem isso o eco sumia e a bolha de "trabalhando…" aparecia sozinha.
+    /// a mensagem de verdade entra e o eco sairia duplicado. Só confirma um
+    /// turno NOVO — id que não existia na hora do envio — com o mesmo texto.
+    /// Por texto e hora, o segundo "oi" era confirmado pelo primeiro.
     static func stillPending(_ pending: [Pending], given messages: [ChatMessage]) -> [Pending] {
-        pending.filter { item in
-            !messages.contains {
-                if case .prompt(let to, let text, let at, _) = $0 {
-                    return to.id == item.target && text == item.text
-                        && at >= item.sentAt.addingTimeInterval(-5)
-                }
-                return false
+        var remaining = pending
+        // Um turno novo confirma UM eco: dois "oi" seguidos são dois turnos,
+        // e o primeiro a chegar não pode dar baixa nos dois. Depois de visto,
+        // o turno vira conhecido para os ecos que sobraram — esta função roda
+        // a cada refresh com a lista inteira, e sem isso o mesmo turno daria
+        // baixa no eco seguinte na rodada seguinte.
+        for message in messages {
+            guard case .prompt(let to, let turnId, _, _, _) = message else { continue }
+            if let index = remaining.firstIndex(where: {
+                $0.target == to.id && $0.text == message.promptText
+                    && !$0.knownTurnIds.contains(turnId)
+            }) {
+                remaining.remove(at: index)
             }
+            for i in remaining.indices { remaining[i].knownTurnIds.insert(turnId) }
         }
+        return remaining
     }
 }
