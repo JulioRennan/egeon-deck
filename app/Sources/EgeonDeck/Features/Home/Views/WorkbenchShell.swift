@@ -165,7 +165,14 @@ final class WorkbenchShell: NSView {
 
     func refreshBadges() {
         terminals.forEach { $0.refreshBadge() }
-        if mode == .chat { chat.tick() }
+        guard mode == .chat else { return }
+        chat.tick()
+        // Em chat o canvas está montado por baixo, coberto — e um terminal de
+        // lá pega o teclado ao ser reparentado. Você digitaria no terminal
+        // escondido achando que digita na caixa. O teclado volta para o chat.
+        if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: canvas) {
+            chat.focusComposer()
+        }
     }
 
     // MARK: Modo

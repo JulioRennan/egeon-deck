@@ -235,6 +235,8 @@ final class ChatContainer: NSView {
         column.tick()
     }
 
+    func focusComposer() { composer.focus() }
+
     // MARK: Rota de teste
 
     /// Escreve na caixa (e opcionalmente aperta Enter) por fora — tecla
@@ -262,7 +264,9 @@ final class ChatContainer: NSView {
             },
             "composer": ["text": composer.text,
                          "textHeight": composer.currentTextHeight,
-                         "height": composer.desiredHeight],
+                         "height": composer.desiredHeight,
+                         "focused": composer.hasFocus,
+                         "firstResponder": composer.firstResponderDescription],
             "popup": popupInfo,
             "pending": pending.count,
             "messages": messages.map { message -> [String: Any] in

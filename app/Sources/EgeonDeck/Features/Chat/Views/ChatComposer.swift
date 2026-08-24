@@ -23,7 +23,7 @@ final class ChatComposer: NSView {
     private let tabHint = NSTextField(labelWithString: "Tab alterna destinatário")
     private let scroll = NSScrollView()
     private let textView = ComposerTextView()
-    private let placeholder = NSTextField(labelWithString: "")
+    private let placeholder = PassthroughLabel(labelWithString: "")
     private let send = NSTextField(labelWithString: "↑")
     private let microcopy = NSTextField(labelWithString: "")
 
@@ -122,6 +122,15 @@ final class ChatComposer: NSView {
     }
 
     func focus() { window?.makeFirstResponder(textView) }
+
+    /// A caixa está com o teclado.
+    var hasFocus: Bool { window?.firstResponder === textView }
+
+    /// Quem tem o teclado descreve-se — para conferir de fora quem roubou o foco.
+    var firstResponderDescription: String {
+        guard let responder = window?.firstResponder else { return "nenhum" }
+        return String(describing: type(of: responder))
+    }
 
     func insertMention(_ name: String) {
         let text = textView.string
@@ -277,6 +286,13 @@ private final class ChipView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) { onClick?() }
+}
+
+/// Rótulo que não existe para o mouse. O placeholder fica POR CIMA da caixa,
+/// e um NSTextField comum ali engolia o clique: com a caixa vazia e o foco em
+/// outro lugar, clicar no "Prompt para…" não fazia nada.
+private final class PassthroughLabel: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: - O NSTextView do composer
