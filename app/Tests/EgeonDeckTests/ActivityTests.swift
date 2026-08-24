@@ -26,8 +26,7 @@ final class ActivityTests: XCTestCase {
         XCTAssertEqual(Activity.asking.label, "● precisa de você")
     }
 
-    // Derivado do relógio: todos os spinners giram em fase, sem estado próprio.
-    func testSpinnerFrameComesFromTheSharedClock() {
-        XCTAssertTrue("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".contains(Spinner.current))
-    }
+    // Spinner fica sem teste: a propriedade dele — girar em fase pelo relógio
+    // compartilhado — só se testa injetando o relógio, e hoje ele lê Date()
+    // direto. Anotado na NOTAS-PARA-REVISAO.md.
 }

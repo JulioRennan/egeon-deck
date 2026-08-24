@@ -63,7 +63,20 @@ bug que ninguém acha depois.
 | `Peer` | resolução por pid de processo vivo |
 | `NodeWorktreePlanner.inspect/materialize` | chama git no disco; `decided` (a regra pura) está testado |
 
-## 8. Dívidas já anotadas no código (desta migração)
+## 8. Apontamentos do revisor (2026-08-24)
+
+A suíte passou por revisão independente (architect): **APROVADO**, com três
+correções aplicadas — teste tautológico do Spinner removido, o de cores
+apertado de `>1` para `>=4` distintas, e `<command-message>` incluído no teste
+de ruído. Sobraram dele:
+
+- **Spinner sem teste**: `Spinner.current` lê `Date()` direto; testar a fase
+  exige relógio injetável. Decidir se vale a indireção.
+- **Funções puras pequenas ainda sem teste**: `AgentProfile.resolvedEnvironment`
+  (expansão de `~`/`$HOME`), `runsOwnBinary`, `systemPromptText`, e
+  `ChatTurn.conversationSpan`. Nenhuma crítica; ficam para a próxima leva.
+
+## 9. Dívidas já anotadas no código (desta migração)
 
 - `NodeWorktreePlanner.ask` monta NSAlert dentro de Models (import comenta).
 - `ClaudeAdapter` deve descer para `ClaudeCode/` na refatoração do chat.

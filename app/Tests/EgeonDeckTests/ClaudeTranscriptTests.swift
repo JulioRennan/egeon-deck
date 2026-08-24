@@ -158,6 +158,7 @@ final class ClaudeTranscriptTests: XCTestCase {
     func testCliNoiseDoesNotOpenTurns() {
         let turns = adapter([
             user("<command-name>/context</command-name>"),
+            user("<command-message>context</command-message>"),
             user("<local-command-stdout>x</local-command-stdout>"),
             user("<task-notification>t</task-notification>"),
         ]).read(author: "claude")

@@ -20,7 +20,9 @@ final class ChatThreadTests: XCTestCase {
     func testAgentColorsSpreadAcrossThePalette() {
         let ids = ["claude", "claude-2", "revisor", "qa", "front", "back", "orq"]
         let distinct = Set(ids.map { AgentColor.of($0).description })
-        XCTAssertGreaterThan(distinct.count, 1, "todos os ids na mesma cor")
+        // 7 ids numa paleta de 6: espalhar de verdade é ocupar a maior parte
+        // dela, não só escapar da colisão total.
+        XCTAssertGreaterThanOrEqual(distinct.count, 4, "paleta subaproveitada: \(distinct.count) cores")
     }
 
     func testWorkSummaryCountsStepsAndFiles() {
