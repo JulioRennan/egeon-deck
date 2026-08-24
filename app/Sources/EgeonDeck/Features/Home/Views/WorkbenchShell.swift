@@ -163,7 +163,10 @@ final class WorkbenchShell: NSView {
 
     var terminals: [TerminalNode] { nodes.compactMap { $0 as? TerminalNode } }
 
-    func refreshBadges() { terminals.forEach { $0.refreshBadge() } }
+    func refreshBadges() {
+        terminals.forEach { $0.refreshBadge() }
+        if mode == .chat { chat.tick() }
+    }
 
     // MARK: Modo
 

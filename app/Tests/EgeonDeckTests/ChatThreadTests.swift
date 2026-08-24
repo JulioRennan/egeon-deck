@@ -73,10 +73,25 @@ final class ChatThreadTests: XCTestCase {
 
     func testPendingDropsWhatTranscriptConfirmed() {
         let front = agent("front")
-        let messages: [ChatMessage] = [.prompt(to: front, text: "oi", at: Date())]
-        let left = ChatThread.stillPending([("oi", "front"), ("oi", "back"), ("tchau", "front")],
-                                           given: messages)
+        let now = Date()
+        let messages: [ChatMessage] = [.prompt(to: front, text: "oi", at: now)]
+        let left = ChatThread.stillPending([
+            .init(text: "oi", target: "front", sentAt: now.addingTimeInterval(-1)),
+            .init(text: "oi", target: "back", sentAt: now.addingTimeInterval(-1)),
+            .init(text: "tchau", target: "front", sentAt: now.addingTimeInterval(-1)),
+        ], given: messages)
         XCTAssertEqual(left.map(\.text), ["oi", "tchau"])
         XCTAssertEqual(left.map(\.target), ["back", "front"])
+    }
+
+    // Um "oi" antigo no transcript não confirma o "oi" que acabou de sair.
+    func testOldPromptDoesNotConfirmNewPending() {
+        let front = agent("front")
+        let now = Date()
+        let messages: [ChatMessage] = [.prompt(to: front, text: "oi",
+                                               at: now.addingTimeInterval(-600))]
+        let left = ChatThread.stillPending([.init(text: "oi", target: "front", sentAt: now)],
+                                           given: messages)
+        XCTAssertEqual(left.count, 1)
     }
 }

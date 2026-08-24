@@ -33,12 +33,14 @@ final class ParticipantsColumn: NSView {
 
     private var signature = ""
 
+    func tick() { rows.forEach { $0.tick() } }
+
     func update(_ participants: [ChatParticipant], focused: String?) {
         // Remontar a cada segundo piscava e pesava; só quando algo que se
         // desenha mudou. O spinner anda em cima da linha que já existe.
         let next = participants.map { "\($0.id)|\($0.activity)|\($0.role ?? "")" }
             .joined(separator: ";") + "|\(focused ?? "")"
-        guard next != signature else { rows.forEach { $0.tick() }; return }
+        guard next != signature else { return }
         signature = next
 
         rows.forEach { $0.removeFromSuperview() }

@@ -33,14 +33,22 @@ enum ChatThread {
             .map(\.element)
     }
 
+    struct Pending: Equatable {
+        let text: String
+        let target: String
+        let sentAt: Date
+    }
+
     /// O eco local de um envio só vale até o transcript mostrar o prompt: daí
-    /// a mensagem de verdade entra e o eco sairia duplicado.
-    static func stillPending(_ pending: [(text: String, target: String)],
-                             given messages: [ChatMessage]) -> [(text: String, target: String)] {
+    /// a mensagem de verdade entra e o eco sairia duplicado. Só conta prompt
+    /// gravado DEPOIS do envio — um "oi" de ontem não confirma o "oi" de agora,
+    /// e sem isso o eco sumia e a bolha de "trabalhando…" aparecia sozinha.
+    static func stillPending(_ pending: [Pending], given messages: [ChatMessage]) -> [Pending] {
         pending.filter { item in
             !messages.contains {
-                if case .prompt(let to, let text, _) = $0 {
+                if case .prompt(let to, let text, let at) = $0 {
                     return to.id == item.target && text == item.text
+                        && at >= item.sentAt.addingTimeInterval(-5)
                 }
                 return false
             }

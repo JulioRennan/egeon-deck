@@ -30,7 +30,7 @@ final class ChatContainer: NSView {
 
     private var bubbles: [ThreadBubble] = []
     private var messages: [ChatMessage] = []
-    private var pending: [(text: String, target: String)] = []
+    private var pending: [ChatThread.Pending] = []
     /// Pilhas de passos abertas, por "agente|instante do prompt".
     private var expandedSteps: Set<String> = []
     private var threadSignature = ""
@@ -152,10 +152,7 @@ final class ChatContainer: NSView {
         let signature = "\(messages.count)|\(messages.last?.at.timeIntervalSince1970 ?? 0)|"
             + "\(messages.last.map { "\($0)" }.hashValue)|\(pending.count)|"
             + typing.map(\.id).joined(separator: ",") + "|\(expandedSteps.count)"
-        guard signature != threadSignature else {
-            bubbles.forEach { ($0 as? AgentBubbleView)?.tick() }
-            return
-        }
+        guard signature != threadSignature else { return }
         threadSignature = signature
 
         let visible = threadScroll.contentView.documentVisibleRect
@@ -182,7 +179,8 @@ final class ChatContainer: NSView {
         }
         for item in pending {
             guard let target = all.first(where: { $0.id == item.target }) else { continue }
-            bubbles.append(ChatBubbleView(text: item.text, target: target, pending: true))
+            bubbles.append(ChatBubbleView(text: item.text, target: target, at: item.sentAt,
+                                          pending: true))
         }
         for agent in typing { bubbles.append(AgentBubbleView(typing: agent)) }
         bubbles.forEach(threadDoc.addSubview)
@@ -226,8 +224,15 @@ final class ChatContainer: NSView {
             Log.write("chat: envio para \(target.address) falhou: \(error)")
             return
         }
-        pending.append((text, target.id))
+        pending.append(.init(text: text, target: target.id, sentAt: Date()))
         refresh()
+    }
+
+    /// Passo do spinner, no timer de 0.12s do app — o mesmo dos badges do
+    /// canvas. No tique de 1s ele parecia travado.
+    func tick() {
+        bubbles.forEach { ($0 as? AgentBubbleView)?.tick() }
+        column.tick()
     }
 
     // MARK: Rota de teste
