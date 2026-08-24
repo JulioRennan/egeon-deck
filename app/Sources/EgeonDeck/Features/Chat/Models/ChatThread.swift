@@ -26,7 +26,11 @@ enum ChatThread {
                 if turn.hasReply { messages.append(.reply(from: participant, turn: turn)) }
             }
         }
-        return messages.sorted { $0.at < $1.at }
+        // `sorted` não é estável: dois itens no mesmo instante trocariam de
+        // lugar entre uma remontagem e outra. O índice desempata.
+        return messages.enumerated()
+            .sorted { ($0.element.at, $0.offset) < ($1.element.at, $1.offset) }
+            .map(\.element)
     }
 
     /// O eco local de um envio só vale até o transcript mostrar o prompt: daí

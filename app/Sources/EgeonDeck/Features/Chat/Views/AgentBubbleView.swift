@@ -89,6 +89,13 @@ final class AgentBubbleView: NSView, ThreadBubble {
         addSubview(body)
     }
 
+    /// Só a bolha de "trabalhando…" tem o que animar; o resto ignora o tique.
+    func tick() {
+        guard isTyping else { return }
+        body.stringValue = "\(Spinner.current) trabalhando…"
+    }
+    private var isTyping: Bool { time.stringValue == "agora" }
+
     private func decorate(color: NSColor) {
         wantsLayer = true
         layer?.cornerRadius = 14

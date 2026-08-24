@@ -5,7 +5,7 @@ import XCTest
 final class ClaudeTranscriptTests: XCTestCase {
     private let sample = """
     {"type":"attachment","timestamp":"2026-08-24T23:13:11.000Z","message":{"content":"x"}}
-    {"type":"user","timestamp":"2026-08-24T23:13:27.000Z","message":{"role":"user","content":"echo egeon-chat-ok"}}
+    {"parentUuid":"a1","isSidechain":false,"userType":"external","cwd":"/x","sessionId":"s","version":"2.1","gitBranch":"main","type":"user","timestamp":"2026-08-24T23:13:27.000Z","message":{"role":"user","content":"echo egeon-chat-ok"}}
     {"type":"assistant","timestamp":"2026-08-24T23:13:31.000Z","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"echo egeon-chat-ok","description":"Ecoa a marca"}}]}}
     {"type":"user","timestamp":"2026-08-24T23:13:32.000Z","message":{"content":[{"type":"tool_result","content":"egeon-chat-ok"}]}}
     {"type":"assistant","timestamp":"2026-08-24T23:13:33.000Z","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/a/b/app/Main.swift"}}]}}

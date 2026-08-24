@@ -102,19 +102,41 @@ final class ChatContainer: NSView {
 
     // MARK: Thread
 
+    /// Transcript cresce a cada tool call do agente, e chega a dezenas de MB.
+    /// Ler e decodificar isso na main thread era o que travava a tela: a
+    /// leitura vai para uma fila de fundo, e a main só consome o cache.
+    private let parseQueue = DispatchQueue(label: "egeon.chat.transcript", qos: .utility)
+    private var parsing: Set<URL> = []
+
     private func turns(of participant: ChatParticipant) -> [ChatTurn] {
         guard let url = participant.transcript,
               let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         else { return [] }
         let size = (attributes[.size] as? UInt64) ?? 0
         let modified = (attributes[.modificationDate] as? Date) ?? .distantPast
-        if let cached = transcriptCache[url], cached.size == size, cached.modified == modified {
-            return cached.turns
+        let cached = transcriptCache[url]
+        if let cached, cached.size == size, cached.modified == modified { return cached.turns }
+
+        if !parsing.contains(url) {
+            parsing.insert(url)
+            let reader = self.reader
+            parseQueue.async { [weak self] in
+                let parsed = reader.turns(at: url)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.parsing.remove(url)
+                    self.transcriptCache[url] = (size, modified, parsed)
+                    self.refresh()
+                }
+            }
         }
-        let parsed = reader.turns(at: url)
-        transcriptCache[url] = (size, modified, parsed)
-        return parsed
+        // Enquanto a leitura nova não chega, o que já se tinha continua valendo.
+        return cached?.turns ?? []
     }
+
+    /// Conversa longa tem centenas de turnos; desenhar todos a cada mudança
+    /// pesa e ninguém rola até lá. Só o fim entra na tela.
+    private static let drawnMessages = 80
 
     private func rebuildThread(_ all: [ChatParticipant]) {
         messages = ChatThread.build(participants: all) { [weak self] in
@@ -126,15 +148,21 @@ final class ChatContainer: NSView {
         }
 
         // Remontar view a cada segundo faria a thread piscar: só quando o que
-        // se desenha mudou de fato.
+        // se desenha mudou de fato. O spinner anda em cima da bolha existente.
         let signature = "\(messages.count)|\(messages.last?.at.timeIntervalSince1970 ?? 0)|"
             + "\(messages.last.map { "\($0)" }.hashValue)|\(pending.count)|"
-            + typing.map(\.id).joined(separator: ",") + "|\(expandedSteps.count)|\(Spinner.current)"
-        guard signature != threadSignature else { return }
+            + typing.map(\.id).joined(separator: ",") + "|\(expandedSteps.count)"
+        guard signature != threadSignature else {
+            bubbles.forEach { ($0 as? AgentBubbleView)?.tick() }
+            return
+        }
         threadSignature = signature
 
+        let visible = threadScroll.contentView.documentVisibleRect
+        let wasAtBottom = visible.maxY >= threadDoc.frame.height - 40
+
         bubbles.forEach { $0.removeFromSuperview() }
-        bubbles = messages.map { message -> ThreadBubble in
+        bubbles = messages.suffix(Self.drawnMessages).map { message -> ThreadBubble in
             switch message {
             case .prompt(let to, let text, let at):
                 return ChatBubbleView(text: text, target: to, at: at)
@@ -161,8 +189,12 @@ final class ChatContainer: NSView {
 
         needsLayout = true
         layoutSubtreeIfNeeded()
-        threadDoc.scroll(NSPoint(x: 0, y: max(0, threadDoc.frame.height
-                                              - threadScroll.contentSize.height)))
+        // Puxar para o fim só se você já estava lá — quem subiu para ler não
+        // pode ser arrastado de volta a cada mensagem.
+        if wasAtBottom || bubbles.count <= 2 {
+            threadDoc.scroll(NSPoint(x: 0, y: max(0, threadDoc.frame.height
+                                                  - threadScroll.contentSize.height)))
+        }
     }
 
     /// Quem o Tab e o alternador percorrem: só agentes. Shell continua na

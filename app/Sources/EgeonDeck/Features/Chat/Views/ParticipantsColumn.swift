@@ -31,9 +31,16 @@ final class ParticipantsColumn: NSView {
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
 
+    private var signature = ""
+
     func update(_ participants: [ChatParticipant], focused: String?) {
-        // Remontar as linhas a cada leitura em vez de sincronizar: são meia
-        // dúzia de views baratas, e o estado nunca fica órfão.
+        // Remontar a cada segundo piscava e pesava; só quando algo que se
+        // desenha mudou. O spinner anda em cima da linha que já existe.
+        let next = participants.map { "\($0.id)|\($0.activity)|\($0.role ?? "")" }
+            .joined(separator: ";") + "|\(focused ?? "")"
+        guard next != signature else { rows.forEach { $0.tick() }; return }
+        signature = next
+
         rows.forEach { $0.removeFromSuperview() }
         rows = participants.map { participant in
             let row = ParticipantRow(participant: participant,
@@ -105,11 +112,18 @@ private final class ParticipantRow: NSView {
         status.autoresizingMask = [.minXMargin]
         addSubview(status)
         statusField = status
+        spinning = participant.activity == .working || participant.activity == .starting
 
         if dead { alphaValue = 0.42 }
     }
 
     private var statusField: NSTextField?
+    private var spinning = false
+
+    func tick() {
+        guard spinning else { return }
+        statusField?.stringValue = String(Spinner.current)
+    }
 
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }

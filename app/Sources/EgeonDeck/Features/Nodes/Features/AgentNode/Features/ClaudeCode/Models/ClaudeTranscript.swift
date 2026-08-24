@@ -16,6 +16,13 @@ struct ClaudeTranscript: TranscriptReader {
     static func parse(_ jsonl: String) -> [ChatTurn] {
         var turns: [ChatTurn] = []
         for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true) {
+            // A maior parte do arquivo é attachment e snapshot — linhas enormes
+            // que não interessam. Procurar o tipo antes de decodificar JSON é o
+            // que faz um transcript de dezenas de MB ser lido em tempo útil.
+            // A linha inteira, e não só o começo: `type` vem depois de
+            // parentUuid, cwd, sessionId e afins.
+            guard line.contains("\"type\":\"user\"") || line.contains("\"type\":\"assistant\"")
+            else { continue }
             guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)),
                   let entry = object as? [String: Any],
                   let type = entry["type"] as? String,
