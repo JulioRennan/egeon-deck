@@ -1,8 +1,9 @@
-# Spec — Modo Chat: a bancada como grupo
+# Modo Chat do Egeon Deck — prompt de design
 
-Prompt de design para o novo modo chat do Egeon Deck. Acompanha um print do
-modo canvas atual — a linguagem visual do app sai de lá. O objetivo aqui é
-desenhar a tela, não implementá-la.
+Você vai desenhar o **modo chat** do Egeon Deck, um app macOS. Junto com este
+texto vai um print do modo canvas atual do app: é dele que sai a linguagem
+visual — respeite-a. Sua tarefa é desenhar a tela do chat, não implementá-la.
+Tudo o que você precisa está neste documento.
 
 ## Contexto do produto
 
@@ -48,9 +49,12 @@ prompts.
    de todos os agentes. Bolhas de mensagem: usuário à direita, agentes à
    esquerda, cada agente na sua cor.
 3. **Rodapé — composer.** Campo de texto multiline + indicação clara de PARA
-   QUEM estou falando agora (o foco). Trocar de destinatário tem de ser
-   rápido: clique no participante ou controle no próprio composer. Enter
-   envia (injeta o prompt no terminal do agente).
+   QUEM estou falando agora (o foco). Nesta versão a mensagem vai SEMPRE para
+   um único agente: um controle de alternância troca o destinatário
+   rapidamente (clique no participante ou Tab no composer), e o foco atual
+   fica sempre visível junto do campo, na cor do agente. Enter envia (injeta
+   o prompt no terminal do agente). Multi-destinatário fica para depois —
+   não desenhar.
 
 ## Anatomia da bolha do agente — o coração da spec
 
@@ -94,18 +98,34 @@ ela.
 ## O que o design NÃO precisa resolver
 
 - Terminal embutido na thread — não existe; o chat é leitura + envio.
+- Multi-destinatário: nesta versão eu falo com um agente por vez, sempre. O
+  gerenciamento de mandar para vários vem depois e não entra no desenho.
 - Edição de mensagem, reações, busca.
 - Multi-bancada: o chat é sempre de UMA bancada.
 
-## Questões em aberto — refinar no design
+## Questões em aberto — decida no design e proponha
 
-1. Composer multi-destinatário: mandar o mesmo prompt para 2+ agentes de uma
-   vez, ou sempre um por vez?
-2. Stack fechado: só o contador ("7 passos") ou preview dos últimos 3?
-3. Aninhamento fundo (3+ níveis): renderizar tudo inline ou cortar em "ver
+1. Stack fechado: só o contador ("7 passos") ou preview dos últimos 3?
+2. Aninhamento fundo (3+ níveis): renderizar tudo inline ou cortar em "ver
    cadeia completa"?
-4. Shells não-agente entram na lista de participantes (dá para mandar
+3. Shells não-agente entram na lista de participantes (dá para mandar
    comando)? Editor e web ficam fora?
-5. A citação mostra quanto do prompt original?
-6. Coluna de participantes: vidro claro como a sidebar do canvas, ou escura
+4. A citação mostra quanto do prompt original?
+5. Coluna de participantes: vidro claro como a sidebar do canvas, ou escura
    integrada à thread?
+
+## O que eu espero de você
+
+A tela do modo chat em alta fidelidade, no tema escuro do print, com dados de
+exemplo realistas. Cubra os dois casos de reply:
+
+1. **Conversa 1:1** — eu e um agente, prompts e respostas empilhados, sem
+   citação.
+2. **Dois agentes intercalados** — citações marcando quem responde o quê, e
+   pelo menos uma bolha de agente com o stack de passos expandido contendo
+   uma sub-conversa aninhada (ex.: `front` mostrando dentro dela a resposta
+   do `back`).
+
+Mostre também o composer nos dois momentos: focado num agente e trocando de
+destinatário. Onde este documento deixa questão em aberto, escolha e mostre a
+escolha no desenho.
