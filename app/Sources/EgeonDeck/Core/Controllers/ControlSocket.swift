@@ -312,6 +312,27 @@ final class ControlSocket {
             let payload = DispatchQueue.main.sync { AppControl.canvasGeometry?() ?? [:] }
             respond(fd, status: "200 OK", json: payload)
 
+        case ("POST", _, _) where route.contains("/compose"):
+            // /compose?target=ws[&send=1] — corpo em texto puro vai para a caixa
+            // do chat; `send=1` aperta o Enter. Texto puro e não JSON porque o
+            // que interessa aqui é justamente prompt de VÁRIAS linhas.
+            let query = Self.query(in: route)
+            let target = query["target"] ?? ""
+            let text = String(decoding: body, as: UTF8.self)
+            let result = DispatchQueue.main.sync {
+                AppControl.chatCompose?(target, text, query["send"] == "1") ?? nil
+            }
+            respond(fd, status: result == nil ? "404 Not Found" : "200 OK",
+                    json: result ?? ["ok": false,
+                                     "error": "bancada sem chat montado '\(target)'"])
+
+        case ("GET", _, _) where route.contains("/chat"):
+            // /chat?target=ws — o modo chat da bancada, como dados.
+            let target = Self.query(in: route)["target"] ?? ""
+            let payload = DispatchQueue.main.sync { AppControl.chatState?(target) ?? nil }
+            respond(fd, status: payload == nil ? "404 Not Found" : "200 OK",
+                    json: payload ?? ["ok": false, "error": "bancada desconhecida '\(target)'"])
+
         case ("GET", _, _) where route.contains("/peek"):
             // /peek?target=ws/id — mostra o que o terminal realmente exibe.
             let target = Self.target(in: route)

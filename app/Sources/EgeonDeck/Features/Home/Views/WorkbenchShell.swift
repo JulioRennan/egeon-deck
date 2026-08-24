@@ -19,6 +19,10 @@ final class WorkbenchShell: NSView {
     /// containers usam como referência de z-order.
     private lazy var bannerPanel = GlassPanel(content: banner, radius: 8, tint: .systemOrange)
     private var mosaic: MosaicContainer?
+    /// O modo chat. Criado junto com a bancada e não sob demanda como o mosaico:
+    /// não guarda geometria de card, então nasce barato, e main.swift precisa
+    /// dele para ligar as fontes de dados uma vez só.
+    let chat = ChatContainer()
 
     private(set) var nodes: [NodeView] = []
     private(set) var mode: ViewMode
@@ -103,6 +107,11 @@ final class WorkbenchShell: NSView {
         // A coluna inteira muda de tamanho com um nó a mais, então não há como
         // encaixar sem remontar.
         case .mosaic: mosaic?.arrange(nodes)
+        // Em chat o card entra no canvas coberto, como em `place`: ele precisa
+        // do passe de layout para o pty nascer com colunas.
+        case .chat:
+            canvas.add(node)
+            chat.refresh()
         }
     }
 
@@ -114,6 +123,7 @@ final class WorkbenchShell: NSView {
         node.prepareForRemoval()
         node.removeFromSuperview()
         if mode == .mosaic { mosaic?.arrange(nodes) }
+        if mode == .chat { chat.refresh() }
     }
 
     /// Onde este nó fica no canvas, mesmo que agora esteja num painel do mosaico.
@@ -134,6 +144,7 @@ final class WorkbenchShell: NSView {
         switch mode {
         case .canvas: return canvas
         case .mosaic: return mosaic ?? canvas
+        case .chat:   return chat
         }
     }
 
@@ -182,6 +193,7 @@ final class WorkbenchShell: NSView {
         switch mode {
         case .canvas:
             mosaic?.removeFromSuperview()
+            chat.removeFromSuperview()
             addSubview(canvas, positioned: .below, relativeTo: bannerPanel)
             for node in nodes {
                 if let frame = canvasFrames[node.nodeID] { node.frame = frame }
@@ -190,10 +202,28 @@ final class WorkbenchShell: NSView {
 
         case .mosaic:
             canvas.removeFromSuperview()
+            chat.removeFromSuperview()
             let container = mosaic ?? makeMosaic()
             addSubview(container, positioned: .below, relativeTo: bannerPanel)
             container.layoutRatios = mosaicLayout
             container.arrange(nodes)
+
+        case .chat:
+            // O canvas CONTINUA montado, com os nós nele, e o chat entra opaco
+            // por cima. Não é preguiça: um `NodeView` fora da hierarquia nunca
+            // recebe passe de layout, e sem layout o SwiftTerm não tem colunas
+            // para informar ao pty. Medido — bancada que ABRE em chat sobe os
+            // terminais com tamanho zero, a TUI não tem onde desenhar, e a tela
+            // fica vazia para sempre: `SIGWINCH` depois não faz o shell
+            // reimprimir o prompt.
+            mosaic?.removeFromSuperview()
+            addSubview(canvas, positioned: .below, relativeTo: bannerPanel)
+            for node in nodes {
+                if let frame = canvasFrames[node.nodeID] { node.frame = frame }
+                canvas.add(node)
+            }
+            addSubview(chat, positioned: .below, relativeTo: bannerPanel)
+            chat.refresh()
         }
 
         needsLayout = true
@@ -233,6 +263,7 @@ final class WorkbenchShell: NSView {
         let content = contentFrame
         canvas.frame = content
         mosaic?.frame = content
+        chat.frame = content
         bannerPanel.frame = NSRect(x: bounds.midX - 380, y: ViewToolbar.height + 12,
                                    width: 760, height: 30)
     }

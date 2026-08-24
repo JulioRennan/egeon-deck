@@ -9,6 +9,7 @@ final class ViewModeTests: XCTestCase {
     func testRawValuesAreFileFormat() {
         XCTAssertEqual(ViewMode.canvas.rawValue, "canvas")
         XCTAssertEqual(ViewMode.mosaic.rawValue, "mosaic")
+        XCTAssertEqual(ViewMode.chat.rawValue, "chat")
     }
 
     // Ausente = canvas: bancada gravada antes do campo existir abre como sempre.
@@ -16,13 +17,17 @@ final class ViewModeTests: XCTestCase {
         let ws = try JSONDecoder().decode(WorkbenchConfig.self,
             from: Data(#"{"name":"d","path":"/t","nodes":[]}"#.utf8))
         XCTAssertEqual(ws.viewMode, .canvas)
+
+        let chat = try JSONDecoder().decode(WorkbenchConfig.self,
+            from: Data(#"{"name":"d","path":"/t","nodes":[],"view":"chat"}"#.utf8))
+        XCTAssertEqual(chat.viewMode, .chat)
     }
 
-    // Modo que saiu do app ("chat") segue gravado em bancada real: valor
+    // Modo que sair do app um dia segue gravado em bancada real: valor
     // desconhecido cai em canvas em vez de derrubar a carga da bancada.
     func testUnknownViewFallsBackToCanvas() throws {
         let ws = try JSONDecoder().decode(WorkbenchConfig.self,
-            from: Data(#"{"name":"d","path":"/t","nodes":[],"view":"chat"}"#.utf8))
+            from: Data(#"{"name":"d","path":"/t","nodes":[],"view":"holograma"}"#.utf8))
         XCTAssertEqual(ws.viewMode, .canvas)
     }
 

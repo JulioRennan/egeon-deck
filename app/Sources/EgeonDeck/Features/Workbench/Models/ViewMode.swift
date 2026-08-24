@@ -11,22 +11,25 @@ enum ViewMode: String, Codable {
     case canvas
     /// A janela inteira dividida entre os nós, sem sobreposição e sem zoom.
     case mosaic
+    /// A bancada como conversa: participantes, thread e composer.
+    case chat
 
-    /// Modo que saiu do app continua gravado no `workbenches.json` de quem o
-    /// usou — "chat" está lá em bancada real. Valor desconhecido vira canvas em
-    /// vez de derrubar a carga da bancada inteira.
+    /// Modo que sai do app continua gravado no `workbenches.json` de quem o
+    /// usou. Valor desconhecido vira canvas em vez de derrubar a carga da
+    /// bancada inteira.
     init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = ViewMode(rawValue: raw) ?? .canvas
     }
 
-    /// Os modos na ordem em que aparecem na barra e nas teclas ⌥⌘1..2.
-    static let all: [ViewMode] = [.canvas, .mosaic]
+    /// Os modos na ordem em que aparecem na barra e nas teclas ⌥⌘1..3.
+    static let all: [ViewMode] = [.canvas, .mosaic, .chat]
 
     var label: String {
         switch self {
         case .canvas: return "Canvas"
         case .mosaic: return "Mosaico"
+        case .chat:   return "Chat"
         }
     }
 
@@ -34,6 +37,7 @@ enum ViewMode: String, Codable {
         switch self {
         case .canvas: return ["square.on.square.dashed", "rectangle.dashed", "square.dashed"]
         case .mosaic: return ["rectangle.split.2x1", "square.split.2x1", "sidebar.right"]
+        case .chat:   return ["bubble.left.and.bubble.right", "bubble.left", "message"]
         }
     }
 
@@ -41,6 +45,7 @@ enum ViewMode: String, Codable {
         switch self {
         case .canvas: return "Canvas — nós soltos, com zoom e ligações (⌥⌘1)"
         case .mosaic: return "Mosaico — os mesmos nós dividindo a janela (⌥⌘2)"
+        case .chat:   return "Chat — a bancada como conversa, sem os cards (⌥⌘3)"
         }
     }
 }

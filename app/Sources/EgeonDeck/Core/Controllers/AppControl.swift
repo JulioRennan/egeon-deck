@@ -94,4 +94,14 @@ enum AppControl {
     /// O CLI avisou qual conversa está aberta neste terminal. Chamado a cada
     /// prompt, então quem implementa só grava quando o valor muda de fato.
     static var recordConversation: ((_ target: String, _ id: String, _ transcript: String?) -> Void)?
+
+    /// O modo chat de uma bancada como dados: participantes, foco, popup, caixa.
+    /// Existe pelo mesmo motivo do `/peek`: conferir a tela sem comparar pixels.
+    static var chatState: ((String) -> [String: Any]?)?
+
+    /// Escreve na caixa do chat, sem enviar ou enviando, e devolve o estado.
+    /// Tecla sintética exige Acessibilidade, que a assinatura ad-hoc perde a
+    /// cada build (ADR-003) — sem esta rota o composer não se verifica de fora.
+    static var chatCompose: ((_ workbench: String, _ text: String, _ send: Bool)
+                             -> [String: Any]?)?
 }

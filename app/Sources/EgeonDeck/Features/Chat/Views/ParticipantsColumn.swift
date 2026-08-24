@@ -1,0 +1,162 @@
+import AppKit
+
+// MARK: - A coluna de participantes
+
+/// O lado esquerdo do chat: quem está na bancada, com papel e estado ao vivo.
+/// Clique escolhe para quem o composer fala.
+final class ParticipantsColumn: NSView {
+    var onPick: ((ChatParticipant) -> Void)?
+
+    private let title = NSTextField(labelWithString: "PARTICIPANTES")
+    private let hint = NSTextField(labelWithString: "Clique foca · Tab alterna entre agentes")
+    private var rows: [ParticipantRow] = []
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.045).cgColor
+        layer?.cornerRadius = 14
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.09).cgColor
+
+        title.font = .systemFont(ofSize: 10, weight: .semibold)
+        title.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        addSubview(title)
+
+        hint.font = .systemFont(ofSize: 10.5)
+        hint.textColor = NSColor(calibratedWhite: 0.38, alpha: 1)
+        addSubview(hint)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+
+    func update(_ participants: [ChatParticipant], focused: String?) {
+        // Remontar as linhas a cada leitura em vez de sincronizar: são meia
+        // dúzia de views baratas, e o estado nunca fica órfão.
+        rows.forEach { $0.removeFromSuperview() }
+        rows = participants.map { participant in
+            let row = ParticipantRow(participant: participant,
+                                     focused: participant.id == focused)
+            row.onClick = { [weak self] in self?.onPick?(participant) }
+            addSubview(row)
+            return row
+        }
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        title.frame = NSRect(x: 14, y: 12, width: bounds.width - 28, height: 13)
+        var y: CGFloat = 34
+        for row in rows {
+            row.frame = NSRect(x: 8, y: y, width: bounds.width - 16, height: 44)
+            y += 47
+        }
+        hint.frame = NSRect(x: 14, y: bounds.height - 26,
+                            width: bounds.width - 28, height: 14)
+    }
+}
+
+// MARK: - Uma linha
+
+private final class ParticipantRow: NSView {
+    var onClick: (() -> Void)?
+    private let dead: Bool
+
+    init(participant: ChatParticipant, focused: Bool) {
+        dead = participant.activity == .dead
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        if focused {
+            layer?.borderWidth = 1
+            layer?.borderColor = participant.color.withAlphaComponent(0.45).cgColor
+            layer?.backgroundColor = participant.color.withAlphaComponent(0.06).cgColor
+        }
+
+        let glyph = NSTextField(labelWithString: participant.glyph)
+        glyph.font = participant.isAgent
+            ? .systemFont(ofSize: 13)
+            : .monospacedSystemFont(ofSize: 12, weight: .regular)
+        glyph.textColor = participant.color
+        glyph.frame = NSRect(x: 10, y: 14, width: 16, height: 16)
+        addSubview(glyph)
+
+        let name = NSTextField(labelWithString: participant.id)
+        name.font = .systemFont(ofSize: 12.5, weight: .semibold)
+        name.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
+        name.frame = NSRect(x: 31, y: 7, width: 160, height: 15)
+        name.lineBreakMode = .byTruncatingTail
+        addSubview(name)
+
+        let role = NSTextField(labelWithString: roleText(participant))
+        role.font = .systemFont(ofSize: 10.5)
+        role.textColor = roleColor(participant)
+        role.frame = NSRect(x: 31, y: 23, width: 190, height: 13)
+        role.lineBreakMode = .byTruncatingTail
+        addSubview(role)
+
+        let status = NSTextField(labelWithString: statusGlyph(participant.activity))
+        status.font = .systemFont(ofSize: 10)
+        status.textColor = statusColor(participant)
+        status.alignment = .right
+        status.frame = NSRect(x: 0, y: 16, width: 0, height: 13)
+        status.autoresizingMask = [.minXMargin]
+        addSubview(status)
+        statusField = status
+
+        if dead { alphaValue = 0.42 }
+    }
+
+    private var statusField: NSTextField?
+
+    required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        statusField?.frame = NSRect(x: bounds.width - 34, y: 16, width: 24, height: 13)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard !dead else { return }
+        onClick?()
+    }
+
+    private func roleText(_ participant: ChatParticipant) -> String {
+        switch participant.activity {
+        case .dead:     return "terminal fechado"
+        case .working:  return "trabalhando…"
+        case .starting: return "subindo…"
+        case .asking:   return "precisa de você"
+        default:        return participant.role ?? ""
+        }
+    }
+
+    private func roleColor(_ participant: ChatParticipant) -> NSColor {
+        switch participant.activity {
+        case .asking:  return .systemOrange
+        case .working: return participant.color.withAlphaComponent(0.85)
+        default:       return NSColor(calibratedWhite: 0.55, alpha: 1)
+        }
+    }
+
+    private func statusGlyph(_ activity: Activity) -> String {
+        switch activity {
+        case .working, .starting: return String(Spinner.current)
+        case .dead:               return "✕"
+        default:                  return "●"
+        }
+    }
+
+    private func statusColor(_ participant: ChatParticipant) -> NSColor {
+        switch participant.activity {
+        case .waiting:            return .systemGreen
+        case .asking:             return .systemOrange
+        case .working, .starting: return participant.color
+        case .dead:               return NSColor(calibratedWhite: 0.4, alpha: 1)
+        case .ready:              return NSColor(calibratedWhite: 1, alpha: 0.18)
+        }
+    }
+}

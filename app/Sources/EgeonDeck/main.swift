@@ -85,11 +85,24 @@ EgeonCLI.install()
         buildMenu()
 
         let screen = Self.startupScreen()
+        // O dev abre menor e lembra o tamanho: ele sobe a cada rebuild, e uma
+        // janela de tela inteira em cima do estável a cada `dev.sh` é o que
+        // atrapalha. O estável continua tomando a tela.
+        let devFrame = screen.visibleFrame.insetBy(dx: screen.visibleFrame.width * 0.15,
+                                                   dy: screen.visibleFrame.height * 0.12)
+        let startFrame = Flavor.current == .dev ? devFrame : screen.visibleFrame
         window = NSWindow(
-            contentRect: screen.visibleFrame,
+            contentRect: startFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
-        window.setFrame(screen.visibleFrame, display: false)
+        if Flavor.current == .dev {
+            window.setFrameAutosaveName("janela-dev")
+            if !window.setFrameUsingName("janela-dev") {
+                window.setFrame(startFrame, display: false)
+            }
+        } else {
+            window.setFrame(startFrame, display: false)
+        }
         // Sem texto na barra de título: quem diz a bancada é a barra do app, logo
         // abaixo, e o nome do flavor repetido ali só empilhava rótulo. O dev
         // continua reconhecível pelo ícone no Dock.
@@ -155,6 +168,21 @@ EgeonCLI.install()
         }
         AppControl.recordConversation = { [weak self] target, id, transcript in
             self?.recordConversation(target: target, id: id, transcript: transcript)
+        }
+        AppControl.chatState = { [weak self] name in
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
+            else { return nil }
+            var out = self.shells[index]?.chat.snapshot() ?? [:]
+            out["workbench"] = name
+            out["mode"] = (self.shells[index]?.mode ?? self.configs[index].viewMode).rawValue
+            return out
+        }
+        AppControl.chatCompose = { [weak self] name, text, send in
+            guard let self,
+                  let index = self.configs.firstIndex(where: { $0.name == name }),
+                  let shell = self.shells[index], shell.mode == .chat
+            else { return nil }
+            return shell.chat.compose(text, send: send)
         }
         AppControl.workbenchOwning = { [weak self] folder in
             self?.workbenchOwning(folder: folder)
@@ -1642,6 +1670,8 @@ EgeonCLI.install()
         shell.mosaicLayout = configs[index].mosaic
         shell.setWorkbench(name: configs[index].name, path: configs[index].path)
 
+        wireChat(shell.chat, index: index)
+
         let canvas = shell.canvas
         canvas.onPlace = { [weak self] tool, rect in self?.place(tool, rect: rect, index: index) }
         canvas.onLayoutChanged = { [weak self] in
@@ -1676,6 +1706,36 @@ EgeonCLI.install()
         return controller
     }
 
+    // MARK: - Modo chat
+
+    /// Fechaduras de leitura e envio; nenhuma referência a `NodeView` — em chat
+    /// os cards estão cobertos, e o que a tela desenha é estado remontado a
+    /// cada leitura.
+    private func wireChat(_ chat: ChatContainer, index: Int) {
+        chat.participants = { [weak self] in
+            guard let self, index >= 0, index < self.configs.count else { return [] }
+            let config = self.configs[index]
+            return ChatParticipant.from(nodes: config.nodes, workbench: config.name) {
+                Dispatcher.shared.target($0)?.activity
+            }
+        }
+        chat.send = { [weak self] text, participant in
+            guard let self, index >= 0, index < self.configs.count else {
+                return "bancada sumiu"
+            }
+            var request = DispatchRequest(target: participant.address)
+            request.text = text
+            do {
+                // `from: nil` de propósito: quem manda é VOCÊ, e as guardas de
+                // cadeia só valem entre agentes.
+                _ = try Dispatcher.shared.dispatch(request, from: nil)
+                return nil
+            } catch {
+                return "\(error)"
+            }
+        }
+    }
+
     // MARK: - Visualização
 
     private func recordViewMode(_ mode: ViewMode, index: Int) {
@@ -1700,6 +1760,7 @@ EgeonCLI.install()
 
     @objc func showCanvasView() { shells[activeIndex]?.show(.canvas) }
     @objc func showMosaicView() { shells[activeIndex]?.show(.mosaic) }
+    @objc func showChatView() { shells[activeIndex]?.show(.chat) }
 
     // MARK: - Ligações entre terminais
 
@@ -2231,7 +2292,8 @@ EgeonCLI.install()
 
         let modeItems: [Selector: ViewMode] = [
             #selector(showCanvasView): .canvas,
-            #selector(showMosaicView): .mosaic
+            #selector(showMosaicView): .mosaic,
+            #selector(showChatView): .chat
         ]
         if let action = menuItem.action, let wants = modeItems[action] {
             guard let mode = shells[activeIndex]?.mode else { return false }
@@ -2319,6 +2381,8 @@ EgeonCLI.install()
                            keyEquivalent: "1").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Ver em mosaico", action: #selector(showMosaicView),
                            keyEquivalent: "2").keyEquivalentModifierMask = [.command, .option]
+        canvasMenu.addItem(withTitle: "Ver como chat", action: #selector(showChatView),
+                           keyEquivalent: "3").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Recolher a barra de bancadas",
                            action: #selector(toggleSidebarCollapsed), keyEquivalent: "/")
         canvasMenu.addItem(.separator())
