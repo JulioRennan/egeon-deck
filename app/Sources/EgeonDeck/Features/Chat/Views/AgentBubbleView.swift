@@ -7,6 +7,8 @@ import AppKit
 /// depois — a forma da bolha já reserva o lugar.
 final class AgentBubbleView: NSView, ThreadBubble {
     var onToggleSteps: (() -> Void)?
+    var onQuoteClick: (() -> Void)?
+    private var quoteView: ChatQuoteView?
 
     private let name = NSTextField(labelWithString: "")
     private let address = NSTextField(labelWithString: "")
@@ -25,7 +27,11 @@ final class AgentBubbleView: NSView, ThreadBubble {
 
     let alignsRight = false
 
-    init(from participant: ChatParticipant, turn: ChatTurn, expanded: Bool) {
+    /// Azul do seu prompt — a cor do fio da citação quando o citado é você.
+    static let youColor = NSColor(srgbRed: 0.184, green: 0.498, blue: 0.965, alpha: 1)
+
+    init(from participant: ChatParticipant, turn: ChatTurn, expanded: Bool,
+         quote: ChatQuote? = nil) {
         steps = turn.steps
         self.expanded = expanded
         hasBody = !turn.replyText.isEmpty
@@ -36,6 +42,14 @@ final class AgentBubbleView: NSView, ThreadBubble {
         name.textColor = participant.color
         address.stringValue = participant.address
         time.stringValue = Self.clock.string(from: turn.replyAt ?? turn.promptAt)
+
+        if let quote {
+            let view = ChatQuoteView(quote: quote, authorLabel: "você → \(participant.id)",
+                                     color: Self.youColor)
+            view.onClick = { [weak self] in self?.onQuoteClick?() }
+            addSubview(view)
+            quoteView = view
+        }
 
         if !steps.isEmpty {
             stepsBox.wantsLayer = true
@@ -136,8 +150,10 @@ final class AgentBubbleView: NSView, ThreadBubble {
                           options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
     }
 
+    private var quoteBlock: CGFloat { quoteView == nil ? 0 : ChatQuoteView.height + 8 }
+
     func height(for width: CGFloat) -> CGFloat {
-        var total: CGFloat = 10 + 16
+        var total: CGFloat = 10 + 16 + quoteBlock
         if !steps.isEmpty { total += 8 + stepsHeight }
         if hasBody { total += 8 + bodyHeight(width: width) }
         return total + 12
@@ -151,7 +167,8 @@ final class AgentBubbleView: NSView, ThreadBubble {
         let headerWidth = name.intrinsicContentSize.width + address.intrinsicContentSize.width
             + time.intrinsicContentSize.width + 50
         let stepsWidth: CGFloat = steps.isEmpty ? 0 : (expanded ? 420 : 240)
-        return min(cap, max(textWidth, headerWidth, stepsWidth))
+        let quoteMin: CGFloat = quoteView == nil ? 0 : 300
+        return min(cap, max(textWidth, headerWidth, stepsWidth, quoteMin))
     }
 
     override func layout() {
@@ -165,6 +182,13 @@ final class AgentBubbleView: NSView, ThreadBubble {
         time.frame = NSRect(x: bounds.width - timeWidth - 13, y: y + 2,
                             width: timeWidth, height: 13)
         y += 16
+
+        if let quoteView {
+            y += 8
+            quoteView.frame = NSRect(x: 13, y: y, width: bounds.width - 26,
+                                     height: ChatQuoteView.height)
+            y += ChatQuoteView.height
+        }
 
         if !steps.isEmpty {
             y += 8

@@ -29,7 +29,17 @@ final class ChatContainer: NSView {
     private var transcriptCache: [URL: (size: UInt64, modified: Date, turns: [ChatTurn])] = [:]
 
     private var bubbles: [ThreadBubble] = []
+    private var bubbleByKey: [String: ThreadBubble] = [:]
     private var messages: [ChatMessage] = []
+
+    /// Clique na citação: rola até a mensagem original e a acende um instante.
+    private func scrollTo(key: String) {
+        guard let bubble = bubbleByKey[key] else { return }
+        threadDoc.scroll(NSPoint(x: 0, y: max(0, bubble.frame.minY - 24)))
+        let old = bubble.layer?.borderColor
+        bubble.layer?.borderColor = NSColor.white.withAlphaComponent(0.7).cgColor
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { bubble.layer?.borderColor = old }
+    }
     private var pending: [ChatThread.Pending] = []
     /// Pilhas de passos abertas, por "agente|instante do prompt".
     private var expandedSteps: Set<String> = []
@@ -159,23 +169,34 @@ final class ChatContainer: NSView {
         let wasAtBottom = visible.maxY >= threadDoc.frame.height - 40
 
         bubbles.forEach { $0.removeFromSuperview() }
+        bubbleByKey = [:]
         bubbles = messages.suffix(Self.drawnMessages).map { message -> ThreadBubble in
+            let bubble: ThreadBubble
             switch message {
-            case .prompt(let to, let text, let at):
-                return ChatBubbleView(text: text, target: to, at: at)
-            case .reply(let from, let turn):
-                let key = "\(from.id)|\(turn.promptAt.timeIntervalSince1970)"
-                let bubble = AgentBubbleView(from: from, turn: turn,
-                                             expanded: expandedSteps.contains(key))
-                bubble.onToggleSteps = { [weak self] in
+            case .prompt(let to, let text, let at, let quote):
+                let view = ChatBubbleView(text: text, target: to, at: at, quote: quote)
+                if let quote {
+                    view.onQuoteClick = { [weak self] in self?.scrollTo(key: quote.targetKey) }
+                }
+                bubble = view
+            case .reply(let from, let turn, let quote):
+                let key = message.key
+                let view = AgentBubbleView(from: from, turn: turn,
+                                           expanded: expandedSteps.contains(key), quote: quote)
+                view.onToggleSteps = { [weak self] in
                     guard let self else { return }
                     if self.expandedSteps.contains(key) { self.expandedSteps.remove(key) }
                     else { self.expandedSteps.insert(key) }
                     self.threadSignature = ""
                     self.refresh()
                 }
-                return bubble
+                if let quote {
+                    view.onQuoteClick = { [weak self] in self?.scrollTo(key: quote.targetKey) }
+                }
+                bubble = view
             }
+            bubbleByKey[message.key] = bubble
+            return bubble
         }
         for item in pending {
             guard let target = all.first(where: { $0.id == item.target }) else { continue }
@@ -270,12 +291,15 @@ final class ChatContainer: NSView {
             "popup": popupInfo,
             "pending": pending.count,
             "messages": messages.map { message -> [String: Any] in
+                let quote = message.quote.map { ["author": $0.authorId ?? "você", "text": $0.text] }
                 switch message {
-                case .prompt(let to, let text, _):
-                    return ["kind": "prompt", "to": to.id, "text": text]
-                case .reply(let from, let turn):
+                case .prompt(let to, let text, _, _):
+                    return ["kind": "prompt", "to": to.id, "text": text,
+                            "quote": quote ?? [:]]
+                case .reply(let from, let turn, _):
                     return ["kind": "reply", "from": from.id, "text": turn.replyText,
-                            "steps": turn.steps.map { "\($0.glyph) \($0.text)" }]
+                            "steps": turn.steps.map { "\($0.glyph) \($0.text)" },
+                            "quote": quote ?? [:]]
                 }
             }
         ]

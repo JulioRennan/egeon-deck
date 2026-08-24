@@ -66,15 +66,56 @@ final class ChatThreadTests: XCTestCase {
 
         XCTAssertEqual(thread.count, 3)
         XCTAssertEqual(thread[0], .prompt(to: front, text: "faz a coluna", at: base))
+        // Prompt ao back logo depois de prompt ao front: o back ainda não falou,
+        // não há o que citar.
         XCTAssertEqual(thread[1], .prompt(to: back, text: "expõe /nodes",
                                           at: base.addingTimeInterval(10)))
-        XCTAssertEqual(thread[2], .reply(from: front, turn: frontTurn))
+        // A resposta do front NÃO vem logo depois do prompt dela (o prompt ao
+        // back entrou no meio): cita o prompt, estilo WhatsApp.
+        guard case .reply(let from, let turn, let quote) = thread[2] else {
+            return XCTFail("esperava resposta do front")
+        }
+        XCTAssertEqual(from, front)
+        XCTAssertEqual(turn, frontTurn)
+        XCTAssertEqual(quote?.authorId, nil)
+        XCTAssertEqual(quote?.text, "faz a coluna")
+        XCTAssertEqual(quote?.targetKey, thread[0].key)
+    }
+
+    // Consecutivo é limpo: prompt e resposta um atrás do outro, sem citação.
+    func testConsecutiveReplyHasNoQuote() {
+        let front = agent("front")
+        let base = Date(timeIntervalSince1970: 1_000)
+        var turn = ChatTurn(prompt: "oi", promptAt: base)
+        turn.replyText = "oi"; turn.replyAt = base.addingTimeInterval(5)
+        let thread = ChatThread.build(participants: [front]) { _ in [turn] }
+        XCTAssertNil(thread[1].quote)
+    }
+
+    // Meu prompt intercalado cita a última fala do agente a quem falo.
+    func testInterleavedPromptQuotesAgentsLastReply() {
+        let front = agent("front"), back = agent("back")
+        let base = Date(timeIntervalSince1970: 1_000)
+        var backTurn = ChatTurn(prompt: "expõe", promptAt: base)
+        backTurn.replyText = "no ar"; backTurn.replyAt = base.addingTimeInterval(5)
+        let frontTurn = ChatTurn(prompt: "faz", promptAt: base.addingTimeInterval(10))
+        let later = ChatTurn(prompt: "adiciona lastActivity", promptAt: base.addingTimeInterval(20))
+
+        let thread = ChatThread.build(participants: [front, back]) {
+            $0.id == "back" ? [backTurn, later] : [frontTurn]
+        }
+        // back: expõe, no ar · front: faz · back: adiciona (intercalado → cita "no ar")
+        XCTAssertEqual(thread.count, 4)
+        XCTAssertEqual(thread[3].quote?.authorId, "back")
+        XCTAssertEqual(thread[3].quote?.text, "no ar")
+        XCTAssertEqual(thread[3].quote?.targetKey, thread[1].key)
+        XCTAssertNil(thread[2].quote, "front ainda não falou: nada a citar")
     }
 
     func testPendingDropsWhatTranscriptConfirmed() {
         let front = agent("front")
         let now = Date()
-        let messages: [ChatMessage] = [.prompt(to: front, text: "oi", at: now)]
+        let messages: [ChatMessage] = [.prompt(to: front, text: "oi", at: now, quote: nil)]
         let left = ChatThread.stillPending([
             .init(text: "oi", target: "front", sentAt: now.addingTimeInterval(-1)),
             .init(text: "oi", target: "back", sentAt: now.addingTimeInterval(-1)),
@@ -89,7 +130,7 @@ final class ChatThreadTests: XCTestCase {
         let front = agent("front")
         let now = Date()
         let messages: [ChatMessage] = [.prompt(to: front, text: "oi",
-                                               at: now.addingTimeInterval(-600))]
+                                               at: now.addingTimeInterval(-600), quote: nil)]
         let left = ChatThread.stillPending([.init(text: "oi", target: "front", sentAt: now)],
                                            given: messages)
         XCTAssertEqual(left.count, 1)
