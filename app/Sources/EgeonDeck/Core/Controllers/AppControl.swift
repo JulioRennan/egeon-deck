@@ -94,21 +94,4 @@ enum AppControl {
     /// O CLI avisou qual conversa está aberta neste terminal. Chamado a cada
     /// prompt, então quem implementa só grava quando o valor muda de fato.
     static var recordConversation: ((_ target: String, _ id: String, _ transcript: String?) -> Void)?
-
-    /// O thread do modo Chat de uma bancada, como dados.
-    ///
-    /// Existe pelo mesmo motivo do `/peek`: o thread é montado de vários arquivos,
-    /// e "a mensagem do dev-backend apareceu depois da sua, com o diff certo" é
-    /// exatamente o tipo de afirmação que não se confere olhando print. Aqui dá
-    /// para ver a ordem, o autor e os blocos de cada mensagem sem abrir o app.
-    static var chatThread: ((String) -> [String: Any]?)?
-
-    /// Escreve na caixa do modo Chat, sem enviar, e devolve a geometria.
-    ///
-    /// Existe pelo mesmo motivo do `swapMosaic` e do `setEdgeDirection`: crescer a
-    /// caixa é digitar, e tecla sintética exige Acessibilidade, que a assinatura
-    /// ad-hoc perde a cada build (ADR-003). Sem esta rota, "a caixa cresce para cima e
-    /// o histórico cede a área" é afirmação sem evidência.
-    static var chatCompose: ((_ workbench: String, _ text: String, _ send: Bool)
-                             -> [String: Any]?)?
 }

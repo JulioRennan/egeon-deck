@@ -29,7 +29,7 @@ enum WorkbenchStore {
               !list.isEmpty else { return nil }
         // Arquivo gravado antes do rename traz `sessionId`/`sessionStarted`. Sem
         // absorver aqui, todo agente perderia a conversa no primeiro arranque desta
-        // versão — o terminal subiria limpo e o thread do chat nasceria vazio.
+        // versão — o terminal subiria limpo em vez de retomar.
         return list.map { config in
             var copy = config
             copy.nodes = config.nodes.map(\.migratingLegacyNames)

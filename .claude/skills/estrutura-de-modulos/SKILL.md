@@ -20,7 +20,6 @@ app/Sources/EgeonDeck/
 │   └── Features/EgeonCLI/      o comando `egeon`
 ├── Features/                ← todo módulo mora aqui
 │   ├── Canvas/                 grid, arestas, toolbar do canvas
-│   ├── Chat/                   o modo chat (refatoração pendente)
 │   ├── Dispatch/               fila, injeção, Target, guardas de cadeia
 │   ├── Home/                   RootView, ViewToolbar, WorkbenchShell, Sidebar
 │   ├── Mosaic/                 o modo mosaico
@@ -78,7 +77,7 @@ tentado e não compilou mais.
   estado: injete config/persistência por closures, como o EdgeController, e o
   teste roda sem tela. `swift test` antes de todo commit.
 - **Verificar é executar:** `./app/dev.sh`, e conferir pelo socket
-  (`/targets`, `/dispatch` + `/peek`, `/edge`, `/chat`) e pelo
+  (`/targets`, `/dispatch` + `/peek`, `/edge`) e pelo
   `~/egeon-dev.log`. Compilar não é verificar.
 - A cada refactor, relatar o que mudou e o que testar à mão.
 
@@ -88,5 +87,8 @@ tentado e não compilou mais.
   arquivo até a refatoração abrir essa fronteira deliberadamente.
 - `NodeWorktreePlanner.ask` monta NSAlert dentro do Models — dívida anotada no
   import; sai quando o diálogo de worktree ganhar view própria.
-- `ClaudeAdapter` (em `Chat/Models/Transcript.swift`) é claude-specific e deve
-  descer para `ClaudeCode/` na refatoração do chat.
+- O modo chat foi removido para ser refeito do zero. O que ficou dele:
+  `NodeConfig.transcript` (gravado pelo gancho via `/conversation`) e o decode
+  tolerante do `ViewMode` — `view:"chat"` gravado cai em canvas. O chat novo
+  nasce como módulo em `Features/`, e leitor de transcript claude-specific
+  nasce direto em `ClaudeCode/`.

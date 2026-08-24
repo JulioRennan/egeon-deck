@@ -24,7 +24,6 @@ app/Sources/EgeonDeck/
 │                    └ Features/EgeonCLI (o comando `egeon`)
 ├── Features/
 │   ├── Canvas/          grid, arestas (EdgeController), toolbar
-│   ├── Chat/            o modo chat (refatoração pendente)
 │   ├── Dispatch/        fila, injeção, Target, guardas de cadeia
 │   ├── Home/            RootView, ViewToolbar, WorkbenchShell, Sidebar
 │   ├── Mosaic/          o modo mosaico
@@ -51,8 +50,9 @@ app/Sources/EgeonDeck/
 - **Aresta** — `from` pode acionar `to`. Vive na **bancada**, não no nó; nasce
   bidirecional; guardas: aresta obrigatória, `maxSends`, `maxVisits`, fila.
 - **Conversa** — `conversationId` por nó agente; o CLI chama de sessão.
-- **Visualização** — canvas · mosaico · chat (⌥⌘1/2/3); o card é o MESMO
-  `NodeView` reparentado, o dono é o `WorkbenchShell`.
+- **Visualização** — canvas · mosaico (⌥⌘1/2); o card é o MESMO `NodeView`
+  reparentado, o dono é o `WorkbenchShell`. O modo chat foi removido para ser
+  refeito do zero (`view:"chat"` gravado cai em canvas na carga).
 
 ## Funcionalidades, por cima
 
@@ -85,7 +85,7 @@ app/Sources/EgeonDeck/
   A cobertura hoje é pequena (23 testes); a regra existe para ela só crescer.
 - **Verificar é executar, compilar não é verificar**: dispare por `/dispatch`,
   confira por `/peek` e pelo log. Rotas úteis: `/targets` `/dispatch` `/peek`
-  `/chat` `/edge` `/layout` `/geometry` `/status` — socket unix, HTTP mínimo:
+  `/edge` `/layout` `/geometry` `/status` — socket unix, HTTP mínimo:
   `curl --unix-socket ~/.egeon-dev/sock http://eg/targets`
 - Config do usuário em `~/.egeon/` (tudo editável à mão); `bin/egeon`,
   `agent-hook.sh` e `claude-hooks.json` são regenerados a cada arranque.

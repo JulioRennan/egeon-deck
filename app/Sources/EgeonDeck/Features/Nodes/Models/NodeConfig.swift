@@ -44,8 +44,9 @@ struct NodeConfig: Codable {
     /// Onde o CLI está gravando esta conversa.
     ///
     /// Relatado pelo gancho, que recebe `transcript_path` no payload, e guardado
-    /// aqui porque o modo Chat precisa dele no arranque — antes do primeiro prompt
-    /// não haveria gancho nenhum e o thread nasceria vazio numa conversa cheia.
+    /// aqui para quem lê a conversa como dados poder achá-la no arranque — antes
+    /// do primeiro prompt não haveria gancho nenhum e a conversa cheia pareceria
+    /// vazia.
     ///
     /// Não é derivado do id da conversa mais convenção de pasta: isso amarraria o app
     /// ao `CLAUDE_CONFIG_DIR` do usuário, que é config de CLI e não é assunto
@@ -99,8 +100,8 @@ struct NodeConfig: Codable {
         var copy = self
         copy.conversationId = nil
         copy.conversationStarted = nil
-        // O transcript é da conversa, não da montagem: mantê-lo faria o chat do
-        // clone mostrar o thread do original.
+        // O transcript é da conversa, não da montagem: mantê-lo faria o clone
+        // apontar para a conversa do original.
         copy.transcript = nil
         return copy
     }

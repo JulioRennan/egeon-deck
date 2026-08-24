@@ -75,7 +75,7 @@ final class RootView: NSView {
     /// Fora do canvas a barra fica ao lado do conteúdo; no canvas, por cima do grid.
     ///
     /// Só o canvas tem folga: o grid corre até a borda e por baixo do vidro, e é isso
-    /// que faz a barra parecer flutuando. Mosaico e chat dividem a janela inteira com
+    /// que faz a barra parecer flutuando. O mosaico divide a janela inteira com
     /// conteúdo opaco, e sobreposição ali é terminal — ou mensagem — coberta.
     ///
     /// Chamado por quem troca de modo e por quem troca de bancada.

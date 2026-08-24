@@ -52,7 +52,7 @@ final class NodeConfigTests: XCTestCase {
 
         XCTAssertNil(node.conversationId)
         XCTAssertNil(node.conversationStarted)
-        // O transcript é da conversa: mantido, o chat do clone mostraria o thread
+        // O transcript é da conversa: mantido, o clone apontaria para a conversa
         // do original.
         XCTAssertNil(node.transcript)
 

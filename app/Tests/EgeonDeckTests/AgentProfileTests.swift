@@ -31,36 +31,3 @@ final class AgentProfileTests: XCTestCase {
         XCTAssertFalse(bare.keepsConversation)
     }
 }
-
-/// O thread como dados — o que a rota /chat devolve para se conferir de fora.
-final class ChatPayloadTests: XCTestCase {
-    func testBlockPayloads() {
-        XCTAssertEqual(ChatBlock.prose("oi").payload["kind"] as? String, "prose")
-        XCTAssertEqual(ChatBlock.code("$ ls").payload["text"] as? String, "$ ls")
-
-        let edit = ChatBlock.edit(EditBlock(file: "m/A.swift", add: 1, del: 2,
-            lines: [DiffLine(mark: "-", text: "velho"), DiffLine(mark: "+", text: "novo")]))
-        let payload = edit.payload
-        XCTAssertEqual(payload["kind"] as? String, "edit")
-        XCTAssertEqual(payload["add"] as? Int, 1)
-        XCTAssertEqual(payload["del"] as? Int, 2)
-        XCTAssertEqual(payload["diff"] as? [String], ["-velho", "+novo"])
-    }
-
-    func testTurnPayloadIsRecursiveAndOmitsEmpty() {
-        var reply = ChatTurn(id: "2", author: "b", at: Date())
-        reply.from = "a"
-        reply.blocks = [.prose("feito")]
-        var turn = ChatTurn(id: "1", author: "a", at: Date())
-        turn.prompt = "faz"
-        turn.replies = [reply]
-
-        let payload = turn.payload
-        XCTAssertEqual(payload["prompt"] as? String, "faz")
-        XCTAssertNil(payload["work"], "turno sem caminho não leva a chave")
-        XCTAssertNil(payload["inFlight"])
-        let replies = payload["replies"] as? [[String: Any]]
-        XCTAssertEqual(replies?.count, 1)
-        XCTAssertEqual(replies?[0]["from"] as? String, "a")
-    }
-}

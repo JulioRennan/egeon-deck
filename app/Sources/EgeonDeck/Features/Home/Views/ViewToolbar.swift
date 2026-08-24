@@ -243,7 +243,6 @@ final class ViewToolbar: NSView {
         for (key, button) in buttons { button.isSelected = (key == mode) }
         switch mode {
         case .mosaic: hint.stringValue = "as posições do canvas ficam guardadas"
-        case .chat:   hint.stringValue = "os terminais continuam rodando"
         case .canvas: hint.stringValue = ""
         }
     }

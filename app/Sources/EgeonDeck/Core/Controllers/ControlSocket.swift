@@ -227,7 +227,8 @@ final class ControlSocket {
             // relatando qual conversa está aberta e onde a está gravando. Vem do
             // gancho `UserPromptSubmit`, a cada prompt.
             //
-            // O transcript é o que o modo Chat lê (ADR-029). Opcional porque um CLI
+            // O transcript alimenta quem quiser ler a conversa como dados
+            // (ADR-029) — o modo chat, quando voltar. Opcional porque um CLI
             // que não o informe continua valendo como agente — perde o thread, não
             // o dispatch.
             let query = Self.query(in: route)
@@ -310,38 +311,6 @@ final class ControlSocket {
             // /geometry — onde cada nó está na tela, para dirigir gestos de fora.
             let payload = DispatchQueue.main.sync { AppControl.canvasGeometry?() ?? [:] }
             respond(fd, status: "200 OK", json: payload)
-
-        case ("POST", _, _) where route.contains("/compose"):
-            // /compose?target=ws — corpo é o texto que vai para a caixa de escrever,
-            // sem enviar. Corpo em texto puro pelo mesmo motivo do `/message`: aqui o
-            // que interessa é justamente texto de VÁRIAS linhas, e escapar quebra de
-            // linha em JSON à mão é onde se erra.
-            //
-            // Devolve a geometria que saiu: altura da caixa, topo, base, altura do
-            // histórico e se bateu no teto.
-            let query = Self.query(in: route)
-            let target = query["target"] ?? ""
-            let text = String(decoding: body, as: UTF8.self)
-            // `&send=1` aperta o Enter — é o gesto que faz a bolha de "entregando"
-            // nascer, e sem ele ela não é verificável de fora.
-            let send = query["send"] == "1"
-            let result = DispatchQueue.main.sync {
-                AppControl.chatCompose?(target, text, send) ?? nil
-            }
-            respond(fd, status: result == nil ? "404 Not Found" : "200 OK",
-                    json: result ?? ["ok": false,
-                                     "error": "bancada sem chat montado '\(target)'"])
-
-        case ("GET", _, _) where route.contains("/chat"):
-            // /chat?target=ws — o thread do modo Chat da bancada, como dados.
-            //
-            // É a ferramenta de teste do modo, do mesmo jeito que `/peek` é a do
-            // terminal: o thread sai de vários transcripts cruzados por tempo, e
-            // conferir isso na tela é conferir o resultado sem ver a conta.
-            let target = Self.query(in: route)["target"] ?? ""
-            let payload = DispatchQueue.main.sync { AppControl.chatThread?(target) ?? nil }
-            respond(fd, status: payload == nil ? "404 Not Found" : "200 OK",
-                    json: payload ?? ["ok": false, "error": "bancada desconhecida '\(target)'"])
 
         case ("GET", _, _) where route.contains("/peek"):
             // /peek?target=ws/id — mostra o que o terminal realmente exibe.
