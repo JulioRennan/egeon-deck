@@ -72,7 +72,11 @@ tentado e não compilou mais.
   Passo que não compila em 30 min reverte — nunca "conserta em cima".
 - **Mover é mover.** Passo de reorganização não muda comportamento. Refatorar
   de verdade é outro passo, outro commit.
-- **Lógica que se move ganha teste.** `swift test` — alvo `EgeonDeckTests`.
+- **Teste unitário é parte da entrega.** Código novo com lógica testável —
+  modelo, parsing, guarda, controller — nasce com teste em `EgeonDeckTests`;
+  lógica que se move ganha teste junto. Controller testável é o que não segura
+  estado: injete config/persistência por closures, como o EdgeController, e o
+  teste roda sem tela. `swift test` antes de todo commit.
 - **Verificar é executar:** `./app/dev.sh`, e conferir pelo socket
   (`/targets`, `/dispatch` + `/peek`, `/edge`, `/chat`) e pelo
   `~/egeon-dev.log`. Compilar não é verificar.

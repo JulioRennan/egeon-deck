@@ -79,7 +79,10 @@ app/Sources/EgeonDeck/
 - Todo caminho novo passa por `Flavor.current.config(_:)`.
 - **Encerre o app antes de tocar no bundle dele** — `rm -rf` num app vivo pula
   o `applicationWillTerminate`, que grava o workbenches.json.
-- Testes: `swift test` (alvo `EgeonDeckTests`). Lógica que se move ganha teste.
+- **Teste unitário é parte da entrega**: código novo com lógica testável —
+  modelo, parsing, guarda, controller — nasce com teste em `EgeonDeckTests`,
+  e lógica que se move ganha teste junto. `swift test` antes de commitar.
+  A cobertura hoje é pequena (23 testes); a regra existe para ela só crescer.
 - **Verificar é executar, compilar não é verificar**: dispare por `/dispatch`,
   confira por `/peek` e pelo log. Rotas úteis: `/targets` `/dispatch` `/peek`
   `/chat` `/edge` `/layout` `/geometry` `/status` — socket unix, HTTP mínimo:
