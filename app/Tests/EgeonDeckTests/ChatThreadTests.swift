@@ -125,6 +125,26 @@ final class ChatThreadTests: XCTestCase {
         XCTAssertEqual(left.map(\.target), ["back", "front"])
     }
 
+    // O eco entra NA linha do tempo pela hora do envio: resposta que chega
+    // depois dele fica embaixo, não em cima de um eco pinado no rodapé.
+    func testPendingEchoSitsInTimeline() {
+        let front = agent("front"), back = agent("back")
+        let base = Date(timeIntervalSince1970: 1_000)
+        var frontTurn = ChatTurn(id: "f1", prompt: "oi", promptAt: base)
+        frontTurn.replyText = "oi"; frontTurn.replyAt = base.addingTimeInterval(8)
+        let echo = ChatThread.Pending(text: "oi", target: "back",
+                                      sentAt: base.addingTimeInterval(3), knownTurnIds: [])
+
+        let built = ChatThread.build(participants: [front, back], pending: [echo]) {
+            $0.id == "front" ? [frontTurn] : []
+        }
+        XCTAssertEqual(built.pending.map(\.text), ["oi"])
+        // O turno do front foi visto e virou conhecido para o eco do back.
+        XCTAssertEqual(built.pending.first?.knownTurnIds, ["f1"])
+        XCTAssertEqual(built.messages.map(\.key),
+                       ["p|f1", "e|back|1003.0", "r|f1"])
+    }
+
     // Dois "oi" seguidos: o primeiro turno novo dá baixa em UM eco, não nos dois.
     func testOneNewTurnConfirmsOnePending() {
         let front = agent("front")

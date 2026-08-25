@@ -149,10 +149,11 @@ final class ChatContainer: NSView {
     private static let drawnMessages = 80
 
     private func rebuildThread(_ all: [ChatParticipant]) {
-        messages = ChatThread.build(participants: all) { [weak self] in
+        let built = ChatThread.build(participants: all, pending: pending) { [weak self] in
             self?.turns(of: $0) ?? []
         }
-        pending = ChatThread.stillPending(pending, given: messages)
+        messages = built.messages
+        pending = built.pending
         let typing = all.filter {
             $0.isAgent && ($0.activity == .working || $0.activity == .starting)
         }
@@ -179,6 +180,12 @@ final class ChatContainer: NSView {
                     view.onQuoteClick = { [weak self] in self?.scrollTo(key: quote.targetKey) }
                 }
                 bubble = view
+            case .pending(let to, let text, let at, let quote):
+                let view = ChatBubbleView(text: text, target: to, at: at, pending: true, quote: quote)
+                if let quote {
+                    view.onQuoteClick = { [weak self] in self?.scrollTo(key: quote.targetKey) }
+                }
+                bubble = view
             case .reply(let from, let turn, let quote):
                 let key = message.key
                 let view = AgentBubbleView(from: from, turn: turn,
@@ -197,11 +204,6 @@ final class ChatContainer: NSView {
             }
             bubbleByKey[message.key] = bubble
             return bubble
-        }
-        for item in pending {
-            guard let target = all.first(where: { $0.id == item.target }) else { continue }
-            bubbles.append(ChatBubbleView(text: item.text, target: target, at: item.sentAt,
-                                          pending: true))
         }
         for agent in typing { bubbles.append(AgentBubbleView(typing: agent)) }
         bubbles.forEach(threadDoc.addSubview)
@@ -297,6 +299,8 @@ final class ChatContainer: NSView {
                 case .prompt(let to, let turnId, let text, _, _):
                     return ["kind": "prompt", "id": turnId, "to": to.id, "text": text,
                             "quote": quote ?? [:]]
+                case .pending(let to, let text, _, _):
+                    return ["kind": "pending", "to": to.id, "text": text, "quote": quote ?? [:]]
                 case .reply(let from, let turn, _):
                     return ["kind": "reply", "id": turn.id, "from": from.id, "text": turn.replyText,
                             "steps": turn.steps.map { "\($0.glyph) \($0.text)" },

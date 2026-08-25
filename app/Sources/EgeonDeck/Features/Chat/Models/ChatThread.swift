@@ -12,15 +12,20 @@ struct ChatQuote: Equatable {
     let targetKey: String
 }
 
-/// Uma linha da thread: seu prompt para alguém, ou a resposta de alguém.
+/// Uma linha da thread: seu prompt para alguém, a resposta de alguém, ou um
+/// prompt seu que acabou de sair e o transcript ainda não confirmou.
 enum ChatMessage: Equatable {
     case prompt(to: ChatParticipant, turnId: String, text: String, at: Date, quote: ChatQuote? = nil)
     case reply(from: ChatParticipant, turn: ChatTurn, quote: ChatQuote? = nil)
+    /// Eco local. Entra na linha do tempo pela hora do envio — pinado embaixo,
+    /// uma resposta que chegasse antes da confirmação passaria por cima dele.
+    case pending(to: ChatParticipant, text: String, at: Date, quote: ChatQuote? = nil)
 
     var at: Date {
         switch self {
         case .prompt(_, _, _, let at, _): return at
         case .reply(_, let turn, _):   return turn.replyAt ?? turn.promptAt
+        case .pending(_, _, let at, _): return at
         }
     }
 
@@ -29,6 +34,7 @@ enum ChatMessage: Equatable {
         switch self {
         case .prompt(_, let turnId, _, _, _): return "p|\(turnId)"
         case .reply(_, let turn, _):          return "r|\(turn.id)"
+        case .pending(let to, _, let at, _):  return "e|\(to.id)|\(at.timeIntervalSince1970)"
         }
     }
 
@@ -36,6 +42,7 @@ enum ChatMessage: Equatable {
         switch self {
         case .prompt(let to, _, _, _, _): return to.id
         case .reply(let from, _, _):   return from.id
+        case .pending(let to, _, _, _): return to.id
         }
     }
 
@@ -46,7 +53,8 @@ enum ChatMessage: Equatable {
 
     var quote: ChatQuote? {
         switch self {
-        case .prompt(_, _, _, _, let quote), .reply(_, _, let quote): return quote
+        case .prompt(_, _, _, _, let quote), .reply(_, _, let quote),
+             .pending(_, _, _, let quote): return quote
         }
     }
 
@@ -55,6 +63,8 @@ enum ChatMessage: Equatable {
         case .prompt(let to, let turnId, let text, let at, _):
             return .prompt(to: to, turnId: turnId, text: text, at: at, quote: quote)
         case .reply(let from, let turn, _):        return .reply(from: from, turn: turn, quote: quote)
+        case .pending(let to, let text, let at, _):
+            return .pending(to: to, text: text, at: at, quote: quote)
         }
     }
 
@@ -66,9 +76,9 @@ enum ChatMessage: Equatable {
     /// resposta que não vem logo depois do próprio prompt cita esse prompt; um
     /// prompt seu que não vem logo depois de uma fala do mesmo agente cita a
     /// última resposta dele. Sem isto, dois papos ao mesmo tempo "juntam".
-    static func thread(participants: [ChatParticipant],
+    static func thread(participants: [ChatParticipant], extra: [ChatMessage] = [],
                        turns: (ChatParticipant) -> [ChatTurn]) -> [ChatMessage] {
-        var messages: [ChatMessage] = []
+        var messages: [ChatMessage] = extra
         for participant in participants where participant.isAgent {
             for turn in turns(participant) {
                 messages.append(.prompt(to: participant, turnId: turn.id, text: turn.prompt,
@@ -97,7 +107,7 @@ enum ChatMessage: Equatable {
                         authorId: nil, text: turn.prompt, at: turn.promptAt,
                         targetKey: "p|\(turn.id)")))
                 }
-            case .prompt(let to, _, _, _, _):
+            case .prompt(let to, _, _, _, _), .pending(let to, _, _, _):
                 if previous?.participantId == to.id || previous == nil {
                     out.append(message)
                 } else if let last = sorted[..<index].last(where: {
@@ -121,6 +131,20 @@ enum ChatThread {
     static func build(participants: [ChatParticipant],
                       turns: (ChatParticipant) -> [ChatTurn]) -> [ChatMessage] {
         ChatMessage.thread(participants: participants, turns: turns)
+    }
+
+    /// A thread com os ecos DENTRO da linha do tempo, e os ecos que sobraram
+    /// depois de o transcript confirmar o que já chegou.
+    static func build(participants: [ChatParticipant], pending: [Pending],
+                      turns: (ChatParticipant) -> [ChatTurn])
+        -> (messages: [ChatMessage], pending: [Pending]) {
+        let confirmed = ChatMessage.thread(participants: participants, turns: turns)
+        let left = stillPending(pending, given: confirmed)
+        let echoes = left.compactMap { item -> ChatMessage? in
+            guard let to = participants.first(where: { $0.id == item.target }) else { return nil }
+            return .pending(to: to, text: item.text, at: item.sentAt)
+        }
+        return (ChatMessage.thread(participants: participants, extra: echoes, turns: turns), left)
     }
 
     struct Pending: Equatable {
