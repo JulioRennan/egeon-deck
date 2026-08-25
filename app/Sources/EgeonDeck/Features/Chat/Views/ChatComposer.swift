@@ -267,17 +267,22 @@ private final class ChipView: NSView {
         needsLayout = true
     }
 
+    // intrinsicContentSize arredonda para baixo e o NSTextField corta o último
+    // glifo ("claud|e"); a folga garante que o texto nunca perde a borda.
+    private static let slack: CGFloat = 3
+
+    private var fields: [NSTextField] { [para, name, detail, caret].filter { !$0.stringValue.isEmpty } }
+
     var desiredWidth: CGFloat {
-        para.intrinsicContentSize.width + name.intrinsicContentSize.width
-            + detail.intrinsicContentSize.width + caret.intrinsicContentSize.width + 40
+        fields.reduce(20 - 7) { $0 + $1.intrinsicContentSize.width + Self.slack + 7 }
     }
 
     override func layout() {
         super.layout()
         var x: CGFloat = 10
-        for field in [para, name, detail, caret] {
-            let width = field.intrinsicContentSize.width
-            field.frame = NSRect(x: x, y: 5, width: width, height: 14)
+        for field in fields {
+            let width = field.intrinsicContentSize.width + Self.slack
+            field.frame = NSRect(x: x, y: 4, width: width, height: 16)
             x += width + 7
         }
     }
