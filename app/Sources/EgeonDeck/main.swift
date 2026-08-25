@@ -182,6 +182,11 @@ EgeonCLI.install()
             else { return }
             self.shells[index]?.chat.scroll(edge)
         }
+        AppControl.chatFocus = { [weak self] name, id in
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
+            else { return }
+            self.shells[index]?.chat.focusFromOutside(id)
+        }
         AppControl.chatCompose = { [weak self] name, text, send in
             guard let self,
                   let index = self.configs.firstIndex(where: { $0.name == name }),

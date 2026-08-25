@@ -87,6 +87,15 @@ final class WorkbenchShell: NSView {
         // nó novo nasceria no mesmo canto de lá.
         canvas.placedNodes = { [weak self] in self?.nodes ?? [] }
 
+        // O chat pega um terminal emprestado do canvas coberto e devolve depois.
+        chat.terminalView = { [weak self] id in self?.nodes.first { $0.nodeID == id } }
+        chat.releaseTerminal = { [weak self] view in
+            guard let self, let node = view as? NodeView, self.nodes.contains(where: { $0 === node })
+            else { return }
+            if let frame = self.canvasFrames[node.nodeID] { node.frame = frame }
+            self.canvas.add(node)
+        }
+
         place()
     }
 
@@ -198,6 +207,7 @@ final class WorkbenchShell: NSView {
         // Reparentar não mexe no processo: o pty continua ligado ao SwiftTerm e o
         // WKWebView não recarrega. É o que permite trocar de modo com agentes
         // trabalhando.
+        chat.leaveTerminal()
         nodes.forEach { $0.removeFromSuperview() }
 
         switch mode {

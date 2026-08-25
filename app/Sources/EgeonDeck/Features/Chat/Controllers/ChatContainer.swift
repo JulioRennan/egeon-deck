@@ -14,6 +14,12 @@ final class ChatContainer: NSView {
     var participants: (() -> [ChatParticipant])?
     /// Envia. Devolve mensagem de erro, ou nil se entrou na fila.
     var send: ((String, ChatParticipant) -> String?)?
+    /// O card de um terminal, pelo id do nó — para mostrar o terminal de
+    /// verdade no lugar da thread quando você clica num shell.
+    var terminalView: ((String) -> NSView?)?
+    /// Devolve o card ao canvas coberto quando o chat para de mostrá-lo.
+    var releaseTerminal: ((NSView) -> Void)?
+    private var shownTerminal: NSView?
 
     private let column = ParticipantsColumn()
     private let threadScroll = NSScrollView()
@@ -154,7 +160,18 @@ final class ChatContainer: NSView {
         }
         column.update(all, focused: focusedId)
         composer.setTarget(alive.first { $0.id == focusedId })
+        // Foco caiu num agente sem ser por clique (o shell morreu): thread de volta.
+        if shownTerminal != nil, alive.first(where: { $0.id == focusedId })?.isAgent != false {
+            leaveTerminal()
+        }
         rebuildThread(all)
+    }
+
+    /// Escolhe o participante por fora (`/chat?focus=id`) — o clique na coluna
+    /// não é dirigível sem Acessibilidade.
+    func focusFromOutside(_ id: String) {
+        guard (participants?() ?? []).contains(where: { $0.id == id }) else { return }
+        focus(on: id)
     }
 
     private var userChoseFocus = false
@@ -277,7 +294,40 @@ final class ChatContainer: NSView {
     private func focus(on id: String) {
         focusedId = id
         userChoseFocus = true
+        let all = participants?() ?? []
+        if let picked = all.first(where: { $0.id == id }), !picked.isAgent {
+            showTerminal(of: picked)
+        } else {
+            leaveTerminal()
+        }
         refresh()
+    }
+
+    // MARK: Terminal no lugar da thread
+
+    /// Clicar num shell é querer VER o terminal: o card sai do canvas coberto e
+    /// entra aqui, no lugar da thread — reparentar não mexe no pty, é o mesmo
+    /// truque do mosaico. O composer continua: Enter manda comando para ele.
+    private func showTerminal(of participant: ChatParticipant) {
+        guard let view = terminalView?(participant.id) else { return }
+        if shownTerminal !== view { leaveTerminal() }
+        shownTerminal = view
+        addSubview(view, positioned: .below, relativeTo: composer)
+        threadScroll.isHidden = true
+        toBottom.isHidden = true
+        emptyThread.isHidden = true
+        needsLayout = true
+    }
+
+    /// De volta à thread; o card volta para o canvas. O shell chama isto ao
+    /// sair do modo chat, para o card não ficar preso aqui.
+    func leaveTerminal() {
+        guard let view = shownTerminal else { return }
+        shownTerminal = nil
+        view.removeFromSuperview()
+        releaseTerminal?(view)
+        threadScroll.isHidden = false
+        needsLayout = true
     }
 
     private func cycleFocus() {
@@ -331,6 +381,7 @@ final class ChatContainer: NSView {
         ]
         return [
             "focus": focusedId ?? "",
+            "viewing": shownTerminal == nil ? "thread" : (focusedId ?? ""),
             "participants": all.map { p -> [String: Any] in
                 ["id": p.id, "address": p.address, "agent": p.isAgent,
                  "activity": "\(p.activity)", "role": p.role ?? ""]
@@ -460,11 +511,12 @@ final class ChatContainer: NSView {
 
         threadScroll.frame = NSRect(x: contentX, y: 10, width: contentWidth,
                                     height: max(0, composer.frame.minY - 20))
+        shownTerminal?.frame = threadScroll.frame
         toBottom.frame = NSRect(x: threadScroll.frame.maxX - 54,
                                 y: threadScroll.frame.maxY - 48, width: 36, height: 36)
         emptyThread.frame = NSRect(x: contentX, y: composer.frame.minY - 28,
                                    width: contentWidth, height: 15)
-        emptyThread.isHidden = !bubbles.isEmpty
+        emptyThread.isHidden = !bubbles.isEmpty || shownTerminal != nil
 
         layoutBubbles(width: contentWidth)
 

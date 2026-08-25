@@ -101,6 +101,8 @@ enum AppControl {
 
     /// Rola a thread do chat por fora: "top" ou "bottom".
     static var chatScroll: ((_ workbench: String, _ edge: String) -> Void)?
+    /// Escolhe o participante em foco por fora, como o clique na coluna.
+    static var chatFocus: ((_ workbench: String, _ id: String) -> Void)?
 
     /// Escreve na caixa do chat, sem enviar ou enviando, e devolve o estado.
     /// Tecla sintética exige Acessibilidade, que a assinatura ad-hoc perde a

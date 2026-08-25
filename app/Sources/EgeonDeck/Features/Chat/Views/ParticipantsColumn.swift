@@ -7,9 +7,12 @@ import AppKit
 final class ParticipantsColumn: NSView {
     var onPick: ((ChatParticipant) -> Void)?
 
-    private let title = NSTextField(labelWithString: "PARTICIPANTES")
+    private let agentsTitle = NSTextField(labelWithString: "AGENTES")
+    private let shellsTitle = NSTextField(labelWithString: "TERMINAIS")
     private let hint = NSTextField(labelWithString: "Clique foca · Tab alterna entre agentes")
-    private var rows: [ParticipantRow] = []
+    private var agentRows: [ParticipantRow] = []
+    private var shellRows: [ParticipantRow] = []
+    private var rows: [ParticipantRow] { agentRows + shellRows }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -19,9 +22,11 @@ final class ParticipantsColumn: NSView {
         layer?.borderWidth = 1
         layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.09).cgColor
 
-        title.font = .systemFont(ofSize: 10, weight: .semibold)
-        title.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
-        addSubview(title)
+        for title in [agentsTitle, shellsTitle] {
+            title.font = .systemFont(ofSize: 10, weight: .semibold)
+            title.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+            addSubview(title)
+        }
 
         hint.font = .systemFont(ofSize: 10.5)
         hint.textColor = NSColor(calibratedWhite: 0.38, alpha: 1)
@@ -44,23 +49,38 @@ final class ParticipantsColumn: NSView {
         signature = next
 
         rows.forEach { $0.removeFromSuperview() }
-        rows = participants.map { participant in
-            let row = ParticipantRow(participant: participant,
-                                     focused: participant.id == focused)
-            row.onClick = { [weak self] in self?.onPick?(participant) }
-            addSubview(row)
-            return row
+        func make(_ list: [ChatParticipant]) -> [ParticipantRow] {
+            list.map { participant in
+                let row = ParticipantRow(participant: participant,
+                                         focused: participant.id == focused)
+                row.onClick = { [weak self] in self?.onPick?(participant) }
+                addSubview(row)
+                return row
+            }
         }
+        // Duas seções: agente se conversa, terminal se olha e manda comando.
+        agentRows = make(participants.filter(\.isAgent))
+        shellRows = make(participants.filter { !$0.isAgent })
+        shellsTitle.isHidden = shellRows.isEmpty
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
-        title.frame = NSRect(x: 14, y: 12, width: bounds.width - 28, height: 13)
+        agentsTitle.frame = NSRect(x: 14, y: 12, width: bounds.width - 28, height: 13)
         var y: CGFloat = 34
-        for row in rows {
+        for row in agentRows {
             row.frame = NSRect(x: 8, y: y, width: bounds.width - 16, height: 44)
             y += 47
+        }
+        if !shellRows.isEmpty {
+            y += 10
+            shellsTitle.frame = NSRect(x: 14, y: y, width: bounds.width - 28, height: 13)
+            y += 22
+            for row in shellRows {
+                row.frame = NSRect(x: 8, y: y, width: bounds.width - 16, height: 44)
+                y += 47
+            }
         }
         hint.frame = NSRect(x: 14, y: bounds.height - 26,
                             width: bounds.width - 28, height: 14)
@@ -84,13 +104,23 @@ private final class ParticipantRow: NSView {
             layer?.backgroundColor = participant.color.withAlphaComponent(0.06).cgColor
         }
 
-        let glyph = NSTextField(labelWithString: participant.glyph)
-        glyph.font = participant.isAgent
-            ? .systemFont(ofSize: 13)
-            : .monospacedSystemFont(ofSize: 12, weight: .regular)
-        glyph.textColor = participant.color
-        glyph.frame = NSRect(x: 10, y: 14, width: 16, height: 16)
-        addSubview(glyph)
+        if participant.isAgent {
+            let glyph = NSTextField(labelWithString: participant.glyph)
+            glyph.font = .systemFont(ofSize: 13)
+            glyph.textColor = participant.color
+            glyph.frame = NSRect(x: 10, y: 14, width: 16, height: 16)
+            addSubview(glyph)
+        } else {
+            // Terminal tem ícone de terminal — o glifo de prompt confundia com
+            // um agente de cor cinza.
+            let icon = NSImageView()
+            icon.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "terminal")?
+                .withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+            icon.contentTintColor = participant.color
+            icon.imageScaling = .scaleNone
+            icon.frame = NSRect(x: 8, y: 13, width: 20, height: 18)
+            addSubview(icon)
+        }
 
         let name = NSTextField(labelWithString: participant.id)
         name.font = .systemFont(ofSize: 12.5, weight: .semibold)

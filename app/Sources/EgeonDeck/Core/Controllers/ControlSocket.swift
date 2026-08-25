@@ -327,11 +327,13 @@ final class ControlSocket {
                                      "error": "bancada sem chat montado '\(target)'"])
 
         case ("GET", _, _) where route.contains("/chat"):
-            // /chat?target=ws[&scroll=top|bottom] — o modo chat da bancada, como
-            // dados; `scroll` rola a thread antes de responder.
+            // /chat?target=ws[&scroll=top|bottom][&focus=id] — o modo chat da
+            // bancada, como dados; `scroll` rola a thread e `focus` escolhe o
+            // participante antes de responder.
             let query = Self.query(in: route)
             let target = query["target"] ?? ""
             let payload = DispatchQueue.main.sync {
+                if let id = query["focus"] { AppControl.chatFocus?(target, id) }
                 if let edge = query["scroll"] { AppControl.chatScroll?(target, edge) }
                 return AppControl.chatState?(target) ?? nil
             }
