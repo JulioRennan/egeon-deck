@@ -1646,9 +1646,11 @@ EgeonCLI.install()
         }
         schedulePersist()
 
+        // Abrir enquadrando os nós, não em (0,0): a bancada gravada pode estar
+        // toda longe do canto, e cair no vazio é ter de procurar os cards.
         DispatchQueue.main.async {
-            shell.canvas.scroll.contentView.scroll(to: NSPoint(x: 20, y: 20))
-            shell.canvas.scroll.reflectScrolledClipView(shell.canvas.scroll.contentView)
+            shell.layoutSubtreeIfNeeded()
+            shell.canvas.fitAll()
         }
         return shell
     }
@@ -1683,6 +1685,10 @@ EgeonCLI.install()
         wireChat(shell.chat, index: index)
 
         let canvas = shell.canvas
+        // Lido na hora do enquadrar, não guardado: a barra lateral recolhe e abre.
+        canvas.visibleInsets = { [weak self] in
+            NSEdgeInsets(top: 0, left: self?.root.floatingSidebarInset ?? 0, bottom: 0, right: 0)
+        }
         canvas.onPlace = { [weak self] tool, rect in self?.place(tool, rect: rect, index: index) }
         canvas.onLayoutChanged = { [weak self] in
             self?.syncFrames(index: index)

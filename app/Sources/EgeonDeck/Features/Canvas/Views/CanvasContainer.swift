@@ -206,6 +206,7 @@ final class CanvasContainer: NSView {
         }
         toolbar.onZoom = { [weak self] direction in self?.stepZoom(direction) }
         toolbar.onResetZoom = { [weak self] in self?.zoom(to: 1) }
+        toolbar.onFitAll = { [weak self] in self?.fitAll() }
         addSubview(toolbarPanel)
 
         NotificationCenter.default.addObserver(
@@ -598,6 +599,68 @@ final class CanvasContainer: NSView {
 
     func zoom(to value: CGFloat) {
         applyZoom(value, keeping: viewportCenterInWindow)
+    }
+
+    /// Zoom que faz um retângulo caber num viewport com margem. Nunca passa de
+    /// 100%: dois cards pequenos não devem virar terminais gigantes — enquadrar
+    /// é achar, não ampliar.
+    static func fitZoom(for content: NSRect, in viewport: NSSize,
+                        margin: CGFloat = 60) -> CGFloat {
+        let usable = NSSize(width: viewport.width - 2 * margin,
+                            height: viewport.height - 2 * margin)
+        guard content.width > 0, content.height > 0, usable.width > 0, usable.height > 0
+        else { return 1 }
+        let scale = min(usable.width / content.width, usable.height / content.height, 1)
+        return min(max(scale, zoomSteps.first!), zoomSteps.last!)
+    }
+
+    /// O que cobre o canvas por cima e não é canvas: a barra lateral flutuante à
+    /// esquerda (largura lida na hora — recolhida ou aberta) e a barra de
+    /// ferramentas embaixo. Enquadrar usa só o que sobra.
+    var visibleInsets: (() -> NSEdgeInsets)?
+
+    /// Em coordenadas do container, que NÃO é flipped: a barra de ferramentas
+    /// fica em y pequeno, embaixo. `y` da área é a borda de baixo.
+    private var visibleArea: NSRect {
+        var insets = visibleInsets?() ?? NSEdgeInsets()
+        insets.bottom = max(insets.bottom, toolbarPanel.frame.maxY + 12)
+        return NSRect(x: insets.left, y: insets.bottom,
+                      width: max(0, bounds.width - insets.left - insets.right),
+                      height: max(0, bounds.height - insets.top - insets.bottom))
+    }
+
+    private var nodesUnion: NSRect? {
+        let frames = nodes.map(\.frame)
+        guard let first = frames.first else { return nil }
+        return frames.dropFirst().reduce(first) { $0.union($1) }
+    }
+
+    /// Enquadra todos os nós na área visível: zoom para caberem, centrados. É
+    /// onde a bancada abre — em (0,0) você caía num canto vazio e tinha de
+    /// procurar os cards — e o botão da barra quando você se perde no canvas.
+    func fitAll() {
+        guard let union = nodesUnion, bounds.width > 0, bounds.height > 0 else { return }
+        let area = visibleArea
+        guard area.width > 0, area.height > 0 else { return }
+        let target = Self.fitZoom(for: union, in: area.size)
+
+        growDocumentIfNeeded(forMagnification: target)
+        rawMagnification = target
+        scroll.magnification = target
+
+        // A união de novo: crescer o documento DESLOCA os nós, e centrar na
+        // união antiga errava por exatamente esse deslocamento.
+        guard let moved = nodesUnion else { return }
+        // O documento é flipped (y cresce para baixo) e o container não: o
+        // centro da área, medido do topo, é o que se converte para o documento.
+        let centerFromTop = bounds.height - area.midY
+        let origin = NSPoint(x: moved.midX - area.midX / target,
+                             y: moved.midY - centerFromTop / target)
+        scroll.contentView.scroll(to: clampedOrigin(origin))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        toolbar.showZoom(scroll.magnification)
+        Log.write(String(format: "canvas: enquadrei %d nós em zoom %.2f, área útil %.0f×%.0f (lateral %.0f)",
+                         nodes.count, Double(target), area.width, area.height, area.minX))
     }
 
     func stepZoom(_ direction: Int) {

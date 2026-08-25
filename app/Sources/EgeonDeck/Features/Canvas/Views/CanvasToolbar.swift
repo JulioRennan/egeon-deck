@@ -14,6 +14,8 @@ final class CanvasToolbar: NSView {
     var onUpdateTemplate: (() -> Void)?
     /// Abrir uma bancada nova numa worktree desta.
     var onNewWorktree: (() -> Void)?
+    /// Enquadrar todos os nós — o "onde é que eu estou" do canvas.
+    var onFitAll: (() -> Void)?
     /// Escolher com que componente o próximo terminal nasce. Nil = shell padrão.
     var onPickComponent: ((String?) -> Void)?
     /// Abrir o formulário para montar um terminal do zero.
@@ -34,6 +36,8 @@ final class CanvasToolbar: NSView {
     private let saveTemplate: ToolbarButton
     private let updateTemplate: ToolbarButton
     private let newWorktree: ToolbarButton
+    private let fitAll: ToolbarButton
+    private let fitSeparator = NSView()
 
     override init(frame frameRect: NSRect) {
         zoomOut = ToolbarButton(symbols: ["minus"], tooltip: "Afastar (⌘−)", size: 28)
@@ -47,6 +51,10 @@ final class CanvasToolbar: NSView {
         newWorktree = ToolbarButton(
             symbols: ["arrow.triangle.branch", "arrow.branch", "square.on.square"],
             tooltip: "Nova bancada numa worktree desta — nada aqui é reiniciado")
+        fitAll = ToolbarButton(
+            symbols: ["arrow.down.left.and.arrow.up.right.rectangle",
+                      "arrow.up.left.and.arrow.down.right", "viewfinder"],
+            tooltip: "Enquadrar todos os nós")
         super.init(frame: frameRect)
 
         // Sem fundo, borda nem sombra próprios: quem dá tudo isso é o
@@ -98,6 +106,12 @@ final class CanvasToolbar: NSView {
 
         newWorktree.onClick = { [weak self] in self?.onNewWorktree?() }
         addSubview(newWorktree)
+
+        fitSeparator.wantsLayer = true
+        fitSeparator.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.18).cgColor
+        addSubview(fitSeparator)
+        fitAll.onClick = { [weak self] in self?.onFitAll?() }
+        addSubview(fitAll)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -113,6 +127,7 @@ final class CanvasToolbar: NSView {
             + 17                                     // separador + folgas
             + 28 + 44 + 28                           // zoom: −, rótulo, +
             + 17 + 32 + Self.gap + 32 + Self.gap + 32 // separador + ações da bancada
+            + 17 + 32                                // separador + enquadrar, no fim
         return NSSize(width: width, height: Self.height)
     }
 
@@ -150,6 +165,13 @@ final class CanvasToolbar: NSView {
             x += 32 + Self.gap
         }
         newWorktree.frame = NSRect(x: x, y: y, width: 32, height: 32)
+        x += 32
+
+        // O mais à direita possível, sozinho: é o botão de se achar.
+        x += 8
+        fitSeparator.frame = NSRect(x: x, y: 12, width: 1, height: bounds.height - 24)
+        x += 9
+        fitAll.frame = NSRect(x: x, y: y, width: 32, height: 32)
     }
 
     override func mouseDown(with event: NSEvent) {

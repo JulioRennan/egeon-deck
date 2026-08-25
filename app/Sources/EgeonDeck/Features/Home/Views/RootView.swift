@@ -46,6 +46,13 @@ final class RootView: NSView {
         isCollapsed ? Sidebar.railWidth : Sidebar.expandedWidth
     }
 
+    /// Quanto da borda esquerda do conteúdo a barra lateral cobre AGORA. No
+    /// canvas ela flutua por cima do grid, então enquadrar nós tem de descontar
+    /// isto — e lido na hora, porque recolher a barra muda o número.
+    var floatingSidebarInset: CGFloat {
+        isMosaic ? 0 : Self.margin + sidebarWidth + Self.gap
+    }
+
     var contentFrame: NSRect {
         // No canvas o conteúdo vai até a BORDA: o grid corre por baixo da barra, e
         // é isso que faz a barra parecer flutuando. Reservar uma faixa aqui pintava
