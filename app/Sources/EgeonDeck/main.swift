@@ -1040,6 +1040,10 @@ EgeonCLI.install()
         let alvo: NSView?
         if target == "window" {
             alvo = window.contentView
+        } else if target == "sidebar" {
+            // Só a barra: no `window` o vidro por baixo sai branco no bitmap e
+            // esconde as linhas, que é justamente o que se quer conferir.
+            alvo = root.sidebar
         } else {
             let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
             alvo = parts.count == 2

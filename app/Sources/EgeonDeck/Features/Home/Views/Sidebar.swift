@@ -98,7 +98,7 @@ final class SidebarRow: NSView {
     /// Largura que o badge de fato ocupa, medida do conteúdo.
     ///
     /// Reservar o pior caso — `⠙9 ●9 ●9`, três avisos com contagem — custaria
-    /// 66pt em TODA linha, e a barra tem 220: um terço do nome da bancada pago
+    /// 66pt em TODA linha, e a barra tem 264: um terço do nome da bancada pago
     /// para um caso que quase nunca acontece. O comum é uma bolinha só.
     private var badgeWidth: CGFloat = 0
 
@@ -182,9 +182,10 @@ final class SidebarRow: NSView {
             // Bancada recém-aberta, terminais ainda subindo: dizer por extenso
             // vale mais que um spinner, que aqui leria como "trabalhando".
             badge.append(NSAttributedString(
-                string: "\(Spinner.current) preparando bancada…",
+                string: "\(Spinner.current) preparando…",
                 attributes: [.foregroundColor: NSColor(calibratedWhite: 1, alpha: 0.35),
-                             .font: font, .paragraphStyle: paragraph]))
+                             .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .medium),
+                             .paragraphStyle: paragraph]))
         } else {
             // No trilho, ou com trabalho de verdade ao lado, o "subindo" é um
             // spinner mais apagado que o de trabalho — presente, não urgente.
@@ -207,7 +208,9 @@ final class SidebarRow: NSView {
 
         // O nome da bancada fica com o que sobra, então a caixa acompanha o
         // conteúdo em vez de reservar o pior caso.
-        let width = badge.length == 0 ? 0 : ceil(badge.size().width) + 2
+        // O NSTextField desenha com ~2pt de inset de cada lado; com folga de 2 a
+        // bolinha alinhada à direita vazava pela borda e saía cortada pela metade.
+        let width = badge.length == 0 ? 0 : ceil(badge.size().width) + 8
         if width != badgeWidth {
             badgeWidth = width
             needsLayout = true
@@ -285,7 +288,8 @@ final class Sidebar: NSView {
     /// Cabeçalho curto porque a barra agora flutua: os botões da janela ficam
     /// FORA dela, e não há mais o que desviar aqui dentro.
     static let headerHeight: CGFloat = 34
-    static let expandedWidth: CGFloat = 232
+    /// Nome, caminho e até três indicadores com contagem cabem sem cortar.
+    static let expandedWidth: CGFloat = 264
     /// Largura do trilho recolhido: cabe a pastilha de 26pt com folga, e é o que
     /// o conteúdo reserva de gutter — o que se abre além disso flutua por cima.
     static let railWidth: CGFloat = 52
