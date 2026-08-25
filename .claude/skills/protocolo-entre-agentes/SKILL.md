@@ -38,18 +38,19 @@ do ambiente do pty e faz POST no socket.
 
 | gancho Claude Code | `HookEvent` | rota | efeito em `Target.hookReported` |
 |---|---|---|---|
+| `SessionStart` | `.start` | `/activity?target=&event=start` | `sessionUp = true`. Com gancho, o terminal fica `.starting` ("preparando") até isto chegar (teto `bootCeiling` 45 s), nunca menos que `warmupMs`. (ADR-034) |
 | `UserPromptSubmit` | `.prompt` | `/conversation?target=&…` | `turnInFlight = true`; informa o `conversationId` aberto (ADR-014). Não é aviso. |
 | `Stop` | `.stop` | `/activity?target=&event=stop&transcript=<path>` | `turnInFlight = false`; gancho diz **quando**, marcador no **transcript** diz **qual** (`ClaudeTranscript.lastMarker`, `settleStop`): linha mais velha que o `prompt` do turno → relê a cada 250 ms até 6×; sem transcript → tela. `ask` → `.asking`, senão `.waiting`. (ADR-034) |
 | `Notification` (`matcher: permission_prompt`) | `.ask` | `/activity?target=&event=ask` | Só vale se `turnInFlight || working || starting` — separa "pedido de permissão" (antes do Stop) do "você sumiu há 60s" (depois). → `.asking`. |
 
 `HookEvent` é enum tipado (`Features/Notifications/Models/HookEvent.swift`):
-evento desconhecido morre na borda do socket com `expected = "stop|prompt|ask"`.
+evento desconhecido morre na borda do socket com `expected = "stop|prompt|ask|start"`.
 
 ### `Activity` (`Features/Notifications/Models/Activity.swift`)
 
 | estado | rótulo | cor | interrompe? |
 |---|---|---|---|
-| `starting` | ⟳ subindo | acento | não |
+| `starting` | ⟳ preparando | acento | não — na Sidebar conta em `ActivitySummary.starting`, não em `working`; bancada só com estes mostra "preparando bancada…" |
 | `ready` | — | acento | não |
 | `working` | ⟳ trabalhando | acento | não |
 | `waiting` | ● terminou | verde | **não** — você lê quando olhar |

@@ -101,6 +101,10 @@ final class Target {
     /// permissão chega. Recusar ali seria engolir justamente o aviso que mais
     /// importa.
     private var turnInFlight = false
+    /// O CLI relatou `SessionStart`: a TUI está de pé. Antes disso, terminal com
+    /// gancho é "iniciando" — o aquecimento por relógio não sabe quanto o
+    /// programa demora para carregar.
+    private var sessionUp = false
     /// Quando o `prompt` deste turno chegou. É contra ele que o marcador lido
     /// do transcript é conferido: linha mais velha que isto é do turno passado.
     private var turnStartedAt: Date?
@@ -260,6 +264,15 @@ final class Target {
             return
         }
 
+        // Com gancho, quem diz que subiu é o `SessionStart`. O teto existe para
+        // um CLI que não relate — wrapper sem `--settings`, versão sem o gancho:
+        // aí o boot acaba como antes, pelo relógio.
+        if speaksHooks, !sessionUp, !turnInFlight,
+           now.timeIntervalSince(startedAt) < Self.bootCeiling {
+            transition(to: .starting)
+            return
+        }
+
         // Fila por drenar, entrega sem confirmação ou Enter por sair: o terminal
         // não está esperando você — está esperando a gente.
         guard queue.isEmpty, unconfirmed == nil, pendingSubmit == nil else {
@@ -350,10 +363,13 @@ final class Target {
         case .stop:
             turnInFlight = false
             settleStop(transcript: transcript, token: hookToken(event.rawValue), attempt: 0)
+        case .start:
+            sessionUp = true
         case .prompt:
             // O relato de conversa (`UserPromptSubmit`) não é aviso nenhum: ele
             // diz qual conversa está aberta (ADR-014), e de quebra confirma que
             // o gancho chega neste terminal.
+            sessionUp = true
             turnInFlight = true
             turnStartedAt = Date()
         case .ask:
@@ -412,6 +428,9 @@ final class Target {
         }
         attend(asked ? .asking : .waiting, via: via, stop: token)
     }
+
+    /// Quanto esperar o `SessionStart` antes de dar o boot por acabado.
+    private static let bootCeiling: TimeInterval = 45
 
     private static let stopRetries = 6
     private static let stopRetryDelay: TimeInterval = 0.25
@@ -955,7 +974,8 @@ final class Dispatcher {
             let name = String(address.split(separator: "/").first ?? "")
             var entry = out[name] ?? ActivitySummary()
             switch target.activity {
-            case .starting, .working: entry.working += 1
+            case .starting:           entry.starting += 1
+            case .working:            entry.working += 1
             case .asking:             entry.attention += 1
             case .waiting:            entry.done += 1
             case .ready, .dead:       break

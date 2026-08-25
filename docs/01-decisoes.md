@@ -2319,6 +2319,16 @@ cada 250ms, até 6 vezes, antes de cair na tela. Em uso, uma releitura basta.
 `Notification` passou a ter `matcher: permission_prompt`: qualquer outro tipo de
 notificação que o CLI inventar deixa de virar "precisa de você".
 
+### Subir não é trabalhar
+
+Abrir uma bancada materializa os terminais dela, e o resumo da barra lateral
+contava `.starting` como `working`: a bancada recém-aberta aparecia ocupada. O
+`SessionStart` do CLI entrou como terceiro gancho — é ele que diz que a TUI está
+de pé — e até ele chegar o terminal é "preparando", contado à parte; bancada só
+com terminais assim diz "preparando bancada…" por extenso. O aquecimento por
+relógio (`warmupMs`) continua como piso, porque também protege a injeção; um CLI
+que não relate cai no teto de 45 s.
+
 ### O que segue valendo
 
 Terminal sem gancho (shell, CLI sem hooks) continua no ADR-011: silêncio,

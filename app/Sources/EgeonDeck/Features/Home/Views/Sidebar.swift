@@ -142,8 +142,8 @@ final class SidebarRow: NSView {
         // assinatura carrega as três contagens e não o texto: com a MESMA
         // bolinha em dois estados, `●` sozinho é ambíguo — laranja e verde
         // escreveriam igual, e a linha ficaria presa na cor anterior.
-        let signature = "\(summary.working)/\(summary.attention)/\(summary.done)/"
-            + (summary.working > 0 ? String(Spinner.current) : "")
+        let signature = "\(summary.starting)/\(summary.working)/\(summary.attention)/\(summary.done)/"
+            + (summary.working > 0 || summary.starting > 0 ? String(Spinner.current) : "")
         guard signature != lastBadge else { return }
         lastBadge = signature
 
@@ -178,10 +178,23 @@ final class SidebarRow: NSView {
         // vez de se reconhecer.
         // Mais claro no trilho: ali o spinner tem 10pt e concorre com o card que
         // passa por trás do vidro.
-        add(String(Spinner.current), summary.working,
-            NSColor(calibratedWhite: 1, alpha: isCompact ? 0.75 : 0.45))
-        add("●", summary.attention, .systemOrange)
-        add("●", summary.done, .systemGreen)
+        if summary.isPreparing, !isCompact {
+            // Bancada recém-aberta, terminais ainda subindo: dizer por extenso
+            // vale mais que um spinner, que aqui leria como "trabalhando".
+            badge.append(NSAttributedString(
+                string: "\(Spinner.current) preparando bancada…",
+                attributes: [.foregroundColor: NSColor(calibratedWhite: 1, alpha: 0.35),
+                             .font: font, .paragraphStyle: paragraph]))
+        } else {
+            // No trilho, ou com trabalho de verdade ao lado, o "subindo" é um
+            // spinner mais apagado que o de trabalho — presente, não urgente.
+            add(String(Spinner.current), summary.starting,
+                NSColor(calibratedWhite: 1, alpha: isCompact ? 0.4 : 0.25))
+            add(String(Spinner.current), summary.working,
+                NSColor(calibratedWhite: 1, alpha: isCompact ? 0.75 : 0.45))
+            add("●", summary.attention, .systemOrange)
+            add("●", summary.done, .systemGreen)
+        }
 
         statusLabel.attributedStringValue = badge
 

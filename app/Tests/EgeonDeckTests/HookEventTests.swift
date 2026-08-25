@@ -3,7 +3,8 @@ import XCTest
 
 /// O contrato da rota /activity: o que o gancho do CLI pode relatar.
 final class HookEventTests: XCTestCase {
-    func testTheThreeKnownEvents() {
+    func testTheKnownEvents() {
+        XCTAssertEqual(HookEvent(rawValue: "start"), .start)
         XCTAssertEqual(HookEvent(rawValue: "stop"), .stop)
         XCTAssertEqual(HookEvent(rawValue: "prompt"), .prompt)
         XCTAssertEqual(HookEvent(rawValue: "ask"), .ask)
@@ -17,6 +18,6 @@ final class HookEventTests: XCTestCase {
     }
 
     func testExpectedListsAllCases() {
-        XCTAssertEqual(HookEvent.expected, "stop|prompt|ask")
+        XCTAssertEqual(HookEvent.expected, "stop|prompt|ask|start")
     }
 }

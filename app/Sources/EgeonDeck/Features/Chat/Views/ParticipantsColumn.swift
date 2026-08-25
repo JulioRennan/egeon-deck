@@ -174,7 +174,7 @@ private final class ParticipantRow: NSView {
         switch participant.activity {
         case .dead:     return "terminal fechado"
         case .working:  return "trabalhando…"
-        case .starting: return "subindo…"
+        case .starting: return "preparando…"
         case .asking:   return "precisa de você"
         default:        return participant.role ?? ""
         }

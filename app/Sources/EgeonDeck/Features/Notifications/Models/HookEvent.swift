@@ -15,6 +15,11 @@ enum HookEvent: String, CaseIterable {
     /// Gancho `Notification`: pedido de permissão (ou o "você sumiu há 60s",
     /// que o `Target` descarta pelo turno).
     case ask
+    /// Gancho `SessionStart`: a TUI subiu e está pronta para receber prompt.
+    /// Até ele chegar o terminal está "iniciando" — o aquecimento por relógio
+    /// acabava antes de o CLI terminar de carregar, e o card ficava sem rótulo
+    /// com o programa ainda subindo.
+    case start
 
     /// Para a mensagem de erro da rota: o que ela aceita, por extenso.
     static var expected: String {

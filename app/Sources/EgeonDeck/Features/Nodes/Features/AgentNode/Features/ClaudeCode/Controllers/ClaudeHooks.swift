@@ -111,8 +111,8 @@ enum ClaudeHooks {
         print(u.quote(d.get("transcript_path") or ""))' 2>/dev/null)
             post "/activity?target=$EGEON_TARGET&event=stop&transcript=$t"
             ;;
-          ask)
-            post "/activity?target=$EGEON_TARGET&event=ask"
+          ask|start)
+            post "/activity?target=$EGEON_TARGET&event=$event"
             ;;
         esac
 
@@ -133,6 +133,9 @@ enum ClaudeHooks {
         """
         {
           "hooks": {
+            "SessionStart": [
+              { "hooks": [{ "type": "command", "command": "\(command("start"))", "timeout": 5 }] }
+            ],
             "UserPromptSubmit": [
               { "hooks": [{ "type": "command", "command": "\(command("prompt"))", "timeout": 5 }] }
             ],

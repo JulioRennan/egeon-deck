@@ -28,7 +28,7 @@ enum Activity: Equatable {
     /// Sufixo do cabeçalho do nó. `nil` quando não vale ocupar a linha.
     var label: String? {
         switch self {
-        case .starting: return "\(Spinner.current) subindo"
+        case .starting: return "\(Spinner.current) preparando"
         case .working:  return "\(Spinner.current) trabalhando"
         case .waiting:  return "● terminou"
         case .asking:   return "● precisa de você"
@@ -54,7 +54,14 @@ enum Activity: Equatable {
 /// Quantos terminais de uma bancada estão em cada situação. É o que a barra
 /// lateral mostra das bancadas que não estão na tela.
 struct ActivitySummary: Equatable {
+    /// Subindo ainda: o CLI não relatou `SessionStart`. Separado de `working`
+    /// porque bancada que acabou de abrir não está trabalhando — está
+    /// preparando, e o spinner de trabalho ali era um falso "ocupado".
+    var starting = 0
     var working = 0
     var attention = 0
     var done = 0
+
+    /// Só terminais subindo, nada mais a dizer: é a bancada se preparando.
+    var isPreparing: Bool { starting > 0 && working == 0 && attention == 0 && done == 0 }
 }
