@@ -20,4 +20,11 @@ enum HookEvent: String, CaseIterable {
     static var expected: String {
         allCases.map(\.rawValue).joined(separator: "|")
     }
+
+    /// Com que marcador o turno fechou, quando o `stop` consegue dizer. Vem
+    /// do transcript, não da tela: é o que separa "terminou" de "precisa de
+    /// você" sem depender do que a TUI já pintou.
+    enum Marker: String {
+        case ok, ask
+    }
 }

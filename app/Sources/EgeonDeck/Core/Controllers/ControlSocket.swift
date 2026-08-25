@@ -249,7 +249,7 @@ final class ControlSocket {
             respond(fd, status: "200 OK", json: ["ok": true])
 
         case ("POST", _, _) where route.contains("/activity"):
-            // /activity?target=bancada/id&event=stop|ask — o CLI relatando que o
+            // /activity?target=bancada/id&event=stop|ask[&transcript=path] — o CLI relatando que o
             // turno acabou (gancho `Stop`) ou que está pedindo permissão (gancho
             // `Notification`). São os dois únicos avisos que chamam você, e vêm
             // do programa em vez de saírem de heurística sobre o pty (ADR-024).
@@ -266,7 +266,10 @@ final class ControlSocket {
                                "error": "evento desconhecido '\(raw)'; use \(HookEvent.expected)"])
                 return
             }
-            DispatchQueue.main.sync { Dispatcher.shared.target(target)?.hookReported(event) }
+            let transcript = query["transcript"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+            DispatchQueue.main.sync {
+                Dispatcher.shared.target(target)?.hookReported(event, transcript: transcript)
+            }
             respond(fd, status: "200 OK", json: ["ok": true])
 
         case ("POST", _, _) where route.contains("/message"):

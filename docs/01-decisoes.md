@@ -2286,3 +2286,41 @@ com exatamente uma linha nova — a da recusa. O `install.sh` tem banco de teste
 roda o script real num sandbox com `HOME`, `/Applications` e `mdfind`/`open`/`osascript`
 desviados: caminho normal, `EG_PURGE=1`, disco limpo e `/Applications` não gravável — e o
 script anterior, no mesmo banco, sai 1 sem reabrir o app.
+
+## ADR-034 — Quem fala por gancho não é lido por byte, e o marcador vem do transcript
+
+**Decisão:** num terminal que relata por gancho, o estado "trabalhando" é o
+turno em curso (`prompt` → `stop`), não byte no pty; e o veredito do `Stop`
+(terminou × precisa de você) é lido do transcript que o gancho aponta, com
+releitura quando a linha ainda não foi gravada. A tela vira reserva, usada só
+quando o transcript não veio. Byte continua decidindo para quem não tem gancho.
+
+### Os dois falsos positivos
+
+**Foco acendia o spinner.** `working` era "saiu byte há menos de 1,5s". Clicar
+no terminal faz a TUI se redesenhar — foco, cursor, borda do prompt — e cada
+redraw virava "trabalhando" por 1,5s. O gancho já sabia que não havia turno
+nenhum; o byte é que estava sendo ouvido.
+
+**"Terminei" acendia laranja.** No `Stop`, o app lia as últimas 24 linhas da
+tela. O gancho dispara antes de a Ink pintar a última linha, então a tela ainda
+mostrava o marcador do turno PASSADO — e se aquele foi `[[ED:ask]]`, o
+"terminei" de agora era anunciado como pergunta.
+
+### Por que transcript, e por que reler
+
+O transcript tem a resposta inteira, marcador incluído, sem depender de pintura.
+Só que ele também chega atrasado: medido, `Stop` bateu no socket e a linha do
+assistant foi gravada ~100ms depois — o primeiro teste em produção leu o
+`[[ED:ok]]` do turno anterior. Por isso a leitura carrega o `timestamp` da
+linha: mais velha que o `prompt` deste turno é do turno passado, e o app relê a
+cada 250ms, até 6 vezes, antes de cair na tela. Em uso, uma releitura basta.
+
+`Notification` passou a ter `matcher: permission_prompt`: qualquer outro tipo de
+notificação que o CLI inventar deixa de virar "precisa de você".
+
+### O que segue valendo
+
+Terminal sem gancho (shell, CLI sem hooks) continua no ADR-011: silêncio,
+marcador na tela, `minWorkMs`. A camada existe para eles; para o Claude Code ela
+só atrapalhava.

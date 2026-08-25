@@ -39,8 +39,8 @@ do ambiente do pty e faz POST no socket.
 | gancho Claude Code | `HookEvent` | rota | efeito em `Target.hookReported` |
 |---|---|---|---|
 | `UserPromptSubmit` | `.prompt` | `/conversation?target=&…` | `turnInFlight = true`; informa o `conversationId` aberto (ADR-014). Não é aviso. |
-| `Stop` | `.stop` | `/activity?target=&event=stop` | `turnInFlight = false`; gancho diz **quando**, marcador na tela diz **qual**: `[[ED:ask]]` → `.asking`, senão `.waiting`. |
-| `Notification` | `.ask` | `/activity?target=&event=ask` | Só vale se `turnInFlight || working || starting` — separa "pedido de permissão" (antes do Stop) do "você sumiu há 60s" (depois). → `.asking`. |
+| `Stop` | `.stop` | `/activity?target=&event=stop&transcript=<path>` | `turnInFlight = false`; gancho diz **quando**, marcador no **transcript** diz **qual** (`ClaudeTranscript.lastMarker`, `settleStop`): linha mais velha que o `prompt` do turno → relê a cada 250 ms até 6×; sem transcript → tela. `ask` → `.asking`, senão `.waiting`. (ADR-034) |
+| `Notification` (`matcher: permission_prompt`) | `.ask` | `/activity?target=&event=ask` | Só vale se `turnInFlight || working || starting` — separa "pedido de permissão" (antes do Stop) do "você sumiu há 60s" (depois). → `.asking`. |
 
 `HookEvent` é enum tipado (`Features/Notifications/Models/HookEvent.swift`):
 evento desconhecido morre na borda do socket com `expected = "stop|prompt|ask"`.
@@ -69,9 +69,10 @@ barulho de fundo (ADR-024).
   `waiting` vira `ready` em silêncio (`attend`, ~l.455). Pergunta (`asking`)
   ainda chama: permissão não se delega.
 - `doneSeen` — mesmo efeito para `waiting` depois de já ter mostrado "terminou".
-- Fallbacks sem gancho: `idle.ms` (1500) de silêncio, `warmupMs` (4000) antes
-  de acreditar em silêncio, `liveCheck` pelo marcador (desligado quando
-  `speaksHooks`).
+- **Com gancho (`speaksHooks`), `working = turnInFlight`** — byte no pty não
+  vira spinner (redraw de foco/cursor não é trabalho). Sem gancho: `idle.ms`
+  (1500) de silêncio, `warmupMs` (4000), `liveCheck` pelo marcador na tela,
+  `minWorkMs`.
 
 ## 3. O comando `egeon` (agente → app)
 
@@ -187,7 +188,8 @@ B tenta `egeon send A` 3ª vez ──► tooManySends (limite 2) ──► "Volt
 `HookEventTests` (enum/expected) · `EdgeLinkTests` (maxSends, par bidirecional)
 · `EdgeControllerTests` · `DispatchRequestTests` (envelopes) ·
 `AgentProfileTests` (decode tolerante, `MarkerConfig`) · `ActivityTests` ·
-`WorkbenchConfigTests`.
+`WorkbenchConfigTests` · `TranscriptMarkerTests` (marcador + timestamp lidos da
+cauda do transcript).
 
 **Sem teste hoje**: as quatro guardas em `dispatch(_:from:)` (`sendCount`,
 `visitLimit`, fila), `verdict(from:)`, `attend`/latches. Mudança ali nasce com
@@ -206,5 +208,6 @@ teste — é a regra do CLAUDE.md.
 - **ADR-028** — par é uma linha só, nasce bidirecional.
 - **ADR-029** — modo Chat: transcript do CLI como fonte (marcador removido do texto).
 - **ADR-032** — socket é dono do arquivo dele.
+- **ADR-034** — com gancho, estado por turno e marcador pelo transcript; byte só sem gancho.
 
 `docs/03-spec-chat.md` — o chat como vista dessa mesma conversa.

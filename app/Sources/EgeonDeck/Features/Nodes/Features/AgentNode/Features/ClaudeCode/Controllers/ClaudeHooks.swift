@@ -101,8 +101,18 @@ enum ClaudeHooks {
             [ -n "$q" ] || exit 0
             post "/conversation?target=$EGEON_TARGET&$q"
             ;;
-          stop|ask)
-            post "/activity?target=$EGEON_TARGET&event=$event"
+          stop)
+            # O transcript vai junto: é dele que o app lê com que marcador o
+            # turno fechou. A tela, neste instante, ainda pode mostrar o do
+            # turno passado.
+            t=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
+              'import sys,json,urllib.parse as u
+        d=json.load(sys.stdin)
+        print(u.quote(d.get("transcript_path") or ""))' 2>/dev/null)
+            post "/activity?target=$EGEON_TARGET&event=stop&transcript=$t"
+            ;;
+          ask)
+            post "/activity?target=$EGEON_TARGET&event=ask"
             ;;
         esac
 
@@ -130,7 +140,8 @@ enum ClaudeHooks {
               { "hooks": [{ "type": "command", "command": "\(command("stop"))", "timeout": 5 }] }
             ],
             "Notification": [
-              { "hooks": [{ "type": "command", "command": "\(command("ask"))", "timeout": 5 }] }
+              { "matcher": "permission_prompt",
+                "hooks": [{ "type": "command", "command": "\(command("ask"))", "timeout": 5 }] }
             ]
           }
         }

@@ -101,6 +101,9 @@ final class Target {
     /// permissão chega. Recusar ali seria engolir justamente o aviso que mais
     /// importa.
     private var turnInFlight = false
+    /// Quando o `prompt` deste turno chegou. É contra ele que o marcador lido
+    /// do transcript é conferido: linha mais velha que isto é do turno passado.
+    private var turnStartedAt: Date?
     /// Você já viu que este terminal terminou.
     ///
     /// Vale só para o "terminou": abrir a bancada basta para dar por visto algo
@@ -225,7 +228,11 @@ final class Target {
         }
 
         let quiet = now.timeIntervalSince(lastOutput)
-        let working = quiet < idleWindow
+        // Quem fala por gancho diz quando o turno começa (`prompt`) e acaba
+        // (`stop`); byte no pty é só a TUI se redesenhando — foco, cursor,
+        // recap — e não pode virar "trabalhando". Byte decide só para quem não
+        // tem gancho: shell, CLI sem hooks.
+        let working = speaksHooks ? turnInFlight : quiet < idleWindow
 
         // Silêncio cheio fecha a rajada. Um respiro curto não fecha nada: a TUI
         // só parou de desenhar por um instante.
@@ -334,7 +341,7 @@ final class Target {
     /// pedindo permissão). O segundo é o caso que marcador nenhum alcança: o
     /// diálogo de permissão é desenhado pelo programa, não é mensagem do modelo
     /// (ADR-024).
-    func hookReported(_ event: HookEvent) {
+    func hookReported(_ event: HookEvent, transcript: URL? = nil) {
         // Dois por turno, e é o que responde "o CLI está mesmo relatando?" e em
         // que ordem — a pergunta que o recap obrigou a fazer.
         Log.write("gancho[\(address)]: \(event.rawValue)")
@@ -342,14 +349,13 @@ final class Target {
         switch event {
         case .stop:
             turnInFlight = false
-            // O gancho diz QUANDO; o marcador na tela diz QUAL dos dois é.
-            let asked = verdict(from: screen()).outcome == .asked
-            attend(asked ? .asking : .waiting, via: "gancho Stop", stop: hookToken(event.rawValue))
+            settleStop(transcript: transcript, token: hookToken(event.rawValue), attempt: 0)
         case .prompt:
             // O relato de conversa (`UserPromptSubmit`) não é aviso nenhum: ele
             // diz qual conversa está aberta (ADR-014), e de quebra confirma que
             // o gancho chega neste terminal.
             turnInFlight = true
+            turnStartedAt = Date()
         case .ask:
             // `Notification` são dois avisos num: o pedido de permissão e o
             // "você sumiu há 60s". O segundo não traz notícia nenhuma — o fim do
@@ -369,6 +375,46 @@ final class Target {
             attend(.asking, via: "gancho Notification", stop: hookToken(event.rawValue))
         }
     }
+
+    /// O gancho diz QUANDO o turno acabou; o marcador diz QUAL das duas paradas
+    /// é. Ele vem do transcript, porque a tela neste instante ainda pode mostrar
+    /// o marcador do turno PASSADO — a TUI pinta depois do gancho, e um
+    /// `[[ED:ask]]` velho acendia laranja em cima de um "terminei".
+    ///
+    /// Só que o transcript também chega atrasado: medido, o `Stop` bateu no
+    /// socket e a linha do assistant foi gravada 100ms depois. Linha mais velha
+    /// que o `prompt` deste turno é do turno passado, e aí espera-se um pouco e
+    /// relê. Esgotadas as tentativas, a tela é a reserva.
+    private func settleStop(transcript: URL?, token: String, attempt: Int) {
+        let read = transcript.flatMap { url in
+            marker.flatMap { ClaudeTranscript.lastMarker(at: url, marker: $0) }
+        }
+        let stale = read.map { r in
+            turnStartedAt.map { started in (r.at ?? .distantPast) < started } ?? false
+        } ?? true
+        if stale, transcript != nil, attempt < Self.stopRetries {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.stopRetryDelay) { [weak self] in
+                self?.settleStop(transcript: transcript, token: token, attempt: attempt + 1)
+            }
+            return
+        }
+
+        let asked: Bool
+        let via: String
+        if let read, !stale {
+            asked = read.marker == .ask
+            via = "gancho Stop, \(read.marker?.rawValue ?? "sem marcador") no transcript"
+                + (attempt > 0 ? " (\(attempt) releitura\(attempt > 1 ? "s" : ""))" : "")
+        } else {
+            let verdict = verdict(from: screen())
+            asked = verdict.outcome == .asked
+            via = "gancho Stop, \(verdict.via) na tela"
+        }
+        attend(asked ? .asking : .waiting, via: via, stop: token)
+    }
+
+    private static let stopRetries = 6
+    private static let stopRetryDelay: TimeInterval = 0.25
 
     /// Identifica uma parada relatada por gancho. O instante entra porque dois
     /// turnos seguidos produzem o mesmo evento e são paradas distintas.

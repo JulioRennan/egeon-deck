@@ -131,6 +131,62 @@ struct ClaudeTranscript: TranscriptReader {
         return parts.suffix(2).joined(separator: "/")
     }
 
+    /// Como o último turno terminou, lido do transcript e não da tela.
+    ///
+    /// O gancho `Stop` chega antes de a TUI pintar a última linha, e a tela
+    /// ainda mostra o marcador do turno PASSADO — era daí que "terminou" virava
+    /// "precisa de você". O transcript já tem a resposta inteira quando o
+    /// gancho dispara, então é ele quem diz qual dos dois marcadores fechou o
+    /// turno. `nil` quando o agente não escreveu marcador nenhum.
+    ///
+    /// Só a cauda do arquivo: transcript passa de dezenas de MB, e o que
+    /// interessa é a última mensagem do assistente.
+    /// O marcador e QUANDO ele foi gravado. O instante importa porque o gancho
+    /// `Stop` pode chegar antes de o CLI escrever a linha: sem a data, o
+    /// marcador do turno passado passaria pelo deste.
+    struct LastMarker: Equatable {
+        var marker: HookEvent.Marker?
+        var at: Date?
+    }
+
+    static func lastMarker(at url: URL, marker: MarkerConfig,
+                           tailBytes: Int = 512 * 1024) -> LastMarker? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let start = size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0
+        try? handle.seek(toOffset: start)
+        guard let data = try? handle.readToEnd(),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        return lastMarker(in: text, marker: marker)
+    }
+
+    static func lastMarker(in jsonl: String, marker: MarkerConfig) -> LastMarker? {
+        for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
+            guard line.contains("\"type\":\"assistant\""),
+                  let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)),
+                  let entry = object as? [String: Any],
+                  entry["type"] as? String == "assistant",
+                  let message = entry["message"] as? [String: Any],
+                  let blocks = message["content"] as? [[String: Any]] else { continue }
+            // O último bloco de texto do último assistant é onde o marcador
+            // mora. Linha de assistant só com tool_use não é fim de turno:
+            // segue procurando para cima.
+            guard let text = blocks.last(where: { $0["type"] as? String == "text" })?["text"] as? String
+            else { continue }
+            let at = (entry["timestamp"] as? String).flatMap(Self.date)
+            let ask = text.range(of: marker.ask, options: .backwards)
+            let done = text.range(of: marker.done, options: .backwards)
+            switch (ask, done) {
+            case let (a?, d?): return LastMarker(marker: a.lowerBound > d.lowerBound ? .ask : .ok, at: at)
+            case (_?, nil):    return LastMarker(marker: .ask, at: at)
+            case (nil, _?):    return LastMarker(marker: .ok, at: at)
+            case (nil, nil):   return LastMarker(marker: nil, at: at)
+            }
+        }
+        return nil
+    }
+
     /// Os marcadores do protocolo Egeon (`[[ED:ok]]`, `[[ED:ask]]`) são para o
     /// app, não para você ler na bolha.
     static func strippingMarkers(_ text: String) -> String {
