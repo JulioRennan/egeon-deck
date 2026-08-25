@@ -93,6 +93,7 @@ final class CanvasContainer: NSView {
     var onRequestEditNode: ((NodeView) -> Void)?
     /// Levar um nó para uma worktree própria (menu do cabeçalho).
     var onRequestNodeWorktree: ((NodeView) -> Void)?
+    var onRequestNodeModel: ((NodeView, String?) -> Void)?
     /// Formulário para montar um terminal do zero.
     var onConfigureTerminal: (() -> Void)?
     /// Componentes salvos, para o menu da ferramenta de terminal.
@@ -723,6 +724,9 @@ final class CanvasContainer: NSView {
         node.onRequestSpace = { [weak self] shift in self?.makeSpace(shift) }
         node.onRequestEdit = { [weak self] node in self?.onRequestEditNode?(node) }
         node.onRequestWorktree = { [weak self] node in self?.onRequestNodeWorktree?(node) }
+        (node as? TerminalNode)?.onRequestModel = { [weak self] node, model in
+            self?.onRequestNodeModel?(node, model)
+        }
         growDocumentIfNeeded()
     }
 

@@ -36,6 +36,7 @@ final class WorkbenchShell: NSView {
     var onRequestClose: ((NodeView) -> Void)?
     var onRequestEditNode: ((NodeView) -> Void)?
     var onRequestNodeWorktree: ((NodeView) -> Void)?
+    var onRequestNodeModel: ((NodeView, String?) -> Void)?
 
     /// Onde cada nó estava no canvas, por id.
     ///
@@ -83,6 +84,9 @@ final class WorkbenchShell: NSView {
         canvas.onRequestClose = { [weak self] node in self?.onRequestClose?(node) }
         canvas.onRequestEditNode = { [weak self] node in self?.onRequestEditNode?(node) }
         canvas.onRequestNodeWorktree = { [weak self] node in self?.onRequestNodeWorktree?(node) }
+        canvas.onRequestNodeModel = { [weak self] node, model in
+            self?.onRequestNodeModel?(node, model)
+        }
         // Com o mosaico ativo o documento do canvas está vazio, e sem isto todo
         // nó novo nasceria no mesmo canto de lá.
         canvas.placedNodes = { [weak self] in self?.nodes ?? [] }
@@ -256,6 +260,9 @@ final class WorkbenchShell: NSView {
         container.onRequestEditNode = { [weak self] node in self?.onRequestEditNode?(node) }
         container.onRequestNodeWorktree = { [weak self] node in
             self?.onRequestNodeWorktree?(node)
+        }
+        container.onRequestNodeModel = { [weak self] node, model in
+            self?.onRequestNodeModel?(node, model)
         }
         container.onLayoutChanged = { [weak self] layout in
             self?.onMosaicLayoutChanged?(layout)

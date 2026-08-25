@@ -188,6 +188,7 @@ final class MosaicContainer: NSView {
     var onRequestClose: ((NodeView) -> Void)?
     var onRequestEditNode: ((NodeView) -> Void)?
     var onRequestNodeWorktree: ((NodeView) -> Void)?
+    var onRequestNodeModel: ((NodeView, String?) -> Void)?
     /// Divisor arrastado — hora de gravar as proporções.
     var onLayoutChanged: ((MosaicLayout) -> Void)?
 
@@ -353,6 +354,9 @@ final class MosaicContainer: NSView {
         node.onRequestClose = { [weak self] node in self?.onRequestClose?(node) }
         node.onRequestEdit = { [weak self] node in self?.onRequestEditNode?(node) }
         node.onRequestWorktree = { [weak self] node in self?.onRequestNodeWorktree?(node) }
+        (node as? TerminalNode)?.onRequestModel = { [weak self] node, model in
+            self?.onRequestNodeModel?(node, model)
+        }
         node.onHeaderDrag = { [weak self] node, point in self?.dragging(node, to: point) }
         node.onHeaderRelease = { [weak self] node, point in self?.drop(node, at: point) }
         node.applyContentsScale(contentsScale)

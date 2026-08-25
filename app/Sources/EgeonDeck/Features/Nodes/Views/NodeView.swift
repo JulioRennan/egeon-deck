@@ -125,6 +125,17 @@ class NodeView: NSView {
     /// exigir duplicar a bancada inteira.
     var onRequestWorktree: ((NodeView) -> Void)?
 
+    /// Controle extra na linha dos botões, à esquerda deles — o seletor de
+    /// modelo do terminal com IA. A subclasse põe; o cabeçalho reserva a largura
+    /// que ele pedir, para o estado não escrever por baixo.
+    var headerAccessory: NSView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let headerAccessory { addSubview(headerAccessory) }
+            needsLayout = true
+        }
+    }
+
     /// Arrasto pelo cabeçalho quando o card NÃO manda na própria posição — isto é,
     /// no mosaico. Em coordenadas de janela; quem resolve sobre qual painel o
     /// cursor está é o container, que é quem conhece o arranjo.
@@ -364,6 +375,15 @@ class NodeView: NSView {
             botãoDaVez.frame = NSRect(x: x, y: meio, width: botão, height: botão)
             x -= entreBotões
             controles += botão + entreBotões
+        }
+        if let headerAccessory, !headerAccessory.isHidden {
+            let size = headerAccessory.fittingSize
+            let largura = min(max(size.width, 60), 160)
+            x -= largura
+            headerAccessory.frame = NSRect(x: x, y: (Self.headerHeight - size.height) / 2,
+                                           width: largura, height: size.height)
+            x -= entreBotões
+            controles += largura + entreBotões
         }
 
         let disponível = max(0, bounds.width - margem * 2 - controles - 8)

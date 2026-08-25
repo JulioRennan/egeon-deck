@@ -8,7 +8,7 @@ final class NodeTemplateTests: XCTestCase {
         let node = try JSONDecoder().decode(NodeConfig.self, from: Data("""
             {"type":"agent","id":"rev","agent":"claude","cmd":"claude --foo",
              "config":"/Users/x/.claude-trabalho","cwd":"packages/api",
-             "prompt":"revise","conversationId":"C1","transcript":"/t.jsonl"}
+             "model":"opus","prompt":"revise","conversationId":"C1","transcript":"/t.jsonl"}
             """.utf8))
 
         let template = NodeTemplateStore.capture(from: node, name: "Revisor")
@@ -17,18 +17,20 @@ final class NodeTemplateTests: XCTestCase {
         XCTAssertEqual(template.cmd, "claude --foo")
         XCTAssertEqual(template.cwd, "packages/api")
         XCTAssertEqual(template.prompt, "revise")
+        XCTAssertEqual(template.model, "opus")
         // NodeTemplate nem tem campo de conversa — a montagem é tudo que existe.
     }
 
     func testInstantiateBuildsNodeWithoutConversation() {
         let template = NodeTemplate(name: "Revisor", kind: .agent, agent: "claude",
-                                    cwd: "src", prompt: "revise")
+                                    model: "sonnet", cwd: "src", prompt: "revise")
         let node = NodeTemplateStore.instantiate(template, id: "revisor-2")
 
         XCTAssertEqual(node.type, .agent)
         XCTAssertEqual(node.id, "revisor-2")
         XCTAssertEqual(node.agent, "claude")
         XCTAssertEqual(node.prompt, "revise")
+        XCTAssertEqual(node.model, "sonnet")
         XCTAssertNil(node.conversationId)
         // O registro de origem: só informativo, editar o preset não mexe em
         // quem já nasceu.

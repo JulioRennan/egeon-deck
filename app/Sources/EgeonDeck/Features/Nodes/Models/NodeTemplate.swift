@@ -30,6 +30,8 @@ struct NodeTemplate: Codable {
     /// dentro da bancada, e o mesmo componente tem de valer em qualquer worktree;
     /// a configuração é da máquina, e a mesma pasta vale para todas as bancadas.
     var config: String?
+    /// Modelo pedido ao CLI. Nulo é o padrão dele. Só para `agent`.
+    var model: String?
     /// Relativo à raiz da bancada — nunca absoluto. É o que faz o mesmo
     /// componente valer em qualquer worktree.
     var cwd: String?
@@ -115,6 +117,7 @@ enum NodeTemplateStore {
                   agent: node.agent,
                   cmd: node.cmd,
                   config: node.config,
+                  model: node.model,
                   cwd: node.cwd,
                   prompt: node.prompt)
     }
@@ -125,6 +128,7 @@ enum NodeTemplateStore {
         node.agent = component.agent
         node.cmd = component.cmd
         node.config = component.config
+        node.model = component.model
         node.cwd = component.cwd
         node.prompt = component.prompt
         node.component = component.name

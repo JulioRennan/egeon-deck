@@ -138,6 +138,21 @@ EgeonCLI.install()
             self?.makeWorktree(target: target, branch: branch, nodeBranches: nodeBranches)
                 ?? ["ok": false, "error": "app encerrando"]
         }
+        AppControl.setNodeModel = { [weak self] target, model in
+            guard let self else { return "app encerrando" }
+            let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2,
+                  let index = self.configs.firstIndex(where: { $0.name == parts[0] })
+            else { return "bancada desconhecida '\(target)'" }
+            guard let node = self.shells[index]?.nodes.first(where: { $0.nodeID == parts[1] })
+            else { return "nó desconhecido '\(target)'" }
+            guard let config = self.configs[index].nodes.first(where: { $0.id == parts[1] }),
+                  config.type == .agent,
+                  config.agent.flatMap({ self.agents[$0] })?.offersModels == true
+            else { return "'\(target)' não é um agente que aceite modelo" }
+            self.changeModel(of: node, to: model, index: index)
+            return nil
+        }
         AppControl.setViewMode = { [weak self] raw in
             guard let self, let mode = ViewMode(rawValue: raw),
                   let shell = self.shells[self.activeIndex] else { return nil }
@@ -1430,12 +1445,20 @@ EgeonCLI.install()
             ?? profile.map { $0.command.joined(separator: " ") }
             ?? "exec /bin/zsh -l"
 
-        guard node.type == .agent, let profile,
-              let text = profile.systemPromptText(role: node.prompt, catalog: catalog)
-        else { return (base, nil, false) }
+        guard node.type == .agent, let profile else { return (base, nil, false) }
+
+        // O modelo é flag do binário do perfil: com `cmd` trocado por outro
+        // programa, anexar `--model` mataria o terminal no arranque.
+        let modelFlags = profile.runsOwnBinary(base)
+            ? (profile.modelArguments(node.model) ?? []) : []
+        let modelSuffix = modelFlags.isEmpty ? ""
+            : " " + modelFlags.map(AppEnvironment.shellQuote).joined(separator: " ")
+
+        guard let text = profile.systemPromptText(role: node.prompt, catalog: catalog)
+        else { return (base + modelSuffix, nil, false) }
 
         if let arguments = profile.systemPromptArguments(for: text), profile.runsOwnBinary(base) {
-            var extras = arguments
+            var extras = modelFlags + arguments
             // O gancho de relato entra junto: é o que faz o app saber quando VOCÊ
             // troca de conversa dentro da TUI, e é por ele que chegam o fim de
             // turno e o pedido de permissão (ADR-024).
@@ -1457,9 +1480,9 @@ EgeonCLI.install()
                           + "o protocolo de marcador não sobe — a detecção fica só no "
                           + "silêncio", key: "marker.\(profile.displayName)")
             }
-            return (base, nil, false)
+            return (base + modelSuffix, nil, false)
         }
-        return (base, text, false)
+        return (base + modelSuffix, text, false)
     }
 
     /// A linha de comando que retoma a conversa deste terminal, ou cria a
@@ -1594,6 +1617,7 @@ EgeonCLI.install()
                                         cwd: config.directory(for: node),
                                         command: launch.command, profile: profile,
                                         config: node.config,
+                                        model: node.model,
                                         prompt: launch.promptToInject,
                                         hooked: launch.hooked)
             if index >= 0, node.conversationId != nil, !node.hasStartedConversation,
@@ -1668,6 +1692,9 @@ EgeonCLI.install()
         shell.onRequestEditNode = { [weak self] node in self?.editNode(node, index: index) }
         shell.onRequestNodeWorktree = { [weak self] node in
             self?.nodeWorktree(node, index: index)
+        }
+        shell.onRequestNodeModel = { [weak self] node, model in
+            self?.changeModel(of: node, to: model, index: index)
         }
         shell.onModeChanged = { [weak self] mode in
             guard let self else { return }
@@ -1983,6 +2010,7 @@ EgeonCLI.install()
 
         let sameProcess = updated.type == current.type
             && updated.agent == current.agent
+            && updated.model == current.model
             && updated.cmd == current.cmd
             && updated.config == current.config
             && updated.cwd == current.cwd
@@ -2001,6 +2029,30 @@ EgeonCLI.install()
         shell.attach(makeNode(updated, in: configs[index], frame: canvasFrame))
         Log.write("bancada \(configs[index].name): nó \"\(current.id)\" reconfigurado"
                   + (newID == current.id ? "" : " e renomeado para \"\(newID)\""))
+        schedulePersist()
+    }
+
+    /// Troca o modelo de um terminal com IA, pelo seletor do cabeçalho.
+    ///
+    /// O processo reinicia — não há como trocar o modelo de um pty em curso — mas
+    /// a conversa FICA: o id é nosso, e o CLI a retoma com o modelo novo. É o
+    /// contrário da worktree, onde a conversa é da pasta antiga e vai embora.
+    private func changeModel(of node: NodeView, to model: String?, index: Int) {
+        guard index >= 0, index < configs.count, let shell = shells[index],
+              let position = configs[index].nodes.firstIndex(where: { $0.id == node.nodeID })
+        else { return }
+        let current = configs[index].nodes[position]
+        guard current.model != model else { return }
+
+        var updated = current
+        updated.model = model
+        configs[index].nodes[position] = updated
+
+        let frame = shell.canvasFrame(of: current.id) ?? node.frame
+        shell.detach(node)
+        shell.attach(makeNode(updated, in: configs[index], frame: frame))
+        Log.write("bancada \(configs[index].name): nó \"\(current.id)\" reiniciado com modelo "
+                  + "\(model ?? "padrão") (antes \(current.model ?? "padrão"))")
         schedulePersist()
     }
 

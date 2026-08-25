@@ -213,6 +213,14 @@ struct AgentProfile: Codable {
     /// não aparece na conversa e não se dilui depois de vinte mensagens.
     var systemPrompt: [String]?
 
+    /// Como pedir um modelo na linha de comando; `{model}` é substituído.
+    /// Nil quando o CLI não aceita — aí o nó não oferece escolha.
+    var model: [String]?
+    /// Modelos oferecidos no formulário e no cabeçalho do card. É DADO, não
+    /// tabela no código: quando o CLI ganhar um nome novo, edita-se o
+    /// agents.json. Vazio com `model` declarado ainda permite o "padrão".
+    var models: [String]?
+
     var attention: AttentionConfig?
 
     /// Variáveis de ambiente do processo deste agente, por cima do que o app já
@@ -321,6 +329,16 @@ struct AgentProfile: Codable {
     /// O CLI sabe retomar conversa por id que escolhemos?
     var keepsConversation: Bool { resume != nil && newSession != nil }
 
+    /// Argumentos que escolhem o modelo, ou nil quando o perfil não sabe pedir
+    /// um — ou quando o nó ficou no padrão do CLI.
+    func modelArguments(_ chosen: String?) -> [String]? {
+        guard let chosen, !chosen.isEmpty, let model, !model.isEmpty else { return nil }
+        return model.map { $0.replacingOccurrences(of: "{model}", with: chosen) }
+    }
+
+    /// O CLI aceita escolher modelo?
+    var offersModels: Bool { !(model ?? []).isEmpty }
+
     /// Argumentos que instalam o gancho de relato. Nil quando o perfil não o
     /// declara — aí o app fica só com a conversa que ele mesmo criou.
     func reportArguments(hookFile: String) -> [String]? {
@@ -409,6 +427,24 @@ enum AgentStore {
         // `attention` não depende de qual binário roda: som, limiar de silêncio
         // e marcador valem para qualquer CLI. Por isso aqui não vale a trava de
         // comando de cima — e o campo é escrito para você poder editá-lo.
+        // `model`/`models` descrevem a flag DAQUELE CLI, como `resume`: a mesma
+        // trava de comando vale.
+        for (key, profile) in map where profile.model == nil {
+            guard let padrão = defaults[key], padrão.model != nil,
+                  padrão.command == profile.command else { continue }
+            updated[key]?.model = padrão.model
+            if profile.models == nil { updated[key]?.models = padrão.models }
+            changed.append("\(key).model")
+        }
+
+        // A primeira lista de fábrica saiu sem `fable`; quem ainda tem
+        // exatamente ela ganha a atual. Lista editada à mão não é tocada.
+        for (key, profile) in map where profile.models == ["opus", "sonnet", "haiku"] {
+            guard let padrão = defaults[key], padrão.command == profile.command else { continue }
+            updated[key]?.models = padrão.models
+            changed.append("\(key).models")
+        }
+
         for (key, profile) in map where profile.attention == nil {
             updated[key]?.attention = AttentionConfig()
             changed.append("\(key).attention")
@@ -435,6 +471,7 @@ enum AgentStore {
             "codex": AgentProfile(
                 displayName: "Codex CLI", command: ["codex"],
                 idle: IdleConfig(), inject: InjectConfig(), resume: nil,
+                model: ["--model", "{model}"], models: [],
                 attention: AttentionConfig(),
                 configEnv: "CODEX_HOME", configGlob: "~/.codex*"),
             "opencode": AgentProfile(
@@ -445,6 +482,7 @@ enum AgentStore {
             "gemini": AgentProfile(
                 displayName: "Gemini CLI", command: ["gemini"],
                 idle: IdleConfig(), inject: InjectConfig(), resume: nil,
+                model: ["--model", "{model}"], models: [],
                 attention: AttentionConfig())
         ]
     }

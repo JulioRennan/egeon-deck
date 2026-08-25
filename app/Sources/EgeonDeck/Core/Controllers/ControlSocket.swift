@@ -427,6 +427,23 @@ final class ControlSocket {
             respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
                     json: payload)
 
+        case ("GET", _, _) where route.contains("/model"):
+            // /model?target=ws/id[&model=nome] — o mesmo que escolher no seletor do
+            // cabeçalho: reinicia o terminal com o modelo, mantendo a conversa.
+            // Sem `model`, volta ao padrão do CLI.
+            let query = Self.query(in: route)
+            let target = query["target"] ?? ""
+            let model = query["model"].flatMap { $0.isEmpty ? nil : $0 }
+            let error: String? = DispatchQueue.main.sync {
+                guard let handler = AppControl.setNodeModel else { return "app sem canvas" }
+                return handler(target, model)
+            }
+            if let error {
+                respond(fd, status: "404 Not Found", json: ["ok": false, "error": error])
+            } else {
+                respond(fd, status: "200 OK", json: ["ok": true, "target": target, "model": model ?? "padrão"])
+            }
+
         case ("GET", _, _) where route.contains("/layout"):
             // /layout?mode=canvas|mosaic — troca a visualização da bancada ativa.
             let mode = Self.query(in: route)["mode"] ?? ""

@@ -70,6 +70,8 @@ app/Sources/EgeonDeck/
 - Estado do terminal por gancho do CLI (`stop`/`ask`/`prompt` → `/activity`);
   laranja interrompe (permissão), verde só informa (terminou).
 - Worktree por bancada E por terminal (formulário decide pela branch).
+- Modelo por nó de agente: formulário e pull-down no cabeçalho; trocar reinicia
+  o processo e retoma a conversa. Lista vem do `agents.json` (`models`).
 - Templates de bancada e de nó copiam valores na criação, nunca ficam atados.
 - Drag & drop de arquivo → paste no terminal (imagem vira anexo no Claude Code).
 - Voz pelo CLI dentro do pty (mic atribuído ao bundle do app).

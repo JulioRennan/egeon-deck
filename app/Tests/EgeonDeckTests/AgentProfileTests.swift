@@ -18,6 +18,17 @@ final class AgentProfileTests: XCTestCase {
         // Sabe retomar E criar com id nosso — é o que faz a conversa sobreviver
         // ao rebuild.
         XCTAssertTrue(profile.keepsConversation)
+        // Modelo: flag com placeholder, lista é dado.
+        XCTAssertTrue(profile.offersModels)
+        XCTAssertEqual(profile.modelArguments("opus"), ["--model", "opus"])
+        XCTAssertEqual(profile.models, ["fable", "opus", "sonnet", "haiku", "opusplan"])
+    }
+
+    // "Padrão" é não passar flag nenhuma — nil e vazio dão o mesmo.
+    func testDefaultModelMeansNoFlag() {
+        let profile = AgentProfile.claudeCode
+        XCTAssertNil(profile.modelArguments(nil))
+        XCTAssertNil(profile.modelArguments(""))
     }
 
     // Perfil sem a forma declarada devolve nil — aí o app fica só com o que o
@@ -28,6 +39,8 @@ final class AgentProfileTests: XCTestCase {
         XCTAssertNil(bare.conversationArguments(bare.resume, id: "A"))
         XCTAssertNil(bare.reportArguments(hookFile: "/f"))
         XCTAssertNil(bare.systemPromptArguments(for: "p"))
+        XCTAssertNil(bare.modelArguments("opus"))
+        XCTAssertFalse(bare.offersModels)
         XCTAssertFalse(bare.keepsConversation)
     }
 }

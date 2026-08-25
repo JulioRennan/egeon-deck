@@ -59,6 +59,9 @@ final class NodeTemplateDialog {
     private let agentLabel = NSTextField(labelWithString: "CLI")
     private let configPicker = NSPopUpButton()
     private let configLabel = NSTextField(labelWithString: "CONFIGURAÇÃO")
+    private let modelPicker = NSPopUpButton()
+    private let modelLabel = NSTextField(labelWithString: "MODELO")
+    private static let defaultModelOption = "padrão do CLI"
     private var promptScroll: NSScrollView?
 
     private let tabs = NSTabView()
@@ -81,6 +84,7 @@ final class NodeTemplateDialog {
             agentPicker.selectItem(at: index)
         }
         reloadConfigPicker(select: component.config)
+        reloadModelPicker(select: component.model)
         cmdField.stringValue = component.cmd ?? ""
         cwdField.stringValue = component.cwd ?? ""
         promptField.string = component.prompt ?? ""
@@ -121,6 +125,7 @@ final class NodeTemplateDialog {
             agent: isAgent ? selectedAgentKey : nil,
             cmd: cmd.isEmpty ? nil : cmd,
             config: isAgent ? selectedConfig : nil,
+            model: isAgent ? selectedModel : nil,
             cwd: cwd.isEmpty ? nil : Self.normalizedFolder(cwd),
             prompt: (isAgent && !prompt.isEmpty) ? prompt : nil)
 
@@ -194,11 +199,20 @@ final class NodeTemplateDialog {
         configLabel.frame = NSRect(x: 0, y: 274, width: width, height: 13)
         container.addSubview(configLabel)
 
-        configPicker.frame = NSRect(x: 0, y: 248, width: width, height: 22)
+        configPicker.frame = NSRect(x: 0, y: 248, width: 260, height: 22)
         configPicker.target = self
         configPicker.action = #selector(configChanged)
         container.addSubview(configPicker)
         reloadConfigPicker(select: initial.config)
+
+        // Na mesma linha da configuração: as duas são "com o quê este CLI sobe".
+        modelLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        modelLabel.textColor = .secondaryLabelColor
+        modelLabel.frame = NSRect(x: 270, y: 274, width: 150, height: 13)
+        container.addSubview(modelLabel)
+        modelPicker.frame = NSRect(x: 270, y: 248, width: 150, height: 22)
+        container.addSubview(modelPicker)
+        reloadModelPicker(select: initial.model)
 
         container.addSubview(caption("COMANDO — vazio usa o padrão do CLI", y: 228))
         cmdField.frame = NSRect(x: 0, y: 202, width: width, height: 22)
@@ -364,6 +378,29 @@ final class NodeTemplateDialog {
         agentKeys[safe: agentPicker.indexOfSelectedItem]
     }
 
+    /// Nil é o padrão do CLI — o primeiro item.
+    private var selectedModel: String? {
+        let index = modelPicker.indexOfSelectedItem
+        guard index > 0, let title = modelPicker.titleOfSelectedItem else { return nil }
+        return title
+    }
+
+    /// A lista vem do perfil: trocar de CLI troca os modelos. A escolha anterior
+    /// volta só se o CLI novo a conhecer; um nome que não está na lista (escrito
+    /// à mão no JSON) entra como item extra para não ser perdido ao editar.
+    private func reloadModelPicker(select value: String?) {
+        modelPicker.removeAllItems()
+        modelPicker.addItem(withTitle: Self.defaultModelOption)
+        var options = selectedAgentKey.flatMap { agents[$0]?.models } ?? []
+        if let value, !value.isEmpty, !options.contains(value) { options.append(value) }
+        modelPicker.addItems(withTitles: options)
+        if let value, let index = options.firstIndex(of: value) {
+            modelPicker.selectItem(at: index + 1)
+        } else {
+            modelPicker.selectItem(at: 0)
+        }
+    }
+
     /// A configuração selecionada. Nil é o padrão da CLI.
     private var selectedConfig: String? {
         configValues[safe: configPicker.indexOfSelectedItem] ?? nil
@@ -374,6 +411,8 @@ final class NodeTemplateDialog {
         // dizem nada ao Codex. A escolha anterior é oferecida de volta só se a
         // CLI nova a conhecer.
         reloadConfigPicker(select: selectedConfig)
+        reloadModelPicker(select: selectedModel)
+        updateAgentFields()
     }
 
     @objc private func configChanged() {
@@ -476,6 +515,10 @@ final class NodeTemplateDialog {
         let hasConfig = isAgent && selectedAgentKey.flatMap { agents[$0]?.configEnv } != nil
         configPicker.isEnabled = hasConfig
         configLabel.textColor = hasConfig ? .secondaryLabelColor : .tertiaryLabelColor
+
+        let hasModels = isAgent && (selectedAgentKey.flatMap { agents[$0]?.offersModels } ?? false)
+        modelPicker.isEnabled = hasModels
+        modelLabel.textColor = hasModels ? .secondaryLabelColor : .tertiaryLabelColor
     }
 
     /// O que o campo de pasta grava.

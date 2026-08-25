@@ -21,6 +21,10 @@ struct NodeConfig: Codable {
     /// settings este terminal sobe. Absoluto, e entregue pela variável que o
     /// perfil declara em `configEnv`. Nulo é o padrão da CLI.
     var config: String?
+    /// Modelo pedido ao CLI, pela flag que o perfil declara em `model`. Nulo é
+    /// o padrão do CLI. Só usado por `type: agent`; trocar reinicia o processo,
+    /// mas a conversa fica — o CLI retoma a mesma sessão com outro modelo.
+    var model: String?
     /// Só usado por `type: web`.
     var url: String?
     /// Nome do perfil em web-profiles.json. Só usado por `type: web`.

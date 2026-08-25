@@ -2334,3 +2334,32 @@ que não relate cai no teto de 45 s.
 Terminal sem gancho (shell, CLI sem hooks) continua no ADR-011: silêncio,
 marcador na tela, `minWorkMs`. A camada existe para eles; para o Claude Code ela
 só atrapalhava.
+
+## ADR-035 — Modelo é escolha do nó, trocado pelo cabeçalho, e reiniciar não perde a conversa
+
+**Decisão:** o nó de agente guarda `model`; o perfil declara como pedi-lo
+(`model: ["--model","{model}"]`) e quais oferecer (`models`). Escolhe-se no
+formulário e num pull-down no cabeçalho do card. Trocar reinicia o processo
+com a MESMA conversa; a rota `/model?target=ws/id&model=` faz o mesmo de fora.
+
+### Por que reiniciar, e por que a conversa fica
+
+Não há como trocar o modelo de um pty em curso sem depender do `/model` da TUI
+— que é parsing de tela e muda a cada release (ADR-008). Reiniciar é barato e
+genérico. E como o id da conversa é nosso (ADR-014), o `--resume` traz a
+sessão inteira de volta com o modelo novo — medido: contagem anterior na tela,
+`Sonnet 5` respondendo em seguida. É o oposto da worktree (ADR-017), onde a
+conversa é da pasta antiga e vai embora.
+
+### Por que a lista é dado
+
+Os apelidos válidos são do CLI — `claude --help` cita `fable`, `opus`,
+`sonnet`; o binário aceita `haiku`, `opusplan`, nome completo e sufixo `[1m]`.
+Eles mudam com o CLI, não com o app, então moram no `agents.json` e o
+formulário só lê. A primeira lista de fábrica saiu sem `fable` por ter sido
+escrita de memória em vez de lida do CLI; a migração corrige quem ficou com ela
+e não toca lista editada à mão.
+
+Flag só entra quando a linha ainda é o binário do perfil (`runsOwnBinary`):
+`cmd` trocado por outro programa não ganha `--model` para não morrer no
+arranque — mesma regra do system prompt.

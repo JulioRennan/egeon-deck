@@ -18,6 +18,12 @@ extension AgentProfile {
             newSession: ["--session-id", "{sessionId}"],
             reportSession: ["--settings", "{file}"],
             systemPrompt: ["--append-system-prompt", "{prompt}"],
+            // Apelidos que o CLI resolve para a versão corrente de cada família —
+            // os que o `claude --help` cita (fable, opus, sonnet) mais os que o
+            // binário aceita (haiku, opusplan). Também vale nome completo
+            // (`claude-fable-5`) e sufixo `[1m]`: é só escrever no agents.json.
+            model: ["--model", "{model}"],
+            models: ["fable", "opus", "sonnet", "haiku", "opusplan"],
             attention: AttentionConfig(),
             configEnv: "CLAUDE_CONFIG_DIR", configGlob: "~/.claude*")
     }

@@ -59,6 +59,14 @@ final class TerminalNode: NodeView {
     private let symbol: String
     private let port = NodePortButton()
 
+    /// Você escolheu outro modelo no cabeçalho. Nil é o padrão do CLI. Quem
+    /// atende reinicia o processo — não há como trocar o modelo de um pty em
+    /// curso — e mantém a conversa.
+    var onRequestModel: ((NodeView, String?) -> Void)?
+    private var modelPicker: NSPopUpButton?
+    private var modelOptions: [String] = []
+    private static let defaultModelTitle = "padrão"
+
     /// `profile == nil` → terminal comum. Com perfil, é um "terminal com IA":
     /// mesma mecânica de pty, o que muda é saber injetar prompt e medir ociosidade.
     /// `hooked` diz se esta linha de comando leva o `--settings` com os nossos
@@ -66,7 +74,7 @@ final class TerminalNode: NodeView {
     /// `cmd` trocado à mão pode ter trocado de programa, e aí não há gancho.
     init(frame: NSRect, address: String, title: String, cwd: String,
          command: String, profile: AgentProfile?, config: String? = nil,
-         prompt: String? = nil, hooked: Bool = false) {
+         model: String? = nil, prompt: String? = nil, hooked: Bool = false) {
         self.address = address
         // Só o nome do terminal no título. O endereço inteiro cabia numa linha de
         // 11pt e não sobrava nada; agora a bancada é a mesma para todos os cards da
@@ -81,6 +89,7 @@ final class TerminalNode: NodeView {
         subtitle = NodeWorktreePlanner.short(cwd)
         titleLabel.toolTip = address + (profile.map { " · \($0.displayName)" } ?? "")
         body.addSubview(term)
+        if let profile, profile.offersModels { installModelPicker(profile: profile, current: model) }
         // Terminal com IA recebe o arrasto como paste; shell, como digitação.
         term.dropAsPaste = profile?.injectConfig.mode == "bracketed-paste"
 
@@ -251,6 +260,35 @@ final class TerminalNode: NodeView {
         titleLabel.textColor = activity.color ?? accent
         statusLabel.textColor = activity.color ?? NSColor(calibratedWhite: 0.62, alpha: 1)
         setAlert(activity.needsAttention)
+    }
+
+    /// O seletor de modelo do cabeçalho. Pull-down miúdo com o nome do modelo
+    /// em curso: é o que responde "este card está rodando com o quê?" sem abrir
+    /// o formulário, e é onde se troca.
+    private func installModelPicker(profile: AgentProfile, current: String?) {
+        let picker = NSPopUpButton(frame: .zero, pullsDown: false)
+        picker.controlSize = .small
+        picker.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
+        picker.isBordered = false
+        picker.toolTip = "Modelo — trocar reinicia o terminal, a conversa continua"
+        var options = profile.models ?? []
+        if let current, !current.isEmpty, !options.contains(current) { options.append(current) }
+        modelOptions = options
+        picker.addItem(withTitle: Self.defaultModelTitle)
+        picker.addItems(withTitles: options)
+        if let current, let index = options.firstIndex(of: current) {
+            picker.selectItem(at: index + 1)
+        }
+        picker.target = self
+        picker.action = #selector(modelChosen(_:))
+        modelPicker = picker
+        headerAccessory = picker
+    }
+
+    @objc private func modelChosen(_ sender: NSPopUpButton) {
+        let index = sender.indexOfSelectedItem
+        let chosen = index > 0 && index - 1 < modelOptions.count ? modelOptions[index - 1] : nil
+        onRequestModel?(self, chosen)
     }
 
     private func shellQuote(_ s: String) -> String {
