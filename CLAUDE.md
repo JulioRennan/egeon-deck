@@ -41,6 +41,10 @@ app/Sources/EgeonDeck/
 - **`estrutura-de-modulos`** (`.claude/skills/`) — onde código novo vive, as
   regras de colocação e o processo de mudança. **Consultar antes de criar
   arquivo, mover código ou decidir onde uma feature mora.**
+- **`protocolo-entre-agentes`** (`.claude/skills/`) — o mapa da camada de
+  coordenação: marcadores `[[ED:*]]`, ganchos, `egeon`, guardas de cadeia,
+  envelope. **Consultar antes de mexer em Dispatch, Notifications, EgeonCLI ou
+  arestas.**
 
 ## Conceitos, em uma linha cada
 
