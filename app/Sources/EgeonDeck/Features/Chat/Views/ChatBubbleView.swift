@@ -27,11 +27,11 @@ final class ChatBubbleView: NSView, ThreadBubble {
         }
         wantsLayer = true
         layer?.cornerRadius = 14
-        layer?.backgroundColor = NSColor(srgbRed: 0.184, green: 0.498, blue: 0.965,
-                                         alpha: 0.12).cgColor
+        // Cor fixa, sua: o lado direito é só seu, e um fundo que variasse com o
+        // destinatário faria a bolha parecer do agente.
+        layer?.backgroundColor = NSColor(srgbRed: 0.11, green: 0.24, blue: 0.46, alpha: 1).cgColor
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor(srgbRed: 0.184, green: 0.498, blue: 0.965,
-                                     alpha: 0.32).cgColor
+        layer?.borderColor = NSColor(srgbRed: 0.24, green: 0.44, blue: 0.75, alpha: 0.7).cgColor
 
         header.font = .monospacedSystemFont(ofSize: 11.5, weight: .bold)
         header.textColor = target.color

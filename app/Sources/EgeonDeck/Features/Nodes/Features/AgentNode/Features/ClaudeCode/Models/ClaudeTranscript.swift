@@ -31,10 +31,12 @@ struct ClaudeTranscript: TranscriptReader {
 
             switch type {
             case "user":
-                guard let prompt = Self.promptText(message["content"]),
+                guard let raw = Self.promptText(message["content"]),
                       entry["isMeta"] as? Bool != true else { continue }
                 let id = entry["uuid"] as? String ?? "t-\(at.timeIntervalSince1970)-\(turns.count)"
-                turns.append(ChatTurn(id: id, prompt: prompt, promptAt: at))
+                let envelope = Self.agentEnvelope(raw)
+                turns.append(ChatTurn(id: id, prompt: envelope?.text ?? raw, promptAt: at,
+                                      from: envelope?.from))
             case "assistant":
                 guard !turns.isEmpty,
                       let blocks = message["content"] as? [[String: Any]] else { continue }
@@ -79,13 +81,33 @@ struct ClaudeTranscript: TranscriptReader {
         return text
     }
 
+    /// O envelope que o Dispatcher põe em mensagem de outro agente: primeira
+    /// linha `[egeon] mensagem de bancada/id`, o texto, e um rodapé fixo de
+    /// aviso. Devolve quem mandou e só o texto.
+    static func agentEnvelope(_ prompt: String) -> (from: String, text: String)? {
+        let header = "[egeon] mensagem de "
+        guard prompt.hasPrefix(header) else { return nil }
+        var lines = prompt.split(separator: "\n", omittingEmptySubsequences: false)
+        let from = String(lines.removeFirst().dropFirst(header.count))
+            .trimmingCharacters(in: .whitespaces)
+        if let trailer = lines.firstIndex(where: { $0.hasPrefix("Quem escreveu foi outro agente") }) {
+            lines = Array(lines[..<trailer])
+        }
+        let text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return (from, text)
+    }
+
     private static func step(_ block: [String: Any]) -> ChatStep {
         let name = block["name"] as? String ?? "?"
         let input = block["input"] as? [String: Any] ?? [:]
         switch name {
         case "Bash":
+            let command = input["command"] as? String ?? ""
+            if let target = Self.sendTarget(in: command) {
+                return ChatStep(glyph: "⇄", text: "egeon send \(target)", sendTo: target)
+            }
             return ChatStep(glyph: "$", text: input["description"] as? String
-                            ?? input["command"] as? String ?? "bash")
+                            ?? (command.isEmpty ? "bash" : command))
         case "Edit", "Write", "MultiEdit", "NotebookEdit":
             return ChatStep(glyph: "±", text: Self.shortPath(input["file_path"] as? String))
         case "Read":
@@ -93,6 +115,14 @@ struct ClaudeTranscript: TranscriptReader {
         default:
             return ChatStep(glyph: "→", text: name)
         }
+    }
+
+    /// O endereço num `egeon send <bancada/id>`, se o comando for um.
+    static func sendTarget(in command: String) -> String? {
+        guard let range = command.range(of: #"egeon\s+send\s+(\S+)"#, options: .regularExpression)
+        else { return nil }
+        let match = command[range]
+        return match.split(separator: " ", omittingEmptySubsequences: true).last.map(String.init)
     }
 
     private static func shortPath(_ path: String?) -> String {

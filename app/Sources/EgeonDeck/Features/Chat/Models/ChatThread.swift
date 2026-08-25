@@ -78,13 +78,16 @@ enum ChatMessage: Equatable {
     /// última resposta dele. Sem isto, dois papos ao mesmo tempo "juntam".
     static func thread(participants: [ChatParticipant], extra: [ChatMessage] = [],
                        turns: (ChatParticipant) -> [ChatTurn]) -> [ChatMessage] {
+        let agents = participants.filter(\.isAgent)
+        var perAgent: [String: [ChatTurn]] = [:]
+        for agent in agents { perAgent[agent.id] = turns(agent) }
+
         var messages: [ChatMessage] = extra
-        for participant in participants where participant.isAgent {
-            for turn in turns(participant) {
-                messages.append(.prompt(to: participant, turnId: turn.id, text: turn.prompt,
-                                        at: turn.promptAt))
-                if turn.hasReply { messages.append(.reply(from: participant, turn: turn)) }
-            }
+        for (participant, turn) in fold(agents: agents, turns: perAgent) {
+            let label = turn.from.map { "de \($0): \(turn.prompt)" } ?? turn.prompt
+            messages.append(.prompt(to: participant, turnId: turn.id, text: label,
+                                    at: turn.promptAt))
+            if turn.hasReply { messages.append(.reply(from: participant, turn: turn)) }
         }
         // `sorted` não é estável: dois itens no mesmo instante trocariam de
         // lugar entre uma remontagem e outra. O índice desempata.
@@ -92,6 +95,72 @@ enum ChatMessage: Equatable {
             .sorted { ($0.element.at, $0.offset) < ($1.element.at, $1.offset) }
             .map(\.element)
         return quoting(sorted)
+    }
+
+    /// Sub-conversa: turno que chegou de OUTRO agente não vira bolha de topo —
+    /// entra, achatado e em ordem, na bolha do agente que começou a cadeia. Se o
+    /// próprio dono da bolha recebeu a volta e continuou, o que ele escreveu é o
+    /// corpo da bolha, e os passos dele somam aos do turno. Quem não tem dono
+    /// (mensagem sem remetente conhecido) fica no topo, para não sumir.
+    static func fold(agents: [ChatParticipant],
+                     turns: [String: [ChatTurn]]) -> [(ChatParticipant, ChatTurn)] {
+        let byAddress = Dictionary(uniqueKeysWithValues: agents.map { ($0.address, $0) })
+        var roots: [(ChatParticipant, ChatTurn)] = []
+        var rootIndex: [String: Int] = [:]
+        for agent in agents {
+            for turn in turns[agent.id] ?? [] where turn.from == nil {
+                rootIndex[turn.id] = roots.count
+                roots.append((agent, turn))
+            }
+        }
+
+        let received = agents.flatMap { agent in
+            (turns[agent.id] ?? []).filter { $0.from != nil }.map { (agent, $0) }
+        }.sorted { $0.1.promptAt < $1.1.promptAt }
+
+        for (receiver, turn) in received {
+            guard let from = turn.from,
+                  let root = rootOf(receiver: receiver, turn: turn, byAddress: byAddress, turns: turns),
+                  let index = rootIndex[root.1.id] else {
+                rootIndex[turn.id] = roots.count
+                roots.append((receiver, turn))
+                continue
+            }
+            let isOwner = receiver.id == root.0.id
+            roots[index].1.exchanges.append(ChatExchange(
+                fromId: byAddress[from]?.id ?? from, toId: receiver.id, text: turn.prompt,
+                at: turn.promptAt, steps: turn.steps.count,
+                note: isOwner ? "" : turn.replyText))
+            if isOwner {
+                roots[index].1.steps += turn.steps
+                if !turn.replyText.isEmpty {
+                    roots[index].1.replyText +=
+                        (roots[index].1.replyText.isEmpty ? "" : "\n\n") + turn.replyText
+                }
+                if let at = turn.replyAt { roots[index].1.replyAt = at }
+            }
+        }
+        return roots
+    }
+
+    /// Sobe a cadeia até o turno que VOCÊ disparou: quem mandou esta mensagem,
+    /// em que turno dele estava (o último, antes dela, com `egeon send` para o
+    /// destino — ou o último antes dela), e assim por diante.
+    private static func rootOf(receiver: ChatParticipant, turn: ChatTurn,
+                               byAddress: [String: ChatParticipant],
+                               turns: [String: [ChatTurn]]) -> (ChatParticipant, ChatTurn)? {
+        var current = (receiver, turn)
+        for _ in 0..<8 {
+            guard let from = current.1.from, let sender = byAddress[from] else { return nil }
+            let before = (turns[sender.id] ?? []).filter { $0.promptAt <= current.1.promptAt }
+            let owner = before.last { candidate in
+                candidate.steps.contains { $0.sendTo == current.0.address }
+            } ?? before.last
+            guard let owner else { return nil }
+            if owner.from == nil { return (sender, owner) }
+            current = (sender, owner)
+        }
+        return nil
     }
 
     static func quoting(_ sorted: [ChatMessage]) -> [ChatMessage] {

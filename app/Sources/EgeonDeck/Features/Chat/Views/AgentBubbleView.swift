@@ -21,6 +21,10 @@ final class AgentBubbleView: NSView, ThreadBubble {
     private let steps: [ChatStep]
     private let expanded: Bool
     private let hasBody: Bool
+    /// A cadeia agente↔agente, sempre aberta — diferente dos passos, ela é a
+    /// própria conversa, não bastidor.
+    private var exchangeRows: [ExchangeRow] = []
+    private let exchangesBox = NSView()
 
     static let maxWidth: CGFloat = 660
     private static let stepRowHeight: CGFloat = 18
@@ -77,6 +81,20 @@ final class AgentBubbleView: NSView, ThreadBubble {
                 }
             }
             addSubview(stepsBox)
+        }
+
+        if !turn.exchanges.isEmpty {
+            exchangesBox.wantsLayer = true
+            exchangesBox.layer?.cornerRadius = 10
+            exchangesBox.layer?.borderWidth = 1
+            exchangesBox.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
+            exchangesBox.layer?.backgroundColor = NSColor(calibratedWhite: 0, alpha: 0.22).cgColor
+            exchangeRows = turn.exchanges.map { exchange in
+                let row = ExchangeRow(exchange: exchange)
+                exchangesBox.addSubview(row)
+                return row
+            }
+            addSubview(exchangesBox)
         }
 
         body.font = .systemFont(ofSize: 13.5)
@@ -157,9 +175,15 @@ final class AgentBubbleView: NSView, ThreadBubble {
 
     private var quoteBlock: CGFloat { quoteView == nil ? 0 : ChatQuoteView.height + 8 }
 
+    private func exchangesHeight(width: CGFloat) -> CGFloat {
+        guard !exchangeRows.isEmpty else { return 0 }
+        return exchangeRows.reduce(8) { $0 + $1.height(for: width - 26 - 20) + 6 }
+    }
+
     func height(for width: CGFloat) -> CGFloat {
         var total: CGFloat = 10 + 16 + quoteBlock
         if !steps.isEmpty { total += 8 + stepsHeight }
+        if !exchangeRows.isEmpty { total += 8 + exchangesHeight(width: width) }
         if hasBody { total += 8 + bodyHeight(width: width) }
         return total + 12
     }
@@ -173,7 +197,9 @@ final class AgentBubbleView: NSView, ThreadBubble {
             + time.intrinsicContentSize.width + 50
         let stepsWidth: CGFloat = steps.isEmpty ? 0 : (expanded ? 420 : 240)
         let quoteMin: CGFloat = quoteView == nil ? 0 : 300
-        return min(cap, max(textWidth, headerWidth, stepsWidth, quoteMin))
+        // Sub-conversa é leitura: ocupa a largura toda que a bolha pode ter.
+        let exchangesMin: CGFloat = exchangeRows.isEmpty ? 0 : cap
+        return min(cap, max(textWidth, headerWidth, stepsWidth, quoteMin, exchangesMin))
     }
 
     override func layout() {
@@ -206,10 +232,94 @@ final class AgentBubbleView: NSView, ThreadBubble {
             y += stepsHeight
         }
 
+        if !exchangeRows.isEmpty {
+            y += 8
+            let boxHeight = exchangesHeight(width: bounds.width)
+            exchangesBox.frame = NSRect(x: 13, y: y, width: bounds.width - 26, height: boxHeight)
+            var rowY: CGFloat = 8
+            let rowWidth = exchangesBox.bounds.width - 20
+            for row in exchangeRows {
+                let rowHeight = row.height(for: rowWidth)
+                row.frame = NSRect(x: 10, y: rowY, width: rowWidth, height: rowHeight)
+                rowY += rowHeight + 6
+            }
+            y += boxHeight
+        }
+
         if hasBody {
             y += 8
             body.frame = NSRect(x: 13, y: y, width: bounds.width - 26,
                                 height: bodyHeight(width: bounds.width))
+        }
+    }
+}
+
+// MARK: - Uma troca entre agentes
+
+/// Uma linha da sub-conversa: "⇄ front → back · 14:24 · 3 passos", o texto que
+/// foi, e — se o destino não é o dono da bolha — o que ele anotou ao atender.
+private final class ExchangeRow: NSView {
+    private let header = NSTextField(labelWithString: "")
+    private let text = NSTextField(wrappingLabelWithString: "")
+    private let note = NSTextField(wrappingLabelWithString: "")
+    private let bar = NSView()
+    private let hasNote: Bool
+
+    init(exchange: ChatExchange) {
+        hasNote = !exchange.note.isEmpty
+        super.init(frame: .zero)
+        let color = AgentPalette.color(for: exchange.fromId)
+
+        bar.wantsLayer = true
+        bar.layer?.backgroundColor = color.withAlphaComponent(0.8).cgColor
+        bar.layer?.cornerRadius = 1.5
+        addSubview(bar)
+
+        let clock = DateFormatter()
+        clock.dateFormat = "HH:mm"
+        var title = "⇄ \(exchange.fromId) → \(exchange.toId) · \(clock.string(from: exchange.at))"
+        if exchange.steps > 0 { title += " · \(exchange.steps) passo\(exchange.steps == 1 ? "" : "s")" }
+        header.stringValue = title
+        header.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
+        header.textColor = color
+        addSubview(header)
+
+        text.stringValue = exchange.text
+        text.font = .systemFont(ofSize: 12.5)
+        text.textColor = NSColor(calibratedWhite: 0.87, alpha: 1)
+        addSubview(text)
+
+        note.stringValue = "↳ \(exchange.note)"
+        note.font = .systemFont(ofSize: 11.5)
+        note.textColor = NSColor(calibratedWhite: 0.55, alpha: 1)
+        note.isHidden = !hasNote
+        addSubview(note)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+
+    private func measure(_ field: NSTextField, width: CGFloat) -> CGFloat {
+        ceil(field.attributedStringValue
+            .boundingRect(with: NSSize(width: width - 12 - 8, height: .infinity),
+                          options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
+    }
+
+    func height(for width: CGFloat) -> CGFloat {
+        var total: CGFloat = 16 + 4 + measure(text, width: width)
+        if hasNote { total += 4 + measure(note, width: width) }
+        return total + 4
+    }
+
+    override func layout() {
+        super.layout()
+        bar.frame = NSRect(x: 0, y: 2, width: 3, height: bounds.height - 4)
+        header.frame = NSRect(x: 12, y: 0, width: bounds.width - 12, height: 15)
+        let textHeight = measure(text, width: bounds.width)
+        text.frame = NSRect(x: 12, y: 20, width: bounds.width - 12, height: textHeight)
+        if hasNote {
+            note.frame = NSRect(x: 12, y: 24 + textHeight, width: bounds.width - 12,
+                                height: measure(note, width: bounds.width))
         }
     }
 }
