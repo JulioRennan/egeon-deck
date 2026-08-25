@@ -53,6 +53,9 @@ final class ChatBubbleView: NSView, ThreadBubble {
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
 
+    /// Prompt com citação: clicar em qualquer parte dele leva à fala citada.
+    override func mouseDown(with event: NSEvent) { onQuoteClick?() }
+
     /// A célula do NSTextField come uns pixels de cada lado antes de quebrar a
     /// linha; medir sem essa folga corta a última palavra.
     private static let cellSlack: CGFloat = 8

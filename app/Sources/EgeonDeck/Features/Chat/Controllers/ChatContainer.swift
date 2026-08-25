@@ -32,14 +32,45 @@ final class ChatContainer: NSView {
     private var bubbleByKey: [String: ThreadBubble] = [:]
     private var messages: [ChatMessage] = []
 
-    /// Clique na citação: rola até a mensagem original e a acende um instante.
+    /// Clique na citação ou na resposta: rola até a mensagem original e a
+    /// acende um instante.
     private func scrollTo(key: String) {
         guard let bubble = bubbleByKey[key] else { return }
-        threadDoc.scroll(NSPoint(x: 0, y: max(0, bubble.frame.minY - 24)))
+        animateScroll(to: max(0, bubble.frame.minY - 24))
         let old = bubble.layer?.borderColor
         bubble.layer?.borderColor = NSColor.white.withAlphaComponent(0.7).cgColor
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { bubble.layer?.borderColor = old }
     }
+
+    private var bottomY: CGFloat {
+        max(0, threadDoc.frame.height - threadScroll.contentSize.height)
+    }
+
+    /// Rolagem com movimento, como no WhatsApp: pular seco perde a noção de
+    /// para onde se foi.
+    private func animateScroll(to y: CGFloat) {
+        let clip = threadScroll.contentView
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.35
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            clip.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            self.threadScroll.reflectScrolledClipView(clip)
+            self.updateToBottomButton()
+        }
+    }
+
+    /// A setinha ↓ no canto: aparece quando você subiu para ler e some no fim.
+    private let toBottom = NSTextField(labelWithString: "↓")
+
+    private func updateToBottomButton() {
+        let visible = threadScroll.contentView.documentVisibleRect
+        let atBottom = visible.maxY >= threadDoc.frame.height - 40
+        toBottom.isHidden = atBottom || bubbles.isEmpty
+    }
+
+    @objc private func scrollToBottomClicked() { animateScroll(to: bottomY) }
     private var pending: [ChatThread.Pending] = []
     /// Pilhas de passos abertas, por "agente|instante do prompt".
     private var expandedSteps: Set<String> = []
@@ -85,7 +116,32 @@ final class ChatContainer: NSView {
 
         popup.isHidden = true
         addSubview(popup)
+
+        toBottom.font = .systemFont(ofSize: 16, weight: .bold)
+        toBottom.alignment = .center
+        toBottom.textColor = NSColor(calibratedWhite: 0.9, alpha: 1)
+        toBottom.wantsLayer = true
+        toBottom.layer?.cornerRadius = 17
+        toBottom.layer?.backgroundColor = NSColor(srgbRed: 0.09, green: 0.11, blue: 0.16,
+                                                  alpha: 0.96).cgColor
+        toBottom.layer?.borderWidth = 1
+        toBottom.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.14).cgColor
+        toBottom.shadow = NSShadow()
+        toBottom.shadow?.shadowBlurRadius = 10
+        toBottom.shadow?.shadowColor = NSColor.black.withAlphaComponent(0.5)
+        toBottom.addGestureRecognizer(NSClickGestureRecognizer(
+            target: self, action: #selector(scrollToBottomClicked)))
+        toBottom.isHidden = true
+        addSubview(toBottom)
+
+        // Saber se você está no fim é o que decide a setinha e o auto-scroll.
+        threadScroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(threadScrolled),
+            name: NSView.boundsDidChangeNotification, object: threadScroll.contentView)
     }
+
+    @objc private func threadScrolled() { updateToBottomButton() }
 
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
@@ -197,9 +253,9 @@ final class ChatContainer: NSView {
                     self.threadSignature = ""
                     self.refresh()
                 }
-                if let quote {
-                    view.onQuoteClick = { [weak self] in self?.scrollTo(key: quote.targetKey) }
-                }
+                // Com ou sem citação, a resposta sabe qual prompt responde.
+                let target = quote?.targetKey ?? "p|\(turn.id)"
+                view.onQuoteClick = { [weak self] in self?.scrollTo(key: target) }
                 bubble = view
             }
             bubbleByKey[message.key] = bubble
@@ -213,9 +269,9 @@ final class ChatContainer: NSView {
         // Puxar para o fim só se você já estava lá — quem subiu para ler não
         // pode ser arrastado de volta a cada mensagem.
         if wasAtBottom || bubbles.count <= 2 {
-            threadDoc.scroll(NSPoint(x: 0, y: max(0, threadDoc.frame.height
-                                                  - threadScroll.contentSize.height)))
+            animateScroll(to: bottomY)
         }
+        updateToBottomButton()
     }
 
     /// Quem o Tab e o alternador percorrem: só agentes. Shell continua na
@@ -411,6 +467,8 @@ final class ChatContainer: NSView {
 
         threadScroll.frame = NSRect(x: contentX, y: 10, width: contentWidth,
                                     height: max(0, composer.frame.minY - 20))
+        toBottom.frame = NSRect(x: threadScroll.frame.maxX - 52,
+                                y: threadScroll.frame.maxY - 44, width: 34, height: 34)
         emptyThread.frame = NSRect(x: contentX, y: composer.frame.minY - 28,
                                    width: contentWidth, height: 15)
         emptyThread.isHidden = !bubbles.isEmpty

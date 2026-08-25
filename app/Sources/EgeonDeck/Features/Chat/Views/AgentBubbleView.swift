@@ -130,6 +130,11 @@ final class AgentBubbleView: NSView, ThreadBubble {
 
     @objc private func toggle() { onToggleSteps?() }
 
+    /// Clicar na resposta leva ao prompt original, como no WhatsApp — a bolha
+    /// inteira, não só a citação. A pilha de passos tem gesto próprio e fica
+    /// com o clique dela.
+    override func mouseDown(with event: NSEvent) { onQuoteClick?() }
+
     private static let clock: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
