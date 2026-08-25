@@ -99,6 +99,9 @@ enum AppControl {
     /// Existe pelo mesmo motivo do `/peek`: conferir a tela sem comparar pixels.
     static var chatState: ((String) -> [String: Any]?)?
 
+    /// Rola a thread do chat por fora: "top" ou "bottom".
+    static var chatScroll: ((_ workbench: String, _ edge: String) -> Void)?
+
     /// Escreve na caixa do chat, sem enviar ou enviando, e devolve o estado.
     /// Tecla sintética exige Acessibilidade, que a assinatura ad-hoc perde a
     /// cada build (ADR-003) — sem esta rota o composer não se verifica de fora.

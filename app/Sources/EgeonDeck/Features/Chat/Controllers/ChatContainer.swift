@@ -61,8 +61,8 @@ final class ChatContainer: NSView {
         }
     }
 
-    /// A setinha ↓ no canto: aparece quando você subiu para ler e some no fim.
-    private let toBottom = NSTextField(labelWithString: "↓")
+    /// A setinha no canto: aparece quando você subiu para ler e some no fim.
+    private let toBottom = ChevronButton()
 
     private func updateToBottomButton() {
         let visible = threadScroll.contentView.documentVisibleRect
@@ -70,7 +70,13 @@ final class ChatContainer: NSView {
         toBottom.isHidden = atBottom || bubbles.isEmpty
     }
 
-    @objc private func scrollToBottomClicked() { animateScroll(to: bottomY) }
+    private func scrollToBottomClicked() { animateScroll(to: bottomY) }
+
+    /// Rola por fora (`/chat?scroll=top|bottom`) — é como se confere a setinha
+    /// e a animação sem mouse.
+    func scroll(_ edge: String) {
+        animateScroll(to: edge == "top" ? 0 : bottomY)
+    }
     private var pending: [ChatThread.Pending] = []
     /// Pilhas de passos abertas, por "agente|instante do prompt".
     private var expandedSteps: Set<String> = []
@@ -117,20 +123,7 @@ final class ChatContainer: NSView {
         popup.isHidden = true
         addSubview(popup)
 
-        toBottom.font = .systemFont(ofSize: 16, weight: .bold)
-        toBottom.alignment = .center
-        toBottom.textColor = NSColor(calibratedWhite: 0.9, alpha: 1)
-        toBottom.wantsLayer = true
-        toBottom.layer?.cornerRadius = 17
-        toBottom.layer?.backgroundColor = NSColor(srgbRed: 0.09, green: 0.11, blue: 0.16,
-                                                  alpha: 0.96).cgColor
-        toBottom.layer?.borderWidth = 1
-        toBottom.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.14).cgColor
-        toBottom.shadow = NSShadow()
-        toBottom.shadow?.shadowBlurRadius = 10
-        toBottom.shadow?.shadowColor = NSColor.black.withAlphaComponent(0.5)
-        toBottom.addGestureRecognizer(NSClickGestureRecognizer(
-            target: self, action: #selector(scrollToBottomClicked)))
+        toBottom.onClick = { [weak self] in self?.scrollToBottomClicked() }
         toBottom.isHidden = true
         addSubview(toBottom)
 
@@ -467,8 +460,8 @@ final class ChatContainer: NSView {
 
         threadScroll.frame = NSRect(x: contentX, y: 10, width: contentWidth,
                                     height: max(0, composer.frame.minY - 20))
-        toBottom.frame = NSRect(x: threadScroll.frame.maxX - 52,
-                                y: threadScroll.frame.maxY - 44, width: 34, height: 34)
+        toBottom.frame = NSRect(x: threadScroll.frame.maxX - 54,
+                                y: threadScroll.frame.maxY - 48, width: 36, height: 36)
         emptyThread.frame = NSRect(x: contentX, y: composer.frame.minY - 28,
                                    width: contentWidth, height: 15)
         emptyThread.isHidden = !bubbles.isEmpty
@@ -500,4 +493,39 @@ final class ChatContainer: NSView {
 /// Documento da thread: flipped para as bolhas empilharem de cima para baixo.
 private final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+/// O botão redondo de "voltar ao fim", com o chevron do sistema centrado —
+/// glifo de texto ficava torto dentro do círculo.
+private final class ChevronButton: NSView {
+    var onClick: (() -> Void)?
+    private let icon = NSImageView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 18
+        layer?.backgroundColor = NSColor(srgbRed: 0.09, green: 0.11, blue: 0.16, alpha: 0.96).cgColor
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.14).cgColor
+        shadow = NSShadow()
+        shadow?.shadowBlurRadius = 10
+        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.5)
+
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        icon.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "ir ao fim")?
+            .withSymbolConfiguration(config)
+        icon.contentTintColor = NSColor(calibratedWhite: 0.9, alpha: 1)
+        icon.imageScaling = .scaleNone
+        addSubview(icon)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        icon.frame = bounds
+    }
+
+    override func mouseDown(with event: NSEvent) { onClick?() }
 }

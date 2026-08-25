@@ -177,6 +177,11 @@ EgeonCLI.install()
             out["mode"] = (self.shells[index]?.mode ?? self.configs[index].viewMode).rawValue
             return out
         }
+        AppControl.chatScroll = { [weak self] name, edge in
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
+            else { return }
+            self.shells[index]?.chat.scroll(edge)
+        }
         AppControl.chatCompose = { [weak self] name, text, send in
             guard let self,
                   let index = self.configs.firstIndex(where: { $0.name == name }),

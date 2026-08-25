@@ -327,9 +327,14 @@ final class ControlSocket {
                                      "error": "bancada sem chat montado '\(target)'"])
 
         case ("GET", _, _) where route.contains("/chat"):
-            // /chat?target=ws — o modo chat da bancada, como dados.
-            let target = Self.query(in: route)["target"] ?? ""
-            let payload = DispatchQueue.main.sync { AppControl.chatState?(target) ?? nil }
+            // /chat?target=ws[&scroll=top|bottom] — o modo chat da bancada, como
+            // dados; `scroll` rola a thread antes de responder.
+            let query = Self.query(in: route)
+            let target = query["target"] ?? ""
+            let payload = DispatchQueue.main.sync {
+                if let edge = query["scroll"] { AppControl.chatScroll?(target, edge) }
+                return AppControl.chatState?(target) ?? nil
+            }
             respond(fd, status: payload == nil ? "404 Not Found" : "200 OK",
                     json: payload ?? ["ok": false, "error": "bancada desconhecida '\(target)'"])
 
