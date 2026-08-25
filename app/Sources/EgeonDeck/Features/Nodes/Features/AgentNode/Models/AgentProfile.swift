@@ -339,6 +339,26 @@ struct AgentProfile: Codable {
     /// O CLI aceita escolher modelo?
     var offersModels: Bool { !(model ?? []).isEmpty }
 
+    /// O que "padrão" significa para este CLI nesta configuração: o `model` do
+    /// `settings.json` da pasta de config em uso. Nil quando não há arquivo ou
+    /// ele não fixa modelo — aí só o transcript, depois do primeiro turno, sabe.
+    ///
+    /// A pasta é a do nó (`config`), senão a do ambiente do perfil, senão a
+    /// padrão do CLI (`configGlob` sem o `*`). Formato do arquivo é do Claude
+    /// Code; outro CLI que não o tenha devolve nil e não perde nada.
+    func defaultModelName(config: String?) -> String? {
+        let directory = config
+            ?? configEnv.flatMap { resolvedEnvironment[$0] }
+            ?? configGlob.map { String($0.dropLast()) }
+        guard let directory, !directory.isEmpty else { return nil }
+        let path = ((directory as NSString).expandingTildeInPath as NSString)
+            .appendingPathComponent("settings.json")
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let model = object["model"] as? String, !model.isEmpty else { return nil }
+        return model
+    }
+
     /// Argumentos que instalam o gancho de relato. Nil quando o perfil não o
     /// declara — aí o app fica só com a conversa que ele mesmo criou.
     func reportArguments(hookFile: String) -> [String]? {

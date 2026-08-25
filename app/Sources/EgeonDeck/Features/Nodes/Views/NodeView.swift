@@ -135,6 +135,10 @@ class NodeView: NSView {
             needsLayout = true
         }
     }
+    /// Largura que o acessório pede. `fittingSize` de um pull-down mede o item
+    /// mais largo do MENU, não o título visível — e o menu tem "padrão do CLI";
+    /// quem monta o acessório sabe medir o que está na tela.
+    var headerAccessoryWidth: CGFloat?
 
     /// Arrasto pelo cabeçalho quando o card NÃO manda na própria posição — isto é,
     /// no mosaico. Em coordenadas de janela; quem resolve sobre qual painel o
@@ -378,7 +382,10 @@ class NodeView: NSView {
         }
         if let headerAccessory, !headerAccessory.isHidden {
             let size = headerAccessory.fittingSize
-            let largura = min(max(size.width, 60), 160)
+            // Cede ao nome do nó: em card estreito o acessório encolhe até 72pt
+            // e o pull-down trunca o texto dele, não o título.
+            let teto = max(64, min(180, bounds.width * 0.22))
+            let largura = min(max(headerAccessoryWidth ?? size.width, 60), teto)
             x -= largura
             headerAccessory.frame = NSRect(x: x, y: (Self.headerHeight - size.height) / 2,
                                            width: largura, height: size.height)
@@ -396,8 +403,20 @@ class NodeView: NSView {
         // com a fonte declarada erra por pouco, porque o `✦` do símbolo cai numa
         // fonte de fallback mais larga do que a que se mediu. Nos dois casos o
         // título virava "clau…" com 1300px de sobra na linha.
+        // Largura solta antes de medir: `sizeToFit` respeita a largura atual do
+        // frame quando o campo quebra linha, e uma passada apertada (acessório
+        // ainda sem medida) deixaria o título preso em "cl…" para sempre.
+        titleLabel.frame.size.width = 4096
+        statusLabel.frame.size.width = 4096
         titleLabel.sizeToFit()
-        let larguraTítulo = min(disponível * 0.62, titleLabel.frame.width + 2)
+        // O estado só reserva o que tem para dizer: parado, ele é vazio e o nome
+        // fica com a linha inteira. Com estado, o nome ainda garante metade —
+        // "cla…" ao lado de "trabalhando" não identifica card nenhum. O estado
+        // trunca pela cabeça, então o que sobra dele ainda termina legível.
+        statusLabel.sizeToFit()
+        let larguraEstado = statusLabel.stringValue.isEmpty ? 0 : statusLabel.frame.width + 8
+        let tetoTítulo = max(disponível * 0.6, disponível - larguraEstado)
+        let larguraTítulo = min(tetoTítulo, titleLabel.frame.width + 2)
         titleLabel.frame = NSRect(x: margem, y: 7,
                                   width: max(0, larguraTítulo), height: 18)
         // O estado acompanha a linha do título, e não o meio: ele fala do que o

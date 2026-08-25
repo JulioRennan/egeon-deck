@@ -69,3 +69,25 @@ final class TranscriptMarkerTests: XCTestCase {
         XCTAssertEqual(ClaudeTranscript.lastMarker(at: url, marker: marker, tailBytes: 200)?.marker, .ok)
     }
 }
+
+/// O nome literal do modelo, lido do transcript.
+final class TranscriptModelTests: XCTestCase {
+    private func assistant(model: String) -> String {
+        #"{"type":"assistant","message":{"model":"\#(model)","content":[{"type":"text","text":"x"}]}}"#
+    }
+
+    func testLastAssistantModelWins() {
+        let jsonl = [assistant(model: "claude-sonnet-5"), assistant(model: "claude-fable-5")]
+            .joined(separator: "\n")
+        XCTAssertEqual(ClaudeTranscript.lastModel(in: jsonl), "claude-fable-5")
+    }
+
+    // A TUI grava respostas fabricadas com model "<synthetic>": não é modelo.
+    func testSyntheticIsSkipped() {
+        let jsonl = [assistant(model: "claude-fable-5"), assistant(model: "<synthetic>")]
+            .joined(separator: "\n")
+        XCTAssertEqual(ClaudeTranscript.lastModel(in: jsonl), "claude-fable-5")
+        XCTAssertNil(ClaudeTranscript.lastModel(in: assistant(model: "<synthetic>")))
+        XCTAssertNil(ClaudeTranscript.lastModel(in: ""))
+    }
+}

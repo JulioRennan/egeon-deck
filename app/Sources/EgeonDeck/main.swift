@@ -1620,6 +1620,9 @@ EgeonCLI.install()
                                         model: node.model,
                                         prompt: launch.promptToInject,
                                         hooked: launch.hooked)
+            terminal.modelResolver = { [weak self] in
+                self?.literalModel(workbench: config.name, nodeID: node.id)
+            }
             if index >= 0, node.conversationId != nil, !node.hasStartedConversation,
                let position = configs[index].nodes.firstIndex(where: { $0.id == node.id }) {
                 configs[index].nodes[position].conversationStarted = true
@@ -2030,6 +2033,30 @@ EgeonCLI.install()
         Log.write("bancada \(configs[index].name): nó \"\(current.id)\" reconfigurado"
                   + (newID == current.id ? "" : " e renomeado para \"\(newID)\""))
         schedulePersist()
+    }
+
+    /// Cache do modelo literal por transcript: (mtime, modelo). O arquivo só é
+    /// relido quando muda.
+    private var literalModelCache: [String: (mtime: Date, model: String?)] = [:]
+
+    /// O modelo que está de fato respondendo neste nó: última linha de assistant
+    /// do transcript; antes do primeiro turno, o `model` do settings.json da
+    /// configuração em uso. Nil quando nenhum dos dois sabe.
+    private func literalModel(workbench: String, nodeID: String) -> String? {
+        guard let config = configs.first(where: { $0.name == workbench }),
+              let node = config.nodes.first(where: { $0.id == nodeID }) else { return nil }
+        if let path = node.transcript, !path.isEmpty {
+            let url = URL(fileURLWithPath: path)
+            let mtime = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]
+                         as? Date) ?? .distantPast
+            if let cached = literalModelCache[path], cached.mtime == mtime, let model = cached.model {
+                return model
+            }
+            let model = ClaudeTranscript.lastModel(at: url)
+            literalModelCache[path] = (mtime, model)
+            if let model { return model }
+        }
+        return node.agent.flatMap { agents[$0] }?.defaultModelName(config: node.config)
     }
 
     /// Troca o modelo de um terminal com IA, pelo seletor do cabeçalho.

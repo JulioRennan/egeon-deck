@@ -65,7 +65,13 @@ final class TerminalNode: NodeView {
     var onRequestModel: ((NodeView, String?) -> Void)?
     private var modelPicker: NSPopUpButton?
     private var modelOptions: [String] = []
-    private static let defaultModelTitle = "padrão"
+    private var chosenModel: String?
+    /// Quem sabe o modelo literal em uso — lê o transcript. Injetado por quem
+    /// tem a configuração do nó; a view não sabe onde a conversa é gravada.
+    var modelResolver: (() -> String?)?
+    private var lastModelProbe = Date.distantPast
+    private var literalModel: String?
+    private static let defaultModelTitle = "padrão do CLI"
 
     /// `profile == nil` → terminal comum. Com perfil, é um "terminal com IA":
     /// mesma mecânica de pty, o que muda é saber injetar prompt e medir ociosidade.
@@ -255,7 +261,13 @@ final class TerminalNode: NodeView {
             // reserva do nome anterior.
             needsLayout = true
         }
-        if statusLabel.stringValue != status { statusLabel.stringValue = status }
+        if statusLabel.stringValue != status {
+            statusLabel.stringValue = status
+            // O estado disputa a linha com o nome: quando ele esvazia, o nome
+            // precisa poder crescer de volta.
+            needsLayout = true
+        }
+        refreshModelTitle()
 
         titleLabel.textColor = activity.color ?? accent
         statusLabel.textColor = activity.color ?? NSColor(calibratedWhite: 0.62, alpha: 1)
@@ -266,28 +278,73 @@ final class TerminalNode: NodeView {
     /// em curso: é o que responde "este card está rodando com o quê?" sem abrir
     /// o formulário, e é onde se troca.
     private func installModelPicker(profile: AgentProfile, current: String?) {
-        let picker = NSPopUpButton(frame: .zero, pullsDown: false)
+        // Pull-down, e não popup: o título é o modelo LITERAL em uso, e o menu
+        // são os apelidos que se pode pedir. Num popup o título seria o item
+        // escolhido — "sonnet", "padrão" — que é justamente o que não informa.
+        let picker = NSPopUpButton(frame: .zero, pullsDown: true)
         picker.controlSize = .small
         picker.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
         picker.isBordered = false
-        picker.toolTip = "Modelo — trocar reinicia o terminal, a conversa continua"
+        picker.toolTip = "Modelo em uso — escolher outro reinicia o terminal, a conversa continua"
         var options = profile.models ?? []
         if let current, !current.isEmpty, !options.contains(current) { options.append(current) }
         modelOptions = options
+        chosenModel = current
+        picker.addItem(withTitle: "")
         picker.addItem(withTitle: Self.defaultModelTitle)
         picker.addItems(withTitles: options)
-        if let current, let index = options.firstIndex(of: current) {
-            picker.selectItem(at: index + 1)
-        }
         picker.target = self
         picker.action = #selector(modelChosen(_:))
         modelPicker = picker
         headerAccessory = picker
+        refreshModelTitle(force: true)
+    }
+
+    /// Título do pull-down: o nome literal quando se sabe, com o apelido pedido
+    /// entre parênteses quando difere; senão o apelido; senão "padrão".
+    /// Consulta o transcript no máximo a cada 2s — é leitura de arquivo, e o
+    /// tick do badge é de 0,25s.
+    private func refreshModelTitle(force: Bool = false) {
+        guard let picker = modelPicker else { return }
+        let now = Date()
+        if force || now.timeIntervalSince(lastModelProbe) >= 2 {
+            lastModelProbe = now
+            literalModel = modelResolver?()
+        }
+        let title: String
+        switch (literalModel, chosenModel) {
+        case let (literal?, chosen?) where literal != chosen && !literal.contains(chosen):
+            title = "\(literal) (\(chosen))"
+        case let (literal?, _):
+            title = literal
+        case let (nil, chosen?):
+            title = chosen
+        case (nil, nil):
+            title = "padrão"
+        }
+        // O prefixo do fornecedor é o mesmo em todo item e só come largura do
+        // nome do nó ao lado; o nome inteiro fica no tooltip.
+        let shown = title.hasPrefix("claude-") ? String(title.dropFirst("claude-".count)) : title
+        if picker.item(at: 0)?.title != shown {
+            picker.item(at: 0)?.title = shown
+            picker.toolTip = "Modelo em uso: \(title) — escolher outro reinicia o terminal, a conversa continua"
+            // Texto mais a seta do pull-down e o respiro da célula.
+            let text = (shown as NSString).size(withAttributes: [.font: picker.font as Any]).width
+            headerAccessoryWidth = ceil(text) + 26
+            needsLayout = true
+        }
+        // Marca no menu o apelido em vigor, para o clique dizer onde se está.
+        for (index, item) in picker.itemArray.enumerated() where index > 0 {
+            let alias = index == 1 ? nil : modelOptions[index - 2]
+            item.state = alias == chosenModel ? .on : .off
+        }
     }
 
     @objc private func modelChosen(_ sender: NSPopUpButton) {
+        // Índice 0 é o título; 1 é "padrão"; daí em diante, os apelidos.
         let index = sender.indexOfSelectedItem
-        let chosen = index > 0 && index - 1 < modelOptions.count ? modelOptions[index - 1] : nil
+        guard index >= 1 else { return }
+        let chosen = index >= 2 && index - 2 < modelOptions.count ? modelOptions[index - 2] : nil
         onRequestModel?(self, chosen)
     }
 

@@ -187,6 +187,35 @@ struct ClaudeTranscript: TranscriptReader {
         return nil
     }
 
+    /// O modelo que respondeu por último, pelo nome completo que o CLI grava
+    /// (`claude-fable-5`). É a única fonte literal: o apelido pedido na flag
+    /// (`sonnet`) não diz qual versão o CLI resolveu, e `padrão` não diz nada.
+    /// `<synthetic>` é resposta fabricada pela TUI, não modelo — pula.
+    static func lastModel(at url: URL, tailBytes: Int = 256 * 1024) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let start = size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0
+        try? handle.seek(toOffset: start)
+        guard let data = try? handle.readToEnd(),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        return lastModel(in: text)
+    }
+
+    static func lastModel(in jsonl: String) -> String? {
+        for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
+            guard line.contains("\"type\":\"assistant\""),
+                  let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)),
+                  let entry = object as? [String: Any],
+                  entry["type"] as? String == "assistant",
+                  let message = entry["message"] as? [String: Any],
+                  let model = message["model"] as? String,
+                  !model.isEmpty, !model.hasPrefix("<") else { continue }
+            return model
+        }
+        return nil
+    }
+
     /// Os marcadores do protocolo Egeon (`[[ED:ok]]`, `[[ED:ask]]`) são para o
     /// app, não para você ler na bolha.
     static func strippingMarkers(_ text: String) -> String {
