@@ -220,9 +220,10 @@ final class ChatContainer: NSView {
         }
         messages = built.messages
         pending = built.pending
-        let typing = all.filter {
-            $0.isAgent && ($0.activity == .working || $0.activity == .starting)
-        }
+        // Só quem está num turno. Terminal subindo não está respondendo a
+        // ninguém — a coluna de participantes já diz "preparando…", e uma bolha
+        // de "trabalhando…" ali era resposta a um prompt que não existe.
+        let typing = all.filter { $0.isAgent && $0.activity == .working }
 
         // Remontar view a cada segundo faria a thread piscar: só quando o que
         // se desenha mudou de fato. O spinner anda em cima da bolha existente.
