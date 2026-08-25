@@ -281,8 +281,11 @@ private final class ChipView: NSView {
         super.layout()
         var x: CGFloat = 10
         for field in fields {
-            let width = field.intrinsicContentSize.width + Self.slack
-            field.frame = NSRect(x: x, y: 4, width: width, height: 16)
+            let size = field.intrinsicContentSize
+            let width = size.width + Self.slack
+            // Fontes de tamanho diferente: cada um centra pela própria altura.
+            field.frame = NSRect(x: x, y: (bounds.height - size.height) / 2,
+                                 width: width, height: size.height)
             x += width + 7
         }
     }
