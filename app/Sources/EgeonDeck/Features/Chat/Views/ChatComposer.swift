@@ -24,7 +24,7 @@ final class ChatComposer: NSView {
     private let scroll = NSScrollView()
     private let textView = ComposerTextView()
     private let placeholder = PassthroughLabel(labelWithString: "")
-    private let send = NSTextField(labelWithString: "↑")
+    private let send = NSImageView()
     private let microcopy = NSTextField(labelWithString: "")
 
     /// Teto do crescimento: ~6 linhas. Daí em diante o texto rola por dentro.
@@ -33,11 +33,16 @@ final class ChatComposer: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        // Uma caixa só, flutuante, como no WhatsApp: chip, texto e botão de
+        // enviar moram DENTRO dela — nada de moldura dentro de moldura.
         wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.05).cgColor
-        layer?.cornerRadius = 14
+        layer?.backgroundColor = NSColor(srgbRed: 0.09, green: 0.11, blue: 0.16, alpha: 0.96).cgColor
+        layer?.cornerRadius = 18
         layer?.borderWidth = 1
         layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
+        shadow = NSShadow()
+        shadow?.shadowBlurRadius = 18
+        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.45)
 
         chip.onClick = { [weak self] in self?.onToggleSwitcher?() }
         addSubview(chip)
@@ -62,12 +67,7 @@ final class ChatComposer: NSView {
 
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
-        scroll.drawsBackground = true
-        scroll.backgroundColor = NSColor(calibratedWhite: 0, alpha: 0.25)
-        scroll.wantsLayer = true
-        scroll.layer?.cornerRadius = 10
-        scroll.layer?.borderWidth = 1
-        scroll.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
+        scroll.drawsBackground = false
         scroll.verticalScrollElasticity = .none
         addSubview(scroll)
 
@@ -75,11 +75,10 @@ final class ChatComposer: NSView {
         placeholder.textColor = NSColor(calibratedWhite: 0.38, alpha: 1)
         addSubview(placeholder)
 
-        send.font = .systemFont(ofSize: 16, weight: .bold)
-        send.alignment = .center
-        send.wantsLayer = true
-        send.layer?.cornerRadius = 10
-        send.layer?.borderWidth = 1
+        send.image = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "enviar")?
+            .withSymbolConfiguration(.init(pointSize: 17, weight: .medium))
+        send.imageScaling = .scaleNone
+        send.toolTip = "Enviar (Enter)"
         let click = NSClickGestureRecognizer(target: self, action: #selector(sendClicked))
         send.addGestureRecognizer(click)
         addSubview(send)
@@ -102,15 +101,13 @@ final class ChatComposer: NSView {
         microcopy.stringValue = participant.map {
             "Enter envia — o prompt entra no terminal de \($0.address) · ⇧Enter quebra linha · @ menciona"
         } ?? ""
-        send.textColor = color
-        send.layer?.borderColor = color.withAlphaComponent(0.4).cgColor
-        send.layer?.backgroundColor = color.withAlphaComponent(0.12).cgColor
+        send.contentTintColor = color
         needsLayout = true
     }
 
     /// Altura total que o composer quer, já com o teto do texto aplicado.
     var desiredHeight: CGFloat {
-        30 + textHeight + 26
+        36 + textHeight + 22
     }
 
     private var textHeight: CGFloat {
@@ -189,13 +186,13 @@ final class ChatComposer: NSView {
         tabHint.frame = NSRect(x: bounds.width - hintWidth - 12, y: 13,
                                width: hintWidth, height: 14)
         let textHeight = self.textHeight
-        scroll.frame = NSRect(x: 10, y: 38, width: bounds.width - 66,
-                              height: textHeight)
-        placeholder.frame = NSRect(x: 22, y: 47, width: bounds.width - 90, height: 17)
-        send.frame = NSRect(x: bounds.width - 46, y: 38 + textHeight - 36,
-                            width: 36, height: 36)
-        microcopy.frame = NSRect(x: 12, y: 38 + textHeight + 5,
-                                 width: bounds.width - 24, height: 14)
+        // O texto vai até perto da borda direita; o avião fica dentro, alinhado
+        // à última linha — como no Slack.
+        scroll.frame = NSRect(x: 8, y: 36, width: bounds.width - 8 - 48, height: textHeight)
+        placeholder.frame = NSRect(x: 20, y: 45, width: bounds.width - 80, height: 17)
+        send.frame = NSRect(x: bounds.width - 44, y: 36 + textHeight - 38, width: 34, height: 34)
+        microcopy.frame = NSRect(x: 14, y: 36 + textHeight + 3,
+                                 width: bounds.width - 28, height: 14)
     }
 }
 
