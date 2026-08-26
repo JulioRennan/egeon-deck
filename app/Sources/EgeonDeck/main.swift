@@ -1858,8 +1858,8 @@ ShellHook.install()
         let alert = NSAlert()
         alert.messageText = "Limpar a bancada \"\(config.name)\"?"
         alert.informativeText = "Roda o comando de limpar em \(agents) agente\(agents == 1 ? "" : "s") "
-            + "— eles esquecem a conversa atual — e arquiva o chat da bancada em "
-            + "chat-archive/. Nada é apagado do disco."
+            + "— eles esquecem a conversa atual — e arquiva o chat e a trilha da bancada em "
+            + "chat-archive/ e trace-archive/. Nada é apagado do disco."
         alert.addButton(withTitle: "Limpar")
         alert.addButton(withTitle: "Cancelar")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -1894,11 +1894,13 @@ ShellHook.install()
             }
         }
         let archived = ChatHistory.shared.archive(workbench: config.id)
+        let trace = TraceLog.shared.archive(workbench: config.id)
         Log.write("bancada \"\(config.name)\" limpa: clear em [\(cleared.joined(separator: ", "))]"
                   + (skipped.isEmpty ? "" : ", pulados [\(skipped.joined(separator: ", "))]")
-                  + (archived.map { ", chat arquivado em \($0.lastPathComponent)" } ?? ", chat já vazio"))
+                  + (archived.map { ", chat arquivado em \($0.lastPathComponent)" } ?? ", chat já vazio")
+                  + (trace.map { ", trilha arquivada em \($0.lastPathComponent)" } ?? ", trilha vazia"))
         return ["ok": true, "workbench": config.name, "cleared": cleared, "skipped": skipped,
-                "archived": archived?.path ?? NSNull()]
+                "archived": archived?.path ?? NSNull(), "trace": trace?.path ?? NSNull()]
     }
 
     // MARK: - Visualização

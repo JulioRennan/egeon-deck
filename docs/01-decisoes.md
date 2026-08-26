@@ -2513,6 +2513,14 @@ a da limpeza: quem procura "a vez que o revisor achou o bug" lembra de quando
 foi, não de quando limpou. Arquivo cujas linhas não decodificam leva o
 instante da limpeza nas duas pontas; período repetido ganha sufixo `_2`.
 
+A trilha vai junto: limpar a bancada move o `trace.md` (ADR-036) para
+`trace-archive/trace-<início>_<fim>.md`, e o próximo `egeon trace` abre outro
+com cabeçalho novo. A conversa e o resumo dela são o mesmo capítulo da
+bancada — arquivar um e deixar o outro crescer separaria o que se lê junto.
+O período da trilha sai das datas do arquivo (nasce na primeira entrada, é
+tocado na última): o carimbo de cada registro só tem minuto, e as datas do
+arquivo têm segundo, como as do chat. Trilha vazia não vira arquivo.
+
 ### O que fica de fora
 
 Só CLI que relata transcript entra (Claude Code hoje): Codex, Gemini e OpenCode

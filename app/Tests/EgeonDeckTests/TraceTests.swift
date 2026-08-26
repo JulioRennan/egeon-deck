@@ -72,6 +72,34 @@ final class TraceLogTests: XCTestCase {
                           log.file(for: entry("deck/dev", id: "aaaa1111", text: "x")).path)
     }
 
+    // Limpar a bancada leva a trilha junto: vai para `trace-archive/` nomeada
+    // pelo período, e a próxima entrada abre um arquivo novo com cabeçalho.
+    func testArchiveMovesTraceAndNextEntryStartsFresh() throws {
+        XCTAssertNil(log.archive(workbench: "aaaa1111"), "sem trilha não nasce arquivo")
+        log.record(entry("deck/a", id: "aaaa1111", text: "primeiro"))
+        log.flush()
+        let current = log.current(forWorkbench: "aaaa1111")
+        let archived = try XCTUnwrap(log.archive(workbench: "aaaa1111"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: current.path))
+        XCTAssertEqual(archived.deletingLastPathComponent().lastPathComponent, "trace-archive")
+        let name = archived.lastPathComponent
+        XCTAssertNotNil(name.range(of: #"^trace-\d{8}-\d{6}_\d{8}-\d{6}\.md$"#, options: .regularExpression), name)
+        XCTAssertTrue(try String(contentsOf: archived, encoding: .utf8).contains("primeiro"))
+        XCTAssertEqual(log.archived(forWorkbench: "aaaa1111").map(\.lastPathComponent), [name])
+
+        log.record(entry("deck/a", id: "aaaa1111", text: "segundo"))
+        log.flush()
+        let fresh = try String(contentsOf: current, encoding: .utf8)
+        XCTAssertTrue(fresh.hasPrefix("# deck\n"), "cabeçalho de novo")
+        XCTAssertFalse(fresh.contains("primeiro"))
+        XCTAssertTrue(fresh.contains("segundo"))
+
+        // Mesmo período de novo (tudo no mesmo segundo): sufixo, não sobrescrita.
+        let second = try XCTUnwrap(log.archive(workbench: "aaaa1111"))
+        XCTAssertNotEqual(second, archived)
+        XCTAssertEqual(log.archived(forWorkbench: "aaaa1111").count, 2)
+    }
+
     func testHeaderCarriesNameAndIDOnceThenAgentsInterleaveInOrder() throws {
         log.record(entry("deck/a", id: "aaaa1111", text: "um"))
         log.record(entry("deck/b", id: "aaaa1111", text: "dois"))

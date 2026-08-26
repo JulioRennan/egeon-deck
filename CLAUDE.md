@@ -65,7 +65,8 @@ app/Sources/EgeonDeck/
   citações. A thread sai do **histórico do app** (`ChatHistory`,
   `workbenches/<id>/chat.jsonl`, gravado no `Stop`), não do transcript do
   CLI. Botão de limpar a bancada (barra lateral, botão direito): `clear` do perfil em cada
-  agente + chat arquivado como `chat-archive/chat-<início>_<fim>.jsonl`
+  agente + chat arquivado como `chat-archive/chat-<início>_<fim>.jsonl` e trilha
+  como `trace-archive/trace-<início>_<fim>.md`
   (`POST /workbench/clear`; só o chat: `POST /chat/clear`) (ADR-037).
 
 ## Funcionalidades, por cima

@@ -168,7 +168,7 @@ caso, **voltar a falar com o usuário**.
 | `GET /status` | agente | estado do próprio terminal |
 | `POST /trace` (texto) | agente via `egeon trace`; shell via `preexec` (`ShellHook`, `ZDOTDIR`) | trilha da bancada, carimbada |
 | `POST /chat/clear?target=<bancada>` | você | arquiva `chat.jsonl` em `chat-archive/` e começa outra conversa (ADR-037) |
-| `POST /workbench/clear?target=<bancada>` | você (o menu da bancada, sem diálogo) | `AgentProfile.clear` (`/clear`) pela fila do Dispatcher em todo agente que declara, + arquiva o chat como `chat-<início>_<fim>.jsonl` (ADR-037) |
+| `POST /workbench/clear?target=<bancada>` | você (o menu da bancada, sem diálogo) | `AgentProfile.clear` (`/clear`) pela fila do Dispatcher em todo agente que declara, + arquiva o chat como `chat-<início>_<fim>.jsonl` e a trilha como `trace-archive/trace-<início>_<fim>.md` (ADR-037) |
 | `GET /targets` | você | endereços conhecidos |
 | `GET /edge?…` | você | ler/editar arestas e `maxSends` |
 | `GET /peek?target=` | você | o que o terminal exibe |

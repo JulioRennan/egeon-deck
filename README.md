@@ -155,7 +155,7 @@ uma bancada** fica em `~/.egeon/workbenches/<id>/`, onde `id` é o da bancada em
 `workbenches.json`: a trilha (`trace.md`), a conversa corrente do chat (`chat.jsonl`) e as arquivadas
 (`chat-archive/chat-<início>_<fim>.jsonl`, nomeadas pelo período da conversa). Botão direito na
 bancada › **Limpar a bancada…** roda o `/clear` de cada agente e move a conversa corrente
-para o arquivo — nada é apagado do disco. O histórico é
+e a trilha para o arquivo (`trace-archive/trace-<início>_<fim>.md`) — nada é apagado do disco. O histórico é
 o que o chat mostra, gravado pelo app a cada turno; não depende de o CLI manter o transcript
 dele. O
 log fica em `~/egeon.log` e é zerado a cada arranque — é a fonte de verdade quando algo
