@@ -50,6 +50,7 @@ enum EgeonCLI {
 
         SOCK="\(ControlSocket.path)"
 
+        \(ControlSocket.shellEncoder)
         api() {
             local method="$1" path="$2"
             shift 2
@@ -65,7 +66,8 @@ enum EgeonCLI {
             [ $# -ge 2 ] || { echo "uso: egeon send <endereço> (texto no stdin)" >&2; exit 2; }
             # --data-binary @- e não -d: -d come as quebras de linha, e o que vai
             # aqui é texto livre de várias linhas.
-            api POST "/message?target=$2" --data-binary @-
+            # Codificado: endereço com espaço no nome da bancada quebrava a linha HTTP.
+            api POST "/message?target=$(enc "$2")" --data-binary @-
             ;;
           trace)
             # Texto nos argumentos ou no stdin: uma linha cabe na chamada, e o

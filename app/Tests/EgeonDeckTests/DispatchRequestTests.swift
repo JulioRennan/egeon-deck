@@ -47,14 +47,14 @@ final class DispatchRequestTests: XCTestCase {
     }
 
     // A entrega de outro agente vira envelope: cabeçalho com o remetente e o
-    // rodapé dizendo que aquilo não autoriza nada — a guarda social da ADR-012.
+    // texto, nada mais. O rodapé "isso não autoriza nada" saiu (ADR-038): o nó
+    // decide sozinho o que fazer com a mensagem.
     func testSenderTurnsAnyKindIntoTheAgentEnvelope() throws {
         let req = try request(
             #"{"target":"ws/t1","kind":"task","from":"deck/claude-2","text":"revise"}"#)
         let prompt = try XCTUnwrap(req.buildPrompt())
-        XCTAssertTrue(prompt.hasPrefix("[egeon] mensagem de deck/claude-2"))
-        XCTAssertTrue(prompt.contains("revise"))
-        XCTAssertTrue(prompt.contains("não autoriza nada"))
+        XCTAssertEqual(prompt, "[egeon] mensagem de deck/claude-2\n\nrevise")
+        XCTAssertFalse(prompt.contains("autoriza"))
     }
 
     func testEnvelopeWithoutTextIsNothing() throws {

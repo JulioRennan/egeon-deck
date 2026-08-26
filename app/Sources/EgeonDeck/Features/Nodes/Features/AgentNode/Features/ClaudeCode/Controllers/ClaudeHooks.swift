@@ -26,7 +26,8 @@ enum ClaudeHooks {
     static var settingsFile: URL { directory.appendingPathComponent("claude-hooks.json") }
     static var script: URL { directory.appendingPathComponent("agent-hook.sh") }
 
-    /// Variável de ambiente que diz ao script de qual terminal ele está falando.
+    /// Variável de ambiente que diz ao script que ele está dentro do Egeon. Não
+    /// é identidade: quem fala vem do pid da conexão (ADR-040).
     static let targetVariable = "EGEON_TARGET"
 
     /// Escrito no arranque, como o `worktree-copy.sh`: é um arquivo feito para ser
@@ -75,6 +76,9 @@ enum ClaudeHooks {
         # Drenado mesmo quando não é lido: stdin fechado sem leitura devolve
         # SIGPIPE para quem escreveu.
         payload=$(cat)
+        # Fora do Egeon (claude aberto num Terminal comum) não há a quem contar.
+        # A variável NÃO diz quem somos: o app descobre pelo processo que abriu
+        # a conexão, como faz com o `egeon` (ADR-040).
         [ -n "${EGEON_TARGET:-}" ] || exit 0
 
         # --max-time porque o gancho bloqueia a TUI: app fora do ar não pode te
@@ -99,7 +103,7 @@ enum ClaudeHooks {
         print("" if not i else "id="+u.quote(i)+"&transcript="+u.quote(d.get("transcript_path") or ""))' \\
               2>/dev/null)
             [ -n "$q" ] || exit 0
-            post "/conversation?target=$EGEON_TARGET&$q"
+            post "/conversation?$q"
             ;;
           stop)
             # O transcript vai junto: é dele que o app lê com que marcador o
@@ -109,10 +113,10 @@ enum ClaudeHooks {
               'import sys,json,urllib.parse as u
         d=json.load(sys.stdin)
         print(u.quote(d.get("transcript_path") or ""))' 2>/dev/null)
-            post "/activity?target=$EGEON_TARGET&event=stop&transcript=$t"
+            post "/activity?event=stop&transcript=$t"
             ;;
           ask|start)
-            post "/activity?target=$EGEON_TARGET&event=$event"
+            post "/activity?event=$event"
             ;;
         esac
 

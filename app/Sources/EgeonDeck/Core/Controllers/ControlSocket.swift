@@ -232,21 +232,25 @@ final class ControlSocket {
             // que não o informe continua valendo como agente — perde o thread, não
             // o dispatch.
             let query = Self.query(in: route)
-            let target = query["target"] ?? ""
             let id = query["id"] ?? ""
-            guard !target.isEmpty, !id.isEmpty else {
-                respond(fd, status: "400 Bad Request",
-                        json: ["ok": false, "error": "target e id são obrigatórios"])
+            guard !id.isEmpty else {
+                respond(fd, status: "400 Bad Request", json: ["ok": false, "error": "id é obrigatório"])
                 return
             }
-            DispatchQueue.main.sync {
-                AppControl.recordConversation?(target, id, query["transcript"])
+            let resolved: Bool = DispatchQueue.main.sync {
+                guard let target = hookCaller(fd, query: query) else { return false }
+                AppControl.recordConversation?(target.address, id, query["transcript"])
                 // Relatar a conversa também prova que o gancho chega aqui — e é
                 // isso que faz o terminal parar de depender de adivinhação sobre
                 // a tela já no primeiro turno (ADR-024).
-                Dispatcher.shared.target(target)?.hookReported(.prompt)
+                target.hookReported(.prompt)
+                return true
             }
-            respond(fd, status: "200 OK", json: ["ok": true])
+            if resolved {
+                respond(fd, status: "200 OK", json: ["ok": true])
+            } else {
+                respond(fd, status: "403 Forbidden", json: ["ok": false, "error": Self.notFromTerminal])
+            }
 
         case ("POST", _, _) where route.contains("/activity"):
             // /activity?target=bancada/id&event=stop|ask[&transcript=path] — o CLI relatando que o
@@ -254,10 +258,8 @@ final class ControlSocket {
             // `Notification`). São os dois únicos avisos que chamam você, e vêm
             // do programa em vez de saírem de heurística sobre o pty (ADR-024).
             let query = Self.query(in: route)
-            let target = query["target"] ?? ""
-            guard !target.isEmpty, let raw = query["event"], !raw.isEmpty else {
-                respond(fd, status: "400 Bad Request",
-                        json: ["ok": false, "error": "target e event são obrigatórios"])
+            guard let raw = query["event"], !raw.isEmpty else {
+                respond(fd, status: "400 Bad Request", json: ["ok": false, "error": "event é obrigatório"])
                 return
             }
             guard let event = HookEvent(rawValue: raw) else {
@@ -267,10 +269,16 @@ final class ControlSocket {
                 return
             }
             let transcript = query["transcript"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-            DispatchQueue.main.sync {
-                Dispatcher.shared.target(target)?.hookReported(event, transcript: transcript)
+            let resolved: Bool = DispatchQueue.main.sync {
+                guard let target = hookCaller(fd, query: query) else { return false }
+                target.hookReported(event, transcript: transcript)
+                return true
             }
-            respond(fd, status: "200 OK", json: ["ok": true])
+            if resolved {
+                respond(fd, status: "200 OK", json: ["ok": true])
+            } else {
+                respond(fd, status: "403 Forbidden", json: ["ok": false, "error": Self.notFromTerminal])
+            }
 
         case ("POST", _, _) where route.contains("/message"):
             // /message?from=<id>&target=<bancada/id> — corpo é o texto puro.
@@ -626,6 +634,22 @@ final class ControlSocket {
         }
     }
 
+    static let notFromTerminal = "esta conexão não veio de um terminal"
+
+    /// Quem é o terminal por trás de um gancho: pelo processo que abriu a
+    /// conexão, como o `egeon` (ADR-040). O `curl` do gancho é bisneto do
+    /// shell do pty (`zsh` → `claude` → `sh -c` → `bash` → `curl`), e a
+    /// ascendência chega lá. `target` na query só como reserva — um `curl` seu
+    /// ou um script antigo ainda em disco — e avisado no log, porque é o
+    /// caminho que o nome da bancada com espaço quebrava. Chamar na main.
+    private func hookCaller(_ fd: Int32, query: [String: String]) -> Target? {
+        if let target = Dispatcher.shared.target(callingOn: fd) { return target }
+        guard let named = query["target"], !named.isEmpty,
+              let target = Dispatcher.shared.target(named) else { return nil }
+        Log.write("gancho[\(named)]: pid não resolveu o terminal; usando target da query")
+        return target
+    }
+
     private func deliver(_ request: DispatchRequest, to fd: Int32) {
         do {
             // Quem chamou sai do kernel, não do pedido: é o `fd` que identifica
@@ -641,6 +665,29 @@ final class ControlSocket {
             respond(fd, status: "400 Bad Request", json: ["ok": false, "error": "\(error)"])
         }
     }
+
+    /// Função de shell para os scripts que o app gera (`agent-hook.sh`,
+    /// `egeon`): codifica um trecho de URL byte a byte. Existe porque o nome
+    /// da bancada pode ter espaço e `+` ("SPEI + SPI"), e a linha HTTP é
+    /// dividida no espaço: `target=SPEI + SPI/backend` chegava como `SPEI`,
+    /// alvo desconhecido, e o gancho sumia sem log. `LC_ALL=C` para o loop
+    /// andar por byte — um `ç` são dois bytes, e é assim que `%XX` os quer.
+    /// Sem processo externo: o gancho roda a cada prompt e segura a TUI. Os
+    /// dois últimos hex e não `%02X` direto: o bash 3.2 do macOS estende o
+    /// sinal de byte ≥ 0x80 e imprime `FFFFFFFFFFFFFFC3`.
+    static let shellEncoder = """
+        enc() {
+            local LC_ALL=C s="$1" out="" c h i
+            for ((i = 0; i < ${#s}; i++)); do
+                c="${s:i:1}"
+                case "$c" in
+                  [a-zA-Z0-9._~/-]) out+="$c" ;;
+                  *) h=$(printf '%02X' "'$c"); out+="%${h: -2}" ;;
+                esac
+            done
+            printf '%s' "$out"
+        }
+        """
 
     private static func query(in route: String) -> [String: String] {
         guard let raw = route.split(separator: "?").dropFirst().first else { return [:] }
