@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Um turno de conversa
 
 /// Um passo que o agente deu para responder: comando, edição, leitura, envio.
-struct ChatStep: Equatable {
+struct ChatStep: Equatable, Codable {
     /// `$` comando · `±` edição · `→` outro uso de ferramenta · `⇄` egeon send.
     let glyph: String
     let text: String
@@ -14,7 +14,7 @@ struct ChatStep: Equatable {
 
 /// Uma mensagem trocada entre agentes, já achatada para caber na bolha de quem
 /// começou: quem mandou, para quem, o texto e o que o destino fez com ela.
-struct ChatExchange: Equatable {
+struct ChatExchange: Equatable, Codable {
     let fromId: String
     let toId: String
     let text: String
@@ -26,8 +26,9 @@ struct ChatExchange: Equatable {
 }
 
 /// Seu prompt e o que o agente fez com ele. O contrato é genérico: quem sabe
-/// ler o arquivo do CLI é o `TranscriptReader` do agente.
-struct ChatTurn: Equatable {
+/// ler o arquivo do CLI é o leitor do perfil (`ClaudeTranscript.lastTurn`);
+/// daí em diante o turno é do app, gravado no histórico (ADR-037).
+struct ChatTurn: Equatable, Codable {
     /// Identidade do turno — o `uuid` que o CLI grava na linha do prompt. Dois
     /// "oi" seguidos são dois turnos; texto e hora não bastam para separá-los.
     let id: String
@@ -43,8 +44,4 @@ struct ChatTurn: Equatable {
     var exchanges: [ChatExchange] = []
 
     var hasReply: Bool { !replyText.isEmpty || !steps.isEmpty || !exchanges.isEmpty }
-}
-
-protocol TranscriptReader {
-    func turns(at url: URL) -> [ChatTurn]
 }

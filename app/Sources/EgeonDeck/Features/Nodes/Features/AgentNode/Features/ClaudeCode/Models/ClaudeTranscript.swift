@@ -6,13 +6,7 @@ import Foundation
 /// que interessam são `user` com texto (seu prompt) e `assistant` (texto e
 /// `tool_use`). `tool_result` vem como `user`, e attachment/system/progress
 /// são ruído para o chat.
-struct ClaudeTranscript: TranscriptReader {
-    func turns(at url: URL) -> [ChatTurn] {
-        guard let data = try? Data(contentsOf: url),
-              let text = String(data: data, encoding: .utf8) else { return [] }
-        return Self.parse(text)
-    }
-
+enum ClaudeTranscript {
     static func parse(_ jsonl: String) -> [ChatTurn] {
         var turns: [ChatTurn] = []
         for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true) {
@@ -153,6 +147,24 @@ struct ClaudeTranscript: TranscriptReader {
                            tailBytes: Int = 512 * 1024) -> LastMarker? {
         guard let text = tail(of: url, bytes: tailBytes) else { return nil }
         return lastMarker(in: text, marker: marker)
+    }
+
+    /// O último turno inteiro — prompt, passos, resposta — para o histórico do
+    /// chat (ADR-037).
+    ///
+    /// Cauda maior que a do marcador: um turno com muitas ferramentas passa
+    /// fácil de 512 KB, e o prompt dele ficaria de fora. E a cauda pode cortar
+    /// justamente a linha do prompt — aí o parse devolve o turno ANTERIOR
+    /// inteiro, que parece certo. `notBefore` é o instante do `prompt` deste
+    /// turno: turno mais velho que isso não é ele, e o arquivo é lido inteiro.
+    static func lastTurn(at url: URL, notBefore: Date? = nil,
+                         tailBytes: Int = 2 * 1024 * 1024) -> ChatTurn? {
+        guard let text = tail(of: url, bytes: tailBytes) else { return nil }
+        if let turn = parse(text).last, notBefore.map({ turn.promptAt >= $0 }) ?? true {
+            return turn
+        }
+        guard let whole = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return parse(whole).last
     }
 
     private static func tail(of url: URL, bytes: Int) -> String? {

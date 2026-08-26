@@ -40,7 +40,7 @@ do ambiente do pty e faz POST no socket.
 |---|---|---|---|
 | `SessionStart` | `.start` | `/activity?target=&event=start` | `sessionUp = true`. Com gancho, o terminal fica `.starting` ("preparando") até isto chegar (teto `bootCeiling` 45 s), nunca menos que `warmupMs`. (ADR-034) |
 | `UserPromptSubmit` | `.prompt` | `/conversation?target=&…` | `turnInFlight = true`; informa o `conversationId` aberto (ADR-014). Não é aviso. |
-| `Stop` | `.stop` | `/activity?target=&event=stop&transcript=<path>` | `turnInFlight = false`; gancho diz **quando**, marcador no **transcript** diz **qual** (`ClaudeTranscript.lastMarker`, `settleStop`): linha mais velha que o `prompt` do turno → relê a cada 250 ms até 6×; sem transcript → tela. `ask` → `.asking`, senão `.waiting`. (ADR-034) |
+| `Stop` | `.stop` | `/activity?target=&event=stop&transcript=<path>` | `turnInFlight = false`; gancho diz **quando**, marcador no **transcript** diz **qual** (`ClaudeTranscript.lastMarker`, `settleStop`): linha mais velha que o `prompt` do turno → relê a cada 250 ms até 6×; sem transcript → tela. `ask` → `.asking`, senão `.waiting`. (ADR-034) Assentado, chama `AppControl.turnEnded` → `ClaudeTranscript.lastTurn` → `ChatHistory.append` (ADR-037). |
 | `Notification` (`matcher: permission_prompt`) | `.ask` | `/activity?target=&event=ask` | Só vale se `turnInFlight || working || starting` — separa "pedido de permissão" (antes do Stop) do "você sumiu há 60s" (depois). → `.asking`. |
 
 `HookEvent` é enum tipado (`Features/Notifications/Models/HookEvent.swift`):
@@ -167,6 +167,8 @@ caso, **voltar a falar com o usuário**.
 | `POST /conversation?target=&…` | `agent-hook.sh` (`UserPromptSubmit`) | `conversationId` aberto |
 | `GET /status` | agente | estado do próprio terminal |
 | `POST /trace` (texto) | agente via `egeon trace`; shell via `preexec` (`ShellHook`, `ZDOTDIR`) | trilha da bancada, carimbada |
+| `POST /chat/clear?target=<bancada>` | você | arquiva `chat.jsonl` em `chat-archive/` e começa outra conversa (ADR-037) |
+| `POST /workbench/clear?target=<bancada>` | você (o menu da bancada, sem diálogo) | `AgentProfile.clear` (`/clear`) pela fila do Dispatcher em todo agente que declara, + arquiva o chat como `chat-<início>_<fim>.jsonl` (ADR-037) |
 | `GET /targets` | você | endereços conhecidos |
 | `GET /edge?…` | você | ler/editar arestas e `maxSends` |
 | `GET /peek?target=` | você | o que o terminal exibe |
@@ -193,7 +195,8 @@ B tenta `egeon send A` 3ª vez ──► tooManySends (limite 2) ──► "Volt
 `AgentProfileTests` (decode tolerante, `MarkerConfig`) · `ActivityTests` ·
 `WorkbenchConfigTests` · `TranscriptMarkerTests` (marcador + timestamp lidos da
 cauda do transcript) · `TraceTests` (carimbo da entrada, um arquivo por bancada,
-ordem entre agentes).
+ordem entre agentes) · `ChatHistoryTests` (corrente na raiz, arquivo, dedupe,
+`lastTurn` com cauda cortada).
 
 **Sem teste hoje**: as quatro guardas em `dispatch(_:from:)` (`sendCount`,
 `visitLimit`, fila), `verdict(from:)`, `attend`/latches. Mudança ali nasce com

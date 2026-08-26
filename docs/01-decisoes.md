@@ -2434,3 +2434,87 @@ para todo CLI que receba system prompt, e é o mesmo texto que apresenta o
 seria de novo o transcript de um CLI só. Teto de 1500 caracteres por entrada é
 segurança, não estilo: impede que um agente despeje a resposta inteira e
 transforme a trilha num transcript.
+
+## ADR-037 — O histórico do chat é do app: um JSONL por capítulo na pasta da bancada, e "limpar" rotaciona
+
+**Decisão:** ao fim de cada turno (`Stop`), o app lê o último turno do transcript
+do CLI — já peneirado como o chat mostra: prompt, quem mandou, passos em uma
+linha, resposta em prosa — e anexa uma linha em
+`~/.egeon*/workbenches/<id>/chat.jsonl` (`ChatRecord`, `ChatHistory`). O modo
+chat monta a thread **só** desse arquivo; o transcript do CLI deixa de ser lido
+pela tela. "Limpar a conversa" (`POST /chat/clear`) move o `chat.jsonl` para
+`chat-archive/chat-<instante>.jsonl` e começa outro vazio; nada é apagado.
+
+Substitui a parte da ADR-029 que dizia "o app não guarda mensagem nenhuma".
+
+### Por que o app guarda, agora
+
+A ADR-029 escolheu o transcript do CLI como fonte por ser o registro fiel e já
+existir. O que ela deixou de fora: a **retenção é do CLI**. O Claude Code apaga
+transcripts por `cleanupPeriodDays` (30 dias por padrão), e o histórico da
+bancada — que é seu — sumia sem aviso, deixando `NodeConfig.transcript`
+apontando para nada. Histórico de bancada tem que morar no Egeon.
+
+### Por que JSON, e não SQLite
+
+O que se guarda é o **espelho do que o chat mostra**, não o transcript: sem
+`tool_result`, `thinking`, snapshot, sidechain. Um turno pesado vira uns KB, e
+uma bancada longa, alguns MB. Nesse volume JSONL só-append basta — legível com
+`jq`, editável à mão como todo arquivo do `~/.egeon`, e o dedupe por
+`nó#uuid-do-prompt` resolve dois `Stop` do mesmo turno e a releitura após o
+arranque. SQLite entra se um dia houver busca cruzada em anos de histórico; o
+JSONL é a fonte para migrar.
+
+### Por que ingerir no `Stop`, e por que a tela não lê mais o transcript
+
+O `Stop` é o único instante em que o turno está inteiro e ainda se sabe qual é
+(`turnStartedAt`), e a ADR-034 já garante ali que o transcript alcançou o
+gancho. O leitor é o mesmo da trilha: cauda de 2 MB e fallback pelo instante do
+prompt quando a cauda corta a linha do prompt e devolve o turno anterior.
+
+A tela lendo o transcript direto era o que mantinha a dependência da retenção
+do CLI. Com o histórico do app, ler dos dois seria duas fontes para a mesma
+thread. Então o chat lê uma só. O custo assumido: os passos do turno em curso
+não aparecem ao vivo — o eco do prompt e a bolha "trabalhando…" cobrem o
+intervalo, e o turno entra inteiro no `Stop`.
+
+### Por que "limpar" é arquivar, e a corrente fica na raiz
+
+Bancada é infinita; a conversa não precisa ser. Limpar apaga da tela, não do
+disco: a conversa vai para `chat-archive/`, com o instante em que foi fechada
+no nome, e a conversa do CLI dentro de cada agente continua a mesma — o
+agente não esquece nada; o que muda é o que a bancada mostra. A corrente fica
+na raiz da pasta da bancada, com nome fixo, porque é a que você abre; as
+arquivadas ficam numa pasta para não disputar o `ls` com ela. Conversa vazia
+não é arquivada (duas limpezas seguidas não deixam arquivo vazio), e duas no
+mesmo segundo ganham sufixo `_2` — com `_` e não `-`, porque a lista é
+ordenada pelo nome e `-` ordena antes de `.`.
+
+### "Limpar a bancada": o botão, o `/clear` de cada agente, e o nome pelo período
+
+"Limpar a bancada…" mora no menu de botão direito da bancada, na barra
+lateral, com as outras ações raras dela (renomear, duplicar, remover) — botão
+fixo na barra superior foi feito, olhado e tirado: ação rara não merece botão
+sempre à vista, e à vista convida ao acidente. O ícone é um pincel
+(`paintbrush.pointed`): varrer para baixo do tapete. Faz duas coisas, com
+confirmação: injeta o comando de limpar de cada agente e arquiva o chat. O
+comando é dado do perfil (`AgentProfile.clear`, `/clear` no Claude Code;
+migrado no `agents.json` com a mesma trava de comando dos outros campos):
+agente cujo CLI não declara um é pulado e listado, não morto. Vai pela fila
+do Dispatcher como um prompt seu — terminal ocupado recebe quando ficar
+livre, e a TUI não descarta o texto no meio de um redraw. O `/clear` abre
+conversa nova no CLI; o app fica sabendo pelo `UserPromptSubmit` seguinte
+(ADR-014), sem código novo. Rota `POST /workbench/clear` faz o mesmo sem o
+diálogo; `POST /chat/clear` só arquiva.
+
+O arquivo arquivado se chama `chat-<início>_<fim>.jsonl`, onde início é o
+primeiro prompt e fim a última resposta da conversa — a data da CONVERSA, não
+a da limpeza: quem procura "a vez que o revisor achou o bug" lembra de quando
+foi, não de quando limpou. Arquivo cujas linhas não decodificam leva o
+instante da limpeza nas duas pontas; período repetido ganha sufixo `_2`.
+
+### O que fica de fora
+
+Só CLI que relata transcript entra (Claude Code hoje): Codex, Gemini e OpenCode
+não têm `reportSession`, e o histórico deles é assunto de gancho ou leitor
+próprio — e nenhum deles tem `clear` declarado ainda, então o botão os pula.

@@ -123,6 +123,7 @@ ShellHook.install()
         }
         sidebar.onRemove = { [weak self] index in self?.confirmRemoveWorkbench(index) }
         sidebar.onEditVisitLimit = { [weak self] index in self?.editVisitLimit(index) }
+        sidebar.onClear = { [weak self] index in self?.confirmClearWorkbench(index) }
         root = RootView(sidebar: sidebar)
         window.contentView = root
 
@@ -190,6 +191,43 @@ ShellHook.install()
             let cli = node.agent.flatMap { self.agents[$0]?.displayName } ?? node.agent
             return (cli, self.literalModel(workbench: parts[0], nodeID: parts[1]), node.conversationId,
                     config.id)
+        }
+        AppControl.turnEnded = { [weak self] address, transcript, notBefore in
+            let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let self, let transcript,
+                  let config = self.configs.first(where: { $0.name == parts[0] }),
+                  let node = config.nodes.first(where: { $0.id == parts[1] }),
+                  node.type == .agent else { return }
+            // Carimbo na main (lê configs); a leitura do transcript, que chega
+            // a MB, vai para fundo — é o que o chat também faz.
+            let record = (conversation: node.conversationId,
+                          cli: node.agent.flatMap { self.agents[$0]?.displayName } ?? node.agent,
+                          model: self.literalModel(workbench: parts[0], nodeID: parts[1]))
+            let workbenchID = config.id
+            DispatchQueue.global(qos: .utility).async {
+                // Só o Claude Code grava transcript hoje; outro CLI entra pelo
+                // leitor do perfil dele, quando existir.
+                guard let turn = ClaudeTranscript.lastTurn(at: transcript, notBefore: notBefore)
+                else { return }
+                ChatHistory.shared.append(ChatRecord(node: parts[1], conversation: record.conversation,
+                                                     cli: record.cli, model: record.model, turn: turn),
+                                          workbench: workbenchID)
+            }
+        }
+        AppControl.clearWorkbench = { [weak self] name in
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
+            else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
+            return self.clearWorkbench(index)
+        }
+        AppControl.clearChat = { [weak self] name in
+            guard let self, let config = self.configs.first(where: { $0.name == name })
+            else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
+            guard let archived = ChatHistory.shared.archive(workbench: config.id) else {
+                return ["ok": true, "workbench": name, "archived": NSNull(),
+                        "detail": "conversa já estava vazia"]
+            }
+            Log.write("chat[\(name)]: conversa limpa — arquivada em \(archived.lastPathComponent)")
+            return ["ok": true, "workbench": name, "archived": archived.path]
         }
         AppControl.recordConversation = { [weak self] target, id, transcript in
             self?.recordConversation(target: target, id: id, transcript: transcript)
@@ -1788,6 +1826,10 @@ ShellHook.install()
                 Dispatcher.shared.target($0)?.activity
             }
         }
+        chat.historyFile = { [weak self] in
+            guard let self, index >= 0, index < self.configs.count else { return nil }
+            return ChatHistory.shared.current(forWorkbench: self.configs[index].id)
+        }
         chat.send = { [weak self] text, participant in
             guard let self, index >= 0, index < self.configs.count else {
                 return "bancada sumiu"
@@ -1803,6 +1845,60 @@ ShellHook.install()
                 return "\(error)"
             }
         }
+    }
+
+    // MARK: - Limpar a bancada
+
+    /// Pergunta antes: o `/clear` zera o contexto de cada agente, e não tem
+    /// volta pela TUI.
+    private func confirmClearWorkbench(_ index: Int) {
+        guard index >= 0, index < configs.count else { return }
+        let config = configs[index]
+        let agents = config.nodes.filter { $0.type == .agent }.count
+        let alert = NSAlert()
+        alert.messageText = "Limpar a bancada \"\(config.name)\"?"
+        alert.informativeText = "Roda o comando de limpar em \(agents) agente\(agents == 1 ? "" : "s") "
+            + "— eles esquecem a conversa atual — e arquiva o chat da bancada em "
+            + "chat-archive/. Nada é apagado do disco."
+        alert.addButton(withTitle: "Limpar")
+        alert.addButton(withTitle: "Cancelar")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let result = clearWorkbench(index)
+        Log.write("bancada \"\(config.name)\" limpa pelo botão: \(result)")
+    }
+
+    /// O `clear` do perfil vai pela fila do Dispatcher, como um prompt seu:
+    /// terminal ocupado recebe quando ficar livre, e a TUI não descarta o
+    /// texto no meio de um redraw. Agente cujo CLI não declara `clear` é
+    /// pulado e listado — não morto.
+    private func clearWorkbench(_ index: Int) -> [String: Any] {
+        guard index >= 0, index < configs.count else { return ["ok": false, "error": "bancada sumiu"] }
+        let config = configs[index]
+        var cleared: [String] = []
+        var skipped: [String] = []
+        for node in config.nodes where node.type == .agent {
+            let address = config.address(of: node)
+            guard let command = node.agent.flatMap({ agents[$0]?.clear }), !command.isEmpty,
+                  Dispatcher.shared.target(address) != nil else {
+                skipped.append(node.id)
+                continue
+            }
+            var request = DispatchRequest(target: address)
+            request.text = command
+            do {
+                _ = try Dispatcher.shared.dispatch(request, from: nil)
+                cleared.append(node.id)
+            } catch {
+                skipped.append(node.id)
+                Log.write("limpar[\(address)]: \(error)")
+            }
+        }
+        let archived = ChatHistory.shared.archive(workbench: config.id)
+        Log.write("bancada \"\(config.name)\" limpa: clear em [\(cleared.joined(separator: ", "))]"
+                  + (skipped.isEmpty ? "" : ", pulados [\(skipped.joined(separator: ", "))]")
+                  + (archived.map { ", chat arquivado em \($0.lastPathComponent)" } ?? ", chat já vazio"))
+        return ["ok": true, "workbench": config.name, "cleared": cleared, "skipped": skipped,
+                "archived": archived?.path ?? NSNull()]
     }
 
     // MARK: - Visualização

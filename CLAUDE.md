@@ -60,10 +60,13 @@ app/Sources/EgeonDeck/
 - **Visualização** — canvas · mosaico · chat (⌥⌘1/2/3); o card é o MESMO
   `NodeView` reparentado, o dono é o `WorkbenchShell`. Em chat o canvas fica
   montado por baixo, coberto (o pty precisa do passe de layout).
-- **Chat** — spec em `docs/03-spec-chat.md`. Hoje: participantes com cor
-  própria e estado, composer estilo Slack (cresce até o teto, Tab alterna só
-  entre agentes, `@` menciona), envio real. Falta a leitura das respostas
-  (transcript, passos, sub-conversas, citações).
+- **Chat** — spec em `docs/03-spec-chat.md`. Participantes com cor própria e
+  estado, composer estilo Slack, envio real, thread por turno com passos e
+  citações. A thread sai do **histórico do app** (`ChatHistory`,
+  `workbenches/<id>/chat.jsonl`, gravado no `Stop`), não do transcript do
+  CLI. Botão de limpar a bancada (barra lateral, botão direito): `clear` do perfil em cada
+  agente + chat arquivado como `chat-archive/chat-<início>_<fim>.jsonl`
+  (`POST /workbench/clear`; só o chat: `POST /chat/clear`) (ADR-037).
 
 ## Funcionalidades, por cima
 

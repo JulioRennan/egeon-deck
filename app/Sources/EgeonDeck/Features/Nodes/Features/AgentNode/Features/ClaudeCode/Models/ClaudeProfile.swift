@@ -18,6 +18,7 @@ extension AgentProfile {
             newSession: ["--session-id", "{sessionId}"],
             reportSession: ["--settings", "{file}"],
             systemPrompt: ["--append-system-prompt", "{prompt}"],
+            clear: "/clear",
             // Apelidos que o CLI resolve para a versão corrente de cada família —
             // os que o `claude --help` cita (fable, opus, sonnet) mais os que o
             // binário aceita (haiku, opusplan). Também vale nome completo

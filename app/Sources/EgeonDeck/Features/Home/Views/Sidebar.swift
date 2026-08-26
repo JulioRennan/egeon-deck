@@ -19,6 +19,8 @@ final class SidebarRow: NSView {
     var onDuplicateAsWorktree: ((Int) -> Void)?
     var onRemove: ((Int) -> Void)?
     var onEditVisitLimit: ((Int) -> Void)?
+    /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
+    var onClear: ((Int) -> Void)?
 
     var isSelected = false { didSet { needsDisplay = true; restyle() } }
     /// Bancada já materializada (terminais rodando, editor carregado).
@@ -273,6 +275,14 @@ final class SidebarRow: NSView {
         menu.addItem(withTitle: "Limite de conversa entre agentes…",
                      action: #selector(visitLimitFromMenu), keyEquivalent: "")
         menu.addItem(.separator())
+        // Varrer para baixo do tapete: os agentes esquecem a conversa e o chat
+        // vai para o arquivo. Mora aqui, com as outras ações da bancada, e não
+        // na barra — é ação rara, e botão fixo convidava ao acidente.
+        let clear = NSMenuItem(title: "Limpar a bancada…", action: #selector(clearFromMenu),
+                               keyEquivalent: "")
+        clear.image = ToolbarButton.symbol(["paintbrush.pointed", "paintbrush"])
+        menu.addItem(clear)
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Remover bancada…", action: #selector(removeFromMenu), keyEquivalent: "")
         menu.items.forEach { $0.target = self }
         return menu
@@ -282,6 +292,7 @@ final class SidebarRow: NSView {
     @objc private func duplicateFromMenu() { onDuplicateAsWorktree?(index) }
     @objc private func removeFromMenu() { onRemove?(index) }
     @objc private func visitLimitFromMenu() { onEditVisitLimit?(index) }
+    @objc private func clearFromMenu() { onClear?(index) }
 }
 
 final class Sidebar: NSView {
@@ -332,6 +343,8 @@ final class Sidebar: NSView {
     var onDuplicateAsWorktree: ((Int) -> Void)?
     var onRemove: ((Int) -> Void)?
     var onEditVisitLimit: ((Int) -> Void)?
+    /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
+    var onClear: ((Int) -> Void)?
 
     init(configs: [WorkbenchConfig]) {
         super.init(frame: .zero)
@@ -376,6 +389,7 @@ final class Sidebar: NSView {
             row.onDuplicateAsWorktree = { [weak self] in self?.onDuplicateAsWorktree?($0) }
             row.onRemove = { [weak self] in self?.onRemove?($0) }
             row.onEditVisitLimit = { [weak self] in self?.onEditVisitLimit?($0) }
+            row.onClear = { [weak self] in self?.onClear?($0) }
             row.isCompact = isCompact
             addSubview(row)
             return row

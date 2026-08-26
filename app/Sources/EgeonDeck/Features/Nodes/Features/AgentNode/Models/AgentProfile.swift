@@ -213,6 +213,11 @@ struct AgentProfile: Codable {
     /// não aparece na conversa e não se dilui depois de vinte mensagens.
     var systemPrompt: [String]?
 
+    /// O comando de barra que zera a conversa dentro da TUI (`/clear` no
+    /// Claude Code). Injetado como prompt pelo "limpar a bancada"; nil quando
+    /// o CLI não tem um — aí o terminal é pulado, não morto.
+    var clear: String?
+
     /// Como pedir um modelo na linha de comando; `{model}` é substituído.
     /// Nil quando o CLI não aceita — aí o nó não oferece escolha.
     var model: [String]?
@@ -463,6 +468,14 @@ enum AgentStore {
             guard let padrão = defaults[key], padrão.command == profile.command else { continue }
             updated[key]?.models = padrão.models
             changed.append("\(key).models")
+        }
+
+        // `clear` é comando de barra DAQUELE CLI: mesma trava de comando.
+        for (key, profile) in map where profile.clear == nil {
+            guard let padrão = defaults[key], padrão.clear != nil,
+                  padrão.command == profile.command else { continue }
+            updated[key]?.clear = padrão.clear
+            changed.append("\(key).clear")
         }
 
         for (key, profile) in map where profile.attention == nil {

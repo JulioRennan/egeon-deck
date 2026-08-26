@@ -426,6 +426,9 @@ final class Target {
             asked = verdict.outcome == .asked
             via = "gancho Stop, \(verdict.via) na tela"
         }
+        // Depois de assentar: as releituras acima são o que garante que a
+        // resposta inteira já está no transcript quando o histórico a lê.
+        AppControl.turnEnded?(address, transcript, turnStartedAt)
         attend(asked ? .asking : .waiting, via: via, stop: token)
     }
 

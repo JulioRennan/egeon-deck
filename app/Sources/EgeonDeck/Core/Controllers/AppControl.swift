@@ -99,6 +99,19 @@ enum AppControl {
     static var nodeIdentity: ((String) -> (cli: String?, model: String?, conversation: String?,
                                            workbenchID: String)?)?
 
+    /// Um turno acabou neste terminal (gancho `Stop`), e o transcript já foi
+    /// conferido. É o instante em que o turno está inteiro e ainda se sabe
+    /// qual é: `notBefore` é quando o prompt dele chegou (ADR-037).
+    static var turnEnded: ((_ address: String, _ transcript: URL?, _ notBefore: Date?) -> Void)?
+
+    /// "Limpar a conversa" do chat da bancada: arquiva o `chat.jsonl` e começa
+    /// outro. Devolve o payload da rota.
+    static var clearChat: ((_ workbench: String) -> [String: Any])?
+
+    /// "Limpar a bancada": o `clear` do perfil em todo agente que tem um, e a
+    /// conversa do chat arquivada. Sem confirmação — a rota é você.
+    static var clearWorkbench: ((_ workbench: String) -> [String: Any])?
+
     /// O CLI avisou qual conversa está aberta neste terminal. Chamado a cada
     /// prompt, então quem implementa só grava quando o valor muda de fato.
     static var recordConversation: ((_ target: String, _ id: String, _ transcript: String?) -> Void)?

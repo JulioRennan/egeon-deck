@@ -310,6 +310,27 @@ final class ControlSocket {
             }
             respond(fd, status: outcome.status, json: outcome.json)
 
+        case ("POST", _, _) where route.contains("/workbench/clear"):
+            // /workbench/clear?target=<bancada> — o botão de limpar, sem o
+            // diálogo: `/clear` em todo agente e a conversa arquivada (ADR-037).
+            let target = Self.query(in: route)["target"] ?? ""
+            let payload = DispatchQueue.main.sync {
+                AppControl.clearWorkbench?(target) ?? ["ok": false, "error": "app sem canvas"]
+            }
+            respond(fd, status: payload["ok"] as? Bool == true ? "200 OK" : "404 Not Found",
+                    json: payload)
+
+        case ("POST", _, _) where route.contains("/chat/clear"):
+            // /chat/clear?target=<bancada> — arquiva a conversa corrente do chat
+            // (`chat.jsonl` → `chat-archive/`) e começa outra. Nada é apagado
+            // (ADR-037).
+            let target = Self.query(in: route)["target"] ?? ""
+            let payload = DispatchQueue.main.sync {
+                AppControl.clearChat?(target) ?? ["ok": false, "error": "app sem canvas"]
+            }
+            respond(fd, status: payload["ok"] as? Bool == true ? "200 OK" : "404 Not Found",
+                    json: payload)
+
         case ("GET", _, _) where route.contains("/peers"):
             // /peers — quem QUEM PERGUNTA pode acionar. Sem parâmetro de
             // identidade: o remetente sai do processo do outro lado do socket.

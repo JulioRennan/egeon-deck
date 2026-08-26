@@ -6,9 +6,10 @@ import AppKit
 /// embaixo. Fechaduras de leitura, como o EdgeController: quem sabe dos nós e
 /// de enviar é o dono lá fora; aqui só se desenha e se coordena.
 ///
-/// A thread sai dos transcripts dos agentes, cruzados por tempo, relidos a
-/// cada segundo (só quando o arquivo mudou). O que você acabou de mandar
-/// aparece como eco até o transcript confirmar o prompt.
+/// A thread sai do histórico da bancada (`ChatHistory`, a conversa corrente),
+/// relido a cada segundo só quando o arquivo mudou. O que você acabou de
+/// mandar aparece como eco até o turno inteiro entrar no histórico, no `Stop`
+/// (ADR-037) — o transcript do CLI não é lido aqui.
 final class ChatContainer: NSView {
     /// Os nós da bancada como participantes, lidos na hora.
     var participants: (() -> [ChatParticipant])?
@@ -29,10 +30,10 @@ final class ChatContainer: NSView {
     private let emptyThread = NSTextField(labelWithString:
         "Sem conversa ainda — Enter envia para o agente em foco")
 
-    /// Só o Claude Code grava transcript hoje; quando outro CLI entrar, o
-    /// leitor vem do perfil do agente.
-    private let reader: TranscriptReader = ClaudeTranscript()
-    private var transcriptCache: [URL: (size: UInt64, modified: Date, turns: [ChatTurn])] = [:]
+    /// A conversa corrente desta bancada (`chat.jsonl`), lida na hora: "limpar
+    /// a conversa" arquiva o arquivo e a thread segue o novo, vazio.
+    var historyFile: (() -> URL?)?
+    private var historyCache: [URL: (size: UInt64, modified: Date, records: [ChatRecord])] = [:]
 
     private var bubbles: [ThreadBubble] = []
     private var bubbleByKey: [String: ThreadBubble] = [:]
@@ -178,36 +179,39 @@ final class ChatContainer: NSView {
 
     // MARK: Thread
 
-    /// Transcript cresce a cada tool call do agente, e chega a dezenas de MB.
-    /// Ler e decodificar isso na main thread era o que travava a tela: a
-    /// leitura vai para uma fila de fundo, e a main só consome o cache.
-    private let parseQueue = DispatchQueue(label: "egeon.chat.transcript", qos: .utility)
+    /// O histórico é pequeno (uns KB por turno), mas uma bancada longa tem
+    /// milhares de turnos; decodificar na main a cada mudança travaria a tela.
+    /// A leitura vai para uma fila de fundo, e a main só consome o cache.
+    private let parseQueue = DispatchQueue(label: "egeon.chat.history", qos: .utility)
     private var parsing: Set<URL> = []
 
     private func turns(of participant: ChatParticipant) -> [ChatTurn] {
-        guard let url = participant.transcript,
+        records().filter { $0.node == participant.id }.map(\.turn)
+    }
+
+    private func records() -> [ChatRecord] {
+        guard let url = historyFile?(),
               let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         else { return [] }
         let size = (attributes[.size] as? UInt64) ?? 0
         let modified = (attributes[.modificationDate] as? Date) ?? .distantPast
-        let cached = transcriptCache[url]
-        if let cached, cached.size == size, cached.modified == modified { return cached.turns }
+        let cached = historyCache[url]
+        if let cached, cached.size == size, cached.modified == modified { return cached.records }
 
         if !parsing.contains(url) {
             parsing.insert(url)
-            let reader = self.reader
             parseQueue.async { [weak self] in
-                let parsed = reader.turns(at: url)
+                let parsed = ChatHistory.read(url)
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.parsing.remove(url)
-                    self.transcriptCache[url] = (size, modified, parsed)
+                    self.historyCache[url] = (size, modified, parsed)
                     self.refresh()
                 }
             }
         }
         // Enquanto a leitura nova não chega, o que já se tinha continua valendo.
-        return cached?.turns ?? []
+        return cached?.records ?? []
     }
 
     /// Conversa longa tem centenas de turnos; desenhar todos a cada mudança
