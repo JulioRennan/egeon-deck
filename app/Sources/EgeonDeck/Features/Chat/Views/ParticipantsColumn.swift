@@ -122,19 +122,25 @@ private final class ParticipantRow: NSView {
             addSubview(icon)
         }
 
+        // Sem segunda linha — agente ocioso e sem prompt —, o nome desce para o
+        // meio em vez de deixar o vão embaixo. A altura da linha não muda: o
+        // estado ("trabalhando…") entra e sai, e a lista não pode pular junto.
+        let roleLabel = roleText(participant)
         let name = NSTextField(labelWithString: participant.id)
         name.font = .systemFont(ofSize: 12.5, weight: .semibold)
         name.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
-        name.frame = NSRect(x: 31, y: 7, width: 160, height: 15)
+        name.frame = NSRect(x: 31, y: roleLabel.isEmpty ? 14 : 7, width: 160, height: 15)
         name.lineBreakMode = .byTruncatingTail
         addSubview(name)
 
-        let role = NSTextField(labelWithString: roleText(participant))
-        role.font = .systemFont(ofSize: 10.5)
-        role.textColor = roleColor(participant)
-        role.frame = NSRect(x: 31, y: 23, width: 190, height: 13)
-        role.lineBreakMode = .byTruncatingTail
-        addSubview(role)
+        if !roleLabel.isEmpty {
+            let role = NSTextField(labelWithString: roleLabel)
+            role.font = .systemFont(ofSize: 10.5)
+            role.textColor = roleColor(participant)
+            role.frame = NSRect(x: 31, y: 23, width: 190, height: 13)
+            role.lineBreakMode = .byTruncatingTail
+            addSubview(role)
+        }
 
         let status = NSTextField(labelWithString: statusGlyph(participant.activity))
         status.font = .systemFont(ofSize: 10)
