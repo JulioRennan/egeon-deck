@@ -7,6 +7,12 @@ import Foundation
 /// repositório em worktrees diferentes, ou para a mesma pasta com nós
 /// diferentes. Elas são independentes de propósito.
 struct WorkbenchConfig: Codable {
+    /// Identidade que o nome não dá: apagar uma bancada e criar outra com o
+    /// mesmo nome é outra bancada, e o que é dela em disco (a trilha) não pode
+    /// se misturar. Nasce com a bancada e nunca muda; bancada gravada antes de
+    /// existir ganha um ao carregar. Oito hex de um UUID: único o bastante para
+    /// uma máquina, curto o bastante para ser nome de pasta.
+    var id: String = WorkbenchConfig.newID()
     /// Renomeável. É também a primeira parte do endereço de dispatch, então
     /// trocar o nome exige re-registrar os alvos vivos — ver `Dispatcher.rekey`.
     var name: String
@@ -42,6 +48,43 @@ struct WorkbenchConfig: Codable {
     var mosaic: MosaicLayout?
 
     var viewMode: ViewMode { view ?? .canvas }
+
+    static func newID() -> String {
+        String(UUID().uuidString.lowercased().prefix(8))
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, path, nodes, template, edges, maxVisits, view, mosaic
+    }
+
+    /// Escrito à mão só por causa do `id`: o decoder sintetizado exige a chave
+    /// de campo não opcional, e o `workbenches.json` de antes não a tem.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? WorkbenchConfig.newID()
+        name = try c.decode(String.self, forKey: .name)
+        path = try c.decode(String.self, forKey: .path)
+        nodes = try c.decodeIfPresent([NodeConfig].self, forKey: .nodes) ?? []
+        template = try c.decodeIfPresent(String.self, forKey: .template)
+        edges = try c.decodeIfPresent([EdgeConfig].self, forKey: .edges)
+        maxVisits = try c.decodeIfPresent(Int.self, forKey: .maxVisits)
+        view = try c.decodeIfPresent(ViewMode.self, forKey: .view)
+        mosaic = try c.decodeIfPresent(MosaicLayout.self, forKey: .mosaic)
+    }
+
+    init(id: String = WorkbenchConfig.newID(), name: String, path: String, nodes: [NodeConfig],
+         template: String? = nil, edges: [EdgeConfig]? = nil, maxVisits: Int? = nil,
+         view: ViewMode? = nil, mosaic: MosaicLayout? = nil) {
+        self.id = id
+        self.name = name
+        self.path = path
+        self.nodes = nodes
+        self.template = template
+        self.edges = edges
+        self.maxVisits = maxVisits
+        self.view = view
+        self.mosaic = mosaic
+    }
 
     var edgeList: [EdgeConfig] { edges ?? [] }
     /// Folgado o bastante para uma orquestração de três nós passar sem esbarrar

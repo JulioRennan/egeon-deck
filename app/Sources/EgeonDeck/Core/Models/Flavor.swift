@@ -42,6 +42,14 @@ enum Flavor {
 
     func config(_ name: String) -> URL { configDirectory.appendingPathComponent(name) }
 
+    /// Tudo que é DE uma bancada e não do app: memória dos agentes, histórico
+    /// do chat, o que vier. Bancada primeiro, assunto dentro — para apagar,
+    /// copiar ou olhar uma bancada ser mexer numa pasta só.
+    var workbenchesDirectory: URL { config("workbenches") }
+    func workbenchDirectory(_ name: String) -> URL {
+        workbenchesDirectory.appendingPathComponent(name)
+    }
+
     var logPath: String {
         NSString(string: isDev ? "~/egeon-dev.log" : "~/egeon.log").expandingTildeInPath
     }

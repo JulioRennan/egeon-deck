@@ -87,6 +87,7 @@ descobre quem fala pelo pid do outro lado da conexão
 | `egeon peers` | `GET /peers` | lista `{address, cli, role}` das arestas **saindo** do chamador (`peers(of:)`). Vazia = ninguém ligado agora; muda em tempo real. Conexão fora de terminal → `[]`. |
 | `egeon send <endereço> <<'MB' … MB` | `POST /message?target=` corpo = texto puro (heredoc, sem JSON para o agente não errar escape) | `enfileirado para X; N na fila; envio a/b` ou erro de guarda |
 | `egeon status` | `GET /status` | estado do próprio terminal; fora de terminal: `"esta conexão não veio de um terminal"` |
+| `egeon trace [texto]` (ou heredoc) | `POST /trace` corpo = texto puro | `{ok, address, file}`; anexa em `workbenches/<WorkbenchConfig.id>/trace.md` com carimbo hora · endereço (pid) · CLI · modelo · conversa (`AppControl.nodeIdentity`, ADR-036). Vazio → 400; fora de terminal → 403. O system prompt pede uma chamada ao fim de TODO turno, antes do marcador. No Claude Code o comando passa pela permissão de Bash: `Bash(egeon:*)` em `permissions.allow` (README, seção do `egeon`). |
 
 `resolve(_:siblingOf:)`: agente pode escrever só o `id` do vizinho; o app
 completa `bancada/id` — barrar por isso seria pedantismo.
@@ -165,6 +166,7 @@ caso, **voltar a falar com o usuário**.
 | `POST /activity?target=&event=stop\|ask` | `agent-hook.sh` | estado do terminal |
 | `POST /conversation?target=&…` | `agent-hook.sh` (`UserPromptSubmit`) | `conversationId` aberto |
 | `GET /status` | agente | estado do próprio terminal |
+| `POST /trace` (texto) | agente via `egeon trace`; shell via `preexec` (`ShellHook`, `ZDOTDIR`) | trilha da bancada, carimbada |
 | `GET /targets` | você | endereços conhecidos |
 | `GET /edge?…` | você | ler/editar arestas e `maxSends` |
 | `GET /peek?target=` | você | o que o terminal exibe |
@@ -190,7 +192,8 @@ B tenta `egeon send A` 3ª vez ──► tooManySends (limite 2) ──► "Volt
 · `EdgeControllerTests` · `DispatchRequestTests` (envelopes) ·
 `AgentProfileTests` (decode tolerante, `MarkerConfig`) · `ActivityTests` ·
 `WorkbenchConfigTests` · `TranscriptMarkerTests` (marcador + timestamp lidos da
-cauda do transcript).
+cauda do transcript) · `TraceTests` (carimbo da entrada, um arquivo por bancada,
+ordem entre agentes).
 
 **Sem teste hoje**: as quatro guardas em `dispatch(_:from:)` (`sendCount`,
 `visitLimit`, fila), `verdict(from:)`, `attend`/latches. Mudança ali nasce com

@@ -30,6 +30,7 @@ app/Sources/EgeonDeck/
 │   │       │   └── Features/ClaudeCode/   o que é SÓ do Claude Code
 │   │       └── EditorNode/     EditorNode + CodeServer
 │   ├── Notifications/          Activity, HookEvent, Spinner, AttentionSound
+│   ├── Trace/                  trilha da bancada: TraceEntry, TraceLog
 │   └── Workbench/              WorkbenchConfig, Store, Template, worktree
 └── main.swift               ← único remanescente; vira módulo App aos poucos
 ```

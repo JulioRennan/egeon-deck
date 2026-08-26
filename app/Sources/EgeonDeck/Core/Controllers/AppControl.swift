@@ -93,6 +93,12 @@ enum AppControl {
     /// o agente lê endereços e não tem como escolher entre dois irmãos.
     static var nodeRole: ((String) -> String?)?
 
+    /// Com o que o nó está rodando, para a trilha da bancada carimbar cada
+    /// registro: nome do CLI, modelo literal em uso e id da conversa. O agente
+    /// escreve o texto; isto ele não escolhe (ADR-036).
+    static var nodeIdentity: ((String) -> (cli: String?, model: String?, conversation: String?,
+                                           workbenchID: String)?)?
+
     /// O CLI avisou qual conversa está aberta neste terminal. Chamado a cada
     /// prompt, então quem implementa só grava quando o valor muda de fato.
     static var recordConversation: ((_ target: String, _ id: String, _ transcript: String?) -> Void)?

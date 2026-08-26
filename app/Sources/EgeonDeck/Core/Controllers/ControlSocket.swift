@@ -285,6 +285,31 @@ final class ControlSocket {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             deliver(request, to: fd)
 
+        case ("POST", _, _) where route.contains("/trace"):
+            // /trace — corpo é o texto puro (`egeon trace`, heredoc). Quem
+            // escreveu sai do processo do outro lado do socket, e CLI, modelo e
+            // conversa saem do nó: o agente não carimba nada (ADR-036).
+            let text = String(decoding: body, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let outcome = DispatchQueue.main.sync { () -> (status: String, json: [String: Any]) in
+                guard let origin = Dispatcher.shared.target(callingOn: fd) else {
+                    return ("403 Forbidden", ["ok": false, "error": "esta conexão não veio de um terminal"])
+                }
+                guard !text.isEmpty else {
+                    return ("400 Bad Request", ["ok": false, "error": "texto vazio — o que você fez?"])
+                }
+                guard let identity = AppControl.nodeIdentity?(origin.address) else {
+                    return ("404 Not Found", ["ok": false, "error": "nó sem bancada carregada"])
+                }
+                let entry = TraceEntry(address: origin.address, workbenchID: identity.workbenchID,
+                                       at: Date(), cli: identity.cli, model: identity.model,
+                                       conversation: identity.conversation, text: text)
+                TraceLog.shared.record(entry)
+                return ("200 OK", ["ok": true, "address": origin.address,
+                                   "file": TraceLog.shared.file(for: entry).path])
+            }
+            respond(fd, status: outcome.status, json: outcome.json)
+
         case ("GET", _, _) where route.contains("/peers"):
             // /peers — quem QUEM PERGUNTA pode acionar. Sem parâmetro de
             // identidade: o remetente sai do processo do outro lado do socket.

@@ -2363,3 +2363,74 @@ e não toca lista editada à mão.
 Flag só entra quando a linha ainda é o binário do perfil (`runsOwnBinary`):
 `cmd` trocado por outro programa não ganha `--model` para não morrer no
 arranque — mesma regra do system prompt.
+
+## ADR-036 — A trilha da bancada é um Markdown só, escrito pelo agente por `egeon trace` e carimbado pelo app
+
+**Decisão:** cada bancada tem `~/.egeon*/workbenches/<bancada>/trace.md`. Ao
+fim de todo turno, antes do marcador, o agente roda `egeon trace` com uma ou
+duas linhas — o que foi pedido, o que entregou. O app anexa a entrada com o
+carimbo: hora, endereço (pelo pid do socket), CLI, modelo literal em uso e id
+da conversa. `TraceEntry`/`TraceLog` em `Features/Trace/`; rota `POST /trace`;
+identidade por `AppControl.nodeIdentity`.
+
+### Por que um arquivo por bancada, e não por agente
+
+O uso é auditar a bancada: ler de cima a baixo quem fez o quê, em ordem, sem
+cruzar arquivos. Um arquivo por agente daria a história de cada um e
+esconderia a da bancada — que é a que importa quando três agentes se
+revezaram numa tarefa. E é a pasta da bancada (`Flavor.workbenchDirectory`):
+o histórico do chat vem morar ao lado.
+
+### Por que o agente escreve, e o app só carimba
+
+A primeira versão lia o último turno do transcript no `Stop` e resumia por
+truncamento. Foi descartada por duas razões. Era específica do Claude Code —
+o formato do JSONL é dele, e a trilha tem que funcionar igual em qualquer CLI
+que saiba rodar um comando de shell, que é o contrato do `egeon` (ADR-009).
+E truncar a resposta não é resumir: 600 caracteres de um recap longo viram um
+parágrafo denso que ninguém lê. Quem sabe o que fez, em uma linha, é o agente.
+
+O que ele NÃO escreve é a identidade. Quem falou vem do pid do outro lado do
+socket, como em `egeon send` (ADR-012): agente não se passa por outro. CLI,
+modelo e conversa vêm do nó e do transcript (`literalModel`, o mesmo do
+cabeçalho, ADR-035) — a trilha diz "o agente X, rodando o Claude Code com
+haiku na conversa Z, fez tal coisa", e essa metade não depende do texto.
+
+### Por que a pasta é o id, e não o nome
+
+Nome de bancada se repete — apaga `deck`, cria `deck` de novo — e muda
+(renomear existe). Se a pasta fosse o nome, a trilha da bancada nova
+continuaria a da antiga, e um rename partiria uma trilha em duas. Então a
+bancada ganhou `id` (oito hex de um UUID; nasce na criação, arquivo antigo
+ganha um ao carregar, nunca muda), e é ele que nomeia
+`workbenches/<id>/`. O nome vai no cabeçalho do `trace.md`, logo abaixo do
+título, que é onde se lê. Pasta ilegível no `ls` é o preço; o `id` está no
+`workbenches.json` ao lado do nome.
+
+### Por que fora do repositório
+
+A bancada abre worktrees — por bancada e por terminal (ADR-017). Um arquivo
+dentro do projeto apareceria no `git status` de cada uma e seria copiado ou
+perdido a cada worktree nova. No diretório do flavor, dev e estável não brigam
+pelo mesmo arquivo.
+
+### O shell registra o comando, pelo `preexec`
+
+Terminal comum não tem modelo para instruir, mas faz parte da história da
+bancada — o `git rebase` que você rodou entre dois turnos de agente explica o
+que veio depois. O `preexec` do zsh manda `$ <comando>` para a trilha; a saída
+fica de fora porque pode ser enorme. O hook entra por `ZDOTDIR` apontando para
+`~/.egeon*/zsh/`, cujos arquivos só carregam os de `$HOME` e acrescentam o
+hook (a técnica da integração de shell do VS Code) — editar o `.zshrc` do
+usuário não é opção. `ZDOTDIR` é desfeito ao fim do `.zshrc` para um `zsh`
+aberto à mão ler o `$HOME` normal. Só zsh: é o shell do macOS, e o nó `shell`
+sobe com `exec /bin/zsh -l`.
+
+### O que fica de fora, de propósito
+
+Instrução no system prompt genérico de agente, não no `MarkerConfig`: vale
+para todo CLI que receba system prompt, e é o mesmo texto que apresenta o
+`egeon`. Agente que esquece não é coberto por reserva automática — a reserva
+seria de novo o transcript de um CLI só. Teto de 1500 caracteres por entrada é
+segurança, não estilo: impede que um agente despeje a resposta inteira e
+transforme a trilha num transcript.

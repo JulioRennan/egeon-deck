@@ -81,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Worktree.installCopyScript()
         ClaudeHooks.install()
 EgeonCLI.install()
+ShellHook.install()
 
         buildMenu()
 
@@ -180,6 +181,15 @@ EgeonCLI.install()
             guard parts.count == 2 else { return nil }
             return self?.configs.first { $0.name == parts[0] }?
                 .nodes.first { $0.id == parts[1] }?.prompt
+        }
+        AppControl.nodeIdentity = { [weak self] address in
+            let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let self,
+                  let config = self.configs.first(where: { $0.name == parts[0] }),
+                  let node = config.nodes.first(where: { $0.id == parts[1] }) else { return nil }
+            let cli = node.agent.flatMap { self.agents[$0]?.displayName } ?? node.agent
+            return (cli, self.literalModel(workbench: parts[0], nodeID: parts[1]), node.conversationId,
+                    config.id)
         }
         AppControl.recordConversation = { [weak self] target, id, transcript in
             self?.recordConversation(target: target, id: id, transcript: transcript)
@@ -1426,6 +1436,9 @@ EgeonCLI.install()
               egeon send <endereço> <<'MB'    manda o texto para ele
               (o que você quer dizer)
               MB
+              egeon trace <<'MB'              registra na trilha da bancada
+              pedido: … — entrega: …
+              MB
 
             Lista vazia significa que ninguém está ligado a você neste momento; \
             ela muda enquanto você trabalha, então consulte na hora em vez de \
@@ -1433,6 +1446,12 @@ EgeonCLI.install()
             mensagem também não. Endereço fora da lista é recusado, e uma cadeia \
             longa demais de agentes falando entre si também — quando isso \
             acontecer, volte a falar com o usuário em vez de insistir.
+
+            A trilha é a memória da bancada, e sobrevive à conversa: ao fim de \
+            TODO turno, antes do marcador final, rode `egeon trace` com uma ou \
+            duas linhas — o que foi pedido e o que você entregou (ou onde parou). \
+            Quem escreveu, CLI, modelo e conversa são carimbados pelo app; não \
+            os repita.
             """
     }
 

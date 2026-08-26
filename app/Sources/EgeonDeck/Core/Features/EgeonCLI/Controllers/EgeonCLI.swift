@@ -41,6 +41,7 @@ enum EgeonCLI {
         #
         #   egeon peers              quem você pode acionar
         #   egeon send <endereço>    manda o stdin para ele
+        #   egeon trace [texto]      registra na trilha da bancada (texto ou stdin)
         #   egeon status             como está este terminal
         #
         # Você não diz quem você é: o app descobre pelo processo que abriu a
@@ -66,11 +67,21 @@ enum EgeonCLI {
             # aqui é texto livre de várias linhas.
             api POST "/message?target=$2" --data-binary @-
             ;;
+          trace)
+            # Texto nos argumentos ou no stdin: uma linha cabe na chamada, e o
+            # heredoc é para quando vem mais que isso.
+            if [ $# -ge 2 ]; then
+                shift
+                printf '%s' "$*" | api POST /trace --data-binary @-
+            else
+                api POST /trace --data-binary @-
+            fi
+            ;;
           status)
             api GET /status
             ;;
           *)
-            sed -n '2,8p' "$0" | cut -c3-
+            sed -n '2,9p' "$0" | cut -c3-
             exit 2
             ;;
         esac

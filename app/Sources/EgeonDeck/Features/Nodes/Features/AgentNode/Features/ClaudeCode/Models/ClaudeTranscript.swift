@@ -151,14 +151,18 @@ struct ClaudeTranscript: TranscriptReader {
 
     static func lastMarker(at url: URL, marker: MarkerConfig,
                            tailBytes: Int = 512 * 1024) -> LastMarker? {
+        guard let text = tail(of: url, bytes: tailBytes) else { return nil }
+        return lastMarker(in: text, marker: marker)
+    }
+
+    private static func tail(of url: URL, bytes: Int) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
-        let start = size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0
+        let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
         try? handle.seek(toOffset: start)
-        guard let data = try? handle.readToEnd(),
-              let text = String(data: data, encoding: .utf8) else { return nil }
-        return lastMarker(in: text, marker: marker)
+        guard let data = try? handle.readToEnd() else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     static func lastMarker(in jsonl: String, marker: MarkerConfig) -> LastMarker? {
@@ -192,13 +196,7 @@ struct ClaudeTranscript: TranscriptReader {
     /// (`sonnet`) não diz qual versão o CLI resolveu, e `padrão` não diz nada.
     /// `<synthetic>` é resposta fabricada pela TUI, não modelo — pula.
     static func lastModel(at url: URL, tailBytes: Int = 256 * 1024) -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-        let size = (try? handle.seekToEnd()) ?? 0
-        let start = size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0
-        try? handle.seek(toOffset: start)
-        guard let data = try? handle.readToEnd(),
-              let text = String(data: data, encoding: .utf8) else { return nil }
+        guard let text = tail(of: url, bytes: tailBytes) else { return nil }
         return lastModel(in: text)
     }
 

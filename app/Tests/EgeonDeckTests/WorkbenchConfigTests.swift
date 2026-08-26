@@ -113,3 +113,37 @@ final class NodeWorktreeTests: XCTestCase {
         XCTAssertFalse(p.decided(workbenchBranch: "feat/x").enabled)
     }
 }
+
+/// O id da bancada: nasce com ela, sobrevive ao nome, e arquivo antigo ganha um.
+final class WorkbenchIDTests: XCTestCase {
+    private func workbench(_ json: String) throws -> WorkbenchConfig {
+        try JSONDecoder().decode(WorkbenchConfig.self, from: Data(json.utf8))
+    }
+
+    func testNewIDIsEightHex() {
+        let id = WorkbenchConfig.newID()
+        XCTAssertEqual(id.count, 8)
+        XCTAssertNotNil(id.range(of: "^[0-9a-f]{8}$", options: .regularExpression))
+        XCTAssertNotEqual(id, WorkbenchConfig.newID())
+    }
+
+    func testLegacyFileGetsAnIDAndKeepsIt() throws {
+        let ws = try workbench(#"{"name":"deck","path":"/tmp/deck","nodes":[]}"#)
+        XCTAssertEqual(ws.id.count, 8)
+        let data = try JSONEncoder().encode(ws)
+        let again = try JSONDecoder().decode(WorkbenchConfig.self, from: data)
+        XCTAssertEqual(again.id, ws.id)
+    }
+
+    func testStoredIDWins() throws {
+        let ws = try workbench(#"{"id":"3f9a2c1d","name":"deck","path":"/tmp/deck","nodes":[]}"#)
+        XCTAssertEqual(ws.id, "3f9a2c1d")
+    }
+
+    // Duas bancadas com o mesmo nome são duas bancadas.
+    func testSameNameDifferentIDs() {
+        let a = WorkbenchConfig(name: "deck", path: "/tmp/a", nodes: [])
+        let b = WorkbenchConfig(name: "deck", path: "/tmp/a", nodes: [])
+        XCTAssertNotEqual(a.id, b.id)
+    }
+}

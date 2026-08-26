@@ -86,6 +86,55 @@ export EG_SIGN_ID="nome-do-certificado"
 Atalhos que valem saber: `⌥⌘1`/`⌥⌘2` trocam canvas e mosaico, `⌘/` recolhe a barra de
 bancadas, `⌘1`…`⌘4` escolhem a ferramenta.
 
+## O comando `egeon` e a trilha da bancada
+
+Todo terminal do app tem um `egeon` no PATH. É por ele que um agente fala com o app —
+e o app sabe **quem** está falando pelo processo do outro lado do socket, não por
+nada que o agente escreva:
+
+```bash
+egeon peers                 # quem este terminal pode acionar agora
+egeon send deck/revisor <<'MB'
+revisa o diff da branch
+MB
+egeon trace "pedido: … — entrega: …"   # registra na trilha da bancada
+egeon status
+```
+
+A **trilha** é a memória da bancada: `~/.egeon/workbenches/<id>/trace.md`, um
+Markdown só por bancada, que se lê de cima a baixo para auditar quem fez o quê. A
+pasta é o **id** da bancada (oito hex, gerado na criação), não o nome: apagar e
+recriar uma bancada com o mesmo nome é outra bancada, com outra trilha; o nome fica
+logo abaixo do título do arquivo. O
+agente escreve uma ou duas linhas ao fim de cada turno (o system prompt pede); o app
+carimba hora, nó, CLI, modelo em uso e id da conversa. Terminal comum também entra:
+cada comando que você roda vira uma linha (o comando, nunca a saída — `preexec` do
+zsh, injetado por `ZDOTDIR` sem tocar no seu `.zshrc`). Sobrevive à conversa, à
+worktree e ao rebuild.
+
+### Configuração específica do Claude Code
+
+O que segue é config **do Claude Code**, não do Egeon: o arquivo, o formato e a
+sintaxe das regras são deles, e mudam com o CLI. O `egeon` roda pela ferramenta de
+shell do agente, e o Claude Code pede aprovação para cada comando novo. Para não
+aprovar um por um, libere o prefixo uma vez em `~/.claude/settings.json` (ou no
+diretório que o seu `CLAUDE_CONFIG_DIR` apontar) — vale para todos os projetos:
+
+```json
+{
+  "permissions": {
+    "allow": ["Bash(egeon:*)"]
+  }
+}
+```
+
+Alternativa: responder "Yes, and don't ask again" no primeiro pedido. O Claude Code
+grava `Bash(egeon trace *)` em `.claude/settings.local.json` **da pasta da bancada**,
+que é local e não entra no git — mas aí é uma regra por subcomando e por projeto.
+
+Codex, Gemini e OpenCode têm o equivalente nas próprias configs de aprovação; o
+Egeon não escreve em nenhuma delas.
+
 ## Dirigir de fora
 
 O app fala HTTP por um socket unix em `~/.egeon/sock`. É como a extensão do editor
@@ -101,9 +150,11 @@ curl --unix-socket ~/.egeon/sock "http://eg/peek?target=deck/claude-1"
 ## Onde ficam as coisas
 
 Tudo em `~/.egeon/`, e todo arquivo é feito para ser editado à mão: `workbenches.json`,
-`agents.json`, `templates.json`, `components.json`, `web-profiles.json`. O log fica em
-`~/egeon.log` e é zerado a cada arranque — é a fonte de verdade quando algo não subiu,
-porque `open -a` descarta stdout.
+`agents.json`, `templates.json`, `components.json`, `web-profiles.json`. O que é **de
+uma bancada** — a trilha, e o que vier — fica em `~/.egeon/workbenches/<id>/`, onde
+`id` é o da bancada em `workbenches.json`. O
+log fica em `~/egeon.log` e é zerado a cada arranque — é a fonte de verdade quando algo
+não subiu, porque `open -a` descarta stdout.
 
 ## Dois apps lado a lado
 

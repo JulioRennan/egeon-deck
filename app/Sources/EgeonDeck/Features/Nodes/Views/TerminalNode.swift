@@ -131,6 +131,9 @@ final class TerminalNode: NodeView {
         // Só em nó com agente: shell não tem conversa para rastrear, e a variável
         // ali seria lixo no ambiente de tudo que você rodar à mão.
         if profile != nil { environment[ClaudeHooks.targetVariable] = address }
+        // Shell não tem modelo para instruir: quem registra na trilha é o
+        // `preexec` do zsh, que entra por aqui (ADR-036).
+        if profile == nil { environment["ZDOTDIR"] = ShellHook.directory.path }
 
         let env: [String] = environment.map { "\($0.key)=\($0.value)" }
 

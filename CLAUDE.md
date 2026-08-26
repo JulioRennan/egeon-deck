@@ -32,6 +32,7 @@ app/Sources/EgeonDeck/
 │   │   └ Features/AgentNode (contrato genérico → Features/ClaudeCode)
 │   │   └ Features/EditorNode (EditorNode + CodeServer)
 │   ├── Notifications/   Activity, HookEvent, Spinner, AttentionSound
+│   ├── Trace/           trilha da bancada — TraceEntry, TraceLog, ShellHook
 │   └── Workbench/       WorkbenchConfig, Store, WorkbenchTemplate, worktree
 └── main.swift       AppDelegate — único fora de módulo; vira App aos poucos
 ```
@@ -51,7 +52,8 @@ app/Sources/EgeonDeck/
 - **Bancada** — uma frente de trabalho: pasta + nós abertos sobre ela.
 - **Nó** — um card: `editor` · `shell` · `agent` · `web`. `NodeConfig` é a
   montagem; conversa nunca é copiada junto (`withoutConversation`).
-- **Endereço** — `bancada/id` (ex. `deck/revisor`); estável.
+- **Endereço** — `bancada/id` (ex. `deck/revisor`); estável. A bancada tem
+  ainda um `id` próprio (8 hex) que sobrevive a rename e não se repete.
 - **Aresta** — `from` pode acionar `to`. Vive na **bancada**, não no nó; nasce
   bidirecional; guardas: aresta obrigatória, `maxSends`, `maxVisits`, fila.
 - **Conversa** — `conversationId` por nó agente; o CLI chama de sessão.
@@ -73,6 +75,11 @@ app/Sources/EgeonDeck/
 - Modelo por nó de agente: formulário e pull-down no cabeçalho; trocar reinicia
   o processo e retoma a conversa. Lista vem do `agents.json` (`models`).
 - Templates de bancada e de nó copiam valores na criação, nunca ficam atados.
+- Trilha da bancada: ao fim de cada turno o agente roda `egeon trace` (uma ou
+  duas linhas); o app carimba quem/CLI/modelo/conversa e anexa em
+  `~/.egeon*/workbenches/<id>/trace.md` — um arquivo por bancada, para
+  auditar (ADR-036). Tudo que é DE uma bancada mora na pasta dela, e a pasta é
+  o `id` (8 hex, nasce com a bancada), não o nome.
 - Drag & drop de arquivo → paste no terminal (imagem vira anexo no Claude Code).
 - Voz pelo CLI dentro do pty (mic atribuído ao bundle do app).
 
@@ -93,7 +100,7 @@ app/Sources/EgeonDeck/
 - **Teste unitário é parte da entrega**: código novo com lógica testável —
   modelo, parsing, guarda, controller — nasce com teste em `EgeonDeckTests`,
   e lógica que se move ganha teste junto. `swift test` antes de commitar.
-  A cobertura hoje é pequena (23 testes); a regra existe para ela só crescer.
+  A cobertura hoje é pequena (118 testes); a regra existe para ela só crescer.
 - **Verificar é executar, compilar não é verificar**: dispare por `/dispatch`,
   confira por `/peek` e pelo log. Rotas úteis: `/targets` `/dispatch` `/peek`
   `/chat` `/compose` `/edge` `/layout` `/geometry` `/status` — socket unix,
