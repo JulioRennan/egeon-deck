@@ -61,6 +61,14 @@ final class WorkbenchShell: NSView {
         didSet { mosaic?.layoutRatios = mosaicLayout }
     }
 
+    /// Quanto o CONTEÚDO cede à esquerda para a barra lateral — a barra de cima
+    /// não cede nunca. Ela é a faixa da titlebar da janela: encurtá-la no
+    /// mosaico deixava o trecho sobre a barra lateral sem ninguém para tratar
+    /// arrasto e duplo clique, e o título perdia o recuo dos botões da janela.
+    var contentInset: CGFloat = 0 {
+        didSet { if contentInset != oldValue { needsLayout = true } }
+    }
+
     init(frame frameRect: NSRect, mode: ViewMode) {
         self.mode = mode
         super.init(frame: frameRect)
@@ -273,19 +281,16 @@ final class WorkbenchShell: NSView {
 
     // MARK: Layout
 
-    private var contentFrame: NSRect {
-        NSRect(x: 0, y: ViewToolbar.height, width: bounds.width,
+    var contentFrame: NSRect {
+        NSRect(x: contentInset, y: ViewToolbar.height,
+               width: max(0, bounds.width - contentInset),
                height: max(0, bounds.height - ViewToolbar.height))
     }
 
+    var barFrame: NSRect { bar.frame }
+
     override func layout() {
         super.layout()
-        // Quem decide o recuo do título é a POSIÇÃO, e não o modo: se a bancada
-        // começa na borda esquerda da janela — o que acontece no canvas, onde o
-        // grid corre por baixo da barra flutuante —, os botões da janela ficam em
-        // cima do título. Perguntar a geometria evita combinar por convenção com o
-        // `RootView`, que é quem escolhe onde a bancada começa.
-        bar.titleInset = convert(NSPoint.zero, to: nil).x < 40 ? 82 : 16
         bar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: ViewToolbar.height)
         let content = contentFrame
         canvas.frame = content

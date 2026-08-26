@@ -93,11 +93,10 @@ final class ViewToolbar: NSView {
 
     var onSelect: ((ViewMode) -> Void)?
 
-    /// Onde o título começa. Cresce quando a barra encosta na borda esquerda da
-    /// janela: com `fullSizeContentView`, os botões dela ficam ali em cima.
-    var titleInset: CGFloat = 16 {
-        didSet { if titleInset != oldValue { needsLayout = true } }
-    }
+    /// Onde o título começa. A barra corre de borda a borda em todo modo e, com
+    /// `fullSizeContentView`, os botões da janela ficam sempre em cima dela — o
+    /// título nasce depois deles.
+    private static let titleInset: CGFloat = 82
 
     private var buttons: [ViewMode: ModeButton] = [:]
     /// Fundo da dupla de modos. Um trilho atrás dos dois, como abas: sem ele os
@@ -182,9 +181,9 @@ final class ViewToolbar: NSView {
             x += width + padding
         }
 
-        let esquerda = max(0, pill.frame.minX - titleInset - margem)
-        title.frame = NSRect(x: titleInset, y: 8, width: esquerda, height: 16)
-        subtitle.frame = NSRect(x: titleInset, y: 25, width: esquerda, height: 13)
+        let esquerda = max(0, pill.frame.minX - Self.titleInset - margem)
+        title.frame = NSRect(x: Self.titleInset, y: 8, width: esquerda, height: 16)
+        subtitle.frame = NSRect(x: Self.titleInset, y: 25, width: esquerda, height: 13)
 
         let direita = max(0, bounds.width - pill.frame.maxX - margem * 2)
         hint.frame = NSRect(x: pill.frame.maxX + margem, y: (bounds.height - 13) / 2,
