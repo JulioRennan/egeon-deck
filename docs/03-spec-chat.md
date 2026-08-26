@@ -75,6 +75,11 @@ ela.
    dentro o que o back respondeu a ele, sem trocar de tela.
 5. **Corpo final:** a resposta em si — prosa, blocos de código, diffs.
 
+Implementado (ADR-039): stack e corpo não são dois blocos — a bolha desenha a
+**cadeia** na ordem em que saiu (parágrafo, grupo de passos fechado, parágrafo…),
+e enquanto o turno corre ela cresce ao vivo, com o que o agente está fazendo
+agora numa linha de status no fim (`⠋ $ Roda os testes`, `⠋ pensando…`).
+
 ## Regras de reply — não misturar conversas
 
 - **Caso 1 — um agente só, fluxo linear:** meu prompt, resposta dele logo

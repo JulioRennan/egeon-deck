@@ -127,11 +127,15 @@ enum ChatMessage: Equatable {
                 continue
             }
             let isOwner = receiver.id == root.0.id
-            roots[index].1.exchanges.append(ChatExchange(
+            let exchange = ChatExchange(
                 fromId: byAddress[from]?.id ?? from, toId: receiver.id, text: turn.prompt,
                 at: turn.promptAt, steps: turn.steps.count,
-                note: isOwner ? "" : turn.replyText))
+                note: isOwner ? "" : turn.replyText)
+            roots[index].1.exchanges.append(exchange)
+            roots[index].1.parts = placing(exchange, in: roots[index].1.chain,
+                                           sentTo: isOwner ? nil : receiver.address)
             if isOwner {
+                roots[index].1.parts += turn.chain
                 roots[index].1.steps += turn.steps
                 if !turn.replyText.isEmpty {
                     roots[index].1.replyText +=
@@ -141,6 +145,27 @@ enum ChatMessage: Equatable {
             }
         }
         return roots
+    }
+
+    /// A troca entra na cadeia onde aconteceu: a ida logo depois do último `⇄`
+    /// para aquele destino (pulando trocas já penduradas ali); a volta (que
+    /// chega ao dono) no fim, antes do que ele escreveu em seguida. Sem isso a
+    /// conversa com o vizinho ficava toda depois da resposta final, fora de
+    /// ordem com o que a provocou.
+    static func placing(_ exchange: ChatExchange, in chain: [ChatPart],
+                        sentTo address: String?) -> [ChatPart] {
+        var chain = chain
+        guard let address,
+              let sendIndex = chain.lastIndex(where: {
+                  if case .step(let step) = $0 { return step.sendTo == address } else { return false }
+              }) else {
+            chain.append(.exchange(exchange))
+            return chain
+        }
+        var position = sendIndex + 1
+        while position < chain.count, case .exchange = chain[position] { position += 1 }
+        chain.insert(.exchange(exchange), at: position)
+        return chain
     }
 
     /// Sobe a cadeia até o turno que VOCÊ disparou: quem mandou esta mensagem,
@@ -168,7 +193,7 @@ enum ChatMessage: Equatable {
         for (index, message) in sorted.enumerated() {
             let previous = index > 0 ? sorted[index - 1] : nil
             switch message {
-            case .reply(let from, let turn, _):
+            case .reply(_, let turn, _):
                 if case .prompt(_, let turnId, _, _, _)? = previous, turnId == turn.id {
                     out.append(message)
                 } else {

@@ -7,9 +7,11 @@ import AppKit
 /// de enviar é o dono lá fora; aqui só se desenha e se coordena.
 ///
 /// A thread sai do histórico da bancada (`ChatHistory`, a conversa corrente),
-/// relido a cada segundo só quando o arquivo mudou. O que você acabou de
-/// mandar aparece como eco até o turno inteiro entrar no histórico, no `Stop`
-/// (ADR-037) — o transcript do CLI não é lido aqui.
+/// relido a cada segundo só quando o arquivo mudou (ADR-037). O turno EM CURSO
+/// é a exceção: enquanto o agente trabalha, a cauda do transcript dele é lida
+/// a cada mudança e a bolha cresce ao vivo — prosa, passos, prosa — com o que
+/// ele está fazendo agora no fim (ADR-039). No `Stop` o turno entra no
+/// histórico e a bolha ao vivo dá lugar à gravada.
 final class ChatContainer: NSView {
     /// Os nós da bancada como participantes, lidos na hora.
     var participants: (() -> [ChatParticipant])?
@@ -34,6 +36,22 @@ final class ChatContainer: NSView {
     /// a conversa" arquiva o arquivo e a thread segue o novo, vazio.
     var historyFile: (() -> URL?)?
     private var historyCache: [URL: (size: UInt64, modified: Date, records: [ChatRecord])] = [:]
+
+    /// Onde o CLI de um agente está gravando a conversa, e quando o turno em
+    /// curso começou. `nil` para quem não tem transcript (shell, CLI sem
+    /// gancho): a bolha dele fica em "trabalhando…".
+    var liveSource: ((ChatParticipant) -> (transcript: URL, notBefore: Date?)?)?
+    private struct LiveEntry {
+        var size: UInt64
+        var modified: Date
+        var live: ClaudeTranscript.LiveTurn?
+        var readAt: Date
+    }
+    private var liveCache: [String: LiveEntry] = [:]
+    private var liveParsing: Set<String> = []
+    /// Vigia de escrita no transcript de quem trabalha: a bolha reage ao byte
+    /// gravado, não ao tique de 1 s. Um por agente; cai quando ele para.
+    private var liveWatchers: [String: (path: String, source: DispatchSourceFileSystemObject)] = [:]
 
     private var bubbles: [ThreadBubble] = []
     private var bubbleByKey: [String: ThreadBubble] = [:]
@@ -85,8 +103,6 @@ final class ChatContainer: NSView {
         animateScroll(to: edge == "top" ? 0 : bottomY)
     }
     private var pending: [ChatThread.Pending] = []
-    /// Pilhas de passos abertas, por "agente|instante do prompt".
-    private var expandedSteps: Set<String> = []
     private var threadSignature = ""
     private var focusedId: String?
     private enum PopupMode { case none, switcher, mention }
@@ -186,7 +202,97 @@ final class ChatContainer: NSView {
     private var parsing: Set<URL> = []
 
     private func turns(of participant: ChatParticipant) -> [ChatTurn] {
-        records().filter { $0.node == participant.id }.map(\.turn)
+        var turns = records().filter { $0.node == participant.id }.map(\.turn)
+        if let live = liveTurn(of: participant)?.turn, !turns.contains(where: { $0.id == live.id }) {
+            turns.append(live)
+        }
+        return turns
+    }
+
+    /// O turno em curso do agente, lido da cauda do transcript só quando o
+    /// arquivo mudou — e só enquanto ele trabalha. Depois do `Stop` a leitura
+    /// para, e o que já se tinha continua na tela até o histórico trazer o
+    /// turno gravado (ou por 20 s, se o histórico nunca trouxer): sem isso a
+    /// bolha sumia e voltava no intervalo entre o gancho e a gravação.
+    private func liveTurn(of participant: ChatParticipant) -> ClaudeTranscript.LiveTurn? {
+        guard participant.isAgent else { return nil }
+        let cached = liveCache[participant.id]
+        // `asking` também lê: permissão pedida no meio do turno não é fim de
+        // turno, e a bolha não pode sumir enquanto você decide. Depois do
+        // `Stop` o turno já está no histórico e a leitura cai sozinha.
+        guard participant.activity == .working || participant.activity == .asking else {
+            unwatch(participant.id)
+            guard let cached, let live = cached.live else { return nil }
+            let recorded = records().contains { $0.node == participant.id && $0.turn.id == live.turn.id }
+            if recorded || Date().timeIntervalSince(cached.readAt) > 20 {
+                liveCache[participant.id] = nil
+                return nil
+            }
+            return live
+        }
+        guard let source = liveSource?(participant),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: source.transcript.path)
+        else { return cached?.live }
+        let size = (attributes[.size] as? UInt64) ?? 0
+        let modified = (attributes[.modificationDate] as? Date) ?? .distantPast
+        watch(participant.id, path: source.transcript.path)
+        if let cached, cached.size == size, cached.modified == modified { return cached.live }
+
+        if !liveParsing.contains(participant.id) {
+            liveParsing.insert(participant.id)
+            let id = participant.id
+            parseQueue.async { [weak self] in
+                let live = ClaudeTranscript.liveTurn(at: source.transcript, notBefore: source.notBefore)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.liveParsing.remove(id)
+                    self.liveCache[id] = LiveEntry(size: size, modified: modified, live: live,
+                                                   readAt: Date())
+                    self.refresh()
+                }
+            }
+        }
+        return cached?.live
+    }
+
+    /// `DispatchSource` no fd do transcript: `.write`/`.extend` chegam a cada
+    /// linha que o CLI anexa. O arquivo é só-append, então o fd não fica
+    /// órfão por troca de inode; se ficar (conversa nova), o caminho muda e o
+    /// vigia é refeito.
+    private func watch(_ id: String, path: String) {
+        if let current = liveWatchers[id], current.path == path { return }
+        unwatch(id)
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .extend], queue: .main)
+        source.setEventHandler { [weak self] in
+            guard let self, self.window != nil, self.popupMode == .none else { return }
+            self.refresh()
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        liveWatchers[id] = (path, source)
+    }
+
+    private func unwatch(_ id: String) {
+        liveWatchers[id]?.source.cancel()
+        liveWatchers[id] = nil
+    }
+
+    /// O que a bolha ao vivo diz no fim: o último passo se o agente está numa
+    /// ferramenta, "pensando…" se raciocina, "trabalhando…" no resto.
+    private func liveStatus(of participant: ChatParticipant,
+                            live: ClaudeTranscript.LiveTurn) -> AgentBubbleView.Live {
+        switch live.last {
+        case .thinking: return .thinking
+        case .tool:
+            for part in live.turn.chain.reversed() {
+                if case .step(let step) = part { return .step(step) }
+            }
+            return .working
+        default: return .working
+        }
     }
 
     private func records() -> [ChatRecord] {
@@ -224,16 +330,32 @@ final class ChatContainer: NSView {
         }
         messages = built.messages
         pending = built.pending
-        // Só quem está num turno. Terminal subindo não está respondendo a
-        // ninguém — a coluna de participantes já diz "preparando…", e uma bolha
-        // de "trabalhando…" ali era resposta a um prompt que não existe.
-        let typing = all.filter { $0.isAgent && $0.activity == .working }
+        // O turno ao vivo de cada agente que trabalha: a bolha dele ganha a
+        // linha de status. Quem trabalha e ainda não gravou nada do turno (ou
+        // não tem transcript) ganha a bolha de "trabalhando…" solta no fim.
+        // Terminal subindo não está respondendo a ninguém — a coluna já diz
+        // "preparando…", e uma bolha ali era resposta a um prompt que não existe.
+        var liveByAgent: [String: (turnId: String, status: AgentBubbleView.Live)] = [:]
+        var typing: [ChatParticipant] = []
+        let recorded = Set(records().map(\.key))
+        for agent in all where agent.isAgent && (agent.activity == .working || agent.activity == .asking) {
+            if let live = liveTurn(of: agent), live.turn.hasReply,
+               !recorded.contains("\(agent.id)#\(live.turn.id)") {
+                liveByAgent[agent.id] = (live.turn.id,
+                                         agent.activity == .asking ? .asking : liveStatus(of: agent, live: live))
+            } else if agent.activity == .working {
+                typing.append(agent)
+            }
+        }
 
         // Remontar view a cada segundo faria a thread piscar: só quando o que
         // se desenha mudou de fato. O spinner anda em cima da bolha existente.
+        let liveSignature = liveByAgent.keys.sorted().map { id in
+            "\(id):\(liveByAgent[id]!.turnId):\(liveByAgent[id]!.status)"
+        }.joined(separator: ",")
         let signature = "\(messages.count)|\(messages.last?.at.timeIntervalSince1970 ?? 0)|"
             + "\(messages.last.map { "\($0)" }.hashValue)|\(pending.count)|"
-            + typing.map(\.id).joined(separator: ",") + "|\(expandedSteps.count)"
+            + typing.map(\.id).joined(separator: ",") + "|" + liveSignature
         guard signature != threadSignature else { return }
         threadSignature = signature
 
@@ -258,16 +380,8 @@ final class ChatContainer: NSView {
                 }
                 bubble = view
             case .reply(let from, let turn, let quote):
-                let key = message.key
-                let view = AgentBubbleView(from: from, turn: turn,
-                                           expanded: expandedSteps.contains(key), quote: quote)
-                view.onToggleSteps = { [weak self] in
-                    guard let self else { return }
-                    if self.expandedSteps.contains(key) { self.expandedSteps.remove(key) }
-                    else { self.expandedSteps.insert(key) }
-                    self.threadSignature = ""
-                    self.refresh()
-                }
+                let live = liveByAgent[from.id].flatMap { $0.turnId == turn.id ? $0.status : nil }
+                let view = AgentBubbleView(from: from, turn: turn, quote: quote, live: live)
                 // Com ou sem citação, a resposta sabe qual prompt responde.
                 let target = quote?.targetKey ?? "p|\(turn.id)"
                 view.onQuoteClick = { [weak self] in self?.scrollTo(key: target) }
@@ -407,8 +521,29 @@ final class ChatContainer: NSView {
                 case .pending(let to, let text, _, _):
                     return ["kind": "pending", "to": to.id, "text": text, "quote": quote ?? [:]]
                 case .reply(let from, let turn, _):
+                    let live = liveCache[from.id]?.live
                     return ["kind": "reply", "id": turn.id, "from": from.id, "text": turn.replyText,
                             "steps": turn.steps.map { "\($0.glyph) \($0.text)" },
+                            "chain": turn.chain.map { part -> String in
+                                switch part {
+                                case .text(let text): return "¶ \(text)"
+                                case .step(let step):
+                                    var line = "\(step.glyph) \(step.text)"
+                                    if let counts = step.diffCounts { line += " (+\(counts.added) −\(counts.removed))" }
+                                    if let output = step.output {
+                                        let n = output.split(separator: "\n").count
+                                        line += " ⎿ \(n) linha\(n == 1 ? "" : "s")"
+                                    }
+                                    if step.isError { line += " ✗" }
+                                    return line
+                                case .exchange(let exchange):
+                                    return "⇄ \(exchange.fromId) → \(exchange.toId): \(exchange.text)"
+                                }
+                            },
+                            "live": live?.turn.id == turn.id && from.activity == .working
+                                ? liveStatus(of: from, live: live!).label
+                                : (live?.turn.id == turn.id && from.activity == .asking
+                                   ? AgentBubbleView.Live.asking.label : ""),
                             "quote": quote ?? [:]]
                 }
             }

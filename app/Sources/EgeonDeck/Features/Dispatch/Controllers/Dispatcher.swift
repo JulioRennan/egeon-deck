@@ -107,7 +107,7 @@ final class Target {
     private var sessionUp = false
     /// Quando o `prompt` deste turno chegou. É contra ele que o marcador lido
     /// do transcript é conferido: linha mais velha que isto é do turno passado.
-    private var turnStartedAt: Date?
+    private(set) var turnStartedAt: Date?
     /// Você já viu que este terminal terminou.
     ///
     /// Vale só para o "terminou": abrir a bancada basta para dar por visto algo

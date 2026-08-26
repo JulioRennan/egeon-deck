@@ -21,6 +21,8 @@ app/Sources/EgeonDeck/
 ├── Features/                ← todo módulo mora aqui
 │   ├── Canvas/                 grid, arestas, toolbar do canvas
 │   ├── Chat/                   o modo chat — participantes, composer, thread
+│   ├── Code/                   código como texto: diff lado a lado, linguagem
+│   │                           por extensão, realce por linha (SyntaxLite)
 │   ├── Dispatch/               fila, injeção, Target, guardas de cadeia
 │   ├── Home/                   RootView, ViewToolbar, WorkbenchShell, Sidebar
 │   ├── Mosaic/                 o modo mosaico

@@ -1830,6 +1830,13 @@ ShellHook.install()
             guard let self, index >= 0, index < self.configs.count else { return nil }
             return ChatHistory.shared.current(forWorkbench: self.configs[index].id)
         }
+        chat.liveSource = { [weak self] participant in
+            guard let self, index >= 0, index < self.configs.count,
+                  let node = self.configs[index].nodes.first(where: { $0.id == participant.id }),
+                  let path = node.transcript else { return nil }
+            return (URL(fileURLWithPath: path),
+                    Dispatcher.shared.target(participant.address)?.turnStartedAt)
+        }
         chat.send = { [weak self] text, participant in
             guard let self, index >= 0, index < self.configs.count else {
                 return "bancada sumiu"

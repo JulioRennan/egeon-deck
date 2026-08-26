@@ -48,6 +48,9 @@ final class ChatBubbleView: NSView, ThreadBubble {
             string: text,
             attributes: [.font: NSFont.systemFont(ofSize: 13.5),
                          .foregroundColor: NSColor(calibratedWhite: 0.92, alpha: 1)]))
+        // Clicar numa label selecionável abre o field editor, e ao sair ele
+        // devolvia o texto SEM atributos: a bolha perdia cor e fonte no clique.
+        body.allowsEditingTextAttributes = true
         body.attributedStringValue = mention
 
         [time, body].forEach(addSubview)

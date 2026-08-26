@@ -2,50 +2,74 @@ import AppKit
 
 // MARK: - Bolha de resposta do agente
 
-/// O que o agente respondeu: cabeçalho na cor dele, a pilha de passos
-/// (fechada por padrão) e o texto final. Sub-conversas e citações entram
-/// depois — a forma da bolha já reserva o lugar.
+/// O que o agente respondeu, na ordem em que fez: cabeçalho na cor dele e a
+/// cadeia do turno — parágrafo, passo, passo, parágrafo, troca… — cada elo
+/// uma linha, sem agrupar e sem recolher (ADR-039): o passo mostra comando,
+/// diff e saída sempre — clique não esconde nada, porque esconder era perder
+/// a leitura. Enquanto o turno corre, uma linha de status no fim diz o que
+/// ele está fazendo agora.
 final class AgentBubbleView: NSView, ThreadBubble {
-    var onToggleSteps: (() -> Void)?
     var onQuoteClick: (() -> Void)?
     private var quoteView: ChatQuoteView?
+
+    /// O que a bolha diz que o agente está fazendo agora. `nil` é turno
+    /// fechado — a bolha do histórico.
+    enum Live: Equatable {
+        case working
+        case thinking
+        case step(ChatStep)
+        /// Permissão pedida no meio do turno: laranja, sem spinner — não há
+        /// trabalho andando, há você para decidir.
+        case asking
+
+        var label: String {
+            switch self {
+            case .working:          return "trabalhando…"
+            case .thinking:         return "pensando…"
+            case .step(let step):   return "\(step.glyph) \(step.text)"
+            case .asking:           return "precisa de você"
+            }
+        }
+    }
 
     private let name = NSTextField(labelWithString: "")
     private let address = NSTextField(labelWithString: "")
     private let time = NSTextField(labelWithString: "")
-    private let stepsBox = NSView()
-    private let stepsHeader = NSTextField(labelWithString: "")
-    private var stepRows: [NSTextField] = []
-    private let body = NSTextField(wrappingLabelWithString: "")
+    private let status = NSTextField(labelWithString: "")
 
-    private let steps: [ChatStep]
-    private let expanded: Bool
-    private let hasBody: Bool
-    /// A cadeia agente↔agente, sempre aberta — diferente dos passos, ela é a
-    /// própria conversa, não bastidor.
-    private var exchangeRows: [ExchangeRow] = []
-    private let exchangesBox = NSView()
+    /// Um elo desenhado: prosa, ou um grupo de passos consecutivos.
+    private enum Row {
+        case text(NSTextField)
+        case step(box: NSView, field: NSTextField)
+        /// Bloco de código da prosa (```): a mesma caixa de um passo, com o
+        /// realce pelo rótulo. Prosa colorida solta não lia como código.
+        case code(box: NSView, field: NSTextField)
+        /// Edição: o diff é uma sub-bolha própria na cadeia, sempre visível —
+        /// recolher os passos não a esconde. É o que você quer ler, não
+        /// bastidor.
+        case diff(DiffView)
+        case exchanges(box: NSView, rows: [ExchangeRow])
+    }
+    private var rows: [Row] = []
+    private let live: Live?
 
     static let maxWidth: CGFloat = 660
-    private static let stepRowHeight: CGFloat = 18
 
     let alignsRight = false
 
     /// Azul do seu prompt — a cor do fio da citação quando o citado é você.
     static let youColor = NSColor(srgbRed: 0.184, green: 0.498, blue: 0.965, alpha: 1)
 
-    init(from participant: ChatParticipant, turn: ChatTurn, expanded: Bool,
-         quote: ChatQuote? = nil) {
-        steps = turn.steps
-        self.expanded = expanded
-        hasBody = !turn.replyText.isEmpty
+    init(from participant: ChatParticipant, turn: ChatTurn,
+         quote: ChatQuote? = nil, live: Live? = nil) {
+        self.live = live
         super.init(frame: .zero)
         decorate(color: participant.color)
 
         name.stringValue = "\(participant.glyph) \(participant.id)"
         name.textColor = participant.color
         address.stringValue = participant.address
-        time.stringValue = Self.clock.string(from: turn.replyAt ?? turn.promptAt)
+        time.stringValue = live == nil ? Self.clock.string(from: turn.replyAt ?? turn.promptAt) : "agora"
 
         if let quote {
             let view = ChatQuoteView(quote: quote, authorLabel: "você → \(participant.id)",
@@ -55,78 +79,190 @@ final class AgentBubbleView: NSView, ThreadBubble {
             quoteView = view
         }
 
-        if !steps.isEmpty {
-            stepsBox.wantsLayer = true
-            stepsBox.layer?.cornerRadius = 10
-            stepsBox.layer?.borderWidth = 1
-            stepsBox.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
-            stepsBox.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.03).cgColor
-            let edits = steps.filter { $0.glyph == "±" }.count
-            var summary = "\(steps.count) passo\(steps.count == 1 ? "" : "s")"
-            if edits > 0 { summary += " · \(edits) edição\(edits == 1 ? "" : "ões")" }
-            stepsHeader.stringValue = "\(expanded ? "▾" : "▸")  \(summary)"
-            stepsHeader.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
-            stepsHeader.textColor = NSColor(calibratedWhite: 0.6, alpha: 1)
-            stepsBox.addSubview(stepsHeader)
-            let click = NSClickGestureRecognizer(target: self, action: #selector(toggle))
-            stepsBox.addGestureRecognizer(click)
-            if expanded {
-                stepRows = steps.map { step in
-                    let row = NSTextField(labelWithString: "\(step.glyph)  \(step.text)")
-                    row.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-                    row.textColor = NSColor(calibratedWhite: 0.7, alpha: 1)
-                    row.lineBreakMode = .byTruncatingMiddle
-                    stepsBox.addSubview(row)
-                    return row
+        rows = Self.group(turn.chain).flatMap { group -> [Row] in
+            switch group {
+            case .text(let text):
+                return makeProseRows(text)
+            case .step(let step):
+                if let diff = step.diff, !diff.isEmpty {
+                    let view = DiffView(file: step.text, diff: diff)
+                    addSubview(view)
+                    return [.diff(view)]
+                }
+                return [makeStepBox(step)]
+            case .exchanges(let exchanges):
+                return [makeExchangesBox(exchanges)]
+            }
+        }
+
+        status.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
+        status.textColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+        status.lineBreakMode = .byTruncatingMiddle
+        status.isHidden = live == nil
+        addSubview(status)
+        tick()
+    }
+
+    /// A bolha de "digitando…": o agente está trabalhando e ainda não gravou
+    /// nada do turno.
+    convenience init(typing participant: ChatParticipant) {
+        self.init(from: participant, turn: ChatTurn(id: "", prompt: "", promptAt: Date()),
+                  live: .working)
+    }
+
+    /// Prosa e passo ficam cada um no seu lugar — passo NÃO agrupa: a
+    /// sequência é o que se quer ler. Trocas seguidas viram uma caixa só —
+    /// sempre aberta: são a própria conversa, não bastidor.
+    private enum Group { case text(String), step(ChatStep), exchanges([ChatExchange]) }
+    private static func group(_ chain: [ChatPart]) -> [Group] {
+        var out: [Group] = []
+        for part in chain {
+            switch part {
+            case .text(let text):
+                out.append(.text(text))
+            case .step(let step):
+                out.append(.step(step))
+            case .exchange(let exchange):
+                if case .exchanges(var exchanges)? = out.last {
+                    exchanges.append(exchange)
+                    out[out.count - 1] = .exchanges(exchanges)
+                } else {
+                    out.append(.exchanges([exchange]))
                 }
             }
-            addSubview(stepsBox)
         }
+        return out
+    }
 
-        if !turn.exchanges.isEmpty {
-            exchangesBox.wantsLayer = true
-            exchangesBox.layer?.cornerRadius = 10
-            exchangesBox.layer?.borderWidth = 1
-            exchangesBox.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
-            exchangesBox.layer?.backgroundColor = NSColor(calibratedWhite: 0, alpha: 0.22).cgColor
-            exchangeRows = turn.exchanges.map { exchange in
-                let row = ExchangeRow(exchange: exchange)
-                exchangesBox.addSubview(row)
-                return row
+    private func makeExchangesBox(_ exchanges: [ChatExchange]) -> Row {
+        let box = FlippedBox()
+        box.wantsLayer = true
+        box.layer?.cornerRadius = 10
+        box.layer?.borderWidth = 1
+        box.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
+        box.layer?.backgroundColor = NSColor(calibratedWhite: 0, alpha: 0.22).cgColor
+        let rows = exchanges.map { exchange -> ExchangeRow in
+            let row = ExchangeRow(exchange: exchange)
+            box.addSubview(row)
+            return row
+        }
+        addSubview(box)
+        return .exchanges(box: box, rows: rows)
+    }
+
+    /// A prosa em linhas: parágrafos, títulos e listas num campo só; cada
+    /// bloco de código na sua caixa.
+    private func makeProseRows(_ text: String) -> [Row] {
+        var out: [Row] = []
+        var run: [MarkdownLite.Block] = []
+        func flush() {
+            guard !run.isEmpty else { return }
+            let field = NSTextField(wrappingLabelWithString: "")
+            // Clicar numa label selecionável abre o field editor, e ao sair ele
+            // devolvia o texto SEM atributos: a bolha perdia cor e fonte no clique.
+            field.allowsEditingTextAttributes = true
+            field.attributedStringValue = MarkdownLite.render(
+                run, font: .systemFont(ofSize: 13.5), color: NSColor(calibratedWhite: 0.9, alpha: 1))
+            addSubview(field)
+            out.append(.text(field))
+            run = []
+        }
+        for block in MarkdownLite.blocks(text) {
+            if case .code(let language, let code) = block {
+                flush()
+                let box = FlippedBox()
+                box.wantsLayer = true
+                box.layer?.cornerRadius = 8
+                box.layer?.borderWidth = 1
+                box.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
+                box.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.03).cgColor
+                let field = NSTextField(wrappingLabelWithString: "")
+                // Clicar numa label selecionável abre o field editor, e ao sair ele
+                // devolvia o texto SEM atributos: a bolha perdia cor e fonte no clique.
+                field.allowsEditingTextAttributes = true
+                field.attributedStringValue = MarkdownLite.renderCode(
+                    language, code, font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                box.addSubview(field)
+                addSubview(box)
+                out.append(.code(box: box, field: field))
+            } else {
+                run.append(block)
             }
-            addSubview(exchangesBox)
         }
-
-        body.font = .systemFont(ofSize: 13.5)
-        body.textColor = NSColor(calibratedWhite: 0.9, alpha: 1)
-        body.stringValue = turn.replyText
-        body.isHidden = !hasBody
-        addSubview(body)
+        flush()
+        return out
     }
 
-    /// A bolha de "digitando…": o agente está trabalhando e ainda não há texto.
-    init(typing participant: ChatParticipant) {
-        steps = []
-        expanded = false
-        hasBody = true
-        super.init(frame: .zero)
-        decorate(color: participant.color)
-        name.stringValue = "\(participant.glyph) \(participant.id)"
-        name.textColor = participant.color
-        address.stringValue = participant.address
-        time.stringValue = "agora"
-        body.font = .systemFont(ofSize: 11.5)
-        body.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
-        body.stringValue = "\(Spinner.current) trabalhando…"
-        addSubview(body)
+    private func makeStepBox(_ step: ChatStep) -> Row {
+        let box = FlippedBox()
+        box.wantsLayer = true
+        box.layer?.cornerRadius = 8
+        box.layer?.borderWidth = 1
+        box.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
+        box.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.03).cgColor
+        let field = NSTextField(wrappingLabelWithString: "")
+        // Clicar numa label selecionável abre o field editor, e ao sair ele
+        // devolvia o texto SEM atributos: a bolha perdia cor e fonte no clique.
+        field.allowsEditingTextAttributes = true
+        field.attributedStringValue = Self.render(step)
+        box.addSubview(field)
+        addSubview(box)
+        return .step(box: box, field: field)
     }
 
-    /// Só a bolha de "trabalhando…" tem o que animar; o resto ignora o tique.
+    /// Um passo como o terminal o mostra: a linha, o comando por extenso, o
+    /// diff com `+` verde e `-` vermelho, a saída recuada com `⎿`. Recolhido,
+    /// só a linha — com `+a −b` e o tamanho da saída para não perder a conta.
+    static func render(_ step: ChatStep, expanded: Bool = true) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let title = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        let small = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let dim = NSColor(calibratedWhite: 0.5, alpha: 1)
+        let removed = NSColor(calibratedRed: 0.9, green: 0.45, blue: 0.45, alpha: 1)
+        func line(_ text: String, _ font: NSFont, _ color: NSColor) {
+            if out.length > 0 { out.append(NSAttributedString(string: "\n", attributes: [.font: small])) }
+            out.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]))
+        }
+        var head = "\(step.glyph)  \(step.text)"
+        if !expanded {
+            if let counts = step.diffCounts { head += "  +\(counts.added) −\(counts.removed)" }
+            if let output = step.output {
+                let n = output.split(separator: "\n").count
+                head += "  ⎿ \(n) linha\(n == 1 ? "" : "s")"
+            }
+        }
+        line(head, title, step.isError ? removed : NSColor(calibratedWhite: 0.7, alpha: 1))
+        guard expanded else { return out }
+        if let detail = step.detail {
+            for l in detail.split(separator: "\n", omittingEmptySubsequences: false) { line("   \(l)", small, dim) }
+        }
+        if let output = step.output {
+            // A saída de `cat x.json` é JSON: a linguagem vem do arquivo citado
+            // no comando, nunca do texto (ADR-041). Erro fica todo vermelho.
+            let language = step.isError ? .plain : Language.detect(inCommand: step.detail ?? step.text)
+            for (i, l) in output.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                if out.length > 0 { out.append(NSAttributedString(string: "\n", attributes: [.font: small])) }
+                let color = step.isError ? removed : dim
+                out.append(NSAttributedString(string: "   \(i == 0 ? "⎿ " : "  ")",
+                                              attributes: [.font: small, .foregroundColor: color]))
+                out.append(CodePalette.attributed(String(l), language: language, font: small,
+                                                  base: step.isError ? removed : NSColor(calibratedWhite: 0.62, alpha: 1)))
+            }
+        }
+        return out
+    }
+
+    /// Só a linha de status tem o que animar; o resto ignora o tique.
     func tick() {
-        guard isTyping else { return }
-        body.stringValue = "\(Spinner.current) trabalhando…"
+        guard let live else { return }
+        if case .asking = live {
+            status.stringValue = "● \(live.label)"
+            status.textColor = Activity.asking.color
+            return
+        }
+        status.textColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+        status.stringValue = "\(Spinner.current) \(live.label)"
     }
-    private var isTyping: Bool { time.stringValue == "agora" }
 
     private func decorate(color: NSColor) {
         wantsLayer = true
@@ -146,11 +282,8 @@ final class AgentBubbleView: NSView, ThreadBubble {
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
 
-    @objc private func toggle() { onToggleSteps?() }
-
     /// Clicar na resposta leva ao prompt original, como no WhatsApp — a bolha
-    /// inteira, não só a citação. A pilha de passos tem gesto próprio e fica
-    /// com o clique dela.
+    /// inteira, não só a citação.
     override func mouseDown(with event: NSEvent) { onQuoteClick?() }
 
     private static let clock: DateFormatter = {
@@ -161,45 +294,68 @@ final class AgentBubbleView: NSView, ThreadBubble {
 
     // MARK: Medidas
 
-    private var stepsHeight: CGFloat {
-        guard !steps.isEmpty else { return 0 }
-        return 26 + (expanded ? CGFloat(steps.count) * Self.stepRowHeight + 6 : 0)
+
+    /// Pela célula, não pelo `boundingRect` da string: o campo quebra linha
+    /// numa largura interna menor (padding da célula), e com fontes misturadas
+    /// — negrito, mono — a diferença virava uma linha a menos, cortada.
+    private static func measure(_ field: NSTextField, width: CGFloat) -> CGFloat {
+        guard let cell = field.cell else { return 0 }
+        return ceil(cell.cellSize(forBounds: NSRect(x: 0, y: 0, width: width,
+                                                    height: .greatestFiniteMagnitude)).height)
     }
 
-    private func bodyHeight(width: CGFloat) -> CGFloat {
-        guard hasBody else { return 0 }
-        return ceil(body.attributedStringValue
-            .boundingRect(with: NSSize(width: width - 26 - 8, height: .infinity),
-                          options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
+    private func rowHeight(_ row: Row, width: CGFloat) -> CGFloat {
+        switch row {
+        case .text(let field):          return Self.measure(field, width: width - 26)
+        case .step(_, let field), .code(_, let field):
+            return Self.measure(field, width: width - 26 - 20) + 12
+        case .diff(let view):           return view.height
+        case .exchanges(_, let rows):   return exchangesHeight(rows, width: width)
+        }
     }
 
     private var quoteBlock: CGFloat { quoteView == nil ? 0 : ChatQuoteView.height + 8 }
+    private var statusBlock: CGFloat { live == nil ? 0 : 8 + 14 }
 
-    private func exchangesHeight(width: CGFloat) -> CGFloat {
-        guard !exchangeRows.isEmpty else { return 0 }
-        return exchangeRows.reduce(8) { $0 + $1.height(for: width - 26 - 20) + 6 }
+    private func exchangesHeight(_ rows: [ExchangeRow], width: CGFloat) -> CGFloat {
+        rows.reduce(8) { $0 + $1.height(for: width - 26 - 20) + 6 }
     }
 
     func height(for width: CGFloat) -> CGFloat {
         var total: CGFloat = 10 + 16 + quoteBlock
-        if !steps.isEmpty { total += 8 + stepsHeight }
-        if !exchangeRows.isEmpty { total += 8 + exchangesHeight(width: width) }
-        if hasBody { total += 8 + bodyHeight(width: width) }
-        return total + 12
+        for row in rows { total += 8 + rowHeight(row, width: width) }
+        return total + statusBlock + 12
     }
 
     func width(for available: CGFloat) -> CGFloat {
-        let cap = min(available, Self.maxWidth)
-        let textWidth = hasBody ? ceil(body.attributedStringValue
-            .boundingRect(with: NSSize(width: cap - 34, height: .infinity),
-                          options: [.usesLineFragmentOrigin, .usesFontLeading]).width) + 34 : 0
+        // Com diff, a bolha abre até a largura da thread: lado a lado em 660
+        // deixa cada metade com 300 px, e a linha que mudou é justamente a
+        // que fica cortada.
+        let hasDiff = rows.contains { if case .diff = $0 { return true } else { return false } }
+        let cap = min(available, hasDiff ? available : Self.maxWidth)
+        var textWidth: CGFloat = 0
+        for row in rows {
+            switch row {
+            case .text(let field):
+                textWidth = max(textWidth, ceil(field.attributedStringValue
+                    .boundingRect(with: NSSize(width: cap - 34, height: .infinity),
+                                  options: [.usesLineFragmentOrigin, .usesFontLeading]).width) + 34)
+            case .step, .code:
+                // Passo tem comando e saída: quer a largura toda.
+                textWidth = cap
+            case .diff:
+                // Lado a lado precisa de largura: sempre a toda.
+                textWidth = cap
+            case .exchanges:
+                // Sub-conversa é leitura: ocupa a largura toda que a bolha pode ter.
+                textWidth = cap
+            }
+        }
         let headerWidth = name.intrinsicContentSize.width + address.intrinsicContentSize.width
             + time.intrinsicContentSize.width + 50
-        let stepsWidth: CGFloat = steps.isEmpty ? 0 : (expanded ? 420 : 240)
         let quoteMin: CGFloat = quoteView == nil ? 0 : 300
-        // Sub-conversa é leitura: ocupa a largura toda que a bolha pode ter.
-        let exchangesMin: CGFloat = exchangeRows.isEmpty ? 0 : cap
-        return min(cap, max(textWidth, headerWidth, stepsWidth, quoteMin, exchangesMin))
+        let statusMin: CGFloat = live == nil ? 0 : min(cap, status.intrinsicContentSize.width + 34)
+        return min(cap, max(textWidth, headerWidth, quoteMin, statusMin))
     }
 
     override func layout() {
@@ -221,35 +377,33 @@ final class AgentBubbleView: NSView, ThreadBubble {
             y += ChatQuoteView.height
         }
 
-        if !steps.isEmpty {
+        for row in rows {
             y += 8
-            stepsBox.frame = NSRect(x: 13, y: y, width: bounds.width - 26, height: stepsHeight)
-            stepsHeader.frame = NSRect(x: 10, y: 6, width: stepsBox.bounds.width - 20, height: 14)
-            for (index, row) in stepRows.enumerated() {
-                row.frame = NSRect(x: 10, y: 28 + CGFloat(index) * Self.stepRowHeight,
-                                   width: stepsBox.bounds.width - 20, height: Self.stepRowHeight)
+            let height = rowHeight(row, width: bounds.width)
+            switch row {
+            case .text(let field):
+                field.frame = NSRect(x: 13, y: y, width: bounds.width - 26, height: height)
+            case .step(let box, let field), .code(let box, let field):
+                box.frame = NSRect(x: 13, y: y, width: bounds.width - 26, height: height)
+                field.frame = NSRect(x: 10, y: 6, width: box.bounds.width - 20, height: height - 12)
+            case .diff(let view):
+                view.frame = NSRect(x: 13, y: y, width: bounds.width - 26, height: height)
+            case .exchanges(let box, let exchangeRows):
+                box.frame = NSRect(x: 13, y: y, width: bounds.width - 26, height: height)
+                var rowY: CGFloat = 8
+                let rowWidth = box.bounds.width - 20
+                for row in exchangeRows {
+                    let rowHeight = row.height(for: rowWidth)
+                    row.frame = NSRect(x: 10, y: rowY, width: rowWidth, height: rowHeight)
+                    rowY += rowHeight + 6
+                }
             }
-            y += stepsHeight
+            y += height
         }
 
-        if !exchangeRows.isEmpty {
+        if live != nil {
             y += 8
-            let boxHeight = exchangesHeight(width: bounds.width)
-            exchangesBox.frame = NSRect(x: 13, y: y, width: bounds.width - 26, height: boxHeight)
-            var rowY: CGFloat = 8
-            let rowWidth = exchangesBox.bounds.width - 20
-            for row in exchangeRows {
-                let rowHeight = row.height(for: rowWidth)
-                row.frame = NSRect(x: 10, y: rowY, width: rowWidth, height: rowHeight)
-                rowY += rowHeight + 6
-            }
-            y += boxHeight
-        }
-
-        if hasBody {
-            y += 8
-            body.frame = NSRect(x: 13, y: y, width: bounds.width - 26,
-                                height: bodyHeight(width: bounds.width))
+            status.frame = NSRect(x: 13, y: y, width: bounds.width - 26, height: 14)
         }
     }
 }
@@ -258,7 +412,7 @@ final class AgentBubbleView: NSView, ThreadBubble {
 
 /// Uma linha da sub-conversa: "⇄ front → back · 14:24 · 3 passos", o texto que
 /// foi, e — se o destino não é o dono da bolha — o que ele anotou ao atender.
-private final class ExchangeRow: NSView {
+final class ExchangeRow: NSView {
     private let header = NSTextField(labelWithString: "")
     private let text = NSTextField(wrappingLabelWithString: "")
     private let note = NSTextField(wrappingLabelWithString: "")
@@ -284,14 +438,18 @@ private final class ExchangeRow: NSView {
         header.textColor = color
         addSubview(header)
 
-        text.stringValue = exchange.text
-        text.font = .systemFont(ofSize: 12.5)
-        text.textColor = NSColor(calibratedWhite: 0.87, alpha: 1)
+        // Clicar numa label selecionável abre o field editor, e ao sair ele
+        // devolvia o texto SEM atributos: a bolha perdia cor e fonte no clique.
+        text.allowsEditingTextAttributes = true
+        text.attributedStringValue = MarkdownLite.render(
+            exchange.text, font: .systemFont(ofSize: 12.5), color: NSColor(calibratedWhite: 0.87, alpha: 1))
         addSubview(text)
 
-        note.stringValue = "↳ \(exchange.note)"
-        note.font = .systemFont(ofSize: 11.5)
-        note.textColor = NSColor(calibratedWhite: 0.55, alpha: 1)
+        // Clicar numa label selecionável abre o field editor, e ao sair ele
+        // devolvia o texto SEM atributos: a bolha perdia cor e fonte no clique.
+        note.allowsEditingTextAttributes = true
+        note.attributedStringValue = MarkdownLite.render(
+            "↳ " + exchange.note, font: .systemFont(ofSize: 11.5), color: NSColor(calibratedWhite: 0.55, alpha: 1))
         note.isHidden = !hasNote
         addSubview(note)
     }
@@ -300,9 +458,9 @@ private final class ExchangeRow: NSView {
     override var isFlipped: Bool { true }
 
     private func measure(_ field: NSTextField, width: CGFloat) -> CGFloat {
-        ceil(field.attributedStringValue
-            .boundingRect(with: NSSize(width: width - 12 - 8, height: .infinity),
-                          options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
+        guard let cell = field.cell else { return 0 }
+        return ceil(cell.cellSize(forBounds: NSRect(x: 0, y: 0, width: width - 12,
+                                                    height: .greatestFiniteMagnitude)).height)
     }
 
     func height(for width: CGFloat) -> CGFloat {
@@ -329,4 +487,8 @@ protocol ThreadBubble: NSView {
     var alignsRight: Bool { get }
     func width(for available: CGFloat) -> CGFloat
     func height(for width: CGFloat) -> CGFloat
+}
+
+private final class FlippedBox: NSView {
+    override var isFlipped: Bool { true }
 }

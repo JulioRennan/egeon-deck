@@ -8,7 +8,17 @@ import Foundation
 /// são ruído para o chat.
 enum ClaudeTranscript {
     static func parse(_ jsonl: String) -> [ChatTurn] {
+        parseDetailed(jsonl).turns
+    }
+
+    /// O que o agente estava fazendo quando a leitura parou: o tipo do último
+    /// bloco do assistant. `thinking` é raciocínio em curso — vale mostrar
+    /// "pensando…", não o conteúdo (ADR-029).
+    enum LastBlock: Equatable { case text, tool, thinking }
+
+    static func parseDetailed(_ jsonl: String) -> (turns: [ChatTurn], last: LastBlock?) {
         var turns: [ChatTurn] = []
+        var last: LastBlock?
         for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true) {
             // A maior parte do arquivo é attachment e snapshot — linhas enormes
             // que não interessam. Procurar o tipo antes de decodificar JSON é o
@@ -25,12 +35,24 @@ enum ClaudeTranscript {
 
             switch type {
             case "user":
+                // Devolução de ferramenta vem como `user`: não é prompt, é o
+                // resultado de um passo deste turno — encontra o passo pelo id.
+                if let blocks = message["content"] as? [[String: Any]],
+                   blocks.contains(where: { $0["type"] as? String == "tool_result" }) {
+                    guard !turns.isEmpty else { continue }
+                    for block in blocks where block["type"] as? String == "tool_result" {
+                        Self.attach(result: block, structured: entry["toolUseResult"],
+                                    to: &turns[turns.count - 1])
+                    }
+                    continue
+                }
                 guard let raw = Self.promptText(message["content"]),
                       entry["isMeta"] as? Bool != true else { continue }
                 let id = entry["uuid"] as? String ?? "t-\(at.timeIntervalSince1970)-\(turns.count)"
                 let envelope = Self.agentEnvelope(raw)
                 turns.append(ChatTurn(id: id, prompt: envelope?.text ?? raw, promptAt: at,
                                       from: envelope?.from))
+                last = nil
             case "assistant":
                 guard !turns.isEmpty,
                       let blocks = message["content"] as? [[String: Any]] else { continue }
@@ -41,17 +63,24 @@ enum ClaudeTranscript {
                         guard !text.isEmpty else { continue }
                         turns[turns.count - 1].replyText +=
                             (turns[turns.count - 1].replyText.isEmpty ? "" : "\n\n") + text
+                        turns[turns.count - 1].parts.append(.text(text))
                         turns[turns.count - 1].replyAt = at
+                        last = .text
                     case "tool_use":
-                        turns[turns.count - 1].steps.append(Self.step(block))
+                        let step = Self.step(block)
+                        turns[turns.count - 1].steps.append(step)
+                        turns[turns.count - 1].parts.append(.step(step))
                         turns[turns.count - 1].replyAt = at
+                        last = .tool
+                    case "thinking":
+                        last = .thinking
                     default: continue
                     }
                 }
             default: continue
             }
         }
-        return turns
+        return (turns, last)
     }
 
     /// Prompt seu: string, ou blocos de texto. `tool_result` não é prompt, e
@@ -76,47 +105,168 @@ enum ClaudeTranscript {
     }
 
     /// O envelope que o Dispatcher põe em mensagem de outro agente: primeira
-    /// linha `[egeon] mensagem de bancada/id`, o texto, e um rodapé fixo de
-    /// aviso. Devolve quem mandou e só o texto.
+    /// linha `[egeon] mensagem de bancada/id` e o texto. Devolve quem mandou e
+    /// só o texto.
     static func agentEnvelope(_ prompt: String) -> (from: String, text: String)? {
         let header = "[egeon] mensagem de "
         guard prompt.hasPrefix(header) else { return nil }
         var lines = prompt.split(separator: "\n", omittingEmptySubsequences: false)
         let from = String(lines.removeFirst().dropFirst(header.count))
             .trimmingCharacters(in: .whitespaces)
-        if let trailer = lines.firstIndex(where: { $0.hasPrefix("Quem escreveu foi outro agente") }) {
-            lines = Array(lines[..<trailer])
-        }
         let text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return (from, text)
     }
 
+    /// O passo como o terminal o mostra: a linha, o comando por extenso, e —
+    /// para edição — o diff já na hora do `tool_use`, antes de o resultado
+    /// voltar: é o que se quer acompanhar ao vivo.
     private static func step(_ block: [String: Any]) -> ChatStep {
         let name = block["name"] as? String ?? "?"
         let input = block["input"] as? [String: Any] ?? [:]
+        let id = block["id"] as? String
         switch name {
         case "Bash":
             let command = input["command"] as? String ?? ""
             if let target = Self.sendTarget(in: command) {
-                return ChatStep(glyph: "⇄", text: "egeon send \(target)", sendTo: target)
+                return ChatStep(glyph: "⇄", text: "egeon send \(target)", sendTo: target, toolId: id,
+                                detail: Self.heredocBody(of: command))
             }
-            return ChatStep(glyph: "$", text: input["description"] as? String
-                            ?? (command.isEmpty ? "bash" : command))
-        case "Edit", "Write", "MultiEdit", "NotebookEdit":
-            return ChatStep(glyph: "±", text: Self.shortPath(input["file_path"] as? String))
+            let description = input["description"] as? String
+            return ChatStep(glyph: "$", text: description ?? (command.isEmpty ? "bash" : command),
+                            toolId: id, detail: description == nil ? nil : command)
+        case "Edit":
+            return ChatStep(glyph: "±", text: Self.shortPath(input["file_path"] as? String), toolId: id,
+                            diff: Self.diff(old: input["old_string"] as? String ?? "",
+                                            new: input["new_string"] as? String ?? ""))
+        case "MultiEdit":
+            let edits = input["edits"] as? [[String: Any]] ?? []
+            let lines = edits.flatMap { edit in
+                Self.diff(old: edit["old_string"] as? String ?? "", new: edit["new_string"] as? String ?? "") ?? []
+            }
+            return ChatStep(glyph: "±", text: Self.shortPath(input["file_path"] as? String), toolId: id,
+                            diff: Self.cappedDiff(lines))
+        case "Write":
+            let content = input["content"] as? String ?? ""
+            let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map { "+" + $0 }
+            return ChatStep(glyph: "±", text: Self.shortPath(input["file_path"] as? String), toolId: id,
+                            diff: Self.cappedDiff(lines))
+        case "NotebookEdit":
+            return ChatStep(glyph: "±", text: Self.shortPath(input["notebook_path"] as? String), toolId: id)
         case "Read":
-            return ChatStep(glyph: "→", text: "read \(Self.shortPath(input["file_path"] as? String))")
+            return ChatStep(glyph: "→", text: "read \(Self.shortPath(input["file_path"] as? String))",
+                            toolId: id)
         default:
-            return ChatStep(glyph: "→", text: name)
+            return ChatStep(glyph: "→", text: name, toolId: id, detail: Self.compactInput(input))
         }
+    }
+
+    /// Diff sem LCS: o `old_string` de um Edit é curto e localizado; `-` para o
+    /// que saiu, `+` para o que entrou é o que o terminal mostra também. O
+    /// `structuredPatch` do resultado, com contexto, substitui isto ao chegar.
+    static func diff(old: String, new: String) -> [String]? {
+        var lines: [String] = []
+        if !old.isEmpty {
+            lines += old.split(separator: "\n", omittingEmptySubsequences: false).map { "-" + $0 }
+        }
+        if !new.isEmpty {
+            lines += new.split(separator: "\n", omittingEmptySubsequences: false).map { "+" + $0 }
+        }
+        return cappedDiff(lines)
+    }
+
+    /// Vazio é nil: edição sem texto não tem diff a mostrar.
+    private static func cappedDiff(_ lines: [String]) -> [String]? {
+        guard !lines.isEmpty else { return nil }
+        guard lines.count > ChatStep.maxDiffLines else { return lines }
+        return Array(lines.prefix(ChatStep.maxDiffLines)) + ["… +\(lines.count - ChatStep.maxDiffLines) linhas"]
+    }
+
+    /// O texto de um `egeon send … <<'MB' … MB`: o que foi dito, sem a moldura.
+    private static func heredocBody(of command: String) -> String? {
+        let lines = command.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.count > 2 else { return nil }
+        return lines.dropFirst().dropLast().joined(separator: "\n")
+    }
+
+    /// Entrada de ferramenta genérica em uma linha por chave, sem afogar:
+    /// `pattern: foo · path: app/` diz o que o Grep procurou.
+    private static func compactInput(_ input: [String: Any]) -> String? {
+        let pairs = input.keys.sorted().compactMap { key -> String? in
+            guard let value = input[key] else { return nil }
+            let text: String
+            if let string = value as? String { text = string }
+            else if let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]),
+                    let string = String(data: data, encoding: .utf8) { text = string }
+            else { text = "\(value)" }
+            let oneLine = text.replacingOccurrences(of: "\n", with: " ")
+            return "\(key): \(oneLine.count > 160 ? String(oneLine.prefix(160)) + "…" : oneLine)"
+        }
+        return pairs.isEmpty ? nil : pairs.joined(separator: "\n")
+    }
+
+    /// Casa o resultado com o passo pelo `tool_use_id` e guarda a prévia. O
+    /// `toolUseResult` estruturado vale mais que o texto: `stdout`/`stderr`
+    /// do Bash sem a moldura, o `structuredPatch` do Edit com contexto, o
+    /// número de linhas do Read em vez do arquivo inteiro.
+    private static func attach(result block: [String: Any], structured: Any?, to turn: inout ChatTurn) {
+        guard let id = block["tool_use_id"] as? String,
+              let index = turn.parts.lastIndex(where: {
+                  if case .step(let step) = $0 { return step.toolId == id } else { return false }
+              }),
+              case .step(var step) = turn.parts[index] else { return }
+        let isError = block["is_error"] as? Bool == true
+        var output: String?
+        let payload = structured as? [String: Any]
+        if let payload, let patch = payload["structuredPatch"] as? [[String: Any]], !patch.isEmpty {
+            // Com o cabeçalho `@@` de cada trecho: é dele que a vista lado a
+            // lado tira o número de linha de cada versão.
+            let lines = patch.flatMap { hunk -> [String] in
+                let header = DiffHunk.header(oldStart: hunk["oldStart"] as? Int ?? 0,
+                                             oldLines: hunk["oldLines"] as? Int ?? 0,
+                                             newStart: hunk["newStart"] as? Int ?? 0,
+                                             newLines: hunk["newLines"] as? Int ?? 0)
+                return [header] + (hunk["lines"] as? [String] ?? [])
+            }
+            step.diff = cappedDiff(lines) ?? step.diff
+        }
+        if let payload, let file = payload["file"] as? [String: Any], let n = file["numLines"] as? Int {
+            output = "\(n) linha\(n == 1 ? "" : "s")"
+                + ((file["totalLines"] as? Int).map { $0 > n ? " de \($0)" : "" } ?? "")
+        } else if let payload, payload["stdout"] != nil || payload["stderr"] != nil {
+            let out = (payload["stdout"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let err = (payload["stderr"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            output = [out, err].filter { !$0.isEmpty }.joined(separator: "\n")
+        } else if step.glyph == "±" {
+            output = nil
+        } else if let text = block["content"] as? String {
+            output = text
+        } else if let blocks = block["content"] as? [[String: Any]] {
+            let texts = blocks.compactMap { b -> String? in
+                switch b["type"] as? String {
+                case "text": return b["text"] as? String
+                case "image": return "[imagem]"
+                default: return nil
+                }
+            }
+            output = texts.joined(separator: "\n")
+        }
+        if isError, output == nil || output?.isEmpty == true, let text = block["content"] as? String {
+            output = text
+        }
+        step.output = output.map { ChatStep.capped($0) }.flatMap { $0.isEmpty ? nil : $0 }
+        step.isError = isError
+        turn.parts[index] = .step(step)
+        if let stepIndex = turn.steps.lastIndex(where: { $0.toolId == id }) { turn.steps[stepIndex] = step }
     }
 
     /// O endereço num `egeon send <bancada/id>`, se o comando for um.
     static func sendTarget(in command: String) -> String? {
-        guard let range = command.range(of: #"egeon\s+send\s+(\S+)"#, options: .regularExpression)
-        else { return nil }
-        let match = command[range]
-        return match.split(separator: " ", omittingEmptySubsequences: true).last.map(String.init)
+        // Só espaço e tab entre as palavras, e o alvo sem `<`: num heredoc
+        // torto, `send\nMB` e `send <<'MB'` passavam por endereço.
+        guard let regex = try? NSRegularExpression(pattern: #"egeon[ \t]+send[ \t]+([^\s<]+)"#),
+              let match = regex.firstMatch(in: command, range: NSRange(command.startIndex..., in: command)),
+              let range = Range(match.range(at: 1), in: command) else { return nil }
+        return String(command[range])
     }
 
     private static func shortPath(_ path: String?) -> String {
@@ -165,6 +315,30 @@ enum ClaudeTranscript {
         }
         guard let whole = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         return parse(whole).last
+    }
+
+    /// O turno EM CURSO, para a bolha ao vivo (ADR-039): a cadeia até onde o
+    /// CLI já gravou, e o que ele estava fazendo no fim dela.
+    ///
+    /// Diferente de `lastTurn`, não cai para o arquivo inteiro: isto roda a
+    /// cada mudança do transcript durante o turno, e um transcript de dezenas
+    /// de MB relido a cada segundo pesaria. Turno mais velho que o `prompt`
+    /// deste (a cauda cortou a linha do prompt, ou a linha ainda não foi
+    /// gravada) devolve nil, e a bolha fica em "trabalhando…".
+    struct LiveTurn: Equatable {
+        var turn: ChatTurn
+        var last: LastBlock?
+    }
+
+    static func liveTurn(at url: URL, notBefore: Date?,
+                         tailBytes: Int = 4 * 1024 * 1024) -> LiveTurn? {
+        guard let text = tail(of: url, bytes: tailBytes) else { return nil }
+        let parsed = parseDetailed(text)
+        guard let turn = parsed.turns.last else { return nil }
+        // Folga porque o gancho `prompt` e a linha do prompt nascem no mesmo
+        // segundo, em ordem que não se controla.
+        if let notBefore, turn.promptAt < notBefore.addingTimeInterval(-5) { return nil }
+        return LiveTurn(turn: turn, last: parsed.last)
     }
 
     private static func tail(of url: URL, bytes: Int) -> String? {

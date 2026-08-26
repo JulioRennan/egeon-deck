@@ -25,6 +25,8 @@ app/Sources/EgeonDeck/
 ├── Features/
 │   ├── Canvas/          grid, arestas (EdgeController), toolbar
 │   ├── Chat/            o modo chat — participantes, composer, thread
+│   ├── Code/            código como texto — DiffHunk/DiffView (lado a lado),
+│   │                    Language (por extensão), SyntaxLite (realce por linha)
 │   ├── Dispatch/        fila, injeção, Target, guardas de cadeia
 │   ├── Home/            RootView, ViewToolbar, WorkbenchShell, Sidebar
 │   ├── Mosaic/          o modo mosaico
@@ -62,7 +64,10 @@ app/Sources/EgeonDeck/
   montado por baixo, coberto (o pty precisa do passe de layout).
 - **Chat** — spec em `docs/03-spec-chat.md`. Participantes com cor própria e
   estado, composer estilo Slack, envio real, thread por turno com passos e
-  citações. A thread sai do **histórico do app** (`ChatHistory`,
+  citações. A bolha desenha a **cadeia** do turno na ordem (prosa, grupo de
+  passos, prosa — `ChatTurn.parts`) e cresce ao vivo enquanto o agente
+  trabalha, lendo a cauda do transcript dele só nesse intervalo (ADR-039). O
+  que já fechou sai do **histórico do app** (`ChatHistory`,
   `workbenches/<id>/chat.jsonl`, gravado no `Stop`), não do transcript do
   CLI. Botão de limpar a bancada (barra lateral, botão direito): `clear` do perfil em cada
   agente + chat arquivado como `chat-archive/chat-<início>_<fim>.jsonl` e trilha
