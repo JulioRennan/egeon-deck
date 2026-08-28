@@ -21,6 +21,20 @@ enum ChatLive: Equatable {
     }
 }
 
+/// Quanto de uma sequência de passos está à vista. O clique na capa avança um
+/// nível e volta ao começo depois do último (ADR-049).
+enum ChatGroupLevel: Int, Equatable {
+    /// Só a capa: "3 passos · echo três".
+    case summary = 0
+    /// A capa e os títulos dos passos.
+    case titles = 1
+    /// Tudo aberto: cada passo com comando e saída.
+    case details = 2
+
+    var next: ChatGroupLevel { ChatGroupLevel(rawValue: (rawValue + 1) % 3) ?? .summary }
+    var showsSteps: Bool { self != .summary }
+}
+
 /// Uma linha da thread. A tabela desenha linha por linha e só o que está na
 /// tela; a bolha é o conjunto de linhas com o mesmo `messageKey` — a primeira
 /// arredonda em cima, a última embaixo (ADR-042). O `id` é estável entre
@@ -44,6 +58,9 @@ struct ChatBlock: Equatable {
         /// tamanho da saída); aberto mostra comando e saída. O diff aberto é
         /// `.diff`; recolhido, é um `.step` como os outros.
         case step(from: ChatParticipant, step: ChatStep, expanded: Bool)
+        /// A capa de uma sequência de passos: "3 passos · echo três". O clique
+        /// aprofunda — resumo, títulos, tudo aberto (ADR-049).
+        case group(from: ChatParticipant, count: Int, last: String, level: ChatGroupLevel)
         case diff(from: ChatParticipant, file: String, diff: [String])
         /// A linha de status no fim da bolha ao vivo.
         case status(from: ChatParticipant, live: ChatLive)
@@ -62,17 +79,19 @@ struct ChatBlock: Equatable {
     var boxTop = true
     var boxBottom = true
 
-    /// Só passo se junta ao vizinho; bloco de código fica na sua caixa.
+    /// Passo e a capa do grupo dele dividem caixa; bloco de código fica na sua.
     var groupsWithNeighbours: Bool {
-        if case .step = kind { return true }
-        return false
+        switch kind {
+        case .step, .group: return true
+        default:            return false
+        }
     }
 
     var participant: ChatParticipant {
         switch kind {
         case .prompt(let to, _, _, _, _, _, _): return to
         case .header(let from, _, _), .prose(let from, _), .code(let from, _, _),
-             .step(let from, _, _), .diff(let from, _, _), .status(let from, _),
+             .step(let from, _, _), .group(let from, _, _, _), .diff(let from, _, _), .status(let from, _),
              .typing(let from):                 return from
         }
     }
@@ -93,7 +112,8 @@ enum ChatBlocks {
     static func build(messages: [ChatMessage],
                       live: [String: (turnId: String, status: ChatLive)],
                       typing: [ChatParticipant],
-                      expanded: Set<String> = []) -> [ChatBlock] {
+                      expanded: Set<String> = [],
+                      groups: [String: ChatGroupLevel] = [:]) -> [ChatBlock] {
         var out: [ChatBlock] = []
         for (index, message) in messages.enumerated() {
             let key = message.key
@@ -118,27 +138,52 @@ enum ChatBlocks {
                                                     at: status == nil ? (turn.replyAt ?? turn.promptAt) : nil,
                                                     quote: quote))]
                 var index = 0
-                func add(_ kind: Kind) {
-                    rows.append(ChatBlock(id: "b|\(turn.id)|\(index)", messageKey: key, kind: kind))
-                    index += 1
+                func add(_ kind: Kind, id: String? = nil) {
+                    rows.append(ChatBlock(id: id ?? "b|\(turn.id)|\(index)", messageKey: key, kind: kind))
+                    if id == nil { index += 1 }
+                }
+                /// Passos seguidos com nada entre eles: dois ou mais ganham
+                /// capa, e a capa decide quanto deles aparece.
+                var run: [(ChatStep, String)] = []
+                func flushRun() {
+                    defer { run = [] }
+                    guard !run.isEmpty else { return }
+                    guard run.count > 1 else {
+                        let (step, id) = run[0]
+                        add(.step(from: agent, step: step,
+                                  expanded: !step.isExpandable || expanded.contains(id)), id: id)
+                        return
+                    }
+                    let groupId = "g|\(run[0].1.dropFirst(2))"
+                    let level = groups[groupId] ?? .summary
+                    add(.group(from: agent, count: run.count, last: run[run.count - 1].0.text,
+                               level: level), id: groupId)
+                    guard level.showsSteps else { return }
+                    for (step, id) in run {
+                        add(.step(from: agent, step: step,
+                                  expanded: !step.isExpandable || level == .details
+                                      || expanded.contains(id)), id: id)
+                    }
                 }
                 for part in turn.chain {
                     switch part {
                     case .text(let text):
+                        flushRun()
                         for kind in split(text, from: agent) { add(kind) }
                     case .step(let step):
                         // Diff nunca recolhe: ver o que mudou no arquivo é o
                         // que sempre interessa — é o passo de comando, com o
                         // seu despejo de saída, que nasce só no título.
                         if let diff = step.diff, !diff.isEmpty {
+                            flushRun()
                             add(.diff(from: agent, file: step.text, diff: diff))
                         } else {
-                            add(.step(from: agent, step: step,
-                                      expanded: !step.isExpandable
-                                          || expanded.contains("b|\(turn.id)|\(index)")))
+                            run.append((step, "b|\(turn.id)|\(index)"))
+                            index += 1
                         }
                     }
                 }
+                flushRun()
                 if let status { rows.append(ChatBlock(id: "s|\(turn.id)", messageKey: key,
                                                       kind: .status(from: agent, live: status))) }
                 out += rows

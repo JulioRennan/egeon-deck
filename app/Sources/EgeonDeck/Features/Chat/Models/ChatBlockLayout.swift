@@ -74,6 +74,8 @@ enum ChatBlockLayout {
             return MarkdownLite.renderCode(language, code, font: codeFont)
         case .step(_, let step, let expanded):
             return render(step, expanded: expanded)
+        case .group(_, let count, let last, let level):
+            return renderGroup(count: count, last: last, level: level)
         case .header, .diff, .status, .typing:
             return nil
         }
@@ -149,6 +151,24 @@ enum ChatBlockLayout {
                 out.append(CodePalette.attributed(String(l), language: language, font: small,
                                                   base: step.isError ? removed : NSColor(calibratedWhite: 0.62, alpha: 1)))
             }
+        }
+        return out
+    }
+
+    /// A capa de uma sequência de passos. Fechada diz quantos são e onde a
+    /// sequência parou; aberta é só o contador — os títulos vêm abaixo.
+    static func renderGroup(count: Int, last: String, level: ChatGroupLevel) -> NSAttributedString {
+        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        let dim = NSColor(calibratedWhite: 0.5, alpha: 1)
+        let out = NSMutableAttributedString(
+            string: level == .summary ? "▸ " : "▾ ",
+            attributes: [.font: font, .foregroundColor: dim])
+        out.append(NSAttributedString(
+            string: "⚙  \(count) passos",
+            attributes: [.font: font, .foregroundColor: NSColor(calibratedWhite: 0.7, alpha: 1)]))
+        let tail = level == .summary ? "  ·  \(last)" : (level == .details ? "  ·  detalhes" : "")
+        if !tail.isEmpty {
+            out.append(NSAttributedString(string: tail, attributes: [.font: font, .foregroundColor: dim]))
         }
         return out
     }
@@ -244,7 +264,7 @@ enum ChatBlockLayout {
                 let address = size(of: NSAttributedString(string: from.address, attributes: [.font: addressFont]), width: cap).width
                 let time = size(of: NSAttributedString(string: "agora", attributes: [.font: timeFont]), width: cap).width
                 width = max(width, name + address + time + 50 + labelSlack * 3)
-            case .prose, .step, .code:
+            case .prose, .step, .code, .group:
                 let text = attributed(block.kind) ?? NSAttributedString()
                 texts[block.id] = text
                 let natural = size(of: text, width: cap - textInset * 2).width
@@ -267,7 +287,7 @@ enum ChatBlockLayout {
                 height = 10 + headerHeight + (quote == nil ? 0 : 8 + quoteHeight)
             case .prose:
                 height = rowGap + size(of: texts[block.id]!, width: width - textInset * 2).height
-            case .step, .code:
+            case .step, .code, .group:
                 let inner = width - textInset * 2 - 20
                 height = (block.boxTop ? rowGap + boxPadding : stepGap)
                     + size(of: texts[block.id]!, width: inner).height
@@ -287,10 +307,10 @@ enum ChatBlockLayout {
         return rows
     }
 
-    /// Passo e bloco de código ficam numa caixa dentro da bolha.
+    /// Passo, capa de grupo e bloco de código ficam numa caixa dentro da bolha.
     static func isBoxed(_ kind: ChatBlock.Kind) -> Bool {
         switch kind {
-        case .step, .code: return true
+        case .step, .code, .group: return true
         default: return false
         }
     }

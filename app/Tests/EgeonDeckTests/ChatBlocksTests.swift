@@ -63,10 +63,10 @@ final class ChatBlocksTests: XCTestCase {
         XCTAssertEqual(open.map(\.id), closed.map(\.id), "abrir não muda o id")
     }
 
-    /// Passos seguidos dividem uma caixa: só o primeiro arredonda em cima e só
-    /// o último embaixo. Prosa, diff ou uma bolha nova cortam o grupo, e bloco
-    /// de código fica na caixa dele.
-    func testContiguousStepsShareOneBox() {
+    /// Passos seguidos viram uma CAPA — "3 passos · três" — e o clique nela
+    /// aprofunda: capa, títulos, tudo aberto, capa de novo. Um passo sozinho
+    /// não ganha capa, e prosa, diff ou código cortam a sequência.
+    func testContiguousStepsCollapseIntoOneGroup() {
         let front = agent("front")
         var turn = ChatTurn(id: "u1", prompt: "faz", promptAt: t0)
         turn.parts = [.step(ChatStep(glyph: "$", text: "um", detail: "a")),
@@ -75,19 +75,35 @@ final class ChatBlocksTests: XCTestCase {
                       .text("No meio.\n\n```swift\nlet a = 1\n```"),
                       .step(ChatStep(glyph: "$", text: "quatro", detail: "d"))]
         turn.replyAt = t0.addingTimeInterval(9)
-        let blocks = ChatBlocks.build(messages: [.reply(from: front, turn: turn)], live: [:], typing: [])
-        let boxes = blocks.map { "\($0.boxTop ? "┌" : "·")\($0.boxBottom ? "┘" : "·")" }
-        //          header  passo  passo  passo  prosa  código  passo
-        XCTAssertEqual(boxes, ["┌┘", "┌·", "··", "·┘", "┌┘", "┌┘", "┌┘"])
+        let messages: [ChatMessage] = [.reply(from: front, turn: turn)]
 
-        // Dois turnos seguidos não emendam a caixa de um no outro.
-        var next = ChatTurn(id: "u2", prompt: "de novo", promptAt: t0.addingTimeInterval(60))
-        next.parts = [.step(ChatStep(glyph: "$", text: "cinco", detail: "e"))]
-        next.replyAt = t0.addingTimeInterval(70)
-        let two = ChatBlocks.build(messages: [.reply(from: front, turn: turn),
-                                              .reply(from: front, turn: next)], live: [:], typing: [])
-        let last = two.suffix(2)
-        XCTAssertTrue(last.allSatisfy { $0.boxTop && $0.boxBottom })
+        let summary = ChatBlocks.build(messages: messages, live: [:], typing: [])
+        XCTAssertEqual(summary.map(\.id), ["h|u1", "g|u1|0", "b|u1|3", "b|u1|4", "b|u1|5"])
+        guard case .group(_, 3, "três", .summary) = summary[1].kind
+        else { return XCTFail("capa: \(summary[1].kind)") }
+        guard case .step(_, let alone, false) = summary[4].kind, alone.text == "quatro"
+        else { return XCTFail("passo sozinho não tem capa: \(summary[4].kind)") }
+
+        // Um clique: a capa e os três títulos, tudo numa caixa só.
+        let titles = ChatBlocks.build(messages: messages, live: [:], typing: [],
+                                      groups: ["g|u1|0": .titles])
+        XCTAssertEqual(titles.map(\.id),
+                       ["h|u1", "g|u1|0", "b|u1|0", "b|u1|1", "b|u1|2", "b|u1|3", "b|u1|4", "b|u1|5"])
+        XCTAssertEqual(titles[1...4].map { "\($0.boxTop ? "┌" : "·")\($0.boxBottom ? "┘" : "·")" },
+                       ["┌·", "··", "··", "·┘"])
+        XCTAssertTrue(titles[2...4].allSatisfy {
+            if case .step(_, _, let open) = $0.kind { return !open } else { return false }
+        }, "no primeiro clique os passos ainda são só título")
+
+        // Outro clique: cada passo com comando e saída.
+        let details = ChatBlocks.build(messages: messages, live: [:], typing: [],
+                                       groups: ["g|u1|0": .details])
+        XCTAssertTrue(details[2...4].allSatisfy {
+            if case .step(_, _, let open) = $0.kind { return open } else { return false }
+        })
+        XCTAssertEqual(ChatGroupLevel.summary.next, .titles)
+        XCTAssertEqual(ChatGroupLevel.titles.next, .details)
+        XCTAssertEqual(ChatGroupLevel.details.next, .summary, "o ciclo volta ao começo")
     }
 
     func testLiveTurnGetsStatusRowAndNoTime() {

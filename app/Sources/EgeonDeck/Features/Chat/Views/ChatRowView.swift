@@ -197,7 +197,8 @@ final class ChatTextRow: ChatRowView {
         path.stroke()
     }
 
-    /// Passo aberto — o que tem miolo para separar do cabeçalho.
+    /// Passo aberto — o que tem miolo para separar do cabeçalho. A capa do
+    /// grupo não tem miolo: o que ela abre são as linhas seguintes.
     private var expandedStep: Bool {
         guard let block, case .step(_, let step, let open) = block.kind else { return false }
         return open && step.isExpandable
@@ -207,8 +208,13 @@ final class ChatTextRow: ChatRowView {
     /// de borda a borda da caixa. É ela que alterna; o resto continua texto
     /// selecionável — o comando aberto é para copiar.
     var toggleRect: NSRect? {
-        guard let block, case .step(_, let step, _) = block.kind, step.isExpandable,
-              let box = boxRect else { return nil }
+        guard let block, let box = boxRect else { return nil }
+        switch block.kind {
+        case .step(_, let step, _) where step.isExpandable: break
+        // A capa do grupo é toda cabeçalho: uma linha, e o clique nela avança.
+        case .group: break
+        default: return nil
+        }
         var line: CGFloat = 16
         if let manager = text.layoutManager, manager.numberOfGlyphs > 0 {
             line = manager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height

@@ -3030,3 +3030,30 @@ redimensionar (cruz), a linha morta da coluna de participantes e a pilha de
 **Verificação:** `HandCursorTests` olha em tempo de execução se cada classe
 clicável sobrescreve `resetCursorRects` — é o que pega a view nova que nasceu
 muda e a regressão de quem perdeu o override.
+
+## ADR-049 — A sequência de passos tem capa, e o clique aprofunda
+
+A ADR-047 juntou os passos contíguos numa caixa só, o que tirou as bordas mas
+não o volume: sete comandos continuavam sete linhas entre um parágrafo e
+outro. Agora a sequência é **uma linha** — a capa: `⚙ 3 passos · echo três`,
+com o título do último para dizer onde aquilo parou.
+
+**O clique na capa aprofunda um nível, e volta ao começo depois do último**
+(`ChatGroupLevel`):
+
+1. `summary` — só a capa (o estado em que tudo nasce);
+2. `titles` — a capa e os títulos dos passos, cada um clicável como sempre;
+3. `details` — todos abertos, com comando e saída.
+
+Voltar ao resumo esquece o que estava aberto lá dentro: a capa fechada é
+estado limpo. Quais passos são "dela" não sai do id — sai da montagem, são as
+linhas de passo logo abaixo dela.
+
+**Um passo sozinho não ganha capa** (seria uma linha para esconder uma linha),
+e prosa, diff ou bloco de código cortam a sequência, como na ADR-047. O nível
+vive no `ChatContainer` (`groupLevels`), fora do histórico, como o
+`expandedSteps`: é como você está olhando, não o que aconteceu.
+
+**Verificação:** `ChatBlocksTests.testContiguousStepsCollapseIntoOneGroup` e
+`ChatStepToggleTests.testClickingTheGroupCoverCyclesTheLevels` — o ciclo
+completo pelo container, inclusive a limpeza ao fechar.

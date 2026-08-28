@@ -109,6 +109,61 @@ final class ChatStepToggleTests: XCTestCase {
                        accuracy: 0.05, "o cabeçalho é o mesmo, aberto ou fechado")
     }
 
+    /// O clique na capa avança o nível no container, e voltar ao resumo
+    /// esquece o que estava aberto lá dentro.
+    func testClickingTheGroupCoverCyclesTheLevels() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("chat-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = ChatHistory(workbenches: root)
+        var turn = ChatTurn(id: "u1", prompt: "faz", promptAt: t0)
+        let steps = [ChatStep(glyph: "$", text: "um", detail: "a", output: "1"),
+                     ChatStep(glyph: "$", text: "dois", detail: "b", output: "2")]
+        turn.steps = steps
+        turn.parts = steps.map(ChatPart.step)
+        turn.replyText = "ok"
+        turn.parts.append(.text("ok"))
+        turn.replyAt = t0.addingTimeInterval(2)
+        history.append(ChatRecord(node: "a", turn: turn), workbench: "w")
+        history.flush()
+
+        let container = ChatContainer(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
+        container.participants = { [self.front] }
+        container.historyFile = { history.current(forWorkbench: "w") }
+        container.needsLayout = true
+        container.layoutSubtreeIfNeeded()
+        container.refresh()
+        settle { container.thread.blocks.contains { $0.id == "g|u1|0" } }
+
+        func cover() throws -> ChatBlock {
+            try XCTUnwrap(container.thread.blocks.first { $0.id == "g|u1|0" })
+        }
+        func level() -> ChatGroupLevel? { container.groupLevels["g|u1|0"] }
+        XCTAssertEqual(container.thread.blocks.filter { $0.id.hasPrefix("b|") }.count, 1,
+                       "no resumo só a prosa acompanha a capa")
+
+        container.toggleStep(try cover())
+        settle { level() == .titles && container.thread.blocks.contains { $0.id == "b|u1|0" } }
+        XCTAssertEqual(level(), .titles)
+
+        // Um passo aberto à mão dentro do grupo.
+        container.toggleStep(id: "b|u1|0")
+        settle { container.expandedSteps.contains("b|u1|0") }
+
+        container.toggleStep(try cover())
+        settle { container.thread.blocks.contains {
+            if case .step(_, _, let open) = $0.kind { return open } else { return false } } }
+        XCTAssertEqual(level(), .details)
+        XCTAssertTrue(container.thread.blocks.contains {
+            if case .step(_, _, let open) = $0.kind { return open } else { return false }
+        })
+
+        container.toggleStep(try cover())
+        settle { !container.thread.blocks.contains { $0.id == "b|u1|0" } }
+        XCTAssertEqual(level(), .summary)
+        XCTAssertEqual(container.expandedSteps, [], "fechar a capa limpa o que estava aberto dentro")
+        XCTAssertFalse(container.thread.blocks.contains { $0.id == "b|u1|0" })
+    }
+
     func testRowTogglesOnlyOnTheTitleStrip() throws {
         let step = ChatStep(glyph: "$", text: "Roda", detail: "swift test", output: "ok\nok")
         let closed = ChatBlock(id: "b|u1|0", messageKey: "r|u1",

@@ -169,7 +169,7 @@ final class ChatThreadController: NSObject, NSTableViewDataSource, NSTableViewDe
         switch block.kind {
         case .prompt:            identifier = ChatPromptRow.identifier
         case .header, .typing:   identifier = ChatHeaderRow.identifier
-        case .prose, .code, .step: identifier = ChatTextRow.identifier
+        case .prose, .code, .step, .group: identifier = ChatTextRow.identifier
         case .diff:              identifier = ChatDiffRow.identifier
         case .status:            identifier = ChatStatusRow.identifier
         }

@@ -92,6 +92,8 @@ final class ChatContainer: NSView {
     /// Os passos que você abriu, por id de bloco — estável entre montagens.
     /// Tudo o mais fica só no título; a montagem seguinte reflete a troca.
     private(set) var expandedSteps: Set<String> = []
+    /// Quanto de cada sequência de passos está à vista (ADR-049).
+    private(set) var groupLevels: [String: ChatGroupLevel] = [:]
     private var expandedVersion = 0
     /// Abrir um passo não é mensagem nova: a thread não deve correr para o
     /// fim por causa disso, mesmo que você esteja lá.
@@ -109,7 +111,23 @@ final class ChatContainer: NSView {
     }
 
     func toggleStep(_ block: ChatBlock) {
-        if expandedSteps.contains(block.id) { expandedSteps.remove(block.id) } else { expandedSteps.insert(block.id) }
+        if case .group(_, _, _, let level) = block.kind {
+            let next = level.next
+            groupLevels[block.id] = next
+            // Voltar ao resumo esquece o que você tinha aberto lá dentro: a
+            // capa fechada é o estado limpo. Quais são os passos dela não sai
+            // do id — sai da montagem: são as linhas de passo logo abaixo.
+            if next == .summary, let start = thread.blocks.firstIndex(where: { $0.id == block.id }) {
+                for below in thread.blocks[(start + 1)...] {
+                    guard case .step = below.kind else { break }
+                    expandedSteps.remove(below.id)
+                }
+            }
+        } else if expandedSteps.contains(block.id) {
+            expandedSteps.remove(block.id)
+        } else {
+            expandedSteps.insert(block.id)
+        }
         expandedVersion += 1
         holdBottom = true
         refresh()
@@ -386,6 +404,7 @@ final class ChatContainer: NSView {
         /// Quantas mensagens do fim entram.
         let window: Int
         let expanded: Set<String>
+        let groups: [String: ChatGroupLevel]
     }
     private struct ThreadOutput {
         let messages: [ChatMessage]
@@ -419,10 +438,11 @@ final class ChatContainer: NSView {
         }
         let input = ThreadInput(participants: all, records: records(), live: live, pending: pending,
                                 width: thread.width, known: thread.bubbleMetrics, window: loadedMessages,
-                                expanded: expandedSteps)
+                                expanded: expandedSteps, groups: groupLevels)
         // O tique de 1 s chega sem nada ter mudado: só monta quando alguma
         // entrada mudou de fato.
         let signature = "\(historyVersion)|\(liveVersion)|\(input.width)|\(loadedMessages)|\(expandedVersion)|"
+            + groupLevels.map { "\($0.key):\($0.value.rawValue)" }.sorted().joined(separator: ",") + "|"
             + pending.map { "\($0.sentAt.timeIntervalSince1970)" }.joined(separator: ",") + "|"
             + all.map { "\($0.id):\($0.activity)" }.joined(separator: ",")
         guard signature != buildSignature else { return }
@@ -471,7 +491,8 @@ final class ChatContainer: NSView {
             }
         }
         let blocks = ChatBlocks.build(messages: Array(built.messages.suffix(input.window)),
-                                      live: liveByAgent, typing: typing, expanded: input.expanded)
+                                      live: liveByAgent, typing: typing, expanded: input.expanded,
+                                      groups: input.groups)
         let metrics = ChatBlockLayout.measure(blocks, width: input.width, known: input.known)
         return ThreadOutput(messages: built.messages, pending: built.pending,
                             blocks: blocks, metrics: metrics)
@@ -622,6 +643,9 @@ final class ChatContainer: NSView {
                 case .step(_, let step, let open):
                     kind = "step"
                     expanded = open || !step.isExpandable
+                case .group(_, _, _, let level):
+                    kind = "group:\(level.rawValue)"
+                    expanded = level.showsSteps
                 }
                 return ["id": block.id, "kind": kind, "expanded": expanded]
             },
