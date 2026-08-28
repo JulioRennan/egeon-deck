@@ -27,16 +27,21 @@ struct ChatRowMetrics: Equatable {
 /// (ADR-042). A linha desenha com o MESMO TextKit (container sem folga,
 /// inset zero), para a altura medida ser a altura desenhada.
 enum ChatBlockLayout {
-    static let gap: CGFloat = 12
+    /// Vão entre uma bolha e a próxima.
+    static let gap: CGFloat = 18
     static let sideInset: CGFloat = 18
-    static let textInset: CGFloat = 13
+    /// Respiro do texto até a borda da bolha, dos dois lados.
+    static let textInset: CGFloat = 16
+    /// Respiro do topo da bolha até a primeira linha, e da última até a base.
+    static let topPad: CGFloat = 12
+    static let bottomPad: CGFloat = 14
     static let agentMaxWidth: CGFloat = 660
     static let promptMaxWidth: CGFloat = 560
     static let quoteHeight: CGFloat = 52
-    static let boxPadding: CGFloat = 6
-    static let rowGap: CGFloat = 8
+    static let boxPadding: CGFloat = 8
+    static let rowGap: CGFloat = 10
     /// Respiro entre dois passos que dividem a mesma caixa.
-    static let stepGap: CGFloat = 5
+    static let stepGap: CGFloat = 7
     static let headerHeight: CGFloat = 16
     static let statusHeight: CGFloat = 14
     static let timeHeight: CGFloat = 13
@@ -241,8 +246,9 @@ enum ChatBlockLayout {
             let width = min(cap, max(natural.width + textInset * 2 + labelSlack, quote == nil ? 0 : 300, 90))
             let height = size(of: text, width: width - textInset * 2).height
             let quoteBlock = quote == nil ? 0 : quoteHeight + 8
-            return [head.id: ChatRowMetrics(height: 10 + quoteBlock + height + 4 + timeHeight + 9 + gap,
-                                            bubbleWidth: width, text: text)]
+            return [head.id: ChatRowMetrics(
+                height: topPad + quoteBlock + height + 4 + timeHeight + bottomPad - 3 + gap,
+                bubbleWidth: width, text: text)]
         }
 
         // Bolha de agente: com diff abre até a largura da thread — lado a lado
@@ -284,7 +290,7 @@ enum ChatBlockLayout {
             var height: CGFloat
             switch block.kind {
             case .header(_, _, let quote):
-                height = 10 + headerHeight + (quote == nil ? 0 : 8 + quoteHeight)
+                height = topPad + headerHeight + (quote == nil ? 0 : 8 + quoteHeight)
             case .prose:
                 height = rowGap + size(of: texts[block.id]!, width: width - textInset * 2).height
             case .step, .code, .group:
@@ -297,11 +303,11 @@ enum ChatBlockLayout {
             case .status:
                 height = rowGap + statusHeight
             case .typing:
-                height = 10 + headerHeight + rowGap + statusHeight
+                height = topPad + headerHeight + rowGap + statusHeight
             case .prompt:
                 height = 0
             }
-            if block.last { height += 12 + gap }
+            if block.last { height += bottomPad + gap }
             rows[block.id] = ChatRowMetrics(height: height, bubbleWidth: width, text: texts[block.id])
         }
         return rows

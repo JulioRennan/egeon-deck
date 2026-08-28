@@ -60,7 +60,7 @@ final class ChatHeaderRow: ChatRowView {
         super.layout()
         let bubble = bubbleRect
         let inset = ChatBlockLayout.textInset
-        let y: CGFloat = 10
+        let y = ChatBlockLayout.topPad
         let slack = ChatBlockLayout.labelSlack
         let nameWidth = name.intrinsicContentSize.width + slack
         name.frame = NSRect(x: bubble.minX + inset, y: y, width: nameWidth, height: ChatBlockLayout.headerHeight)

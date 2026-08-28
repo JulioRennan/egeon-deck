@@ -37,13 +37,14 @@ final class ChatPromptRow: ChatRowView {
         super.layout()
         let bubble = bubbleRect
         let inset = ChatBlockLayout.textInset
-        var y: CGFloat = 10
+        var y = ChatBlockLayout.topPad
         if let quoteView {
             quoteView.frame = NSRect(x: bubble.minX + inset, y: y, width: bubble.width - inset * 2,
                                      height: ChatBlockLayout.quoteHeight)
             y += ChatBlockLayout.quoteHeight + 8
         }
-        let textHeight = bubble.height - y - 4 - ChatBlockLayout.timeHeight - 9
+        let textHeight = bubble.height - y - 4 - ChatBlockLayout.timeHeight
+            - (ChatBlockLayout.bottomPad - 3)
         text.frame = NSRect(x: bubble.minX + inset, y: y, width: bubble.width - inset * 2,
                             height: max(0, textHeight))
         let timeWidth = time.intrinsicContentSize.width + ChatBlockLayout.labelSlack

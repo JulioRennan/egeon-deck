@@ -155,7 +155,7 @@ final class ChatTextRow: ChatRowView {
         let bubble = bubbleRect
         let inset = ChatBlockLayout.textInset
         let top: CGFloat = block.boxTop ? ChatBlockLayout.rowGap : 0
-        let bottom = bubble.height - (block.last ? 12 : 0)
+        let bottom = bubble.height - (block.last ? ChatBlockLayout.bottomPad : 0)
         return NSRect(x: bubble.minX + inset, y: top,
                       width: bubble.width - inset * 2, height: max(0, bottom - top))
     }
@@ -251,7 +251,8 @@ final class ChatTextRow: ChatRowView {
             text.frame = NSRect(x: box.minX + 10, y: top, width: box.width - 20,
                                 height: max(0, box.maxY - top - (block.boxBottom ? pad : 0)))
         } else {
-            let height = bubble.height - ChatBlockLayout.rowGap - (block.last ? 12 : 0)
+            let height = bubble.height - ChatBlockLayout.rowGap
+                - (block.last ? ChatBlockLayout.bottomPad : 0)
             text.frame = NSRect(x: bubble.minX + inset, y: ChatBlockLayout.rowGap,
                                 width: bubble.width - inset * 2, height: height)
         }
