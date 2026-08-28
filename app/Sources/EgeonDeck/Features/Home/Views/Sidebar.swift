@@ -608,6 +608,8 @@ final class Sidebar: NSView {
     private static let cardGap: CGFloat = 8
     private static let cardInset: CGFloat = 6
     private static let rowGap: CGFloat = 2
+    /// O fio do projeto e o respiro que ele ocupa (1pt de linha + folga).
+    private static let dividerGap: CGFloat = 7
 
     /// Trilho recolhido. Propagado às linhas, que trocam nome por pastilha; os
     /// projetos e os cards somem — no trilho a hierarquia é workspace → bancada.
@@ -633,6 +635,9 @@ final class Sidebar: NSView {
     struct ProjectTile {
         let tile: SidebarCard
         let header: SidebarGroupRow
+        /// Fio entre o cabeçalho do projeto e as bancadas dele: sem ele, nome
+        /// do projeto e nome da bancada viram uma lista só.
+        let divider: NSView
         let rows: [SidebarRow]
         /// `nil` no tile dos órfãos: ele não é projeto, e nada cai nele.
         var projectID: String?
@@ -773,9 +778,11 @@ final class Sidebar: NSView {
                 wire(head)
                 groups.append(head)
                 list.addSubview(head)
+                let line = Self.makeDivider()
+                list.addSubview(line)
                 let members = tree.indices(inProject: project.id).map(row)
                 members.forEach { list.addSubview($0) }
-                tiles.append(ProjectTile(tile: tile, header: head, rows: members,
+                tiles.append(ProjectTile(tile: tile, header: head, divider: line, rows: members,
                                          projectID: project.id))
             }
             cards.append(WorkspaceCard(card: card, header: header, projects: tiles,
@@ -792,13 +799,23 @@ final class Sidebar: NSView {
             list.addSubview(head)
             let members = lost.map(row)
             members.forEach { list.addSubview($0) }
-            orphanTile = ProjectTile(tile: tile, header: head, rows: members, projectID: nil)
+            let line = Self.makeDivider()
+            list.addSubview(line)
+            orphanTile = ProjectTile(tile: tile, header: head, divider: line, rows: members,
+                                     projectID: nil)
         }
 
         rows.forEach { $0.isCompact = isCompact }
         groups.forEach { $0.isCompact = isCompact }
         emptyLabel.isHidden = isCompact || !configs.isEmpty
         needsLayout = true
+    }
+
+    private static func makeDivider() -> NSView {
+        let line = NSView()
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.07).cgColor
+        return line
     }
 
     private func wire(_ group: SidebarGroupRow) {
@@ -842,6 +859,11 @@ final class Sidebar: NSView {
             tile.header.isHidden = false
             tile.header.frame = NSRect(x: x, y: y, width: width, height: Self.rowHeight)
             y += Self.rowHeight
+            tile.divider.isHidden = !expanded || tile.rows.isEmpty
+            if !tile.divider.isHidden {
+                tile.divider.frame = NSRect(x: x + inset, y: y, width: width - inset * 2, height: 1)
+                y += Self.dividerGap
+            }
             if expanded {
                 for row in tile.rows {
                     row.isHidden = false
@@ -896,6 +918,7 @@ final class Sidebar: NSView {
             for tile in tiles {
                 tile.tile.isHidden = true
                 tile.header.isHidden = true
+                tile.divider.isHidden = true
                 for row in tile.rows {
                     row.isHidden = collapsed
                     guard !collapsed else { continue }
