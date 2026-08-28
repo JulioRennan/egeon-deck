@@ -324,6 +324,10 @@ final class SidebarGroupRow: NSView {
     private let pathLabel = NSTextField(labelWithString: "")
     private let chevron = NSImageView()
     private let statusLabel = NSTextField(labelWithString: "")
+    /// Quantos itens moram aqui — projetos no workspace, bancadas no projeto.
+    /// A pastilha monta no canto do ícone, como um selo: ao lado do nome ela
+    /// comia o título, que é o que se lê para achar a coisa.
+    private let countLabel = NSTextField(labelWithString: "")
     /// Criar bancada direto do projeto, sem passar pelo botão direito.
     private var addButton: ToolbarButton?
     private var lastBadge = ""
@@ -336,6 +340,8 @@ final class SidebarGroupRow: NSView {
     var onRemoveProject: ((_ workspaceID: String, _ projectID: String) -> Void)?
 
     private(set) var isCollapsed = false
+    /// Quantos itens o nível tem; zero não mostra pastilha — vazio já se vê.
+    private var count = 0
     var isCompact = false {
         didSet {
             guard isCompact != oldValue else { return }
@@ -356,7 +362,7 @@ final class SidebarGroupRow: NSView {
 
     var isWorkspace: Bool { if case .workspace = item { return true } else { return false } }
 
-    init(workspace: WorkspaceConfig) {
+    init(workspace: WorkspaceConfig, workbenches: Int) {
         item = .workspace(id: workspace.id)
         badge = WorkspaceBadge(side: Self.badgeSide)
         isCollapsed = workspace.isCollapsed
@@ -365,13 +371,15 @@ final class SidebarGroupRow: NSView {
         nameLabel.stringValue = workspace.name
         nameLabel.font = .systemFont(ofSize: 13, weight: .bold)
         nameLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.92)
-        let projects = workspace.projects.count
-        pathLabel.stringValue = projects == 1 ? "1 projeto" : "\(projects) projetos"
+        count = workspace.projects.count
+        // A contagem de projetos subiu para a pastilha; o subtítulo passa a
+        // dizer o que ela não diz — quanto trabalho há embaixo, somado.
+        pathLabel.stringValue = workbenches == 1 ? "1 bancada" : "\(workbenches) bancadas"
         pathLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.42)
         setup()
     }
 
-    init(workspaceID: String, project: ProjectConfig) {
+    init(workspaceID: String, project: ProjectConfig, workbenches: Int) {
         item = .project(workspaceID: workspaceID, id: project.id)
         badge = nil
         isCollapsed = project.isCollapsed
@@ -385,6 +393,7 @@ final class SidebarGroupRow: NSView {
         pathLabel.textColor = project.exists
             ? NSColor(calibratedWhite: 1, alpha: 0.42)
             : NSColor.systemRed.withAlphaComponent(0.85)
+        count = workbenches
         icon.image = ToolbarButton.symbol(["folder.fill", "folder"])
         icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: 0.5)
         let add = ToolbarButton(symbols: ["plus"], tooltip: "Nova bancada neste projeto", size: 20)
@@ -426,6 +435,21 @@ final class SidebarGroupRow: NSView {
         statusLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         statusLabel.alignment = .right
         addSubview(statusLabel)
+        countLabel.font = .monospacedDigitSystemFont(ofSize: 9.5, weight: .bold)
+        countLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.7)
+        countLabel.alignment = .center
+        countLabel.wantsLayer = true
+        // Selo opaco com anel escuro: ele monta em cima do ícone, e sem o anel
+        // o número se mistura ao desenho embaixo.
+        countLabel.layer?.backgroundColor = NSColor(srgbRed: 0.16, green: 0.18, blue: 0.22,
+                                                    alpha: 1).cgColor
+        countLabel.layer?.borderWidth = 1.5
+        countLabel.layer?.borderColor = NSColor(srgbRed: 0.09, green: 0.10, blue: 0.13,
+                                                alpha: 1).cgColor
+        countLabel.layer?.cornerRadius = 7.5
+        countLabel.stringValue = count == 0 ? "" : "\(count)"
+        countLabel.isHidden = count == 0
+        addSubview(countLabel)
         if let addButton { addSubview(addButton) }
     }
 
@@ -445,8 +469,10 @@ final class SidebarGroupRow: NSView {
                                      width: side, height: side)
             }
             statusLabel.frame = .zero
+            countLabel.isHidden = true
             return
         }
+        countLabel.isHidden = count == 0
         var x: CGFloat = 10
         if let badge {
             let side = Self.badgeSide
@@ -469,8 +495,21 @@ final class SidebarGroupRow: NSView {
             ? 0 : ceil(statusLabel.attributedStringValue.size().width) + 8
         statusLabel.frame = NSRect(x: right - badgeWidth, y: midY - 8, width: badgeWidth, height: 16)
         right -= badgeWidth
-        nameLabel.frame = NSRect(x: x, y: 7, width: max(0, right - x - 4), height: 17)
-        pathLabel.frame = NSRect(x: x, y: 24, width: max(0, right - x - 4), height: 13)
+        // A pastilha anda com o nome: encostada nele, e o nome encolhe antes
+        // dela — a contagem é curta e não pode ser o que some.
+        // O selo monta no canto do ícone; o título fica com a linha inteira.
+        if !countLabel.isHidden {
+            let anchor = badge?.frame ?? icon.frame
+            let font = countLabel.font ?? .systemFont(ofSize: 9.5)
+            let text = ceil(NSAttributedString(string: countLabel.stringValue,
+                                               attributes: [.font: font]).size().width)
+            let side = max(15, text + 9)
+            countLabel.frame = NSRect(x: anchor.maxX - side + 6, y: anchor.maxY - 9,
+                                      width: side, height: 15)
+        }
+        let available = max(0, right - x - 4)
+        nameLabel.frame = NSRect(x: x, y: 7, width: available, height: 17)
+        pathLabel.frame = NSRect(x: x, y: 24, width: available, height: 13)
     }
 
     /// Resumo do que está embaixo, só quando recolhido: aberto, quem avisa são
@@ -599,7 +638,7 @@ final class Sidebar: NSView {
     /// FORA dela, e não há mais o que desviar aqui dentro.
     static let headerHeight: CGFloat = 34
     /// Nome, caminho e até três indicadores com contagem cabem sem cortar.
-    static let expandedWidth: CGFloat = 264
+    static let expandedWidth: CGFloat = 292
     /// Largura do trilho recolhido: cabe a pastilha de 26pt com folga, e é o que
     /// o conteúdo reserva de gutter — o que se abre além disso flutua por cima.
     static let railWidth: CGFloat = 52
@@ -766,7 +805,8 @@ final class Sidebar: NSView {
         for space in workspaces {
             let card = SidebarCard(radius: 12, fill: 0.045, stroke: 0.09)
             list.addSubview(card)
-            let header = SidebarGroupRow(workspace: space)
+            let header = SidebarGroupRow(workspace: space,
+                                         workbenches: tree.indices(inWorkspace: space.id).count)
             wire(header)
             groups.append(header)
             list.addSubview(header)
@@ -774,16 +814,18 @@ final class Sidebar: NSView {
             for project in space.projects {
                 let tile = SidebarCard(radius: 9, fill: 0.04, stroke: 0.06)
                 list.addSubview(tile)
-                let head = SidebarGroupRow(workspaceID: space.id, project: project)
+                let members = tree.indices(inProject: project.id)
+                let head = SidebarGroupRow(workspaceID: space.id, project: project,
+                                           workbenches: members.count)
                 wire(head)
                 groups.append(head)
                 list.addSubview(head)
                 let line = Self.makeDivider()
                 list.addSubview(line)
-                let members = tree.indices(inProject: project.id).map(row)
-                members.forEach { list.addSubview($0) }
-                tiles.append(ProjectTile(tile: tile, header: head, divider: line, rows: members,
-                                         projectID: project.id))
+                let rowsOfProject = members.map(row)
+                rowsOfProject.forEach { list.addSubview($0) }
+                tiles.append(ProjectTile(tile: tile, header: head, divider: line,
+                                         rows: rowsOfProject, projectID: project.id))
             }
             cards.append(WorkspaceCard(card: card, header: header, projects: tiles,
                                        workspaceID: space.id))
