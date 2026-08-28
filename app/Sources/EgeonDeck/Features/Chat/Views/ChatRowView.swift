@@ -123,10 +123,20 @@ final class ChatTextRow: ChatRowView {
     private static let radius: CGFloat = 8
     private static let boxFill = NSColor(calibratedWhite: 1, alpha: 0.03)
     private static let boxBorder = NSColor(calibratedWhite: 1, alpha: 0.08)
+    private static let titleFill = NSColor(calibratedWhite: 1, alpha: 0.05)
+    private static let titleHover = NSColor(calibratedWhite: 1, alpha: 0.10)
+    private static let contentFill = NSColor(calibratedWhite: 0, alpha: 0.20)
+
+    /// Mouse em cima do cabeçalho: é o realce que diz "aqui se clica" antes
+    /// de você clicar.
+    private var hoveringTitle = false {
+        didSet { if oldValue != hoveringTitle { needsDisplay = true } }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(text)
+        text.onHoverToggle = { [weak self] over in self?.hoveringTitle = over }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -152,16 +162,45 @@ final class ChatTextRow: ChatRowView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard let block, var rect = boxRect else { return }
+        guard let block, let box = boxRect else { return }
+        var rect = box
         if !block.boxTop { rect.origin.y -= Self.radius; rect.size.height += Self.radius }
         if !block.boxBottom { rect.size.height += Self.radius }
         rect = rect.insetBy(dx: 0.5, dy: 0.5)
         let path = NSBezierPath(roundedRect: rect, xRadius: Self.radius, yRadius: Self.radius)
         Self.boxFill.setFill()
         path.fill()
+
+        // Anatomia de tile: o cabeçalho tem fundo próprio (e clareia sob o
+        // mouse) e o miolo é mais fundo — a diferença é a única pista de onde
+        // o clique age e onde só há texto para ler e copiar.
+        if let strip = toggleRect {
+            NSGraphicsContext.saveGraphicsState()
+            path.addClip()
+            let open = expandedStep
+            if open || hoveringTitle {
+                (hoveringTitle ? Self.titleHover : Self.titleFill).setFill()
+                strip.fill()
+            }
+            if open {
+                Self.contentFill.setFill()
+                NSRect(x: box.minX, y: strip.maxY, width: box.width,
+                       height: max(0, box.maxY - strip.maxY)).fill()
+                Self.boxBorder.setFill()
+                NSRect(x: box.minX, y: strip.maxY - 0.5, width: box.width, height: 1).fill()
+            }
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
         Self.boxBorder.setStroke()
         path.lineWidth = 1
         path.stroke()
+    }
+
+    /// Passo aberto — o que tem miolo para separar do cabeçalho.
+    private var expandedStep: Bool {
+        guard let block, case .step(_, let step, let open) = block.kind else { return false }
+        return open && step.isExpandable
     }
 
     /// A faixa do título de um passo com o que abrir: a primeira linha dele,
@@ -241,6 +280,26 @@ final class StepTextView: NSTextView {
         }
     }
 
+    /// Avisa a linha quando o mouse entra e sai da faixa do título.
+    var onHoverToggle: ((Bool) -> Void)?
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.activeInKeyWindow, .mouseEnteredAndExited, .mouseMoved],
+                                  owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverToggle?(isOnToggle(convert(event.locationInWindow, from: nil)))
+    }
+
+    override func mouseExited(with event: NSEvent) { onHoverToggle?(false) }
+
     /// Ponto no espaço deste texto: está na faixa que abre o passo?
     func isOnToggle(_ point: NSPoint) -> Bool { toggleHeight > 0 && point.y <= toggleHeight }
 
@@ -269,8 +328,10 @@ final class StepTextView: NSTextView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        onHoverToggle?(isOnToggle(point))
         guard toggleHeight > 0 else { return super.mouseMoved(with: event) }
-        set(at: convert(event.locationInWindow, from: nil))
+        set(at: point)
     }
 
     /// A linha da tabela é reusada: quando ela entra na janela (ou muda de

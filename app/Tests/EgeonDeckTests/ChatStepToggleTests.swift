@@ -67,6 +67,48 @@ final class ChatStepToggleTests: XCTestCase {
         XCTAssertEqual(container.expandedSteps, [], "id desconhecido não abre nada")
     }
 
+    /// Aberto, o passo tem anatomia de tile: cabeçalho com um fundo, miolo com
+    /// outro e um fio entre os dois — é isso que separa "aqui se clica" de
+    /// "aqui é texto". Medido no pixel, longe do texto.
+    func testOpenStepPaintsHeaderAndBodyDifferently() throws {
+        let step = ChatStep(glyph: "$", text: "Roda", detail: "swift test", output: "ok\nok\nok")
+        func render(expanded: Bool) throws -> (header: NSColor, body: NSColor) {
+            let blocks = ChatBlocks.positioned([ChatBlock(id: "b|u1|0", messageKey: "r|u1",
+                kind: .step(from: front, step: step, expanded: expanded))])
+            let metrics = try XCTUnwrap(ChatBlockLayout.measure(blocks, width: 600, known: [:])["r|u1"])
+            let row = ChatTextRow(frame: NSRect(x: 0, y: 0, width: 600,
+                                                height: metrics.rows["b|u1|0"]!.height))
+            let window = NSWindow(contentRect: row.frame, styleMask: .borderless,
+                                  backing: .buffered, defer: false)
+            defer { window.contentView = nil }
+            window.contentView = row
+            row.configure(blocks[0], metrics: metrics.rows["b|u1|0"]!)
+            row.layoutSubtreeIfNeeded()
+            let strip = try XCTUnwrap(row.toggleRect)
+            let rep = try XCTUnwrap(row.bitmapImageRepForCachingDisplay(in: row.bounds))
+            row.cacheDisplay(in: row.bounds, to: rep)
+            // O bitmap é o da tela: 2 pixels por ponto no retina.
+            let scale = CGFloat(rep.pixelsWide) / row.bounds.width
+            // Encostado na borda direita da caixa: ali não passa texto.
+            let x = Int((strip.maxX - 6) * scale)
+            return (try XCTUnwrap(rep.colorAt(x: x, y: Int(strip.midY * scale))),
+                    try XCTUnwrap(rep.colorAt(x: x, y: Int((strip.maxY + 8) * scale))))
+        }
+
+        let open = try render(expanded: true)
+        XCTAssertNotEqual(open.header.brightnessComponent, open.body.brightnessComponent,
+                          accuracy: 0.0, "cabeçalho e miolo têm de se distinguir")
+        XCTAssertGreaterThan(open.header.brightnessComponent, open.body.brightnessComponent,
+                             "o cabeçalho é o claro; o miolo, o fundo")
+
+        // Recolhido não tem miolo: a caixa inteira é cabeçalho, e o ponto
+        // abaixo dela já é o fundo da bolha — mais escuro que o cabeçalho.
+        let closed = try render(expanded: false)
+        XCTAssertGreaterThan(closed.header.brightnessComponent, closed.body.brightnessComponent)
+        XCTAssertEqual(closed.header.brightnessComponent, open.header.brightnessComponent,
+                       accuracy: 0.05, "o cabeçalho é o mesmo, aberto ou fechado")
+    }
+
     func testRowTogglesOnlyOnTheTitleStrip() throws {
         let step = ChatStep(glyph: "$", text: "Roda", detail: "swift test", output: "ok\nok")
         let closed = ChatBlock(id: "b|u1|0", messageKey: "r|u1",

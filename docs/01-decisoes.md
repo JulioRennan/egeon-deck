@@ -2993,8 +2993,18 @@ continuar na linha seguinte.
 Nada disso muda o que abre: cada passo continua alternando pelo seu título
 (ADR-044), agora dentro da caixa comum.
 
+**Anatomia de tile, para o clicável se anunciar.** Dentro da caixa, o
+cabeçalho de um passo aberto tem fundo próprio (branco 5%), um fio embaixo e
+o miolo mais fundo (preto 20%): o contraste é o que diz onde o clique age e
+onde só há texto para ler e copiar — no miolo, que é comando e saída, o
+clique é seleção. Sob o mouse o cabeçalho clareia (10%), e é esse realce que
+anuncia a área clicável antes do clique; recolhido, a caixa inteira é
+cabeçalho e o realce sozinho basta.
+
 **Verificação:** `ChatBlocksTests.testContiguousStepsShareOneBox` desenha o
-grupo como `┌┘ / ┌· / ·· / ·┘`; na tela, três `echo` seguidos numa moldura só.
+grupo como `┌┘ / ┌· / ·· / ·┘`; `testOpenStepPaintsHeaderAndBodyDifferently`
+mede no pixel que cabeçalho e miolo não têm a mesma cor. Na tela, três `echo`
+seguidos numa moldura só.
 
 ## ADR-048 — Onde se clica, o ponteiro diz: mão em tudo que age
 
