@@ -202,26 +202,27 @@ final class ChatTextRow: ChatRowView {
         return open && step.isExpandable
     }
 
-    /// A faixa do título de um passo com o que abrir: a primeira linha dele,
-    /// de borda a borda da caixa. É ela que alterna; o resto continua texto
-    /// selecionável — o comando aberto é para copiar.
+    /// A área que alterna. Recolhido, é o CARD INTEIRO — inclusive o rodapé,
+    /// que é padding e não conteúdo: uma caixa de uma linha é um botão, e ter
+    /// nela um canto morto só confunde. Aberto, é o cabeçalho: título mais o
+    /// respiro em volta dele, porque daí para baixo há texto para selecionar e
+    /// copiar.
     var toggleRect: NSRect? {
         guard let block, let box = boxRect else { return nil }
         switch block.kind {
-        case .step(_, let step, _) where step.isExpandable: break
-        // A capa do grupo é toda cabeçalho: uma linha, e o clique nela avança.
-        case .group: break
-        default: return nil
+        case .group:
+            return box
+        case .step(_, let step, let open) where step.isExpandable:
+            guard open else { return box }
+            var line: CGFloat = 16
+            if let manager = text.layoutManager, manager.numberOfGlyphs > 0 {
+                line = manager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
+            }
+            return NSRect(x: box.minX, y: box.minY, width: box.width,
+                          height: ChatBlockLayout.boxPadding + line)
+        default:
+            return nil
         }
-        var line: CGFloat = 16
-        if let manager = text.layoutManager, manager.numberOfGlyphs > 0 {
-            line = manager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
-        }
-        // Termina no fim da PRIMEIRA linha: com o respiro de baixo somado, a
-        // faixa entrava alguns pontos na linha seguinte — clique e cursor de
-        // mão em cima do comando, que é texto para copiar.
-        return NSRect(x: box.minX, y: box.minY, width: box.width,
-                      height: (text.frame.minY - box.minY) + line)
     }
 
     /// O NSTextView engole o clique; na faixa do título a linha fica com ele.

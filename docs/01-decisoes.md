@@ -3077,6 +3077,13 @@ um terceiro nível.
 passo. A caixa de uma linha estava com a altura do texto e mais nada, e um
 comando com saída ficava ilegível de tão apertado.
 
+**O card recolhido é um botão inteiro.** Com o padding maior, a faixa que
+alternava — só o título — deixava o rodapé da caixa morto ao clique, o que
+numa caixa de uma linha não se explica. Recolhido, a área que alterna é o
+card todo, padding incluído; aberto, volta a ser o cabeçalho, porque daí para
+baixo há texto para selecionar e copiar. O realce sob o mouse acompanha:
+ilumina o card inteiro quando fechado, só o cabeçalho quando aberto.
+
 **A rolagem, junto:** abrir um passo no meio da thread continua não te
 arrastando para o fim, mas abrir estando no fim passa a acompanhar o
 crescimento (`holdBottom` só quando você não está lá). Sem isso o que você

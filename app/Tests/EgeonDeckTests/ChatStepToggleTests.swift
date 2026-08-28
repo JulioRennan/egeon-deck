@@ -230,6 +230,20 @@ final class ChatStepToggleTests: XCTestCase {
         XCTAssertEqual(cursor(at: onTitle, row.text.mouseMoved), NSCursor.pointingHand)
         XCTAssertEqual(cursor(at: onOutput, row.text.mouseMoved), NSCursor.iBeam)
 
+        // Recolhido, o card inteiro alterna — inclusive o rodapé, que é
+        // padding: uma caixa de uma linha é um botão, sem canto morto.
+        let shutBlocks = ChatBlocks.positioned([closed])
+        let shutMetrics = try XCTUnwrap(ChatBlockLayout.measure(shutBlocks, width: 600, known: [:])["r|u1"])
+        row.configure(shutBlocks[0], metrics: shutMetrics.rows["b|u1|0"]!)
+        row.layoutSubtreeIfNeeded()
+        let card = try XCTUnwrap(row.toggleRect)
+        let footer = NSPoint(x: card.midX, y: card.maxY - 2)
+        XCTAssertTrue(card.contains(footer), "o rodapé do card recolhido clica")
+        XCTAssertTrue(row.hitTest(footer) === row)
+        let before = toggles
+        click(footer)
+        XCTAssertEqual(toggles, before + 1)
+
         // Sem nada além do título, não há faixa.
         let bare = ChatBlock(id: "b|u1|1", messageKey: "r|u1",
                              kind: .step(from: front, step: ChatStep(glyph: "→", text: "Lê"), expanded: true))
