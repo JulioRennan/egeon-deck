@@ -105,8 +105,15 @@ final class ChatStepToggleTests: XCTestCase {
         // por baixo — dois donos no mesmo ponto faziam o ponteiro tremer.
         XCTAssertEqual(row.text.toggleHeight, strip.maxY - row.text.frame.minY, accuracy: 0.01)
         XCTAssertGreaterThan(row.text.toggleHeight, 0)
-        XCTAssertTrue(row.text.isOnToggle(row.text.convert(onTitle, from: row)), "mão no título")
-        XCTAssertFalse(row.text.isOnToggle(row.text.convert(onOutput, from: row)), "no comando é texto")
+        // O cursor sai todo daqui: NSTextView põe o I-beam por cursor rect, e
+        // é por cursor rect que a mão tem de vir também.
+        let rects = row.text.cursorRects(in: row.text.bounds)
+        XCTAssertEqual(rects.count, 2)
+        XCTAssertEqual(rects[0].cursor, NSCursor.pointingHand)
+        XCTAssertEqual(rects[1].cursor, NSCursor.iBeam)
+        XCTAssertTrue(rects[0].rect.contains(row.text.convert(onTitle, from: row)), "mão no título")
+        XCTAssertTrue(rects[1].rect.contains(row.text.convert(onOutput, from: row)), "no comando é texto")
+        XCTAssertEqual(rects[0].rect.width, row.text.bounds.width)
 
         // Sem nada além do título, não há faixa.
         let bare = ChatBlock(id: "b|u1|1", messageKey: "r|u1",
@@ -115,6 +122,7 @@ final class ChatStepToggleTests: XCTestCase {
         row.layoutSubtreeIfNeeded()
         XCTAssertNil(row.toggleRect)
         XCTAssertEqual(row.text.toggleHeight, 0, "sem faixa, o texto não mexe no cursor")
+        XCTAssertTrue(row.text.cursorRects(in: row.text.bounds).isEmpty)
         _ = closed
     }
 }
