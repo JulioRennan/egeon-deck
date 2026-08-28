@@ -64,9 +64,15 @@ app/Sources/EgeonDeck/
   montado por baixo, coberto (o pty precisa do passe de layout).
 - **Chat** — spec em `docs/03-spec-chat.md`. Participantes com cor própria e
   estado, composer estilo Slack, envio real, thread por turno com passos e
-  citações. A bolha desenha a **cadeia** do turno na ordem (prosa, grupo de
-  passos, prosa — `ChatTurn.parts`) e cresce ao vivo enquanto o agente
-  trabalha, lendo a cauda do transcript dele só nesse intervalo (ADR-039). O
+  citações. **Linha do tempo plana** (ADR-042): cada turno de cada agente é
+  uma bolha, inclusive o que veio de outro agente ("✦ front" em cima); a marca
+  é só o `@destinatário`, e só quando a mensagem não é contínua; nada
+  aninha. A thread é um `NSTableView` com **uma linha por bloco** da cadeia
+  (`ChatBlock`), alturas medidas na fila de fundo (`ChatBlockLayout`) e diff
+  por id entre montagens (`ChatThreadController`). A bolha desenha a
+  **cadeia** do turno na ordem (prosa, passo, diff, prosa — `ChatTurn.parts`)
+  e cresce ao vivo enquanto o agente trabalha, lendo a cauda do transcript
+  dele — a partir do prompt do turno — só nesse intervalo (ADR-039). O
   que já fechou sai do **histórico do app** (`ChatHistory`,
   `workbenches/<id>/chat.jsonl`, gravado no `Stop`), não do transcript do
   CLI. Botão de limpar a bancada (barra lateral, botão direito): `clear` do perfil em cada

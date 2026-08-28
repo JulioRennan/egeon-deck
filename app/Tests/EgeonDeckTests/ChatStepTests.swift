@@ -61,8 +61,8 @@ final class ChatStepTests: XCTestCase {
         XCTAssertEqual(after.steps[0].diffCounts?.added, 2)
         XCTAssertEqual(after.steps[0].diffCounts?.removed, 1)
         // Recolhido, a linha do passo ainda diz o tamanho da mudança.
-        XCTAssertTrue(AgentBubbleView.render(after.steps[0], expanded: false).string.hasSuffix("+2 −1"))
-        XCTAssertFalse(AgentBubbleView.render(after.steps[0], expanded: false).string.contains("import"))
+        XCTAssertTrue(ChatBlockLayout.render(after.steps[0], expanded: false).string.hasSuffix("+2 −1"))
+        XCTAssertFalse(ChatBlockLayout.render(after.steps[0], expanded: false).string.contains("import"))
     }
 
     func testWriteIsAllAddedAndReadCountsLines() throws {

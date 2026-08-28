@@ -80,6 +80,14 @@ Implementado (ADR-039): stack e corpo não são dois blocos — a bolha desenha 
 e enquanto o turno corre ela cresce ao vivo, com o que o agente está fazendo
 agora numa linha de status no fim (`⠋ $ Roda os testes`, `⠋ pensando…`).
 
+**Superado (ADR-042): o item 4 não existe mais.** A linha do tempo é plana,
+como num grupo do WhatsApp: a mensagem do front para o back é uma bolha do
+front ("✦ front" em cima, na cor do front, à esquerda), e a resposta do back é
+uma bolha do back. Nada aninha. A marca é só o `@destinatário` no começo do
+texto — e só quando a mensagem não é contínua (consecutivo é limpo,
+intercalado é marcado). Sem seta. A thread é um `NSTableView` com uma linha
+por bloco da cadeia.
+
 ## Regras de reply — não misturar conversas
 
 - **Caso 1 — um agente só, fluxo linear:** meu prompt, resposta dele logo

@@ -25,8 +25,8 @@ final class ChatContainer: NSView {
     private var shownTerminal: NSView?
 
     private let column = ParticipantsColumn()
-    private let threadScroll = NSScrollView()
-    private let threadDoc = FlippedView()
+    /// A thread é uma tabela: uma linha por bloco, só o visível existe (ADR-042).
+    private let thread = ChatThreadController()
     private let composer = ChatComposer()
     private let popup = ChatListPopup()
     private let emptyThread = NSTextField(labelWithString:
@@ -53,57 +53,42 @@ final class ChatContainer: NSView {
     /// gravado, não ao tique de 1 s. Um por agente; cai quando ele para.
     private var liveWatchers: [String: (path: String, source: DispatchSourceFileSystemObject)] = [:]
 
-    private var bubbles: [ThreadBubble] = []
-    private var bubbleByKey: [String: ThreadBubble] = [:]
+    private var threadViewportHeight: CGFloat = 0
+    /// Largura para a qual as linhas foram medidas; mudou, mede de novo.
+    private var threadWidth: CGFloat = 0
+    /// Quantas vezes a tabela mudou de verdade — para o teste provar que
+    /// refresh sem mudança não mexe na tela.
+    private(set) var threadRebuilds = 0
     private var messages: [ChatMessage] = []
-
-    /// Clique na citação ou na resposta: rola até a mensagem original e a
-    /// acende um instante.
-    private func scrollTo(key: String) {
-        guard let bubble = bubbleByKey[key] else { return }
-        animateScroll(to: max(0, bubble.frame.minY - 24))
-        let old = bubble.layer?.borderColor
-        bubble.layer?.borderColor = NSColor.white.withAlphaComponent(0.7).cgColor
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { bubble.layer?.borderColor = old }
-    }
-
-    private var bottomY: CGFloat {
-        max(0, threadDoc.frame.height - threadScroll.contentSize.height)
-    }
-
-    /// Rolagem com movimento, como no WhatsApp: pular seco perde a noção de
-    /// para onde se foi.
-    private func animateScroll(to y: CGFloat) {
-        let clip = threadScroll.contentView
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.35
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            clip.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
-        } completionHandler: { [weak self] in
-            guard let self else { return }
-            self.threadScroll.reflectScrolledClipView(clip)
-            self.updateToBottomButton()
-        }
-    }
 
     /// A setinha no canto: aparece quando você subiu para ler e some no fim.
     private let toBottom = ChevronButton()
 
     private func updateToBottomButton() {
-        let visible = threadScroll.contentView.documentVisibleRect
-        let atBottom = visible.maxY >= threadDoc.frame.height - 40
-        toBottom.isHidden = atBottom || bubbles.isEmpty
+        toBottom.isHidden = thread.isAtBottom || thread.blocks.isEmpty
     }
 
-    private func scrollToBottomClicked() { animateScroll(to: bottomY) }
+    private func scrollToBottomClicked() { thread.scrollToBottom(animated: true) }
 
     /// Rola por fora (`/chat?scroll=top|bottom`) — é como se confere a setinha
     /// e a animação sem mouse.
     func scroll(_ edge: String) {
-        animateScroll(to: edge == "top" ? 0 : bottomY)
+        if edge == "top" { thread.scrollToTop(animated: true) } else { thread.scrollToBottom(animated: true) }
+    }
+
+    /// Clique numa linha: leva à mensagem que ela cita — ou, numa resposta
+    /// sem citação, ao prompt que ela responde, como no WhatsApp.
+    private func rowClicked(_ block: ChatBlock) {
+        let target: String?
+        if case .prompt(_, _, _, _, let quote, _, _) = block.kind {
+            target = quote?.targetKey
+        } else {
+            target = messages.first { $0.key == block.messageKey }?.quote?.targetKey
+                ?? "p|" + block.messageKey.dropFirst(2)
+        }
+        if let target { thread.scrollTo(messageKey: target) }
     }
     private var pending: [ChatThread.Pending] = []
-    private var threadSignature = ""
     private var focusedId: String?
     private enum PopupMode { case none, switcher, mention }
     private var popupMode = PopupMode.none
@@ -123,10 +108,13 @@ final class ChatContainer: NSView {
         }
         addSubview(column)
 
-        threadScroll.documentView = threadDoc
-        threadScroll.hasVerticalScroller = true
-        threadScroll.drawsBackground = false
-        addSubview(threadScroll)
+        thread.onClick = { [weak self] block in self?.rowClicked(block) }
+        // Saber se você está no fim é o que decide a setinha e o auto-scroll.
+        thread.onScroll = { [weak self] in
+            self?.updateToBottomButton()
+            self?.loadMoreIfNearTop()
+        }
+        addSubview(thread.scrollView)
 
         emptyThread.font = .systemFont(ofSize: 11)
         emptyThread.textColor = NSColor(calibratedWhite: 0.35, alpha: 1)
@@ -149,15 +137,7 @@ final class ChatContainer: NSView {
         toBottom.onClick = { [weak self] in self?.scrollToBottomClicked() }
         toBottom.isHidden = true
         addSubview(toBottom)
-
-        // Saber se você está no fim é o que decide a setinha e o auto-scroll.
-        threadScroll.contentView.postsBoundsChangedNotifications = true
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(threadScrolled),
-            name: NSView.boundsDidChangeNotification, object: threadScroll.contentView)
     }
-
-    @objc private func threadScrolled() { updateToBottomButton() }
 
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
@@ -202,10 +182,13 @@ final class ChatContainer: NSView {
     private var parsing: Set<URL> = []
 
     private func turns(of participant: ChatParticipant) -> [ChatTurn] {
-        var turns = records().filter { $0.node == participant.id }.map(\.turn)
-        if let live = liveTurn(of: participant)?.turn, !turns.contains(where: { $0.id == live.id }) {
-            turns.append(live)
-        }
+        Self.turns(of: participant, records: records(), live: liveTurn(of: participant)?.turn)
+    }
+
+    private static func turns(of participant: ChatParticipant, records: [ChatRecord],
+                              live: ChatTurn?) -> [ChatTurn] {
+        var turns = records.filter { $0.node == participant.id }.map(\.turn)
+        if let live, !turns.contains(where: { $0.id == live.id }) { turns.append(live) }
         return turns
     }
 
@@ -226,6 +209,7 @@ final class ChatContainer: NSView {
             let recorded = records().contains { $0.node == participant.id && $0.turn.id == live.turn.id }
             if recorded || Date().timeIntervalSince(cached.readAt) > 20 {
                 liveCache[participant.id] = nil
+                liveVersion += 1
                 return nil
             }
             return live
@@ -237,17 +221,29 @@ final class ChatContainer: NSView {
         let modified = (attributes[.modificationDate] as? Date) ?? .distantPast
         watch(participant.id, path: source.transcript.path)
         if let cached, cached.size == size, cached.modified == modified { return cached.live }
+        // A cauda tem até 4 MB e o CLI grava várias linhas por segundo: ler a
+        // cada uma saturava a fila de fundo e a main com remontagens. Umas
+        // três leituras por segundo bastam para a bolha parecer viva.
+        if let cached, Date().timeIntervalSince(cached.readAt) < 0.3 {
+            scheduleLiveRefresh()
+            return cached.live
+        }
 
         if !liveParsing.contains(participant.id) {
             liveParsing.insert(participant.id)
             let id = participant.id
+            // A partir do prompt do turno já conhecido: só o turno em curso é
+            // relido, não os 4 MB de cauda.
+            let from = cached?.live?.promptOffset ?? 0
             parseQueue.async { [weak self] in
-                let live = ClaudeTranscript.liveTurn(at: source.transcript, notBefore: source.notBefore)
+                let live = ClaudeTranscript.liveTurn(at: source.transcript,
+                                                     notBefore: source.notBefore, from: from)
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.liveParsing.remove(id)
                     self.liveCache[id] = LiveEntry(size: size, modified: modified, live: live,
                                                    readAt: Date())
+                    self.liveVersion += 1
                     self.refresh()
                 }
             }
@@ -266,13 +262,25 @@ final class ChatContainer: NSView {
         guard fd >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd, eventMask: [.write, .extend], queue: .main)
-        source.setEventHandler { [weak self] in
-            guard let self, self.window != nil, self.popupMode == .none else { return }
-            self.refresh()
-        }
+        source.setEventHandler { [weak self] in self?.scheduleLiveRefresh() }
         source.setCancelHandler { close(fd) }
         source.resume()
         liveWatchers[id] = (path, source)
+    }
+
+    /// As escritas chegam em rajada (uma por bloco do turno, de vários agentes
+    /// ao mesmo tempo) e cada uma pedia uma remontagem. O que chega em 200 ms
+    /// vira um refresh só.
+    private var liveRefreshPending = false
+    private func scheduleLiveRefresh() {
+        guard !liveRefreshPending else { return }
+        liveRefreshPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self else { return }
+            self.liveRefreshPending = false
+            guard self.window != nil, self.popupMode == .none else { return }
+            self.refresh()
+        }
     }
 
     private func unwatch(_ id: String) {
@@ -282,8 +290,7 @@ final class ChatContainer: NSView {
 
     /// O que a bolha ao vivo diz no fim: o último passo se o agente está numa
     /// ferramenta, "pensando…" se raciocina, "trabalhando…" no resto.
-    private func liveStatus(of participant: ChatParticipant,
-                            live: ClaudeTranscript.LiveTurn) -> AgentBubbleView.Live {
+    private static func liveStatus(_ live: ClaudeTranscript.LiveTurn) -> ChatLive {
         switch live.last {
         case .thinking: return .thinking
         case .tool:
@@ -312,6 +319,7 @@ final class ChatContainer: NSView {
                     guard let self else { return }
                     self.parsing.remove(url)
                     self.historyCache[url] = (size, modified, parsed)
+                    self.historyVersion += 1
                     self.refresh()
                 }
             }
@@ -320,86 +328,141 @@ final class ChatContainer: NSView {
         return cached?.records ?? []
     }
 
-    /// Conversa longa tem centenas de turnos; desenhar todos a cada mudança
-    /// pesa e ninguém rola até lá. Só o fim entra na tela.
-    private static let drawnMessages = 80
+    /// Conversa longa tem milhares de turnos; a tabela só desenha o visível,
+    /// mas medir todos na primeira montagem pesa e ninguém rola até lá. Entra
+    /// o fim, e a janela cresce quando você rola até o começo do que há —
+    /// como o WhatsApp carregando mensagens antigas.
+    private static let windowStep = 60
+    private(set) var loadedMessages = ChatContainer.windowStep
+    /// Quantas linhas a tabela tem — para o teste.
+    var snapshotBlockCount: Int { thread.blocks.count }
+    private var loadingMore = false
+
+    private func loadMoreIfNearTop() {
+        guard thread.isNearTop, !loadingMore, messages.count > loadedMessages, !thread.blocks.isEmpty else { return }
+        loadingMore = true
+        loadedMessages += Self.windowStep
+        buildSignature = ""
+        refresh()
+    }
+
+    /// O que a montagem precisa, colhido na main num instante só. Só valor:
+    /// a fila de fundo não toca em estado da view.
+    private struct ThreadInput {
+        let participants: [ChatParticipant]
+        let records: [ChatRecord]
+        let live: [String: ClaudeTranscript.LiveTurn]
+        let pending: [ChatThread.Pending]
+        /// Largura da thread e as medidas da montagem anterior, para reusar.
+        let width: CGFloat
+        let known: [String: ChatBlockLayout.BubbleMetrics]
+        /// Quantas mensagens do fim entram.
+        let window: Int
+    }
+    private struct ThreadOutput {
+        let messages: [ChatMessage]
+        let pending: [ChatThread.Pending]
+        let blocks: [ChatBlock]
+        let metrics: [String: ChatBlockLayout.BubbleMetrics]
+    }
+
+    /// Cruzar transcripts, ordenar e citar sai da main: com milhares de
+    /// registros e vários agentes ao vivo, isso rodava por tique e por rajada
+    /// de escrita, competindo com a digitação e o pty.
+    private let buildQueue = DispatchQueue(label: "egeon.chat.thread", qos: .userInitiated)
+    private var buildSignature = ""
+    private var buildGeneration = 0
+    private var building = false
+    private var buildAgain = false
+    /// Sobem quando o cache correspondente muda — é o que a assinatura olha em
+    /// vez de comparar conteúdo.
+    private var historyVersion = 0
+    private var liveVersion = 0
+    /// Quantas montagens foram para a fila — para o teste provar que o tique
+    /// sem mudança não monta.
+    private(set) var threadBuilds = 0
 
     private func rebuildThread(_ all: [ChatParticipant]) {
-        let built = ChatThread.build(participants: all, pending: pending) { [weak self] in
-            self?.turns(of: $0) ?? []
+        // Ler o vivo tem efeito (vigia no fd, leitura agendada): fica na main,
+        // uma vez por agente.
+        var live: [String: ClaudeTranscript.LiveTurn] = [:]
+        for agent in all where agent.isAgent {
+            if let turn = liveTurn(of: agent) { live[agent.id] = turn }
         }
-        messages = built.messages
-        pending = built.pending
+        let input = ThreadInput(participants: all, records: records(), live: live, pending: pending,
+                                width: thread.width, known: thread.bubbleMetrics, window: loadedMessages)
+        // O tique de 1 s chega sem nada ter mudado: só monta quando alguma
+        // entrada mudou de fato.
+        let signature = "\(historyVersion)|\(liveVersion)|\(input.width)|\(loadedMessages)|"
+            + pending.map { "\($0.sentAt.timeIntervalSince1970)" }.joined(separator: ",") + "|"
+            + all.map { "\($0.id):\($0.activity)" }.joined(separator: ",")
+        guard signature != buildSignature else { return }
+        buildSignature = signature
+        buildGeneration += 1
+        guard !building else { buildAgain = true; return }
+        building = true
+        threadBuilds += 1
+        let generation = buildGeneration
+        buildQueue.async { [weak self] in
+            let output = Self.buildThread(input)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.building = false
+                // Entrada mudou enquanto montava: este resultado já é passado.
+                if generation == self.buildGeneration { self.applyThread(output) }
+                if self.buildAgain {
+                    self.buildAgain = false
+                    self.buildSignature = ""
+                    self.refresh()
+                }
+            }
+        }
+    }
+
+    private static func buildThread(_ input: ThreadInput) -> ThreadOutput {
+        let built = ChatThread.build(participants: input.participants, pending: input.pending) {
+            turns(of: $0, records: input.records, live: input.live[$0.id]?.turn)
+        }
         // O turno ao vivo de cada agente que trabalha: a bolha dele ganha a
         // linha de status. Quem trabalha e ainda não gravou nada do turno (ou
         // não tem transcript) ganha a bolha de "trabalhando…" solta no fim.
         // Terminal subindo não está respondendo a ninguém — a coluna já diz
         // "preparando…", e uma bolha ali era resposta a um prompt que não existe.
-        var liveByAgent: [String: (turnId: String, status: AgentBubbleView.Live)] = [:]
+        var liveByAgent: [String: (turnId: String, status: ChatLive)] = [:]
         var typing: [ChatParticipant] = []
-        let recorded = Set(records().map(\.key))
-        for agent in all where agent.isAgent && (agent.activity == .working || agent.activity == .asking) {
-            if let live = liveTurn(of: agent), live.turn.hasReply,
+        let recorded = Set(input.records.map(\.key))
+        for agent in input.participants
+        where agent.isAgent && (agent.activity == .working || agent.activity == .asking) {
+            if let live = input.live[agent.id], live.turn.hasReply,
                !recorded.contains("\(agent.id)#\(live.turn.id)") {
                 liveByAgent[agent.id] = (live.turn.id,
-                                         agent.activity == .asking ? .asking : liveStatus(of: agent, live: live))
+                                         agent.activity == .asking ? .asking : liveStatus(live))
             } else if agent.activity == .working {
                 typing.append(agent)
             }
         }
+        let blocks = ChatBlocks.build(messages: Array(built.messages.suffix(input.window)),
+                                      live: liveByAgent, typing: typing)
+        let metrics = ChatBlockLayout.measure(blocks, width: input.width, known: input.known)
+        return ThreadOutput(messages: built.messages, pending: built.pending,
+                            blocks: blocks, metrics: metrics)
+    }
 
-        // Remontar view a cada segundo faria a thread piscar: só quando o que
-        // se desenha mudou de fato. O spinner anda em cima da bolha existente.
-        let liveSignature = liveByAgent.keys.sorted().map { id in
-            "\(id):\(liveByAgent[id]!.turnId):\(liveByAgent[id]!.status)"
-        }.joined(separator: ",")
-        let signature = "\(messages.count)|\(messages.last?.at.timeIntervalSince1970 ?? 0)|"
-            + "\(messages.last.map { "\($0)" }.hashValue)|\(pending.count)|"
-            + typing.map(\.id).joined(separator: ",") + "|" + liveSignature
-        guard signature != threadSignature else { return }
-        threadSignature = signature
-
-        let visible = threadScroll.contentView.documentVisibleRect
-        let wasAtBottom = visible.maxY >= threadDoc.frame.height - 40
-
-        bubbles.forEach { $0.removeFromSuperview() }
-        bubbleByKey = [:]
-        bubbles = messages.suffix(Self.drawnMessages).map { message -> ThreadBubble in
-            let bubble: ThreadBubble
-            switch message {
-            case .prompt(let to, _, let text, let at, let quote):
-                let view = ChatBubbleView(text: text, target: to, at: at, quote: quote)
-                if let quote {
-                    view.onQuoteClick = { [weak self] in self?.scrollTo(key: quote.targetKey) }
-                }
-                bubble = view
-            case .pending(let to, let text, let at, let quote):
-                let view = ChatBubbleView(text: text, target: to, at: at, pending: true, quote: quote)
-                if let quote {
-                    view.onQuoteClick = { [weak self] in self?.scrollTo(key: quote.targetKey) }
-                }
-                bubble = view
-            case .reply(let from, let turn, let quote):
-                let live = liveByAgent[from.id].flatMap { $0.turnId == turn.id ? $0.status : nil }
-                let view = AgentBubbleView(from: from, turn: turn, quote: quote, live: live)
-                // Com ou sem citação, a resposta sabe qual prompt responde.
-                let target = quote?.targetKey ?? "p|\(turn.id)"
-                view.onQuoteClick = { [weak self] in self?.scrollTo(key: target) }
-                bubble = view
-            }
-            bubbleByKey[message.key] = bubble
-            return bubble
-        }
-        for agent in typing { bubbles.append(AgentBubbleView(typing: agent)) }
-        bubbles.forEach(threadDoc.addSubview)
-
-        needsLayout = true
-        layoutSubtreeIfNeeded()
+    private func applyThread(_ output: ThreadOutput) {
+        messages = output.messages
+        pending = output.pending
+        loadingMore = false
+        let wasAtBottom = thread.isAtBottom
+        let result = thread.apply(output.blocks, metrics: output.metrics)
+        guard result.changed else { return }
+        threadRebuilds += 1
         // Puxar para o fim só se você já estava lá — quem subiu para ler não
-        // pode ser arrastado de volta a cada mensagem.
-        if wasAtBottom || bubbles.count <= 2 {
-            animateScroll(to: bottomY)
+        // pode ser arrastado de volta a cada mensagem. Linha nova entra com
+        // movimento; a bolha ao vivo crescendo só acompanha.
+        if wasAtBottom || thread.blocks.count <= 2 {
+            thread.scrollToBottom(animated: result.structural)
         }
+        emptyThread.isHidden = !thread.blocks.isEmpty || shownTerminal != nil
         updateToBottomButton()
     }
 
@@ -432,7 +495,7 @@ final class ChatContainer: NSView {
         if shownTerminal !== view { leaveTerminal() }
         shownTerminal = view
         addSubview(view, positioned: .below, relativeTo: composer)
-        threadScroll.isHidden = true
+        thread.scrollView.isHidden = true
         toBottom.isHidden = true
         emptyThread.isHidden = true
         needsLayout = true
@@ -445,7 +508,7 @@ final class ChatContainer: NSView {
         shownTerminal = nil
         view.removeFromSuperview()
         releaseTerminal?(view)
-        threadScroll.isHidden = false
+        thread.scrollView.isHidden = false
         needsLayout = true
     }
 
@@ -473,7 +536,7 @@ final class ChatContainer: NSView {
     /// Passo do spinner, no timer de 0.12s do app — o mesmo dos badges do
     /// canvas. No tique de 1s ele parecia travado.
     func tick() {
-        bubbles.forEach { ($0 as? AgentBubbleView)?.tick() }
+        thread.tick()
         column.tick()
     }
 
@@ -515,9 +578,9 @@ final class ChatContainer: NSView {
             "messages": messages.map { message -> [String: Any] in
                 let quote = message.quote.map { ["author": $0.authorId ?? "você", "text": $0.text] }
                 switch message {
-                case .prompt(let to, let turnId, let text, _, _):
+                case .prompt(let to, let turnId, let text, _, _, let from):
                     return ["kind": "prompt", "id": turnId, "to": to.id, "text": text,
-                            "quote": quote ?? [:]]
+                            "from": from ?? "", "quote": quote ?? [:]]
                 case .pending(let to, let text, _, _):
                     return ["kind": "pending", "to": to.id, "text": text, "quote": quote ?? [:]]
                 case .reply(let from, let turn, _):
@@ -536,14 +599,12 @@ final class ChatContainer: NSView {
                                     }
                                     if step.isError { line += " ✗" }
                                     return line
-                                case .exchange(let exchange):
-                                    return "⇄ \(exchange.fromId) → \(exchange.toId): \(exchange.text)"
                                 }
                             },
                             "live": live?.turn.id == turn.id && from.activity == .working
-                                ? liveStatus(of: from, live: live!).label
+                                ? Self.liveStatus(live!).label
                                 : (live?.turn.id == turn.id && from.activity == .asking
-                                   ? AgentBubbleView.Live.asking.label : ""),
+                                   ? ChatLive.asking.label : ""),
                             "quote": quote ?? [:]]
                 }
             }
@@ -644,21 +705,35 @@ final class ChatContainer: NSView {
 
         let contentX = pad + 264 + pad
         let contentWidth = max(0, bounds.width - contentX - pad)
+        let wasAtBottom = thread.isAtBottom
         let composerHeight = composer.desiredHeight
         composer.frame = NSRect(x: contentX,
                                 y: bounds.height - pad - composerHeight,
                                 width: contentWidth, height: composerHeight)
 
-        threadScroll.frame = NSRect(x: contentX, y: 10, width: contentWidth,
-                                    height: max(0, composer.frame.minY - 20))
-        shownTerminal?.frame = threadScroll.frame
-        toBottom.frame = NSRect(x: threadScroll.frame.maxX - 54,
-                                y: threadScroll.frame.maxY - 48, width: 36, height: 36)
+        let scrollView = thread.scrollView
+        scrollView.frame = NSRect(x: contentX, y: 10, width: contentWidth,
+                                  height: max(0, composer.frame.minY - 20))
+        shownTerminal?.frame = scrollView.frame
+        toBottom.frame = NSRect(x: scrollView.frame.maxX - 54,
+                                y: scrollView.frame.maxY - 48, width: 36, height: 36)
         emptyThread.frame = NSRect(x: contentX, y: composer.frame.minY - 28,
                                    width: contentWidth, height: 15)
-        emptyThread.isHidden = !bubbles.isEmpty || shownTerminal != nil
+        emptyThread.isHidden = !thread.blocks.isEmpty || shownTerminal != nil
 
-        layoutBubbles(width: contentWidth)
+        // A caixa cresceu (ou a janela mudou) e a thread encolheu por baixo:
+        // quem estava no fim continua vendo a última mensagem em vez de a
+        // caixa cobri-la.
+        if scrollView.frame.height != threadViewportHeight {
+            threadViewportHeight = scrollView.frame.height
+            if wasAtBottom { thread.scrollToBottom(animated: false) }
+        }
+        // Largura nova: as medidas não valem mais. A montagem é assíncrona;
+        // até chegar, as linhas ficam com a altura antiga.
+        if thread.width != threadWidth {
+            threadWidth = thread.width
+            DispatchQueue.main.async { [weak self] in self?.refresh() }
+        }
 
         if !popup.isHidden {
             let height = popup.desiredHeight
@@ -668,23 +743,6 @@ final class ChatContainer: NSView {
         }
     }
 
-    private func layoutBubbles(width: CGFloat) {
-        var y: CGFloat = 10
-        for bubble in bubbles {
-            let bubbleWidth = bubble.width(for: width - 36)
-            let height = bubble.height(for: bubbleWidth)
-            bubble.frame = NSRect(x: bubble.alignsRight ? width - bubbleWidth - 18 : 18,
-                                  y: y, width: bubbleWidth, height: height)
-            y += height + 12
-        }
-        threadDoc.frame = NSRect(x: 0, y: 0, width: width,
-                                 height: max(y, threadScroll.contentSize.height))
-    }
-}
-
-/// Documento da thread: flipped para as bolhas empilharem de cima para baixo.
-private final class FlippedView: NSView {
-    override var isFlipped: Bool { true }
 }
 
 /// O botão redondo de "voltar ao fim", com o chevron do sistema centrado —

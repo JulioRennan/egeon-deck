@@ -89,19 +89,6 @@ struct ChatStep: Equatable, Codable {
     }
 }
 
-/// Uma mensagem trocada entre agentes, já achatada para caber na bolha de quem
-/// começou: quem mandou, para quem, o texto e o que o destino fez com ela.
-struct ChatExchange: Equatable, Codable {
-    let fromId: String
-    let toId: String
-    let text: String
-    let at: Date
-    let steps: Int
-    /// O que o destino escreveu no próprio terminal ao atender — nota, não
-    /// mensagem: a mensagem de volta, se houver, é outro `ChatExchange`.
-    let note: String
-}
-
 /// Um elo da cadeia do turno, na ordem em que o agente o produziu: um
 /// parágrafo de prosa ou um passo. É a cadeia que a bolha desenha —
 /// "vou olhar X", três comandos, "achei", uma edição, a resposta — e não
@@ -109,19 +96,15 @@ struct ChatExchange: Equatable, Codable {
 enum ChatPart: Equatable, Codable {
     case text(String)
     case step(ChatStep)
-    /// Uma troca com outro agente, no ponto da cadeia em que aconteceu —
-    /// logo depois do `⇄` que a disparou, e a volta logo depois dela. Não é
-    /// gravada: o `fold` da thread a insere ao montar a bolha.
-    case exchange(ChatExchange)
 
-    private enum CodingKeys: String, CodingKey { case kind, text, step, glyph, sendTo, exchange }
+    private enum CodingKeys: String, CodingKey { case kind, text, step, glyph, sendTo }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        // Tipo que não existe mais (a "troca" achatada da sub-conversa, que
+        // nunca foi gravada) cai em prosa vazia, e o turno a descarta.
         switch try c.decode(String.self, forKey: .kind) {
-        case "exchange":
-            self = .exchange(try c.decode(ChatExchange.self, forKey: .exchange))
         case "step":
             if let step = try c.decodeIfPresent(ChatStep.self, forKey: .step) {
                 self = .step(step)
@@ -144,9 +127,6 @@ enum ChatPart: Equatable, Codable {
         case .step(let step):
             try c.encode("step", forKey: .kind)
             try c.encode(step, forKey: .step)
-        case .exchange(let exchange):
-            try c.encode("exchange", forKey: .kind)
-            try c.encode(exchange, forKey: .exchange)
         }
     }
 }
@@ -160,16 +140,14 @@ struct ChatTurn: Equatable, Codable {
     let id: String
     let prompt: String
     let promptAt: Date
-    /// Endereço do agente que mandou o prompt, quando não foi você. Turno assim
-    /// é sub-conversa: vive dentro da bolha de quem começou, não no topo.
+    /// Endereço do agente que mandou o prompt, quando não foi você. A bolha
+    /// dele fica no topo como qualquer outra, com quem mandou em cima (ADR-042).
     var from: String? = nil
     var steps: [ChatStep] = []
     var replyText = ""
     var replyAt: Date?
-    /// A cadeia agente↔agente que este turno disparou, em ordem de tempo.
-    var exchanges: [ChatExchange] = []
     /// Prosa e passos na ordem em que saíram. `steps` e `replyText` continuam
-    /// existindo — são as somas que a citação, a troca e o histórico antigo
+    /// existindo — são as somas que a citação e o histórico antigo
     /// usam; a bolha desenha por aqui.
     var parts: [ChatPart] = []
 
@@ -180,7 +158,7 @@ struct ChatTurn: Equatable, Codable {
         self.from = from
     }
 
-    var hasReply: Bool { !replyText.isEmpty || !steps.isEmpty || !exchanges.isEmpty }
+    var hasReply: Bool { !replyText.isEmpty || !steps.isEmpty }
 
     /// A cadeia para desenhar. Registro gravado antes da cadeia existir não tem
     /// `parts`: reconstrói na forma antiga — passos, depois o texto.
@@ -198,7 +176,7 @@ struct ChatTurn: Equatable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, prompt, promptAt, from, steps, replyText, replyAt, exchanges, parts
+        case id, prompt, promptAt, from, steps, replyText, replyAt, parts
     }
 
     /// Tolerante ao que falta: `parts` nasceu depois do histórico (ADR-039), e
@@ -212,8 +190,10 @@ struct ChatTurn: Equatable, Codable {
         steps = try c.decodeIfPresent([ChatStep].self, forKey: .steps) ?? []
         replyText = try c.decodeIfPresent(String.self, forKey: .replyText) ?? ""
         replyAt = try c.decodeIfPresent(Date.self, forKey: .replyAt)
-        exchanges = try c.decodeIfPresent([ChatExchange].self, forKey: .exchanges) ?? []
-        parts = try c.decodeIfPresent([ChatPart].self, forKey: .parts) ?? []
+        // Chave `exchanges` de arquivo antigo é ignorada; elo de tipo extinto
+        // decodifica como prosa vazia e sai aqui.
+        parts = (try c.decodeIfPresent([ChatPart].self, forKey: .parts) ?? [])
+            .filter { if case .text("") = $0 { return false } else { return true } }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -225,7 +205,6 @@ struct ChatTurn: Equatable, Codable {
         try c.encode(steps, forKey: .steps)
         try c.encode(replyText, forKey: .replyText)
         try c.encodeIfPresent(replyAt, forKey: .replyAt)
-        try c.encode(exchanges, forKey: .exchanges)
         try c.encode(parts, forKey: .parts)
     }
 }

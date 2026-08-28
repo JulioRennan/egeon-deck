@@ -15,7 +15,12 @@ struct ChatQuote: Equatable {
 /// Uma linha da thread: seu prompt para alguém, a resposta de alguém, ou um
 /// prompt seu que acabou de sair e o transcript ainda não confirmou.
 enum ChatMessage: Equatable {
-    case prompt(to: ChatParticipant, turnId: String, text: String, at: Date, quote: ChatQuote? = nil)
+    /// `from` é quem mandou quando não foi você: o id do agente remetente (ou
+    /// o endereço cru, se ele não está na bancada). A linha do tempo é plana,
+    /// como num grupo do WhatsApp: a mensagem do front para o back é uma
+    /// bolha do front, e a resposta do back é uma bolha do back (ADR-042).
+    case prompt(to: ChatParticipant, turnId: String, text: String, at: Date,
+                quote: ChatQuote? = nil, from: String? = nil)
     case reply(from: ChatParticipant, turn: ChatTurn, quote: ChatQuote? = nil)
     /// Eco local. Entra na linha do tempo pela hora do envio — pinado embaixo,
     /// uma resposta que chegasse antes da confirmação passaria por cima dele.
@@ -23,7 +28,7 @@ enum ChatMessage: Equatable {
 
     var at: Date {
         switch self {
-        case .prompt(_, _, _, let at, _): return at
+        case .prompt(_, _, _, let at, _, _): return at
         case .reply(_, let turn, _):   return turn.replyAt ?? turn.promptAt
         case .pending(_, _, let at, _): return at
         }
@@ -32,7 +37,7 @@ enum ChatMessage: Equatable {
     /// Identidade estável da mensagem entre remontagens — alvo de citação.
     var key: String {
         switch self {
-        case .prompt(_, let turnId, _, _, _): return "p|\(turnId)"
+        case .prompt(_, let turnId, _, _, _, _): return "p|\(turnId)"
         case .reply(_, let turn, _):          return "r|\(turn.id)"
         case .pending(let to, _, let at, _):  return "e|\(to.id)|\(at.timeIntervalSince1970)"
         }
@@ -40,28 +45,34 @@ enum ChatMessage: Equatable {
 
     var participantId: String {
         switch self {
-        case .prompt(let to, _, _, _, _): return to.id
+        case .prompt(let to, _, _, _, _, _): return to.id
         case .reply(let from, _, _):   return from.id
         case .pending(let to, _, _, _): return to.id
         }
     }
 
     var promptText: String? {
-        if case .prompt(_, _, let text, _, _) = self { return text }
+        if case .prompt(_, _, let text, _, _, _) = self { return text }
+        return nil
+    }
+
+    /// Quem mandou o prompt, quando foi outro agente. `nil` é você.
+    var senderId: String? {
+        if case .prompt(_, _, _, _, _, let from) = self { return from }
         return nil
     }
 
     var quote: ChatQuote? {
         switch self {
-        case .prompt(_, _, _, _, let quote), .reply(_, _, let quote),
+        case .prompt(_, _, _, _, let quote, _), .reply(_, _, let quote),
              .pending(_, _, _, let quote): return quote
         }
     }
 
     private func with(quote: ChatQuote?) -> ChatMessage {
         switch self {
-        case .prompt(let to, let turnId, let text, let at, _):
-            return .prompt(to: to, turnId: turnId, text: text, at: at, quote: quote)
+        case .prompt(let to, let turnId, let text, let at, _, let from):
+            return .prompt(to: to, turnId: turnId, text: text, at: at, quote: quote, from: from)
         case .reply(let from, let turn, _):        return .reply(from: from, turn: turn, quote: quote)
         case .pending(let to, let text, let at, _):
             return .pending(to: to, text: text, at: at, quote: quote)
@@ -82,12 +93,17 @@ enum ChatMessage: Equatable {
         var perAgent: [String: [ChatTurn]] = [:]
         for agent in agents { perAgent[agent.id] = turns(agent) }
 
+        // Plano, sem sub-conversa: cada turno de cada agente é uma bolha de
+        // topo, inclusive o que chegou de outro agente — esse leva quem mandou.
+        let byAddress = Dictionary(agents.map { ($0.address, $0) }, uniquingKeysWith: { a, _ in a })
         var messages: [ChatMessage] = extra
-        for (participant, turn) in fold(agents: agents, turns: perAgent) {
-            let label = turn.from.map { "de \($0): \(turn.prompt)" } ?? turn.prompt
-            messages.append(.prompt(to: participant, turnId: turn.id, text: label,
-                                    at: turn.promptAt))
-            if turn.hasReply { messages.append(.reply(from: participant, turn: turn)) }
+        for agent in agents {
+            for turn in perAgent[agent.id] ?? [] {
+                let from = turn.from.map { byAddress[$0]?.id ?? $0 }
+                messages.append(.prompt(to: agent, turnId: turn.id, text: turn.prompt,
+                                        at: turn.promptAt, from: from))
+                if turn.hasReply { messages.append(.reply(from: agent, turn: turn)) }
+            }
         }
         // `sorted` não é estável: dois itens no mesmo instante trocariam de
         // lugar entre uma remontagem e outra. O índice desempata.
@@ -97,112 +113,29 @@ enum ChatMessage: Equatable {
         return quoting(sorted)
     }
 
-    /// Sub-conversa: turno que chegou de OUTRO agente não vira bolha de topo —
-    /// entra, achatado e em ordem, na bolha do agente que começou a cadeia. Se o
-    /// próprio dono da bolha recebeu a volta e continuou, o que ele escreveu é o
-    /// corpo da bolha, e os passos dele somam aos do turno. Quem não tem dono
-    /// (mensagem sem remetente conhecido) fica no topo, para não sumir.
-    static func fold(agents: [ChatParticipant],
-                     turns: [String: [ChatTurn]]) -> [(ChatParticipant, ChatTurn)] {
-        let byAddress = Dictionary(uniqueKeysWithValues: agents.map { ($0.address, $0) })
-        var roots: [(ChatParticipant, ChatTurn)] = []
-        var rootIndex: [String: Int] = [:]
-        for agent in agents {
-            for turn in turns[agent.id] ?? [] where turn.from == nil {
-                rootIndex[turn.id] = roots.count
-                roots.append((agent, turn))
-            }
-        }
-
-        let received = agents.flatMap { agent in
-            (turns[agent.id] ?? []).filter { $0.from != nil }.map { (agent, $0) }
-        }.sorted { $0.1.promptAt < $1.1.promptAt }
-
-        for (receiver, turn) in received {
-            guard let from = turn.from,
-                  let root = rootOf(receiver: receiver, turn: turn, byAddress: byAddress, turns: turns),
-                  let index = rootIndex[root.1.id] else {
-                rootIndex[turn.id] = roots.count
-                roots.append((receiver, turn))
-                continue
-            }
-            let isOwner = receiver.id == root.0.id
-            let exchange = ChatExchange(
-                fromId: byAddress[from]?.id ?? from, toId: receiver.id, text: turn.prompt,
-                at: turn.promptAt, steps: turn.steps.count,
-                note: isOwner ? "" : turn.replyText)
-            roots[index].1.exchanges.append(exchange)
-            roots[index].1.parts = placing(exchange, in: roots[index].1.chain,
-                                           sentTo: isOwner ? nil : receiver.address)
-            if isOwner {
-                roots[index].1.parts += turn.chain
-                roots[index].1.steps += turn.steps
-                if !turn.replyText.isEmpty {
-                    roots[index].1.replyText +=
-                        (roots[index].1.replyText.isEmpty ? "" : "\n\n") + turn.replyText
-                }
-                if let at = turn.replyAt { roots[index].1.replyAt = at }
-            }
-        }
-        return roots
-    }
-
-    /// A troca entra na cadeia onde aconteceu: a ida logo depois do último `⇄`
-    /// para aquele destino (pulando trocas já penduradas ali); a volta (que
-    /// chega ao dono) no fim, antes do que ele escreveu em seguida. Sem isso a
-    /// conversa com o vizinho ficava toda depois da resposta final, fora de
-    /// ordem com o que a provocou.
-    static func placing(_ exchange: ChatExchange, in chain: [ChatPart],
-                        sentTo address: String?) -> [ChatPart] {
-        var chain = chain
-        guard let address,
-              let sendIndex = chain.lastIndex(where: {
-                  if case .step(let step) = $0 { return step.sendTo == address } else { return false }
-              }) else {
-            chain.append(.exchange(exchange))
-            return chain
-        }
-        var position = sendIndex + 1
-        while position < chain.count, case .exchange = chain[position] { position += 1 }
-        chain.insert(.exchange(exchange), at: position)
-        return chain
-    }
-
-    /// Sobe a cadeia até o turno que VOCÊ disparou: quem mandou esta mensagem,
-    /// em que turno dele estava (o último, antes dela, com `egeon send` para o
-    /// destino — ou o último antes dela), e assim por diante.
-    private static func rootOf(receiver: ChatParticipant, turn: ChatTurn,
-                               byAddress: [String: ChatParticipant],
-                               turns: [String: [ChatTurn]]) -> (ChatParticipant, ChatTurn)? {
-        var current = (receiver, turn)
-        for _ in 0..<8 {
-            guard let from = current.1.from, let sender = byAddress[from] else { return nil }
-            let before = (turns[sender.id] ?? []).filter { $0.promptAt <= current.1.promptAt }
-            let owner = before.last { candidate in
-                candidate.steps.contains { $0.sendTo == current.0.address }
-            } ?? before.last
-            guard let owner else { return nil }
-            if owner.from == nil { return (sender, owner) }
-            current = (sender, owner)
-        }
-        return nil
-    }
-
     static func quoting(_ sorted: [ChatMessage]) -> [ChatMessage] {
         var out: [ChatMessage] = []
         for (index, message) in sorted.enumerated() {
             let previous = index > 0 ? sorted[index - 1] : nil
             switch message {
             case .reply(_, let turn, _):
-                if case .prompt(_, let turnId, _, _, _)? = previous, turnId == turn.id {
+                if case .prompt(_, let turnId, _, _, _, _)? = previous, turnId == turn.id {
                     out.append(message)
                 } else {
+                    // O prompt pode ter vindo de outro agente: a citação diz
+                    // quem perguntou, não "você".
+                    let sender = sorted.first {
+                        if case .prompt(_, let id, _, _, _, _) = $0 { return id == turn.id }
+                        return false
+                    }?.senderId
                     out.append(message.with(quote: ChatQuote(
-                        authorId: nil, text: turn.prompt, at: turn.promptAt,
+                        authorId: sender, text: turn.prompt, at: turn.promptAt,
                         targetKey: "p|\(turn.id)")))
                 }
-            case .prompt(let to, _, _, _, _), .pending(let to, _, _, _):
-                if previous?.participantId == to.id || previous == nil {
+            case .prompt(let to, _, _, _, _, _), .pending(let to, _, _, _):
+                // Mensagem de agente para agente já diz de quem é e para quem
+                // vai: não é resposta a nada, não cita.
+                if previous?.participantId == to.id || previous == nil || message.senderId != nil {
                     out.append(message)
                 } else if let last = sorted[..<index].last(where: {
                     if case .reply(let from, _, _) = $0 { return from.id == to.id }
@@ -262,7 +195,7 @@ enum ChatThread {
         // a cada refresh com a lista inteira, e sem isso o mesmo turno daria
         // baixa no eco seguinte na rodada seguinte.
         for message in messages {
-            guard case .prompt(let to, let turnId, _, _, _) = message else { continue }
+            guard case .prompt(let to, let turnId, _, _, _, _) = message else { continue }
             if let index = remaining.firstIndex(where: {
                 $0.target == to.id && $0.text == message.promptText
                     && !$0.knownTurnIds.contains(turnId)

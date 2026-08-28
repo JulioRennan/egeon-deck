@@ -41,8 +41,16 @@ final class DiffView: NSView {
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
 
-    var height: CGFloat {
-        Self.headerHeight + rows.reduce(0) { $0 + Self.hunkHeight + CGFloat($1.count) * Self.rowHeight }
+    var height: CGFloat { Self.height(rows: rows) }
+
+    /// A altura sem a view: quem mede a thread fora da main precisa dela
+    /// antes de existir uma view.
+    static func height(diff: [String]) -> CGFloat {
+        height(rows: DiffHunk.parse(diff).map(\.rows))
+    }
+
+    private static func height(rows: [[DiffHunk.Row]]) -> CGFloat {
+        headerHeight + rows.reduce(0) { $0 + hunkHeight + CGFloat($1.count) * rowHeight }
     }
 
     private var counts: (added: Int, removed: Int) {

@@ -172,10 +172,18 @@ final class ChatComposer: NSView {
         onSend?(text)
     }
 
+    /// Última altura anunciada ao dono do layout. Avisar a cada tecla fazia o
+    /// pai medir a thread inteira de novo por caractere digitado — a digitação
+    /// engasgava com poucas dezenas de bolhas na tela.
+    private var reportedHeight: CGFloat = 0
+
     private func refreshAfterEdit() {
         placeholder.isHidden = !textView.string.isEmpty
-        onHeightChange?()
         needsLayout = true
+        let height = desiredHeight
+        guard height != reportedHeight else { return }
+        reportedHeight = height
+        onHeightChange?()
     }
 
     override func layout() {

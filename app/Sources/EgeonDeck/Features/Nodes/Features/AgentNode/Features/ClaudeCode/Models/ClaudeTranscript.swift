@@ -17,17 +17,45 @@ enum ClaudeTranscript {
     enum LastBlock: Equatable { case text, tool, thinking }
 
     static func parseDetailed(_ jsonl: String) -> (turns: [ChatTurn], last: LastBlock?) {
+        let scanned = scan(Data(jsonl.utf8))
+        return (scanned.turns, scanned.last)
+    }
+
+    /// A varredura com onde cada turno começa no arquivo — a leitura ao vivo
+    /// parte dali na vez seguinte em vez de reler a cauda inteira.
+    struct Scan {
         var turns: [ChatTurn] = []
         var last: LastBlock?
-        for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true) {
+        /// Byte (relativo ao início de `data`) da linha do prompt de cada turno,
+        /// na ordem de `turns`.
+        var promptOffsets: [Int] = []
+    }
+
+    private static let userMark = Data("\"type\":\"user\"".utf8)
+    private static let assistantMark = Data("\"type\":\"assistant\"".utf8)
+
+    /// Linha a linha em bytes. Em `String`, `split` e `contains` andam grafema
+    /// a grafema: 4 MB de cauda custavam dezenas de ms por leitura, várias
+    /// vezes por segundo enquanto o agente trabalha.
+    static func scan(_ data: Data) -> Scan {
+        var out = Scan()
+        var turns: [ChatTurn] = []
+        var last: LastBlock?
+        var cursor = data.startIndex
+        while cursor < data.endIndex {
+            let lineEnd = data[cursor...].firstIndex(of: 0x0A) ?? data.endIndex
+            let line = data[cursor..<lineEnd]
+            let offset = cursor - data.startIndex
+            cursor = lineEnd + 1
             // A maior parte do arquivo é attachment e snapshot — linhas enormes
             // que não interessam. Procurar o tipo antes de decodificar JSON é o
             // que faz um transcript de dezenas de MB ser lido em tempo útil.
             // A linha inteira, e não só o começo: `type` vem depois de
             // parentUuid, cwd, sessionId e afins.
-            guard line.contains("\"type\":\"user\"") || line.contains("\"type\":\"assistant\"")
+            guard !line.isEmpty,
+                  line.range(of: Self.userMark) != nil || line.range(of: Self.assistantMark) != nil
             else { continue }
-            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)),
+            guard let object = try? JSONSerialization.jsonObject(with: line),
                   let entry = object as? [String: Any],
                   let type = entry["type"] as? String,
                   let message = entry["message"] as? [String: Any] else { continue }
@@ -52,6 +80,7 @@ enum ClaudeTranscript {
                 let envelope = Self.agentEnvelope(raw)
                 turns.append(ChatTurn(id: id, prompt: envelope?.text ?? raw, promptAt: at,
                                       from: envelope?.from))
+                out.promptOffsets.append(offset)
                 last = nil
             case "assistant":
                 guard !turns.isEmpty,
@@ -80,7 +109,9 @@ enum ClaudeTranscript {
             default: continue
             }
         }
-        return (turns, last)
+        out.turns = turns
+        out.last = last
+        return out
     }
 
     /// Prompt seu: string, ou blocos de texto. `tool_result` não é prompt, e
@@ -328,17 +359,43 @@ enum ClaudeTranscript {
     struct LiveTurn: Equatable {
         var turn: ChatTurn
         var last: LastBlock?
+        /// Byte do arquivo onde a linha do prompt deste turno começa. A
+        /// leitura seguinte parte daqui (`from:`): só o turno em curso é
+        /// relido, não os 4 MB de turnos velhos atrás dele.
+        var promptOffset: UInt64 = 0
     }
 
-    static func liveTurn(at url: URL, notBefore: Date?,
+    static func liveTurn(at url: URL, notBefore: Date?, from offset: UInt64 = 0,
                          tailBytes: Int = 4 * 1024 * 1024) -> LiveTurn? {
-        guard let text = tail(of: url, bytes: tailBytes) else { return nil }
-        let parsed = parseDetailed(text)
-        guard let turn = parsed.turns.last else { return nil }
+        guard var read = read(url, from: offset, tailBytes: tailBytes) else { return nil }
+        var scanned = scan(read.data)
+        // Offset de uma conversa que já não existe (arquivo trocado ou
+        // encolhido): sem turno a partir dele, volta à cauda.
+        if scanned.turns.isEmpty, offset > 0, let again = Self.read(url, from: 0, tailBytes: tailBytes) {
+            read = again
+            scanned = scan(read.data)
+        }
+        guard let turn = scanned.turns.last, let promptOffset = scanned.promptOffsets.last
+        else { return nil }
         // Folga porque o gancho `prompt` e a linha do prompt nascem no mesmo
         // segundo, em ordem que não se controla.
         if let notBefore, turn.promptAt < notBefore.addingTimeInterval(-5) { return nil }
-        return LiveTurn(turn: turn, last: parsed.last)
+        return LiveTurn(turn: turn, last: scanned.last,
+                        promptOffset: read.base + UInt64(promptOffset))
+    }
+
+    /// Do byte `offset` ao fim — é o turno em curso, do tamanho que for. Sem
+    /// offset (ou com um que passou do fim do arquivo), só a cauda.
+    private static func read(_ url: URL, from offset: UInt64,
+                             tailBytes: Int) -> (data: Data, base: UInt64)? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let tailStart = size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0
+        let start = offset > 0 && offset <= size ? offset : tailStart
+        try? handle.seek(toOffset: start)
+        guard let data = try? handle.readToEnd() else { return nil }
+        return (data, start)
     }
 
     private static func tail(of url: URL, bytes: Int) -> String? {

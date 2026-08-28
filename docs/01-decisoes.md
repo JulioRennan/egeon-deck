@@ -2734,3 +2734,81 @@ inferir. Arquivo sem extensão conhecida fica sem cor — e é honesto.
 A cor é discreta de propósito: o fundo verde/vermelho diz **o que mudou**; a
 cor do token diz **o que é**. Linha não quebra (desalinharia os lados); corta
 com `…` no token que não coube.
+
+## ADR-042 — A thread do chat é um `NSTableView` de blocos, medido fora da main; a linha do tempo é plana
+
+**Decisão:** a thread deixa de ser uma pilha de `NSView` feita à mão e vira
+um `NSTableView` view-based com **uma linha por bloco** da cadeia — prompt,
+cabeçalho da resposta, trecho de prosa, bloco de código, passo, diff, linha
+de status, "trabalhando…" (`ChatBlock`, id estável). Altura de linha vem de
+um cache (`usesAutomaticRowHeights = false`); a medida é feita com TextKit
+avulso **na fila de fundo** da montagem, por bolha, e só a bolha que mudou é
+medida de novo (`ChatBlockLayout.measure`, `known`). A linha desenha com o
+mesmo TextKit (TextKit 1 explícito, inset zero, sem folga de fragmento) para
+a altura desenhada ser a medida. Entre uma montagem e outra a tabela recebe
+um diff por id: linha nova é inserida, linha que mudou é recarregada, o
+resto fica (`ChatThreadController.apply`); se a ordem dos ids comuns mudou
+(a resposta ao vivo muda de hora), recarrega inteira — que numa tabela só
+refaz o visível. A bolha é o conjunto de linhas com o mesmo `messageKey`:
+cada linha desenha o seu pedaço, com canto só na primeira e na última e o
+retângulo estendido para fora nas do meio, e a bolha lê contínua.
+
+**E a linha do tempo é plana, como um grupo do WhatsApp.** O `fold` que
+achatava a sub-conversa entre agentes dentro da bolha de quem começou
+(ADR-039, `ChatPart.exchange`) sai: cada turno de cada agente é uma bolha de
+topo, na ordem do tempo, e o que chegou de outro agente leva quem mandou
+(`ChatMessage.prompt(from:)`: "✦ front" em cima na cor de quem mandou, à
+esquerda). A marca de destinatário é só o `@back` na cor dele no começo do
+texto — e só quando a mensagem não é contínua, a mesma regra da citação:
+consecutivo é limpo, intercalado é marcado (`ChatBlock.Kind.prompt.mention`).
+Sem seta. Mensagem de agente para agente não cita — já diz de quem é. `ChatExchange` e `ChatPart.exchange` saíram do
+código: um agente responde ao outro, e é só isso. Arquivo antigo com a chave
+`exchanges` ou um elo `"kind":"exchange"` decodifica sem tropeçar (a chave é
+ignorada; o elo vira prosa vazia e é descartado). `ChatPart.exchange` fica só para decodificar o que houver.
+
+### Por que a tabela
+
+A pilha à mão era a coisa certa para 20 bolhas curtas e a errada para "muita
+informação": 80 bolhas × dezenas de subviews com layer, todas vivas mesmo fora
+da tela; a unidade era o turno inteiro — um turno com 100 passos era uma view
+gigante que renascia inteira a cada linha gravada no transcript; e cada
+medição (`cellSize`, `boundingRect`) rodava na main. O padrão do macOS para
+lista longa de altura variável é o de todo chat nativo pesado: Telegram macOS
+(`TGUIKit/TableView` sobre `NSTableView`, alturas do item, `stableId`,
+layer-backed), QuickMD (`NSTextView` em `NSTableView` virtualizado, "uma linha
+por bloco, alturas exatas medidas fora da main"). O que se descartou, com
+evidência: `usesAutomaticRowHeights` (self-sizing por Auto Layout — flicker
+no Sonoma, cache de altura quebrado no Ventura 13.0), SwiftUI `List`/
+`LazyVStack` no macOS (lento acima de umas centenas de linhas, engasga com
+altura variável), `NSCollectionView` antigo (instancia tudo, não reutiliza).
+
+### Por que plana
+
+O aninhamento (spec §4, ADR-039) foi desenhado para "ler a resposta do front
+e ver dentro o que o back respondeu". Na prática escondia a conversa: a fala
+do back virava nota dentro da bolha do front, sem cor própria, sem hora
+própria, e a cadeia de três agentes ficava ilegível. Plano, cada agente fala
+na sua bolha, na sua cor, na hora em que falou — e quem quer saber a quem
+responde tem a citação e o "→".
+
+### Preguiçoso de ponta a ponta
+
+- **Linha**: só a visível existe, reusada por tipo ao rolar (`rowsCreated`
+  prova: 600 linhas, poucas dezenas de views).
+- **Texto**: markdown e realce são renderizados uma vez, na medição em fundo,
+  e viajam dentro de `ChatRowMetrics.text`; a linha só mostra.
+- **Histórico em janelas**: entram as últimas 60 mensagens; rolar até o
+  começo do que há traz mais 60 (`loadedMessages`), como o WhatsApp
+  carregando mensagens antigas. As bolhas já medidas não são medidas de novo.
+- **Âncora de leitura**: quem está no meio não é empurrado — antes de mudar a
+  tabela, a primeira linha visível e sua distância ao topo são guardadas e
+  devolvidas ao mesmo lugar depois (`ChatThreadController.restore`).
+
+### Limites assumidos
+
+- A bolha ao vivo ainda é remontada por bloco a cada mudança do turno (só as
+  linhas dela; as outras ficam). Um turno com 100 passos re-mede 100 linhas —
+  na fila de fundo, com o cache do resto intacto.
+- Clique dentro do texto (que é `NSTextView` selecionável) não rola para a
+  citação; clique no fundo da bolha ou no cabeçalho, sim.
+

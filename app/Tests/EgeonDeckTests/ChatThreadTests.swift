@@ -226,7 +226,10 @@ final class ChatThreadTests: XCTestCase {
     // "de front"), responde via egeon send; o front recebe a volta e continua.
     // Na thread: UMA bolha do front, com as duas trocas dentro e a continuação
     // como corpo. Nada disso vira bolha de topo.
-    func testAgentExchangesFoldIntoOwnersBubble() {
+    // Plano como um grupo do WhatsApp: a mensagem do front para o back é uma
+    // bolha do front, a resposta do back é do back, e a volta ao front é do
+    // back também — tudo na ordem do tempo, sem sub-conversa aninhada.
+    func testAgentMessagesAreTheirOwnBubbles() {
         let front = agent("front"), back = agent("back")
         let base = Date(timeIntervalSince1970: 1_000)
 
@@ -236,90 +239,28 @@ final class ChatThreadTests: XCTestCase {
 
         var backTurn = ChatTurn(id: "b1", prompt: "o estado vem pronto?",
                                 promptAt: base.addingTimeInterval(10), from: "deck/front")
-        backTurn.steps = [ChatStep(glyph: "⇄", text: "egeon send deck/front", sendTo: "deck/front")]
         backTurn.replyText = "Respondi ao front."
         backTurn.replyAt = base.addingTimeInterval(15)
 
         var frontBack = ChatTurn(id: "f2", prompt: "vem pronto: state ∈ {…}",
                                  promptAt: base.addingTimeInterval(20), from: "deck/back")
-        frontBack.steps = [ChatStep(glyph: "±", text: "Column.swift")]
-        frontBack.replyText = "Coluna pronta, ligada no endpoint."
+        frontBack.replyText = "Coluna pronta."
         frontBack.replyAt = base.addingTimeInterval(30)
 
         let thread = ChatThread.build(participants: [front, back]) {
             $0.id == "front" ? [root, frontBack] : [backTurn]
         }
 
-        XCTAssertEqual(thread.count, 2, "só prompt seu + bolha do front")
-        guard case .reply(let from, let turn, _) = thread[1] else { return XCTFail("esperava resposta") }
-        XCTAssertEqual(from, front)
-        XCTAssertEqual(turn.exchanges.map { "\($0.fromId)→\($0.toId)" }, ["front→back", "back→front"])
-        XCTAssertEqual(turn.exchanges[0].text, "o estado vem pronto?")
-        XCTAssertEqual(turn.exchanges[0].note, "Respondi ao front.")
-        XCTAssertEqual(turn.exchanges[0].steps, 1)
-        XCTAssertEqual(turn.exchanges[1].note, "", "o dono não anota: o que ele disse é o corpo")
-        XCTAssertEqual(turn.replyText, "Coluna pronta, ligada no endpoint.")
-        XCTAssertEqual(turn.steps.count, 2, "os passos da continuação somam aos do turno")
-        XCTAssertEqual(turn.replyAt, base.addingTimeInterval(30))
-    }
-
-    // Mensagem de agente sem dono conhecido fica no topo — não some.
-    // A volta que o dono da bolha recebeu e continuou: a cadeia dele soma à
-    // do turno-raiz, na ordem — não só as somas de passos e texto.
-    func testOwnersContinuationAppendsToChain() {
-        let base = Date(timeIntervalSince1970: 1_000)
-        let front = agent("front"), back = agent("back")
-        var root = ChatTurn(id: "f1", prompt: "faz", promptAt: base)
-        root.parts = [.text("vou pedir"),
-                      .step(ChatStep(glyph: "⇄", text: "egeon send deck/back", sendTo: "deck/back"))]
-        root.steps = [ChatStep(glyph: "⇄", text: "egeon send deck/back", sendTo: "deck/back")]
-        root.replyText = "vou pedir"; root.replyAt = base.addingTimeInterval(5)
-        var backTurn = ChatTurn(id: "b1", prompt: "expõe", promptAt: base.addingTimeInterval(10),
-                                from: "deck/front")
-        backTurn.replyText = "exposto"; backTurn.replyAt = base.addingTimeInterval(20)
-        var back2front = ChatTurn(id: "f2", prompt: "exposto", promptAt: base.addingTimeInterval(21),
-                                  from: "deck/back")
-        back2front.parts = [.step(ChatStep(glyph: "±", text: "a.swift")), .text("pronto")]
-        back2front.steps = [ChatStep(glyph: "±", text: "a.swift")]
-        back2front.replyText = "pronto"; back2front.replyAt = base.addingTimeInterval(30)
-
-        let folded = ChatMessage.fold(agents: [front, back],
-                                      turns: ["front": [root, back2front], "back": [backTurn]])
-        XCTAssertEqual(folded.count, 1)
-        // As trocas entram na cadeia (teste próprio abaixo); o resto é a
-        // cadeia do raiz seguida da continuação do dono, na ordem.
-        let withoutExchanges = folded[0].1.chain.filter { if case .exchange = $0 { return false } else { return true } }
-        XCTAssertEqual(withoutExchanges, root.parts + back2front.parts)
-        XCTAssertEqual(folded[0].1.exchanges.count, 2)
-    }
-
-    // A troca entra na cadeia onde aconteceu: a ida logo depois do `⇄` que a
-    // disparou, a volta depois dela, e a continuação do dono depois de tudo —
-    // não "toda a conversa com o vizinho depois da resposta final".
-    func testExchangesSitInTheChainWhereTheyHappened() {
-        let base = Date(timeIntervalSince1970: 1_000)
-        let front = agent("front"), back = agent("back")
-        let send = ChatStep(glyph: "⇄", text: "egeon send deck/back", sendTo: "deck/back")
-        var root = ChatTurn(id: "f1", prompt: "faz", promptAt: base)
-        root.parts = [.text("vou pedir"), .step(send), .text("pedi")]
-        root.steps = [send]; root.replyText = "vou pedir\n\npedi"; root.replyAt = base.addingTimeInterval(5)
-        var backTurn = ChatTurn(id: "b1", prompt: "expõe", promptAt: base.addingTimeInterval(10),
-                                from: "deck/front")
-        backTurn.replyText = "exposto"; backTurn.replyAt = base.addingTimeInterval(20)
-        var reply = ChatTurn(id: "f2", prompt: "exposto", promptAt: base.addingTimeInterval(21),
-                             from: "deck/back")
-        reply.parts = [.text("pronto")]; reply.replyText = "pronto"; reply.replyAt = base.addingTimeInterval(30)
-
-        let folded = ChatMessage.fold(agents: [front, back],
-                                      turns: ["front": [root, reply], "back": [backTurn]])
-        let kinds = folded[0].1.chain.map { part -> String in
-            switch part {
-            case .text(let t): return "¶\(t)"
-            case .step: return "⇄"
-            case .exchange(let e): return "\(e.fromId)→\(e.toId)"
-            }
-        }
-        XCTAssertEqual(kinds, ["¶vou pedir", "⇄", "front→back", "¶pedi", "back→front", "¶pronto"])
+        XCTAssertEqual(thread.map(\.key), ["p|f1", "r|f1", "p|b1", "r|b1", "p|f2", "r|f2"])
+        XCTAssertEqual(thread.map(\.senderId), [nil, nil, "front", nil, "back", nil])
+        XCTAssertEqual(thread[2].promptText, "o estado vem pronto?", "sem prefixo 'de …': quem mandou vai em `from`")
+        // Mensagem de agente para agente não cita: ela já diz de quem é.
+        XCTAssertNil(thread[2].quote)
+        XCTAssertNil(thread[4].quote)
+        // A resposta logo depois do próprio prompt é limpa.
+        XCTAssertNil(thread[3].quote)
+        guard case .reply(_, let turn, _) = thread[5] else { return XCTFail("esperava resposta") }
+        XCTAssertEqual(turn.replyText, "Coluna pronta.")
     }
 
     func testSendTargetIgnoresHeredocNoise() {
@@ -329,19 +270,43 @@ final class ChatThreadTests: XCTestCase {
         XCTAssertNil(ClaudeTranscript.sendTarget(in: "egeon send\ndeck/b"))
     }
 
-    func testExchangePartRoundTrips() throws {
-        let exchange = ChatExchange(fromId: "a", toId: "b", text: "oi", at: Date(timeIntervalSince1970: 5),
-                                    steps: 2, note: "feito")
-        let data = try ChatHistory.encoder.encode(ChatPart.exchange(exchange))
-        XCTAssertEqual(try ChatHistory.decoder.decode(ChatPart.self, from: data), .exchange(exchange))
+    // Linha antiga com o elo extinto ("exchange") e a chave `exchanges`: o
+    // turno decodifica sem tropeçar, e o elo some.
+    func testLegacyExchangeDecodesToNothing() throws {
+        let json = """
+        {"id":"t1","prompt":"oi","promptAt":"2026-08-24T23:13:27.000Z","steps":[],"replyText":"feito","exchanges":[{"fromId":"a","toId":"b","text":"x","at":"2026-08-24T23:13:27.000Z","steps":0,"note":""}],"parts":[{"kind":"text","text":"feito"},{"kind":"exchange","exchange":{"fromId":"a","toId":"b","text":"x","at":"2026-08-24T23:13:27.000Z","steps":0,"note":""}}]}
+        """
+        let turn = try ChatHistory.decoder.decode(ChatTurn.self, from: Data(json.utf8))
+        XCTAssertEqual(turn.parts, [.text("feito")])
+        XCTAssertTrue(turn.hasReply)
     }
 
-    func testOrphanExchangeStaysOnTop() {
+    // A resposta a uma mensagem de outro agente, quando não vem logo depois
+    // dela, cita quem perguntou — não "você".
+    func testReplyToAgentMessageQuotesTheSender() {
+        let front = agent("front"), back = agent("back")
+        let base = Date(timeIntervalSince1970: 1_000)
+        var ask = ChatTurn(id: "b1", prompt: "vem pronto?", promptAt: base, from: "deck/front")
+        ask.replyText = "Vem."; ask.replyAt = base.addingTimeInterval(20)
+        var other = ChatTurn(id: "f9", prompt: "e a cor?", promptAt: base.addingTimeInterval(10))
+        other.replyText = "azul"; other.replyAt = base.addingTimeInterval(12)
+        let thread = ChatThread.build(participants: [front, back]) {
+            $0.id == "back" ? [ask] : [other]
+        }
+        guard case .reply(let from, _, let quote)? = thread.last else { return XCTFail("esperava resposta") }
+        XCTAssertEqual(from, back)
+        XCTAssertEqual(quote?.authorId, "front")
+        XCTAssertEqual(quote?.text, "vem pronto?")
+    }
+
+    // Remetente que não está na bancada: o endereço cru vai em `from`.
+    func testUnknownSenderKeepsRawAddress() {
         let back = agent("back")
         let turn = ChatTurn(id: "b1", prompt: "oi", promptAt: Date(), from: "outra/coisa")
         let thread = ChatThread.build(participants: [back]) { _ in [turn] }
         XCTAssertEqual(thread.count, 1)
-        XCTAssertEqual(thread[0].promptText, "de outra/coisa: oi")
+        XCTAssertEqual(thread[0].promptText, "oi")
+        XCTAssertEqual(thread[0].senderId, "outra/coisa")
     }
 
     // O eco entra NA linha do tempo pela hora do envio: resposta que chega
