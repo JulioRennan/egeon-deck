@@ -35,6 +35,8 @@ enum ChatBlockLayout {
     static let quoteHeight: CGFloat = 52
     static let boxPadding: CGFloat = 6
     static let rowGap: CGFloat = 8
+    /// Respiro entre dois passos que dividem a mesma caixa.
+    static let stepGap: CGFloat = 5
     static let headerHeight: CGFloat = 16
     static let statusHeight: CGFloat = 14
     static let timeHeight: CGFloat = 13
@@ -267,7 +269,9 @@ enum ChatBlockLayout {
                 height = rowGap + size(of: texts[block.id]!, width: width - textInset * 2).height
             case .step, .code:
                 let inner = width - textInset * 2 - 20
-                height = rowGap + size(of: texts[block.id]!, width: inner).height + boxPadding * 2
+                height = (block.boxTop ? rowGap + boxPadding : stepGap)
+                    + size(of: texts[block.id]!, width: inner).height
+                    + (block.boxBottom ? boxPadding : 0)
             case .diff(_, _, let diff):
                 height = rowGap + DiffView.height(diff: diff)
             case .status:

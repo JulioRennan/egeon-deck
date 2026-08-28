@@ -79,6 +79,7 @@ app/Sources/EgeonDeck/
   por id entre montagens (`ChatThreadController`). A bolha desenha a
   **cadeia** do turno na ordem (prosa, passo, diff, prosa — `ChatTurn.parts`)
   — passo de comando nasce **recolhido**, só o título com `▸`, e clique abre;
+  passos contíguos dividem **uma caixa** (ADR-047);
   **diff nunca recolhe** (o `DiffView` lado a lado está sempre lá) e leitura
   mostra o arquivo com o formatador (ADR-044/046) — e cresce ao vivo enquanto
   o agente trabalha, lendo a cauda do transcript dele — a partir do prompt do

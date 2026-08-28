@@ -56,6 +56,17 @@ struct ChatBlock: Equatable {
     let kind: Kind
     var first = true
     var last = true
+    /// Passos contíguos dividem UMA caixa: a de cima arredonda em cima, a de
+    /// baixo embaixo, e entre elas não há borda nem respiro (ADR-047). Mesmo
+    /// arranjo que a bolha usa com `first`/`last`, um nível abaixo.
+    var boxTop = true
+    var boxBottom = true
+
+    /// Só passo se junta ao vizinho; bloco de código fica na sua caixa.
+    var groupsWithNeighbours: Bool {
+        if case .step = kind { return true }
+        return false
+    }
 
     var participant: ChatParticipant {
         switch kind {
@@ -159,12 +170,18 @@ enum ChatBlocks {
         return out
     }
 
-    /// Marca a primeira e a última linha de cada bolha.
+    /// Marca a primeira e a última linha de cada bolha — e de cada caixa de
+    /// passos contíguos dentro dela.
     static func positioned(_ blocks: [ChatBlock]) -> [ChatBlock] {
         var out = blocks
+        func joined(_ a: ChatBlock, _ b: ChatBlock) -> Bool {
+            a.groupsWithNeighbours && b.groupsWithNeighbours && a.messageKey == b.messageKey
+        }
         for i in out.indices {
             out[i].first = i == 0 || out[i - 1].messageKey != out[i].messageKey
             out[i].last = i == out.count - 1 || out[i + 1].messageKey != out[i].messageKey
+            out[i].boxTop = i == 0 || !joined(out[i - 1], out[i])
+            out[i].boxBottom = i == out.count - 1 || !joined(out[i], out[i + 1])
         }
         return out
     }

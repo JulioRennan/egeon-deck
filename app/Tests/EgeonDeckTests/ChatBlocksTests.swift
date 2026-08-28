@@ -63,6 +63,33 @@ final class ChatBlocksTests: XCTestCase {
         XCTAssertEqual(open.map(\.id), closed.map(\.id), "abrir não muda o id")
     }
 
+    /// Passos seguidos dividem uma caixa: só o primeiro arredonda em cima e só
+    /// o último embaixo. Prosa, diff ou uma bolha nova cortam o grupo, e bloco
+    /// de código fica na caixa dele.
+    func testContiguousStepsShareOneBox() {
+        let front = agent("front")
+        var turn = ChatTurn(id: "u1", prompt: "faz", promptAt: t0)
+        turn.parts = [.step(ChatStep(glyph: "$", text: "um", detail: "a")),
+                      .step(ChatStep(glyph: "$", text: "dois", detail: "b")),
+                      .step(ChatStep(glyph: "$", text: "três", detail: "c")),
+                      .text("No meio.\n\n```swift\nlet a = 1\n```"),
+                      .step(ChatStep(glyph: "$", text: "quatro", detail: "d"))]
+        turn.replyAt = t0.addingTimeInterval(9)
+        let blocks = ChatBlocks.build(messages: [.reply(from: front, turn: turn)], live: [:], typing: [])
+        let boxes = blocks.map { "\($0.boxTop ? "┌" : "·")\($0.boxBottom ? "┘" : "·")" }
+        //          header  passo  passo  passo  prosa  código  passo
+        XCTAssertEqual(boxes, ["┌┘", "┌·", "··", "·┘", "┌┘", "┌┘", "┌┘"])
+
+        // Dois turnos seguidos não emendam a caixa de um no outro.
+        var next = ChatTurn(id: "u2", prompt: "de novo", promptAt: t0.addingTimeInterval(60))
+        next.parts = [.step(ChatStep(glyph: "$", text: "cinco", detail: "e"))]
+        next.replyAt = t0.addingTimeInterval(70)
+        let two = ChatBlocks.build(messages: [.reply(from: front, turn: turn),
+                                              .reply(from: front, turn: next)], live: [:], typing: [])
+        let last = two.suffix(2)
+        XCTAssertTrue(last.allSatisfy { $0.boxTop && $0.boxBottom })
+    }
+
     func testLiveTurnGetsStatusRowAndNoTime() {
         let front = agent("front")
         let messages: [ChatMessage] = [.reply(from: front, turn: turn())]

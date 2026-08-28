@@ -2973,3 +2973,25 @@ retrato do chat passou a listar `blocks` (id, tipo, aberto), e clique
 sintético exige Acessibilidade, que a assinatura ad-hoc perde a cada build
 (ADR-003). Conferido no app: leitura aberta sai com `import`, `enum` e
 `return` coloridos, e as duas edições desenham lado a lado sem clique nenhum.
+
+## ADR-047 — Passos contíguos dividem uma caixa
+
+Sete comandos seguidos viravam sete molduras com respiro entre elas — mais
+borda que conteúdo, e a prosa (que é o que se lê) perdida no meio. Agora
+passos **contíguos da mesma bolha** dividem **uma caixa**: uma linha por
+passo, sem borda nem respiro entre elas, cantos só nas pontas do grupo. Prosa,
+diff, bloco de código ou uma bolha nova cortam o grupo — o bloco de código
+continua na caixa dele, porque é conteúdo, não passo.
+
+O arranjo é o mesmo que a bolha já usa um nível acima (ADR-042): `boxTop` e
+`boxBottom` marcados no `positioned`, e cada linha desenha o seu pedaço da
+caixa — quando não é ponta, o retângulo sai da linha e o clipe dela corta,
+deixando só as laterais. A caixa deixou de ser uma subview (`makeBox`) e
+passou a ser desenhada no `draw` da linha: subview arredondada não tem como
+continuar na linha seguinte.
+
+Nada disso muda o que abre: cada passo continua alternando pelo seu título
+(ADR-044), agora dentro da caixa comum.
+
+**Verificação:** `ChatBlocksTests.testContiguousStepsShareOneBox` desenha o
+grupo como `┌┘ / ┌· / ·· / ·┘`; na tela, três `echo` seguidos numa moldura só.

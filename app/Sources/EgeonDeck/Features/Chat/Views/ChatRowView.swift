@@ -108,29 +108,24 @@ class ChatRowView: NSView {
         return field
     }
 
-    /// A caixa de passo e de bloco de código dentro da bolha.
-    static func makeBox() -> NSView {
-        let box = NSView()
-        box.wantsLayer = true
-        box.layer?.cornerRadius = 8
-        box.layer?.borderWidth = 1
-        box.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
-        box.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.03).cgColor
-        return box
-    }
 }
 
 // MARK: - Prosa, código e passo
 
 /// Uma linha de texto da resposta: prosa solta, ou passo/código na sua caixa.
+/// Passos contíguos dividem uma caixa só: cada linha desenha o seu pedaço dela
+/// — cantos só nas pontas do grupo, e no meio o retângulo sai da linha para o
+/// clipe cortar, deixando as laterais contínuas (ADR-047).
 final class ChatTextRow: ChatRowView {
     static let identifier = NSUserInterfaceItemIdentifier("chat.text")
     let text = ChatRowView.makeTextView()
-    private let box = ChatRowView.makeBox()
+
+    private static let radius: CGFloat = 8
+    private static let boxFill = NSColor(calibratedWhite: 1, alpha: 0.03)
+    private static let boxBorder = NSColor(calibratedWhite: 1, alpha: 0.08)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        addSubview(box)
         addSubview(text)
     }
 
@@ -142,24 +137,48 @@ final class ChatTextRow: ChatRowView {
         // de novo era markdown e realce duas vezes por linha.
         text.textStorage?.setAttributedString(
             metrics.text ?? ChatBlockLayout.attributed(block.kind) ?? NSAttributedString())
-        box.isHidden = !ChatBlockLayout.isBoxed(block.kind)
     }
 
-    /// A faixa do título de um passo com o que abrir: a primeira linha da
-    /// caixa, de borda a borda. É ela que alterna; o resto da caixa continua
-    /// texto selecionável — o comando aberto é para copiar.
+    /// O pedaço da caixa que cabe nesta linha, sem o vão do fim da bolha.
+    private var boxRect: NSRect? {
+        guard let block, ChatBlockLayout.isBoxed(block.kind) else { return nil }
+        let bubble = bubbleRect
+        let inset = ChatBlockLayout.textInset
+        let top: CGFloat = block.boxTop ? ChatBlockLayout.rowGap : 0
+        let bottom = bubble.height - (block.last ? 12 : 0)
+        return NSRect(x: bubble.minX + inset, y: top,
+                      width: bubble.width - inset * 2, height: max(0, bottom - top))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let block, var rect = boxRect else { return }
+        if !block.boxTop { rect.origin.y -= Self.radius; rect.size.height += Self.radius }
+        if !block.boxBottom { rect.size.height += Self.radius }
+        rect = rect.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: rect, xRadius: Self.radius, yRadius: Self.radius)
+        Self.boxFill.setFill()
+        path.fill()
+        Self.boxBorder.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+
+    /// A faixa do título de um passo com o que abrir: a primeira linha dele,
+    /// de borda a borda da caixa. É ela que alterna; o resto continua texto
+    /// selecionável — o comando aberto é para copiar.
     var toggleRect: NSRect? {
-        guard let block, case .step(_, let step, _) = block.kind, step.isExpandable else { return nil }
-        let pad = ChatBlockLayout.boxPadding
+        guard let block, case .step(_, let step, _) = block.kind, step.isExpandable,
+              let box = boxRect else { return nil }
         var line: CGFloat = 16
         if let manager = text.layoutManager, manager.numberOfGlyphs > 0 {
             line = manager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
         }
-        // Termina no fim da PRIMEIRA linha: com o padding de baixo somado, a
-        // faixa entrava alguns pontos na segunda — clique e cursor de mão em
-        // cima do comando, que é texto para copiar.
-        return NSRect(x: box.frame.minX, y: box.frame.minY,
-                      width: box.frame.width, height: pad + line)
+        // Termina no fim da PRIMEIRA linha: com o respiro de baixo somado, a
+        // faixa entrava alguns pontos na linha seguinte — clique e cursor de
+        // mão em cima do comando, que é texto para copiar.
+        return NSRect(x: box.minX, y: box.minY, width: box.width,
+                      height: (text.frame.minY - box.minY) + line)
     }
 
     /// O NSTextView engole o clique; na faixa do título a linha fica com ele.
@@ -181,16 +200,15 @@ final class ChatTextRow: ChatRowView {
         guard let block else { return }
         let bubble = bubbleRect
         let inset = ChatBlockLayout.textInset
-        let height = bubble.height - ChatBlockLayout.rowGap - (block.last ? 12 : 0)
-        let area = NSRect(x: bubble.minX + inset, y: ChatBlockLayout.rowGap,
-                          width: bubble.width - inset * 2, height: height)
-        if ChatBlockLayout.isBoxed(block.kind) {
-            box.frame = area
+        if let box = boxRect {
             let pad = ChatBlockLayout.boxPadding
-            text.frame = NSRect(x: area.minX + 10, y: area.minY + pad,
-                                width: area.width - 20, height: area.height - pad * 2)
+            let top = box.minY + (block.boxTop ? pad : ChatBlockLayout.stepGap)
+            text.frame = NSRect(x: box.minX + 10, y: top, width: box.width - 20,
+                                height: max(0, box.maxY - top - (block.boxBottom ? pad : 0)))
         } else {
-            text.frame = area
+            let height = bubble.height - ChatBlockLayout.rowGap - (block.last ? 12 : 0)
+            text.frame = NSRect(x: bubble.minX + inset, y: ChatBlockLayout.rowGap,
+                                width: bubble.width - inset * 2, height: height)
         }
         // Quanto da caixa é a faixa do título, para o texto saber onde mostrar
         // a mão. O cursor tem um dono só (`StepTextView`): com a linha
