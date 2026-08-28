@@ -269,10 +269,14 @@ final class CanvasContainer: NSView {
             return event
 
         case .scrollWheel:
+            guard isOverCanvas(event) else { return event }
             // ⌘+scroll: zoom ancorado no cursor, como no Figma.
-            guard event.modifierFlags.contains(.command), isOverCanvas(event) else { return event }
-            zoomAtCursor(event)
-            return nil
+            if event.modifierFlags.contains(.command) {
+                zoomAtCursor(event)
+                return nil
+            }
+            extendDocument(forWheel: event)
+            return event
 
         case .leftMouseDown:
             guard isOverCanvas(event) else { return event }
@@ -419,6 +423,10 @@ final class CanvasContainer: NSView {
             target.x += openedX
             target.y += openedY
         }
+
+        // Além da borda direita/de baixo também, senão o canvas seria infinito
+        // para um lado só. Aqui basta o documento crescer.
+        extendDocument(toShow: target)
 
         scroll.contentView.scroll(to: clampedOrigin(target))
         scroll.reflectScrolledClipView(scroll.contentView)
@@ -769,6 +777,43 @@ final class CanvasContainer: NSView {
         onLayoutChanged?()
     }
 
+    /// Abre espaço à direita e embaixo: o documento cresce até um viewport com
+    /// origem em `origin` caber inteiro. É o par de `makeSpace`, e mais barato —
+    /// o canto (0,0) fica onde está, então nó nenhum se desloca.
+    func extendDocument(toShow origin: NSPoint) {
+        let viewport = scroll.contentView.bounds.size
+        growDocument(toAtLeast: NSSize(width: origin.x + viewport.width,
+                                       height: origin.y + viewport.height))
+    }
+
+    /// A roda do trackpad vai para o NSScrollView, que para na borda do
+    /// documento — crescer ANTES de entregar o evento faz a borda recuar junto.
+    /// Delta negativo é a vista andando para a direita/baixo, já com a inversão
+    /// "natural" aplicada pelo sistema.
+    private func extendDocument(forWheel event: NSEvent) {
+        let origin = scroll.contentView.bounds.origin
+        let scale = max(scroll.magnification, 0.01)
+        // Em blocos: crescer a cada pixel redesenharia as arestas a cada evento.
+        let chunk: CGFloat = 512
+        var target = origin
+        if event.scrollingDeltaX < 0 { target.x += chunk - event.scrollingDeltaX / scale }
+        if event.scrollingDeltaY < 0 { target.y += chunk - event.scrollingDeltaY / scale }
+        guard target != origin else { return }
+        extendDocument(toShow: target)
+    }
+
+    /// Cresce o documento até `size`; nunca encolhe. No teto o canvas volta a
+    /// ter borda dura — diferente de `makeSpace`, que precisa recusar inteiro
+    /// para não deslocar os nós pela metade.
+    func growDocument(toAtLeast size: NSSize) {
+        let width = min(max(size.width.rounded(.up), doc.frame.width), Self.maxDocumentSize)
+        let height = min(max(size.height.rounded(.up), doc.frame.height), Self.maxDocumentSize)
+        guard width > doc.frame.width || height > doc.frame.height else { return }
+        doc.setFrameSize(NSSize(width: width, height: height))
+        doc.needsDisplay = true
+        syncEdgeLayer()
+    }
+
     /// O documento era fixo em 6000×4000, e isso trava o pan de dois jeitos: um
     /// nó arrastado para perto da borda não tem para onde continuar, e em zoom
     /// out o viewport passa a mostrar mais unidades do que o documento tem —
@@ -788,12 +833,7 @@ final class CanvasContainer: NSView {
         let viewport = NSSize(width: bounds.width / scale, height: bounds.height / scale)
         size.width = max(size.width, viewport.width * 1.5)
         size.height = max(size.height, viewport.height * 1.5)
-
-        guard size.width > doc.frame.width || size.height > doc.frame.height else { return }
-        doc.setFrameSize(NSSize(width: max(size.width, doc.frame.width),
-                                height: max(size.height, doc.frame.height)))
-        doc.needsDisplay = true
-        syncEdgeLayer()
+        growDocument(toAtLeast: size)
     }
 
     /// Tira o nó da tela depois de alguém já ter confirmado.
