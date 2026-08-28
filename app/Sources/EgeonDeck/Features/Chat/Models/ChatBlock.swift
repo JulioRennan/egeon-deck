@@ -73,19 +73,10 @@ struct ChatBlock: Equatable {
     let kind: Kind
     var first = true
     var last = true
-    /// Passos contíguos dividem UMA caixa: a de cima arredonda em cima, a de
-    /// baixo embaixo, e entre elas não há borda nem respiro (ADR-047). Mesmo
-    /// arranjo que a bolha usa com `first`/`last`, um nível abaixo.
-    var boxTop = true
-    var boxBottom = true
-
-    /// Passo e a capa do grupo dele dividem caixa; bloco de código fica na sua.
-    var groupsWithNeighbours: Bool {
-        switch kind {
-        case .step, .group: return true
-        default:            return false
-        }
-    }
+    /// Um degrau de recuo por nível: o passo que pertence a uma capa entra um
+    /// tab, e cada um fica na SUA caixinha, separadas por um respiro — é o
+    /// aninhamento que se vê (ADR-050).
+    var depth = 0
 
     var participant: ChatParticipant {
         switch kind {
@@ -138,8 +129,9 @@ enum ChatBlocks {
                                                     at: status == nil ? (turn.replyAt ?? turn.promptAt) : nil,
                                                     quote: quote))]
                 var index = 0
-                func add(_ kind: Kind, id: String? = nil) {
-                    rows.append(ChatBlock(id: id ?? "b|\(turn.id)|\(index)", messageKey: key, kind: kind))
+                func add(_ kind: Kind, id: String? = nil, depth: Int = 0) {
+                    rows.append(ChatBlock(id: id ?? "b|\(turn.id)|\(index)", messageKey: key,
+                                          kind: kind, depth: depth))
                     if id == nil { index += 1 }
                 }
                 /// Passos seguidos com nada entre eles: dois ou mais ganham
@@ -162,7 +154,7 @@ enum ChatBlocks {
                     for (step, id) in run {
                         add(.step(from: agent, step: step,
                                   expanded: !step.isExpandable || level == .details
-                                      || expanded.contains(id)), id: id)
+                                      || expanded.contains(id)), id: id, depth: 1)
                     }
                 }
                 for part in turn.chain {
@@ -215,18 +207,12 @@ enum ChatBlocks {
         return out
     }
 
-    /// Marca a primeira e a última linha de cada bolha — e de cada caixa de
-    /// passos contíguos dentro dela.
+    /// Marca a primeira e a última linha de cada bolha.
     static func positioned(_ blocks: [ChatBlock]) -> [ChatBlock] {
         var out = blocks
-        func joined(_ a: ChatBlock, _ b: ChatBlock) -> Bool {
-            a.groupsWithNeighbours && b.groupsWithNeighbours && a.messageKey == b.messageKey
-        }
         for i in out.indices {
             out[i].first = i == 0 || out[i - 1].messageKey != out[i].messageKey
             out[i].last = i == out.count - 1 || out[i + 1].messageKey != out[i].messageKey
-            out[i].boxTop = i == 0 || !joined(out[i - 1], out[i])
-            out[i].boxBottom = i == out.count - 1 || !joined(out[i], out[i + 1])
         }
         return out
     }

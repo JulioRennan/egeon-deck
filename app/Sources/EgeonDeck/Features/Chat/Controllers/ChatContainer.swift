@@ -95,8 +95,9 @@ final class ChatContainer: NSView {
     /// Quanto de cada sequência de passos está à vista (ADR-049).
     private(set) var groupLevels: [String: ChatGroupLevel] = [:]
     private var expandedVersion = 0
-    /// Abrir um passo não é mensagem nova: a thread não deve correr para o
-    /// fim por causa disso, mesmo que você esteja lá.
+    /// Abrir um passo no meio da thread não pode te arrastar para o fim. No
+    /// fim é o contrário: o que você abriu cresce para baixo, e sem acompanhar
+    /// ele nasce atrás do composer — parecendo que a bolha não cresceu.
     private var holdBottom = false
     /// Você mandou mensagem: a próxima montagem desce, esteja você onde
     /// estiver — como em qualquer mensageiro, enviar te leva ao fim. Fica de
@@ -129,7 +130,7 @@ final class ChatContainer: NSView {
             expandedSteps.insert(block.id)
         }
         expandedVersion += 1
-        holdBottom = true
+        holdBottom = !thread.isAtBottom
         refresh()
     }
     private var pending: [ChatThread.Pending] = []

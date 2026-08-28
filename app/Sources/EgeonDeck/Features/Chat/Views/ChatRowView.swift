@@ -149,24 +149,22 @@ final class ChatTextRow: ChatRowView {
             metrics.text ?? ChatBlockLayout.attributed(block.kind) ?? NSAttributedString())
     }
 
-    /// O pedaço da caixa que cabe nesta linha, sem o vão do fim da bolha.
+    /// A caixa desta linha — cada passo tem a sua, recuada um tab por nível.
     private var boxRect: NSRect? {
         guard let block, ChatBlockLayout.isBoxed(block.kind) else { return nil }
         let bubble = bubbleRect
         let inset = ChatBlockLayout.textInset
-        let top: CGFloat = block.boxTop ? ChatBlockLayout.rowGap : 0
+        let indent = CGFloat(block.depth) * ChatBlockLayout.indentStep
+        let top = block.depth > 0 ? ChatBlockLayout.stepGap : ChatBlockLayout.rowGap
         let bottom = bubble.height - (block.last ? ChatBlockLayout.bottomPad : 0)
-        return NSRect(x: bubble.minX + inset, y: top,
-                      width: bubble.width - inset * 2, height: max(0, bottom - top))
+        return NSRect(x: bubble.minX + inset + indent, y: top,
+                      width: bubble.width - inset * 2 - indent, height: max(0, bottom - top))
     }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard let block, let box = boxRect else { return }
-        var rect = box
-        if !block.boxTop { rect.origin.y -= Self.radius; rect.size.height += Self.radius }
-        if !block.boxBottom { rect.size.height += Self.radius }
-        rect = rect.insetBy(dx: 0.5, dy: 0.5)
+        guard block != nil, let box = boxRect else { return }
+        let rect = box.insetBy(dx: 0.5, dy: 0.5)
         let path = NSBezierPath(roundedRect: rect, xRadius: Self.radius, yRadius: Self.radius)
         Self.boxFill.setFill()
         path.fill()
@@ -247,9 +245,8 @@ final class ChatTextRow: ChatRowView {
         let inset = ChatBlockLayout.textInset
         if let box = boxRect {
             let pad = ChatBlockLayout.boxPadding
-            let top = box.minY + (block.boxTop ? pad : ChatBlockLayout.stepGap)
-            text.frame = NSRect(x: box.minX + 10, y: top, width: box.width - 20,
-                                height: max(0, box.maxY - top - (block.boxBottom ? pad : 0)))
+            text.frame = NSRect(x: box.minX + 10, y: box.minY + pad, width: box.width - 20,
+                                height: max(0, box.height - pad * 2))
         } else {
             let height = bubble.height - ChatBlockLayout.rowGap
                 - (block.last ? ChatBlockLayout.bottomPad : 0)

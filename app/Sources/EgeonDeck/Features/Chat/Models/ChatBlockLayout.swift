@@ -38,10 +38,16 @@ enum ChatBlockLayout {
     static let agentMaxWidth: CGFloat = 660
     static let promptMaxWidth: CGFloat = 560
     static let quoteHeight: CGFloat = 52
-    static let boxPadding: CGFloat = 8
-    static let rowGap: CGFloat = 10
-    /// Respiro entre dois passos que dividem a mesma caixa.
-    static let stepGap: CGFloat = 7
+    /// Respiro dentro da caixa de passo, em cima e embaixo do texto.
+    static let boxPadding: CGFloat = 12
+    static let rowGap: CGFloat = 12
+    /// Respiro entre duas caixinhas de passo dentro de uma capa.
+    static let stepGap: CGFloat = 6
+    /// O tab de cada nível de aninhamento.
+    static let indentStep: CGFloat = 18
+    /// Entrelinha do passo: comando e saída em monoespaçada ficam apertados
+    /// com a entrelinha padrão da fonte.
+    static let stepLineSpacing: CGFloat = 3
     static let headerHeight: CGFloat = 16
     static let statusHeight: CGFloat = 14
     static let timeHeight: CGFloat = 13
@@ -115,6 +121,8 @@ enum ChatBlockLayout {
     /// da saída para não perder a conta — e o chevron avisa que há o que abrir.
     static func render(_ step: ChatStep, expanded: Bool = true) -> NSAttributedString {
         let out = NSMutableAttributedString()
+        defer { out.addAttribute(.paragraphStyle, value: stepParagraph,
+                                 range: NSRange(location: 0, length: out.length)) }
         let title = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         let small = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         let dim = NSColor(calibratedWhite: 0.5, alpha: 1)
@@ -160,6 +168,13 @@ enum ChatBlockLayout {
         return out
     }
 
+    /// Entrelinha comum do passo e da capa.
+    static let stepParagraph: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = stepLineSpacing
+        return style
+    }()
+
     /// A capa de uma sequência de passos. Fechada diz quantos são e onde a
     /// sequência parou; aberta é só o contador — os títulos vêm abaixo.
     static func renderGroup(count: Int, last: String, level: ChatGroupLevel) -> NSAttributedString {
@@ -167,7 +182,7 @@ enum ChatBlockLayout {
         let dim = NSColor(calibratedWhite: 0.5, alpha: 1)
         let out = NSMutableAttributedString(
             string: level == .summary ? "▸ " : "▾ ",
-            attributes: [.font: font, .foregroundColor: dim])
+            attributes: [.font: font, .foregroundColor: dim, .paragraphStyle: stepParagraph])
         out.append(NSAttributedString(
             string: "⚙  \(count) passos",
             attributes: [.font: font, .foregroundColor: NSColor(calibratedWhite: 0.7, alpha: 1)]))
@@ -273,8 +288,10 @@ enum ChatBlockLayout {
             case .prose, .step, .code, .group:
                 let text = attributed(block.kind) ?? NSAttributedString()
                 texts[block.id] = text
-                let natural = size(of: text, width: cap - textInset * 2).width
-                width = max(width, natural + textInset * 2 + (isBoxed(block.kind) ? boxPadding * 2 + 8 : 0))
+                let indent = CGFloat(block.depth) * indentStep
+                let natural = size(of: text, width: cap - textInset * 2 - indent).width
+                width = max(width, natural + textInset * 2 + indent
+                                + (isBoxed(block.kind) ? boxPadding * 2 + 8 : 0))
             case .diff:
                 width = cap
             case .status(_, let live):
@@ -294,10 +311,12 @@ enum ChatBlockLayout {
             case .prose:
                 height = rowGap + size(of: texts[block.id]!, width: width - textInset * 2).height
             case .step, .code, .group:
-                let inner = width - textInset * 2 - 20
-                height = (block.boxTop ? rowGap + boxPadding : stepGap)
-                    + size(of: texts[block.id]!, width: inner).height
-                    + (block.boxBottom ? boxPadding : 0)
+                let indent = CGFloat(block.depth) * indentStep
+                let inner = width - textInset * 2 - indent - 20
+                // Caixa filha cola um pouco mais na de cima: o respiro entre
+                // irmãs é menor que o que separa a caixa da prosa.
+                height = (block.depth > 0 ? stepGap : rowGap) + boxPadding
+                    + size(of: texts[block.id]!, width: inner).height + boxPadding
             case .diff(_, _, let diff):
                 height = rowGap + DiffView.height(diff: diff)
             case .status:

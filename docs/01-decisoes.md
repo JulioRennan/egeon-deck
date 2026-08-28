@@ -3057,3 +3057,28 @@ vive no `ChatContainer` (`groupLevels`), fora do histórico, como o
 **Verificação:** `ChatBlocksTests.testContiguousStepsCollapseIntoOneGroup` e
 `ChatStepToggleTests.testClickingTheGroupCoverCyclesTheLevels` — o ciclo
 completo pelo container, inclusive a limpeza ao fechar.
+
+## ADR-050 — Sub-bolha: o passo dentro da capa entra um tab e tem a sua caixa
+
+A caixa contínua da ADR-047 resolveu o excesso de bordas, mas com a capa da
+ADR-049 por cima o resultado ficou um bloco só, sem hierarquia: capa e passos
+colados, com a mesma moldura. **Substitui-se** aquele arranjo por
+aninhamento explícito — cada passo aberto por uma capa é uma **sub-bolha**:
+caixa própria, recuada um tab (`indentStep`, 18pt) e separada das irmãs por
+um respiro menor (`stepGap`, 6pt) do que o que separa uma caixa da prosa
+(`rowGap`, 12pt). É o recuo, e não a borda compartilhada, que mostra a quem
+o passo pertence.
+
+`ChatBlock.depth` carrega o nível (a capa fica em 0, os passos dela em 1) e a
+medida e o desenho recuam por ele — a convenção é recursiva se um dia houver
+um terceiro nível.
+
+**E as caixas respiram:** `boxPadding` 8 → 12 e entrelinha de 3pt no texto do
+passo. A caixa de uma linha estava com a altura do texto e mais nada, e um
+comando com saída ficava ilegível de tão apertado.
+
+**A rolagem, junto:** abrir um passo no meio da thread continua não te
+arrastando para o fim, mas abrir estando no fim passa a acompanhar o
+crescimento (`holdBottom` só quando você não está lá). Sem isso o que você
+acabou de abrir nascia atrás do composer — e parecia que a bolha não tinha
+crescido.

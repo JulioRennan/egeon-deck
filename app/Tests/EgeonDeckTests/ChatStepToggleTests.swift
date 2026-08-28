@@ -89,10 +89,13 @@ final class ChatStepToggleTests: XCTestCase {
             row.cacheDisplay(in: row.bounds, to: rep)
             // O bitmap é o da tela: 2 pixels por ponto no retina.
             let scale = CGFloat(rep.pixelsWide) / row.bounds.width
-            // Encostado na borda direita da caixa: ali não passa texto.
+            // Encostado na borda direita da caixa: ali não passa texto. O
+            // segundo ponto é o miolo quando há um, e o fundo da bolha acima
+            // da caixa quando não há.
             let x = Int((strip.maxX - 6) * scale)
+            let below = expanded ? (strip.maxY + 8) : 2
             return (try XCTUnwrap(rep.colorAt(x: x, y: Int(strip.midY * scale))),
-                    try XCTUnwrap(rep.colorAt(x: x, y: Int((strip.maxY + 8) * scale))))
+                    try XCTUnwrap(rep.colorAt(x: x, y: Int(below * scale))))
         }
 
         let open = try render(expanded: true)
@@ -101,8 +104,8 @@ final class ChatStepToggleTests: XCTestCase {
         XCTAssertGreaterThan(open.header.brightnessComponent, open.body.brightnessComponent,
                              "o cabeçalho é o claro; o miolo, o fundo")
 
-        // Recolhido não tem miolo: a caixa inteira é cabeçalho, e o ponto
-        // abaixo dela já é o fundo da bolha — mais escuro que o cabeçalho.
+        // Recolhido não tem miolo: a caixa inteira é cabeçalho, e o fundo da
+        // bolha em volta é mais escuro que ela.
         let closed = try render(expanded: false)
         XCTAssertGreaterThan(closed.header.brightnessComponent, closed.body.brightnessComponent)
         XCTAssertEqual(closed.header.brightnessComponent, open.header.brightnessComponent,
@@ -181,7 +184,8 @@ final class ChatStepToggleTests: XCTestCase {
         row.layoutSubtreeIfNeeded()
 
         let strip = try XCTUnwrap(row.toggleRect)
-        XCTAssertLessThan(strip.height, 30, "a faixa é a primeira linha da caixa, não a caixa toda")
+        XCTAssertLessThan(strip.height, row.bounds.height * 0.6,
+                          "a faixa é a primeira linha da caixa, não a caixa toda")
         let onTitle = NSPoint(x: strip.midX, y: strip.midY)
         let onOutput = NSPoint(x: strip.midX, y: strip.maxY + 20)
         XCTAssertTrue(row.hitTest(onTitle) === row, "o título é da linha, não do texto")

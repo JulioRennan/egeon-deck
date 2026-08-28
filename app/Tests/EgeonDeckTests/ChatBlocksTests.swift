@@ -89,8 +89,11 @@ final class ChatBlocksTests: XCTestCase {
                                       groups: ["g|u1|0": .titles])
         XCTAssertEqual(titles.map(\.id),
                        ["h|u1", "g|u1|0", "b|u1|0", "b|u1|1", "b|u1|2", "b|u1|3", "b|u1|4", "b|u1|5"])
-        XCTAssertEqual(titles[1...4].map { "\($0.boxTop ? "┌" : "·")\($0.boxBottom ? "┘" : "·")" },
-                       ["┌·", "··", "··", "·┘"])
+        // A capa fica na raiz; os passos dela entram um tab, cada um na sua
+        // caixinha (ADR-050).
+        XCTAssertEqual(titles[1...4].map(\.depth), [0, 1, 1, 1])
+        XCTAssertEqual(titles.filter { $0.depth > 0 }.count, 3)
+        XCTAssertTrue(summary.allSatisfy { $0.depth == 0 }, "sem capa aberta, nada é filho")
         XCTAssertTrue(titles[2...4].allSatisfy {
             if case .step(_, _, let open) = $0.kind { return !open } else { return false }
         }, "no primeiro clique os passos ainda são só título")

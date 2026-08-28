@@ -80,7 +80,8 @@ app/Sources/EgeonDeck/
   **cadeia** do turno na ordem (prosa, passo, diff, prosa — `ChatTurn.parts`)
   — passo de comando nasce **recolhido**, só o título com `▸`, e clique abre;
   passos contíguos viram **uma capa** ("⚙ 3 passos"), e o clique nela
-  aprofunda — resumo, títulos, tudo aberto (ADR-047/049);
+  aprofunda — resumo, títulos, tudo aberto (ADR-049); o passo da capa é
+  sub-bolha, recuada um tab e com caixa própria (ADR-050);
   **diff nunca recolhe** (o `DiffView` lado a lado está sempre lá) e leitura
   mostra o arquivo com o formatador (ADR-044/046) — e cresce ao vivo enquanto
   o agente trabalha, lendo a cauda do transcript dele — a partir do prompt do
