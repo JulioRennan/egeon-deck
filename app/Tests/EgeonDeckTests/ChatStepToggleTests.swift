@@ -101,11 +101,20 @@ final class ChatStepToggleTests: XCTestCase {
         click(onOutput)
         XCTAssertEqual(toggles, 1, "fora da faixa não alterna")
 
+        // O cursor tem um dono só: o texto. A linha não registra faixa de mão
+        // por baixo — dois donos no mesmo ponto faziam o ponteiro tremer.
+        XCTAssertEqual(row.text.toggleHeight, strip.maxY - row.text.frame.minY, accuracy: 0.01)
+        XCTAssertGreaterThan(row.text.toggleHeight, 0)
+        XCTAssertTrue(row.text.isOnToggle(row.text.convert(onTitle, from: row)), "mão no título")
+        XCTAssertFalse(row.text.isOnToggle(row.text.convert(onOutput, from: row)), "no comando é texto")
+
         // Sem nada além do título, não há faixa.
         let bare = ChatBlock(id: "b|u1|1", messageKey: "r|u1",
                              kind: .step(from: front, step: ChatStep(glyph: "→", text: "Lê"), expanded: true))
         row.configure(bare, metrics: metrics.rows["b|u1|0"]!)
+        row.layoutSubtreeIfNeeded()
         XCTAssertNil(row.toggleRect)
+        XCTAssertEqual(row.text.toggleHeight, 0, "sem faixa, o texto não mexe no cursor")
         _ = closed
     }
 }

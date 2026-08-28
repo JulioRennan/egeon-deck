@@ -81,7 +81,7 @@ class ChatRowView: NSView {
     /// Um NSTextView só para mostrar, com o MESMO TextKit da medição: TextKit 1
     /// explícito, sem inset e sem folga de fragmento — a altura desenhada é a
     /// altura medida.
-    static func makeTextView() -> NSTextView {
+    static func makeTextView() -> StepTextView {
         let storage = NSTextStorage()
         let manager = NSLayoutManager()
         let container = NSTextContainer(size: NSSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
@@ -89,7 +89,7 @@ class ChatRowView: NSView {
         container.widthTracksTextView = true
         manager.addTextContainer(container)
         storage.addLayoutManager(manager)
-        let view = NSTextView(frame: .zero, textContainer: container)
+        let view = StepTextView(frame: .zero, textContainer: container)
         view.isEditable = false
         view.isSelectable = true
         view.drawsBackground = false
@@ -125,7 +125,7 @@ class ChatRowView: NSView {
 /// Uma linha de texto da resposta: prosa solta, ou passo/código na sua caixa.
 final class ChatTextRow: ChatRowView {
     static let identifier = NSUserInterfaceItemIdentifier("chat.text")
-    private let text = ChatRowView.makeTextView()
+    let text = ChatRowView.makeTextView()
     private let box = ChatRowView.makeBox()
 
     override init(frame frameRect: NSRect) {
@@ -155,8 +155,11 @@ final class ChatTextRow: ChatRowView {
         if let manager = text.layoutManager, manager.numberOfGlyphs > 0 {
             line = manager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
         }
+        // Termina no fim da PRIMEIRA linha: com o padding de baixo somado, a
+        // faixa entrava alguns pontos na segunda — clique e cursor de mão em
+        // cima do comando, que é texto para copiar.
         return NSRect(x: box.frame.minX, y: box.frame.minY,
-                      width: box.frame.width, height: pad * 2 + line)
+                      width: box.frame.width, height: pad + line)
     }
 
     /// O NSTextView engole o clique; na faixa do título a linha fica com ele.
@@ -171,10 +174,6 @@ final class ChatTextRow: ChatRowView {
         } else {
             super.mouseDown(with: event)
         }
-    }
-
-    override func resetCursorRects() {
-        if let rect = toggleRect { addCursorRect(rect, cursor: .pointingHand) }
     }
 
     override func layout() {
@@ -193,6 +192,30 @@ final class ChatTextRow: ChatRowView {
         } else {
             text.frame = area
         }
-        window?.invalidateCursorRects(for: self)
+        // Quanto da caixa é a faixa do título, para o texto saber onde mostrar
+        // a mão. O cursor tem um dono só (`StepTextView`): com a linha
+        // registrando um `cursorRect` de mão por baixo e o texto pedindo
+        // I-beam por cima, o ponteiro piscava entre os dois sem sair do lugar.
+        text.toggleHeight = toggleRect.map { $0.maxY - text.frame.minY } ?? 0
+    }
+}
+
+// MARK: - O texto de uma linha
+
+/// O `NSTextView` das linhas. Ele cobre a faixa do título de um passo, então é
+/// ele quem decide o cursor ali: mão na faixa, I-beam no resto. Nada de
+/// `cursorRect` na linha por baixo — dois donos para o mesmo ponto é o que faz
+/// o ponteiro tremer.
+final class StepTextView: NSTextView {
+    /// Altura da faixa de título dentro deste texto; zero quando não há o que abrir.
+    var toggleHeight: CGFloat = 0
+
+    /// Ponto no espaço deste texto: está na faixa que abre o passo?
+    func isOnToggle(_ point: NSPoint) -> Bool { toggleHeight > 0 && point.y <= toggleHeight }
+
+    override func cursorUpdate(with event: NSEvent) {
+        guard isOnToggle(convert(event.locationInWindow, from: nil))
+        else { return super.cursorUpdate(with: event) }
+        NSCursor.pointingHand.set()
     }
 }
