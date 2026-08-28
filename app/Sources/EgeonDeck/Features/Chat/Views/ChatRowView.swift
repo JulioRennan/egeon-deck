@@ -11,6 +11,8 @@ class ChatRowView: NSView {
     private(set) var metrics = ChatRowMetrics(height: 0, bubbleWidth: 0)
     /// Clique na linha: leva ao que ela cita ou responde.
     var onClick: (() -> Void)?
+    /// Clique no título de um passo: abre ou recolhe.
+    var onToggle: (() -> Void)?
     /// Acesa um instante depois de uma rolagem por citação.
     var flashing = false { didSet { needsDisplay = true } }
 
@@ -143,6 +145,38 @@ final class ChatTextRow: ChatRowView {
         box.isHidden = !ChatBlockLayout.isBoxed(block.kind)
     }
 
+    /// A faixa do título de um passo com o que abrir: a primeira linha da
+    /// caixa, de borda a borda. É ela que alterna; o resto da caixa continua
+    /// texto selecionável — o comando aberto é para copiar.
+    var toggleRect: NSRect? {
+        guard let block, case .step(_, let step, _) = block.kind, step.isExpandable else { return nil }
+        let pad = ChatBlockLayout.boxPadding
+        var line: CGFloat = 16
+        if let manager = text.layoutManager, manager.numberOfGlyphs > 0 {
+            line = manager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
+        }
+        return NSRect(x: box.frame.minX, y: box.frame.minY,
+                      width: box.frame.width, height: pad * 2 + line)
+    }
+
+    /// O NSTextView engole o clique; na faixa do título a linha fica com ele.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let rect = toggleRect, rect.contains(convert(point, from: superview)) { return self }
+        return super.hitTest(point)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if let rect = toggleRect, rect.contains(convert(event.locationInWindow, from: nil)) {
+            onToggle?()
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+
+    override func resetCursorRects() {
+        if let rect = toggleRect { addCursorRect(rect, cursor: .pointingHand) }
+    }
+
     override func layout() {
         super.layout()
         guard let block else { return }
@@ -159,5 +193,6 @@ final class ChatTextRow: ChatRowView {
         } else {
             text.frame = area
         }
+        window?.invalidateCursorRects(for: self)
     }
 }

@@ -15,6 +15,8 @@ final class ChatThreadController: NSObject, NSTableViewDataSource, NSTableViewDe
     private(set) var bubbleMetrics: [String: ChatBlockLayout.BubbleMetrics] = [:]
     /// Clique numa linha: a chave da mensagem-alvo (citação ou prompt respondido).
     var onClick: ((ChatBlock) -> Void)?
+    /// Clique no título de um passo (ou no cabeçalho de um diff): abre ou recolhe.
+    var onToggle: ((ChatBlock) -> Void)?
     var onScroll: (() -> Void)?
     /// Quantas vezes a tabela mudou de fato — para o teste.
     private(set) var applies = 0
@@ -169,6 +171,7 @@ final class ChatThreadController: NSObject, NSTableViewDataSource, NSTableViewDe
         view.configure(block, metrics: rows[block.id] ?? ChatRowMetrics(height: 40, bubbleWidth: 200))
         view.flashing = flashKey == block.messageKey
         view.onClick = { [weak self] in self?.onClick?(block) }
+        view.onToggle = { [weak self] in self?.onToggle?(block) }
         return view
     }
 

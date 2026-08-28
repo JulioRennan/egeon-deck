@@ -8,13 +8,32 @@ final class ChatBlockLayoutTests: XCTestCase {
     private let front = ChatParticipant(id: "front", address: "deck/front", isAgent: true,
                                         role: nil, activity: .ready)
 
-    private func blocks(reply: String = "Uma linha só.") -> [ChatBlock] {
+    private func blocks(reply: String = "Uma linha só.", expanded: Set<String> = []) -> [ChatBlock] {
         var turn = ChatTurn(id: "u1", prompt: "faz", promptAt: t0)
-        turn.parts = [.text(reply), .step(ChatStep(glyph: "$", text: "Roda", detail: "swift test"))]
+        turn.parts = [.text(reply), .step(ChatStep(glyph: "$", text: "Roda", detail: "swift test",
+                                                   output: "ok\nok\nok"))]
         turn.replyAt = t0.addingTimeInterval(3)
         return ChatBlocks.build(messages: [.prompt(to: front, turnId: "u1", text: "faz", at: t0),
                                            .reply(from: front, turn: turn)],
-                                live: [:], typing: [])
+                                live: [:], typing: [], expanded: expanded)
+    }
+
+    /// Recolhido é uma linha: chevron, título e o tamanho da saída; aberto
+    /// tem o comando e a saída, e a linha cresce com eles.
+    func testCollapsedStepIsOneLineAndOpenOneIsTaller() {
+        let closed = ChatBlockLayout.measure(blocks(), width: 800, known: [:])["r|u1"]!
+        let open = ChatBlockLayout.measure(blocks(expanded: ["b|u1|1"]), width: 800, known: [:])["r|u1"]!
+        XCTAssertGreaterThan(open.rows["b|u1|1"]!.height, closed.rows["b|u1|1"]!.height)
+        let closedText = closed.rows["b|u1|1"]!.text!.string
+        XCTAssertTrue(closedText.hasPrefix("▸ $  Roda"), closedText)
+        XCTAssertTrue(closedText.hasSuffix("⎿ 3 linhas"), closedText)
+        XCTAssertFalse(closedText.contains("swift test"))
+        let openText = open.rows["b|u1|1"]!.text!.string
+        XCTAssertTrue(openText.hasPrefix("▾ $  Roda\n"), openText)
+        XCTAssertTrue(openText.contains("swift test") && openText.contains("⎿ ok"))
+        // Sem nada além do título, não há o que abrir — nem chevron.
+        let bare = ChatBlockLayout.render(ChatStep(glyph: "→", text: "Lê"), expanded: false).string
+        XCTAssertEqual(bare, "→  Lê")
     }
 
     func testEveryRowGetsAHeightAndBubbleSharesWidth() {

@@ -35,11 +35,31 @@ final class ChatBlocksTests: XCTestCase {
         XCTAssertEqual(blocks.map(\.last), [true, false, false, false, false, false, false, true])
         // Prosa, código, prosa, passo, diff, prosa — na ordem da cadeia.
         guard case .prose = blocks[2].kind, case .code(_, "swift", "let a = 1") = blocks[3].kind,
-              case .prose = blocks[4].kind, case .step = blocks[5].kind,
-              case .diff(_, "a.swift", _) = blocks[6].kind, case .prose = blocks[7].kind
+              case .prose = blocks[4].kind, case .step(_, _, false) = blocks[5].kind,
+              case .step(_, _, false) = blocks[6].kind, case .prose = blocks[7].kind
         else { return XCTFail("ordem da cadeia: \(blocks.map(\.kind))") }
         XCTAssertTrue(blocks[0].alignsRight)
         XCTAssertFalse(blocks[1].alignsRight)
+    }
+
+    /// Passo nasce só no título; aberto por id vira o passo inteiro — e o de
+    /// edição vira o diff. Passo sem nada além do título é sempre inteiro.
+    func testStepsCollapseUntilOpenedById() {
+        let front = agent("front")
+        var turn = self.turn()
+        turn.parts.append(.step(ChatStep(glyph: "→", text: "só título")))
+        let messages: [ChatMessage] = [.reply(from: front, turn: turn)]
+        let closed = ChatBlocks.build(messages: messages, live: [:], typing: [])
+        guard case .step(_, let step, false) = closed[4].kind, step.text == "Roda",
+              case .step(_, let edit, false) = closed[5].kind, edit.text == "a.swift",
+              case .step(_, _, true) = closed[7].kind
+        else { return XCTFail("recolhidos: \(closed.map(\.kind))") }
+
+        let open = ChatBlocks.build(messages: messages, live: [:], typing: [],
+                                    expanded: ["b|u1|3", "b|u1|4"])
+        guard case .step(_, _, true) = open[4].kind, case .diff(_, "a.swift", _) = open[5].kind
+        else { return XCTFail("abertos: \(open.map(\.kind))") }
+        XCTAssertEqual(open.map(\.id), closed.map(\.id), "abrir não muda o id")
     }
 
     func testLiveTurnGetsStatusRowAndNoTime() {

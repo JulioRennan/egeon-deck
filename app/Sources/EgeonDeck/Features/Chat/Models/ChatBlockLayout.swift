@@ -70,8 +70,8 @@ enum ChatBlockLayout {
             return MarkdownLite.render(blocks, font: proseFont, color: proseColor)
         case .code(_, let language, let code):
             return MarkdownLite.renderCode(language, code, font: codeFont)
-        case .step(_, let step):
-            return render(step)
+        case .step(_, let step, let expanded):
+            return render(step, expanded: expanded)
         case .header, .diff, .status, .typing:
             return nil
         }
@@ -103,7 +103,7 @@ enum ChatBlockLayout {
 
     /// Um passo como o terminal o mostra: a linha, o comando por extenso, a
     /// saída recuada com `⎿`. Recolhido, só a linha — com `+a −b` e o tamanho
-    /// da saída para não perder a conta.
+    /// da saída para não perder a conta — e o chevron avisa que há o que abrir.
     static func render(_ step: ChatStep, expanded: Bool = true) -> NSAttributedString {
         let out = NSMutableAttributedString()
         let title = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -114,15 +114,23 @@ enum ChatBlockLayout {
             if out.length > 0 { out.append(NSAttributedString(string: "\n", attributes: [.font: small])) }
             out.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]))
         }
-        var head = "\(step.glyph)  \(step.text)"
+        if step.isExpandable {
+            out.append(NSAttributedString(string: expanded ? "▾ " : "▸ ",
+                                          attributes: [.font: title, .foregroundColor: dim]))
+        }
+        out.append(NSAttributedString(
+            string: "\(step.glyph)  \(step.text)",
+            attributes: [.font: title,
+                         .foregroundColor: step.isError ? removed : NSColor(calibratedWhite: 0.7, alpha: 1)]))
         if !expanded {
-            if let counts = step.diffCounts { head += "  +\(counts.added) −\(counts.removed)" }
+            var summary = ""
+            if let counts = step.diffCounts { summary += "  +\(counts.added) −\(counts.removed)" }
             if let output = step.output {
                 let n = output.split(separator: "\n").count
-                head += "  ⎿ \(n) linha\(n == 1 ? "" : "s")"
+                summary += "  ⎿ \(n) linha\(n == 1 ? "" : "s")"
             }
+            out.append(NSAttributedString(string: summary, attributes: [.font: title, .foregroundColor: dim]))
         }
-        line(head, title, step.isError ? removed : NSColor(calibratedWhite: 0.7, alpha: 1))
         guard expanded else { return out }
         if let detail = step.detail {
             for l in detail.split(separator: "\n", omittingEmptySubsequences: false) { line("   \(l)", small, dim) }

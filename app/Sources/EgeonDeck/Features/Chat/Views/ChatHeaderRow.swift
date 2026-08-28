@@ -138,5 +138,25 @@ final class ChatDiffRow: ChatRowView {
         let inset = ChatBlockLayout.textInset
         diff?.frame = NSRect(x: bubble.minX + inset, y: ChatBlockLayout.rowGap,
                              width: bubble.width - inset * 2, height: diff?.height ?? 0)
+        window?.invalidateCursorRects(for: self)
+    }
+
+    /// O cabeçalho do diff (arquivo, `+a −b`) recolhe de volta ao título.
+    private var toggleRect: NSRect? {
+        guard let diff else { return nil }
+        return NSRect(x: diff.frame.minX, y: diff.frame.minY, width: diff.frame.width,
+                      height: DiffView.headerHeight)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if let rect = toggleRect, rect.contains(convert(event.locationInWindow, from: nil)) {
+            onToggle?()
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+
+    override func resetCursorRects() {
+        if let rect = toggleRect { addCursorRect(rect, cursor: .pointingHand) }
     }
 }

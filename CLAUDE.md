@@ -78,7 +78,8 @@ app/Sources/EgeonDeck/
   (`ChatBlock`), alturas medidas na fila de fundo (`ChatBlockLayout`) e diff
   por id entre montagens (`ChatThreadController`). A bolha desenha a
   **cadeia** do turno na ordem (prosa, passo, diff, prosa — `ChatTurn.parts`)
-  e cresce ao vivo enquanto o agente trabalha, lendo a cauda do transcript
+  — passo nasce **recolhido**, só o título com `▸`; clique abre, e o diff
+  aberto é o `DiffView` (ADR-044) — e cresce ao vivo enquanto o agente trabalha, lendo a cauda do transcript
   dele — a partir do prompt do turno — só nesse intervalo (ADR-039). O
   que já fechou sai do **histórico do app** (`ChatHistory`,
   `workbenches/<id>/chat.jsonl`, gravado no `Stop`), não do transcript do

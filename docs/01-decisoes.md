@@ -2885,3 +2885,30 @@ nomes das bancadas por projeto e os órfãos.
 por conotar "organização inteira" — que é exatamente o que este nível é. E
 "projeto" era o que a bancada não era ("nada impede duas bancadas apontarem
 para o mesmo repositório"): agora é a camada que as agrupa.
+
+## ADR-044 — Passo na bolha nasce recolhido: só o título, abre por clique
+
+**Contexto.** Com o passo inteiro na bolha (ADR-039: comando por extenso,
+saída com teto de 40 linhas), um turno com cinco comandos virava uma página
+de terminal no meio da conversa — a prosa do agente, que é o que se lê,
+sumia entre `git status` e listas de arquivos.
+
+**Decisão.** Todo passo com algo além do título — comando, saída ou diff —
+entra na thread **recolhido**: uma linha na caixa, com chevron (`▸`), o
+título e o resumo que já existia (`+a −b`, `⎿ n linhas`). O clique na faixa
+do título abre (`▾`); o resto da caixa aberta continua texto selecionável,
+porque o comando aberto é para copiar. O diff da edição segue a mesma regra:
+recolhido é um passo como os outros; aberto é o `DiffView`, e o cabeçalho
+dele (arquivo, `+a −b`) recolhe de volta. Passo sem nada além do título não
+tem chevron nem faixa.
+
+O estado é **do container, por id de bloco** (`ChatContainer.expandedSteps`,
+`b|turno|índice`, estável entre montagens — ADR-042): abrir é remontar com
+`ChatBlocks.build(expanded:)`, e o bloco que mudou de `expanded` é um bloco
+diferente, então a tabela recarrega e remede só essa linha (a largura da
+bolha muda se um diff abriu). Não vai para o histórico: é como você está
+olhando, não o que aconteceu. Abrir um passo não corre a thread para o fim
+mesmo com você lá (`holdBottom`): não é mensagem nova.
+
+**Verificação:** `ChatStepToggleTests` — o toggle no container remonta com o
+passo aberto e a edição como diff, e a linha só alterna na faixa do título.

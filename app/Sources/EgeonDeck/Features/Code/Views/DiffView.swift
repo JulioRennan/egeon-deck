@@ -16,7 +16,7 @@ final class DiffView: NSView {
     private static let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
     private static let headerFont = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .semibold)
     private static let rowHeight: CGFloat = 18
-    private static let headerHeight: CGFloat = 24
+    static let headerHeight: CGFloat = 24
     private static let hunkHeight: CGFloat = 16
     private static let gutter: CGFloat = 36
 

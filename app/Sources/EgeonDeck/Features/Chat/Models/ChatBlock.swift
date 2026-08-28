@@ -40,7 +40,10 @@ struct ChatBlock: Equatable {
         case prose(from: ChatParticipant, blocks: [MarkdownLite.Block])
         /// Bloco de código da prosa (```), na sua caixa.
         case code(from: ChatParticipant, language: String?, code: String)
-        case step(from: ChatParticipant, step: ChatStep)
+        /// Um passo na sua caixa. Recolhido é só o título (com `+a −b` e o
+        /// tamanho da saída); aberto mostra comando e saída. O diff aberto é
+        /// `.diff`; recolhido, é um `.step` como os outros.
+        case step(from: ChatParticipant, step: ChatStep, expanded: Bool)
         case diff(from: ChatParticipant, file: String, diff: [String])
         /// A linha de status no fim da bolha ao vivo.
         case status(from: ChatParticipant, live: ChatLive)
@@ -58,7 +61,7 @@ struct ChatBlock: Equatable {
         switch kind {
         case .prompt(let to, _, _, _, _, _, _): return to
         case .header(let from, _, _), .prose(let from, _), .code(let from, _, _),
-             .step(let from, _), .diff(let from, _, _), .status(let from, _),
+             .step(let from, _, _), .diff(let from, _, _), .status(let from, _),
              .typing(let from):                 return from
         }
     }
@@ -72,10 +75,13 @@ struct ChatBlock: Equatable {
 
 enum ChatBlocks {
     /// A thread inteira em linhas. `live` é o turno em curso de cada agente
-    /// (id do turno e o status); `typing`, quem trabalha sem turno gravado.
+    /// (id do turno e o status); `typing`, quem trabalha sem turno gravado;
+    /// `expanded`, os ids dos passos que você abriu — todo o resto fica só no
+    /// título. Passo sem nada além do título é sempre inteiro.
     static func build(messages: [ChatMessage],
                       live: [String: (turnId: String, status: ChatLive)],
-                      typing: [ChatParticipant]) -> [ChatBlock] {
+                      typing: [ChatParticipant],
+                      expanded: Set<String> = []) -> [ChatBlock] {
         var out: [ChatBlock] = []
         for (index, message) in messages.enumerated() {
             let key = message.key
@@ -109,10 +115,11 @@ enum ChatBlocks {
                     case .text(let text):
                         for kind in split(text, from: agent) { add(kind) }
                     case .step(let step):
-                        if let diff = step.diff, !diff.isEmpty {
+                        let open = !step.isExpandable || expanded.contains("b|\(turn.id)|\(index)")
+                        if open, let diff = step.diff, !diff.isEmpty {
                             add(.diff(from: agent, file: step.text, diff: diff))
                         } else {
-                            add(.step(from: agent, step: step))
+                            add(.step(from: agent, step: step, expanded: open))
                         }
                     }
                 }

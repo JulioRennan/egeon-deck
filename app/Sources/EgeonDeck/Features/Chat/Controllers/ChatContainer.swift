@@ -26,7 +26,7 @@ final class ChatContainer: NSView {
 
     private let column = ParticipantsColumn()
     /// A thread é uma tabela: uma linha por bloco, só o visível existe (ADR-042).
-    private let thread = ChatThreadController()
+    let thread = ChatThreadController()
     private let composer = ChatComposer()
     private let popup = ChatListPopup()
     private let emptyThread = NSTextField(labelWithString:
@@ -88,6 +88,21 @@ final class ChatContainer: NSView {
         }
         if let target { thread.scrollTo(messageKey: target) }
     }
+
+    /// Os passos que você abriu, por id de bloco — estável entre montagens.
+    /// Tudo o mais fica só no título; a montagem seguinte reflete a troca.
+    private(set) var expandedSteps: Set<String> = []
+    private var expandedVersion = 0
+    /// Abrir um passo não é mensagem nova: a thread não deve correr para o
+    /// fim por causa disso, mesmo que você esteja lá.
+    private var holdBottom = false
+
+    func toggleStep(_ block: ChatBlock) {
+        if expandedSteps.contains(block.id) { expandedSteps.remove(block.id) } else { expandedSteps.insert(block.id) }
+        expandedVersion += 1
+        holdBottom = true
+        refresh()
+    }
     private var pending: [ChatThread.Pending] = []
     private var focusedId: String?
     private enum PopupMode { case none, switcher, mention }
@@ -109,6 +124,7 @@ final class ChatContainer: NSView {
         addSubview(column)
 
         thread.onClick = { [weak self] block in self?.rowClicked(block) }
+        thread.onToggle = { [weak self] block in self?.toggleStep(block) }
         // Saber se você está no fim é o que decide a setinha e o auto-scroll.
         thread.onScroll = { [weak self] in
             self?.updateToBottomButton()
@@ -358,6 +374,7 @@ final class ChatContainer: NSView {
         let known: [String: ChatBlockLayout.BubbleMetrics]
         /// Quantas mensagens do fim entram.
         let window: Int
+        let expanded: Set<String>
     }
     private struct ThreadOutput {
         let messages: [ChatMessage]
@@ -390,10 +407,11 @@ final class ChatContainer: NSView {
             if let turn = liveTurn(of: agent) { live[agent.id] = turn }
         }
         let input = ThreadInput(participants: all, records: records(), live: live, pending: pending,
-                                width: thread.width, known: thread.bubbleMetrics, window: loadedMessages)
+                                width: thread.width, known: thread.bubbleMetrics, window: loadedMessages,
+                                expanded: expandedSteps)
         // O tique de 1 s chega sem nada ter mudado: só monta quando alguma
         // entrada mudou de fato.
-        let signature = "\(historyVersion)|\(liveVersion)|\(input.width)|\(loadedMessages)|"
+        let signature = "\(historyVersion)|\(liveVersion)|\(input.width)|\(loadedMessages)|\(expandedVersion)|"
             + pending.map { "\($0.sentAt.timeIntervalSince1970)" }.joined(separator: ",") + "|"
             + all.map { "\($0.id):\($0.activity)" }.joined(separator: ",")
         guard signature != buildSignature else { return }
@@ -442,7 +460,7 @@ final class ChatContainer: NSView {
             }
         }
         let blocks = ChatBlocks.build(messages: Array(built.messages.suffix(input.window)),
-                                      live: liveByAgent, typing: typing)
+                                      live: liveByAgent, typing: typing, expanded: input.expanded)
         let metrics = ChatBlockLayout.measure(blocks, width: input.width, known: input.known)
         return ThreadOutput(messages: built.messages, pending: built.pending,
                             blocks: blocks, metrics: metrics)
@@ -452,7 +470,8 @@ final class ChatContainer: NSView {
         messages = output.messages
         pending = output.pending
         loadingMore = false
-        let wasAtBottom = thread.isAtBottom
+        let wasAtBottom = thread.isAtBottom && !holdBottom
+        holdBottom = false
         let result = thread.apply(output.blocks, metrics: output.metrics)
         guard result.changed else { return }
         threadRebuilds += 1
