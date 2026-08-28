@@ -119,10 +119,12 @@ final class SidebarRow: NSView {
             return
         }
 
-        dot.frame = NSRect(x: 12, y: bounds.midY - 3, width: 6, height: 6)
-        let textWidth = bounds.width - 40 - badgeWidth
-        nameLabel.frame = NSRect(x: 28, y: 8, width: textWidth, height: 17)
-        pathLabel.frame = NSRect(x: 28, y: 26, width: textWidth, height: 13)
+        // Mesma coluna de texto que o cabeçalho do projeto (`SidebarGroupRow`):
+        // dentro do tile, a bancada tem de ler como item da mesma lista.
+        dot.frame = NSRect(x: 15, y: bounds.midY - 3, width: 6, height: 6)
+        let textWidth = bounds.width - 44 - badgeWidth
+        nameLabel.frame = NSRect(x: 32, y: 7, width: textWidth, height: 17)
+        pathLabel.frame = NSRect(x: 32, y: 24, width: textWidth, height: 13)
         // 4 da borda da linha, que é onde o `+` do cabeçalho termina: encostado
         // no limite útil da direita e alinhado com o que já estava lá.
         statusLabel.frame = NSRect(x: bounds.width - badgeWidth - 4,
@@ -243,7 +245,7 @@ final class SidebarRow: NSView {
         layer?.backgroundColor = (isSelected && !isCompact)
             ? NSColor(calibratedWhite: 1, alpha: 0.14).cgColor
             : NSColor.clear.cgColor
-        layer?.cornerRadius = 8
+        layer?.cornerRadius = 7
         nameLabel.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.72)
 
         tile.layer?.backgroundColor = isSelected
@@ -295,6 +297,281 @@ final class SidebarRow: NSView {
     @objc private func clearFromMenu() { onClear?(index) }
 }
 
+/// Cabeçalho de workspace ou de projeto na árvore da barra (ADR-043).
+///
+/// Clique recolhe ou abre; o menu de contexto carrega as ações do nível. O
+/// badge só aparece recolhido: aberto, cada bancada fala por si.
+///
+/// Projeto e bancada têm a MESMA altura e a mesma anatomia — ícone à esquerda,
+/// nome em cima, caminho embaixo — para o card ler como uma lista de coisas do
+/// mesmo tipo, e não como cabeçalho mais rodapé.
+final class SidebarGroupRow: NSView {
+    let item: SidebarItem
+    private let badge: WorkspaceBadge?
+    private let icon = NSImageView()
+    private let nameLabel = NSTextField(labelWithString: "")
+    private let pathLabel = NSTextField(labelWithString: "")
+    private let chevron = NSImageView()
+    private let statusLabel = NSTextField(labelWithString: "")
+    /// Criar bancada direto do projeto, sem passar pelo botão direito.
+    private var addButton: ToolbarButton?
+    private var lastBadge = ""
+
+    var onToggle: ((SidebarItem) -> Void)?
+    var onCreateWorkbench: ((_ projectID: String) -> Void)?
+    var onCreateWorkbenchFromWorktree: ((_ projectID: String) -> Void)?
+    var onEditWorkspace: ((_ workspaceID: String) -> Void)?
+    var onRemoveWorkspace: ((_ workspaceID: String) -> Void)?
+    var onRemoveProject: ((_ workspaceID: String, _ projectID: String) -> Void)?
+
+    private(set) var isCollapsed = false
+    var isCompact = false {
+        didSet {
+            guard isCompact != oldValue else { return }
+            nameLabel.isHidden = isCompact
+            pathLabel.isHidden = isCompact
+            chevron.isHidden = isCompact
+            addButton?.isHidden = isCompact
+            icon.isHidden = isCompact || badge != nil
+            lastBadge = ""
+            needsLayout = true
+        }
+    }
+
+    /// Uma altura só para tudo que é linha: cabeçalho de workspace, de projeto
+    /// e a bancada. É o que faz a árvore parecer feita de peças iguais.
+    static let height: CGFloat = 44
+    static let badgeSide: CGFloat = 28
+
+    var isWorkspace: Bool { if case .workspace = item { return true } else { return false } }
+
+    init(workspace: WorkspaceConfig) {
+        item = .workspace(id: workspace.id)
+        badge = WorkspaceBadge(side: Self.badgeSide)
+        isCollapsed = workspace.isCollapsed
+        super.init(frame: .zero)
+        badge?.show(workspace)
+        nameLabel.stringValue = workspace.name
+        nameLabel.font = .systemFont(ofSize: 13, weight: .bold)
+        nameLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.92)
+        let projects = workspace.projects.count
+        pathLabel.stringValue = projects == 1 ? "1 projeto" : "\(projects) projetos"
+        pathLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.42)
+        setup()
+    }
+
+    init(workspaceID: String, project: ProjectConfig) {
+        item = .project(workspaceID: workspaceID, id: project.id)
+        badge = nil
+        isCollapsed = project.isCollapsed
+        super.init(frame: .zero)
+        nameLabel.stringValue = project.name
+        nameLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        nameLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.8)
+        pathLabel.stringValue = project.exists
+            ? (project.path as NSString).abbreviatingWithTildeInPath
+            : "caminho não existe — \(project.path)"
+        pathLabel.textColor = project.exists
+            ? NSColor(calibratedWhite: 1, alpha: 0.42)
+            : NSColor.systemRed.withAlphaComponent(0.85)
+        icon.image = ToolbarButton.symbol(["folder.fill", "folder"])
+        icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: 0.5)
+        let add = ToolbarButton(symbols: ["plus"], tooltip: "Nova bancada neste projeto", size: 20)
+        add.onClick = { [weak self] in self?.showCreateMenu() }
+        addButton = add
+        setup()
+    }
+
+    init(orphans: Int) {
+        item = .orphans
+        badge = nil
+        super.init(frame: .zero)
+        nameLabel.stringValue = "Sem projeto"
+        nameLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        nameLabel.textColor = NSColor.systemOrange.withAlphaComponent(0.9)
+        pathLabel.stringValue = "\(orphans) bancada(s) com projeto que não existe"
+        pathLabel.textColor = NSColor.systemOrange.withAlphaComponent(0.6)
+        icon.image = ToolbarButton.symbol(["questionmark.folder", "folder"])
+        icon.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+        chevron.isHidden = true
+        setup()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setup() {
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        if let badge { addSubview(badge) } else { addSubview(icon) }
+        nameLabel.lineBreakMode = .byTruncatingTail
+        addSubview(nameLabel)
+        pathLabel.font = .systemFont(ofSize: 10)
+        pathLabel.lineBreakMode = .byTruncatingMiddle
+        addSubview(pathLabel)
+        chevron.contentTintColor = NSColor(calibratedWhite: 1, alpha: 0.4)
+        chevron.imageScaling = .scaleProportionallyDown
+        refreshChevron()
+        addSubview(chevron)
+        statusLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        statusLabel.alignment = .right
+        addSubview(statusLabel)
+        if let addButton { addSubview(addButton) }
+    }
+
+    private func refreshChevron() {
+        chevron.image = ToolbarButton.symbol([isCollapsed ? "chevron.right" : "chevron.down"])
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let midY = bounds.midY
+        if isCompact {
+            if let badge {
+                let side = Self.badgeSide
+                badge.frame = NSRect(x: ((bounds.width - side) / 2).rounded(), y: midY - side / 2,
+                                     width: side, height: side)
+            }
+            statusLabel.frame = .zero
+            return
+        }
+        var x: CGFloat = 10
+        if let badge {
+            let side = Self.badgeSide
+            badge.frame = NSRect(x: x, y: midY - side / 2, width: side, height: side)
+            x += side + 10
+        } else {
+            icon.frame = NSRect(x: x + 2, y: midY - 8, width: 16, height: 16)
+            x += 28
+        }
+        var right = bounds.width - 10
+        if !chevron.isHidden {
+            chevron.frame = NSRect(x: right - 12, y: midY - 6, width: 12, height: 12)
+            right -= 18
+        }
+        if let addButton {
+            addButton.frame = NSRect(x: right - 20, y: midY - 10, width: 20, height: 20)
+            right -= 24
+        }
+        let badgeWidth: CGFloat = statusLabel.attributedStringValue.length == 0
+            ? 0 : ceil(statusLabel.attributedStringValue.size().width) + 8
+        statusLabel.frame = NSRect(x: right - badgeWidth, y: midY - 8, width: badgeWidth, height: 16)
+        right -= badgeWidth
+        nameLabel.frame = NSRect(x: x, y: 7, width: max(0, right - x - 4), height: 17)
+        pathLabel.frame = NSRect(x: x, y: 24, width: max(0, right - x - 4), height: 13)
+    }
+
+    /// Resumo do que está embaixo, só quando recolhido: aberto, quem avisa são
+    /// as linhas das bancadas.
+    func show(_ summary: ActivitySummary) {
+        let visible = isCollapsed || isCompact
+        let signature = visible
+            ? "\(summary.working + summary.starting)/\(summary.attention)/\(summary.done)/"
+                + (summary.working + summary.starting > 0 ? String(Spinner.current) : "")
+            : ""
+        guard signature != lastBadge else { return }
+        lastBadge = signature
+        badge?.wantsAttention = visible && summary.attention > 0
+
+        let text = NSMutableAttributedString()
+        func add(_ glyph: String, _ count: Int, _ color: NSColor) {
+            guard count > 0 else { return }
+            if text.length > 0 { text.append(NSAttributedString(string: " ")) }
+            text.append(NSAttributedString(
+                string: count > 1 ? "\(glyph)\(count)" : glyph,
+                attributes: [.foregroundColor: color,
+                             .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)]))
+        }
+        if visible, !isCompact {
+            add(String(Spinner.current), summary.working + summary.starting,
+                NSColor(calibratedWhite: 1, alpha: 0.45))
+            add("●", summary.attention, .systemOrange)
+            add("●", summary.done, .systemGreen)
+        }
+        statusLabel.attributedStringValue = text
+        needsLayout = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if case .orphans = item { return }
+        onToggle?(item)
+    }
+
+    private func showCreateMenu() {
+        guard case .project = item, let addButton else { return }
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Nova bancada…", action: #selector(createWorkbench), keyEquivalent: "")
+        menu.addItem(withTitle: "Nova bancada em worktree…",
+                     action: #selector(createWorkbenchFromWorktree), keyEquivalent: "")
+        menu.items.forEach { $0.target = self }
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: addButton.frame.minX, y: addButton.frame.maxY + 4), in: self)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        switch item {
+        case .workspace:
+            menu.addItem(withTitle: "Editar workspace…", action: #selector(editWorkspace),
+                         keyEquivalent: "")
+            menu.addItem(.separator())
+            menu.addItem(withTitle: "Remover workspace…", action: #selector(removeWorkspace),
+                         keyEquivalent: "")
+        case .project:
+            menu.addItem(withTitle: "Nova bancada…", action: #selector(createWorkbench),
+                         keyEquivalent: "")
+            menu.addItem(withTitle: "Nova bancada em worktree…",
+                         action: #selector(createWorkbenchFromWorktree), keyEquivalent: "")
+            menu.addItem(.separator())
+            menu.addItem(withTitle: "Tirar projeto do workspace…", action: #selector(removeProject),
+                         keyEquivalent: "")
+        case .workbench, .orphans:
+            return nil
+        }
+        menu.items.forEach { $0.target = self }
+        return menu
+    }
+
+    @objc private func editWorkspace() {
+        if case .workspace(let id) = item { onEditWorkspace?(id) }
+    }
+    @objc private func removeWorkspace() {
+        if case .workspace(let id) = item { onRemoveWorkspace?(id) }
+    }
+    @objc private func createWorkbench() {
+        if case .project(_, let id) = item { onCreateWorkbench?(id) }
+    }
+    @objc private func createWorkbenchFromWorktree() {
+        if case .project(_, let id) = item { onCreateWorkbenchFromWorktree?(id) }
+    }
+    @objc private func removeProject() {
+        if case .project(let ws, let id) = item { onRemoveProject?(ws, id) }
+    }
+}
+
+/// O card de um workspace, e dentro dele o tile de cada projeto — o
+/// `ExpansionTile` aninhado: cabeçalho em cima, filhos por dentro do mesmo
+/// contorno, para o que é de um workspace parecer de fato separado do que é
+/// do outro.
+private final class SidebarCard: NSView {
+    init(radius: CGFloat, fill: CGFloat, stroke: CGFloat) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = radius
+        layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: fill).cgColor
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor(calibratedWhite: 1, alpha: stroke).cgColor
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+}
+
+/// Documento da rolagem: virado, como o resto da barra.
+private final class SidebarList: NSView {
+    override var isFlipped: Bool { true }
+}
+
 final class Sidebar: NSView {
     /// Cabeçalho curto porque a barra agora flutua: os botões da janela ficam
     /// FORA dela, e não há mais o que desviar aqui dentro.
@@ -304,18 +581,23 @@ final class Sidebar: NSView {
     /// Largura do trilho recolhido: cabe a pastilha de 26pt com folga, e é o que
     /// o conteúdo reserva de gutter — o que se abre além disso flutua por cima.
     static let railWidth: CGFloat = 52
-    private static let rowHeight: CGFloat = 46
-    private static let rowGap: CGFloat = 4
+    private static let rowHeight = SidebarGroupRow.height
+    /// Folga entre cards e entre peças dentro de um card.
+    private static let cardGap: CGFloat = 8
+    private static let cardInset: CGFloat = 6
+    private static let rowGap: CGFloat = 2
 
-    /// Trilho recolhido. Propagado às linhas, que trocam nome por pastilha.
+    /// Trilho recolhido. Propagado às linhas, que trocam nome por pastilha; os
+    /// projetos e os cards somem — no trilho a hierarquia é workspace → bancada.
     var isCompact = false {
         didSet {
             guard isCompact != oldValue else { return }
             rows.forEach { $0.isCompact = isCompact }
+            groups.forEach { $0.isCompact = isCompact }
             title.isHidden = isCompact
             emptyLabel.isHidden = isCompact || !rows.isEmpty
-            // O + sai do trilho: criar bancada abre um menu, e menu saindo de uma
-            // faixa de 52pt cai por cima dos cards. Você abre a barra e cria.
+            // O + sai do trilho: criar abre um menu, e menu saindo de uma faixa
+            // de 52pt cai por cima dos cards. Você abre a barra e cria.
             addButton.isHidden = isCompact
             collapseButton.setSymbols(
                 isCompact ? ["sidebar.trailing", "chevron.right"]
@@ -325,20 +607,44 @@ final class Sidebar: NSView {
         }
     }
 
+    /// A árvore montada: card por workspace, tile por projeto, linhas dentro.
+    private struct ProjectTile {
+        let tile: SidebarCard
+        let header: SidebarGroupRow
+        let rows: [SidebarRow]
+    }
+    private struct WorkspaceCard {
+        let card: SidebarCard
+        let header: SidebarGroupRow
+        let projects: [ProjectTile]
+    }
+    private var cards: [WorkspaceCard] = []
+    private var orphanTile: ProjectTile?
+
     private var rows: [SidebarRow] = []
-    private let title = NSTextField(labelWithString: "BANCADAS")
-    private let addButton = ToolbarButton(symbols: ["plus"], tooltip: "Nova bancada", size: 22)
-    /// Recolher e abrir. Existe além do ⌘/ porque atalho não se descobre olhando
-    /// a tela, e uma barra que recolhe sem dizer como voltar é uma barra que
-    /// alguém vai achar que quebrou.
+    private var groups: [SidebarGroupRow] = []
+    private var tree = WorkspaceTree(workspaces: [], workbenches: [])
+    private let scroll = NSScrollView()
+    private let list = SidebarList()
+    private let title = NSTextField(labelWithString: "WORKSPACES")
+    private let addButton = ToolbarButton(symbols: ["plus"], tooltip: "Novo workspace ou bancada", size: 22)
     private let collapseButton = ToolbarButton(symbols: ["sidebar.leading", "chevron.left"],
                                                tooltip: "Recolher a barra (⌘/)", size: 22)
     private let emptyLabel = NSTextField(labelWithString: "")
 
     var onSelect: ((Int) -> Void)?
     var onToggleCollapse: (() -> Void)?
+    /// Bancada por pasta livre, sem projeto escolhido: o app acha o projeto.
     var onCreate: (() -> Void)?
     var onCreateFromWorktree: (() -> Void)?
+    /// Bancada dentro de um projeto: a pasta já está decidida.
+    var onCreateInProject: ((_ projectID: String) -> Void)?
+    var onCreateFromWorktreeInProject: ((_ projectID: String) -> Void)?
+    var onCreateWorkspace: (() -> Void)?
+    var onEditWorkspace: ((_ workspaceID: String) -> Void)?
+    var onRemoveWorkspace: ((_ workspaceID: String) -> Void)?
+    var onRemoveProject: ((_ workspaceID: String, _ projectID: String) -> Void)?
+    var onToggleGroup: ((SidebarItem) -> Void)?
     var onRename: ((Int) -> Void)?
     var onDuplicateAsWorktree: ((Int) -> Void)?
     var onRemove: ((Int) -> Void)?
@@ -346,7 +652,7 @@ final class Sidebar: NSView {
     /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
     var onClear: ((Int) -> Void)?
 
-    init(configs: [WorkbenchConfig]) {
+    init(workspaces: [WorkspaceConfig], configs: [WorkbenchConfig]) {
         super.init(frame: .zero)
         wantsLayer = true
         // Sem fundo próprio: quem pinta é o `GlassPanel` que a envolve. Chapa
@@ -357,8 +663,8 @@ final class Sidebar: NSView {
         title.textColor = NSColor(calibratedWhite: 1, alpha: 0.42)
         addSubview(title)
 
-        // Menu, e não ação direta: as duas rotas terminam no mesmo lugar (uma
-        // bancada nova na lista), então elas pertencem ao mesmo botão.
+        // Menu, e não ação direta: as rotas terminam no mesmo lugar (algo novo na
+        // árvore), então pertencem ao mesmo botão.
         addButton.onClick = { [weak self] in self?.showCreateMenu() }
         addSubview(addButton)
 
@@ -369,33 +675,98 @@ final class Sidebar: NSView {
         emptyLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.45)
         emptyLabel.stringValue = "Nenhuma bancada.\nUse + para criar,\nvazia ou de um template."
         emptyLabel.maximumNumberOfLines = 0
-        addSubview(emptyLabel)
 
-        reload(configs)
+        // Rolagem porque a árvore cresce: três workspaces com dois projetos cada
+        // já passam da altura de uma janela pequena.
+        scroll.documentView = list
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
+        scroll.verticalScrollElasticity = .allowed
+        scroll.horizontalScrollElasticity = .none
+        addSubview(scroll)
+        list.addSubview(emptyLabel)
+
+        reload(workspaces: workspaces, configs: configs)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
 
-    /// Recria as linhas. Bancadas são criadas e removidas em tempo de execução,
-    /// então a barra não pode ser montada só uma vez no init.
-    func reload(_ configs: [WorkbenchConfig]) {
-        rows.forEach { $0.removeFromSuperview() }
-        rows = configs.enumerated().map { index, config in
-            let row = SidebarRow(index: index, config: config)
+    /// Recria as linhas. Bancadas, projetos e workspaces mudam em tempo de
+    /// execução, então a barra não pode ser montada só uma vez no init.
+    func reload(workspaces: [WorkspaceConfig], configs: [WorkbenchConfig]) {
+        list.subviews.filter { $0 !== emptyLabel }.forEach { $0.removeFromSuperview() }
+        rows = []
+        groups = []
+        cards = []
+        orphanTile = nil
+        tree = WorkspaceTree(workspaces: workspaces, workbenches: configs)
+
+        func row(_ index: Int) -> SidebarRow {
+            let row = SidebarRow(index: index, config: configs[index])
             row.onClick = { [weak self] in self?.onSelect?($0) }
             row.onRename = { [weak self] in self?.onRename?($0) }
             row.onDuplicateAsWorktree = { [weak self] in self?.onDuplicateAsWorktree?($0) }
             row.onRemove = { [weak self] in self?.onRemove?($0) }
             row.onEditVisitLimit = { [weak self] in self?.onEditVisitLimit?($0) }
             row.onClear = { [weak self] in self?.onClear?($0) }
-            row.isCompact = isCompact
-            addSubview(row)
+            rows.append(row)
             return row
         }
+
+        // O card entra na hierarquia ANTES do que vai dentro: é fundo, e um
+        // fundo por cima engoliria os cliques das linhas.
+        for space in workspaces {
+            let card = SidebarCard(radius: 12, fill: 0.045, stroke: 0.09)
+            list.addSubview(card)
+            let header = SidebarGroupRow(workspace: space)
+            wire(header)
+            groups.append(header)
+            list.addSubview(header)
+            var tiles: [ProjectTile] = []
+            for project in space.projects {
+                let tile = SidebarCard(radius: 9, fill: 0.04, stroke: 0.06)
+                list.addSubview(tile)
+                let head = SidebarGroupRow(workspaceID: space.id, project: project)
+                wire(head)
+                groups.append(head)
+                list.addSubview(head)
+                let members = tree.indices(inProject: project.id).map(row)
+                members.forEach { list.addSubview($0) }
+                tiles.append(ProjectTile(tile: tile, header: head, rows: members))
+            }
+            cards.append(WorkspaceCard(card: card, header: header, projects: tiles))
+        }
+
+        let lost = tree.orphans
+        if !lost.isEmpty {
+            let tile = SidebarCard(radius: 12, fill: 0.03, stroke: 0.08)
+            tile.layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.35).cgColor
+            list.addSubview(tile)
+            let head = SidebarGroupRow(orphans: lost.count)
+            groups.append(head)
+            list.addSubview(head)
+            let members = lost.map(row)
+            members.forEach { list.addSubview($0) }
+            orphanTile = ProjectTile(tile: tile, header: head, rows: members)
+        }
+
+        rows.forEach { $0.isCompact = isCompact }
+        groups.forEach { $0.isCompact = isCompact }
         emptyLabel.isHidden = isCompact || !configs.isEmpty
         needsLayout = true
+    }
+
+    private func wire(_ group: SidebarGroupRow) {
+        group.onToggle = { [weak self] in self?.onToggleGroup?($0) }
+        group.onCreateWorkbench = { [weak self] in self?.onCreateInProject?($0) }
+        group.onCreateWorkbenchFromWorktree = { [weak self] in self?.onCreateFromWorktreeInProject?($0) }
+        group.onEditWorkspace = { [weak self] in self?.onEditWorkspace?($0) }
+        group.onRemoveWorkspace = { [weak self] in self?.onRemoveWorkspace?($0) }
+        group.onRemoveProject = { [weak self] in self?.onRemoveProject?($0, $1) }
     }
 
     override func layout() {
@@ -408,20 +779,106 @@ final class Sidebar: NSView {
             addButton.frame = NSRect(x: bounds.width - 60, y: 8, width: 22, height: 22)
             collapseButton.frame = NSRect(x: bounds.width - 32, y: 8, width: 22, height: 22)
         }
-        emptyLabel.frame = NSRect(x: 16, y: Self.headerHeight + 8,
-                                  width: bounds.width - 32, height: 56)
+        scroll.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width,
+                              height: max(0, bounds.height - Self.headerHeight))
+        emptyLabel.frame = NSRect(x: 16, y: 8, width: bounds.width - 32, height: 56)
 
-        let inset: CGFloat = isCompact ? 2 : 8
-        var y = Self.headerHeight
-        for row in rows {
-            row.frame = NSRect(x: inset, y: y,
-                               width: bounds.width - inset * 2, height: Self.rowHeight)
-            y += Self.rowHeight + Self.rowGap
+        let y = isCompact ? layoutRail() : layoutCards()
+        list.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(y + 8, scroll.bounds.height))
+    }
+
+    /// Expandido: card por workspace, tile por projeto, linhas dentro do tile.
+    private func layoutCards() -> CGFloat {
+        let inset = Self.cardInset
+        let outer: CGFloat = 8
+        var y: CGFloat = 2
+
+        func layoutTile(_ tile: ProjectTile, x: CGFloat, width: CGFloat, y: inout CGFloat,
+                        expanded: Bool) {
+            tile.tile.isHidden = false
+            let top = y
+            tile.header.isHidden = false
+            tile.header.frame = NSRect(x: x, y: y, width: width, height: Self.rowHeight)
+            y += Self.rowHeight
+            if expanded {
+                for row in tile.rows {
+                    row.isHidden = false
+                    row.frame = NSRect(x: x + inset, y: y, width: width - inset * 2,
+                                       height: Self.rowHeight)
+                    y += Self.rowHeight + Self.rowGap
+                }
+                if !tile.rows.isEmpty { y += inset - Self.rowGap }
+            } else {
+                tile.rows.forEach { $0.isHidden = true }
+            }
+            tile.tile.frame = NSRect(x: x, y: top, width: width, height: y - top)
         }
+
+        for card in cards {
+            let top = y
+            let width = bounds.width - outer * 2
+            card.card.isHidden = false
+            card.header.frame = NSRect(x: outer, y: y, width: width, height: Self.rowHeight)
+            y += Self.rowHeight
+            if card.header.isCollapsed {
+                for tile in card.projects {
+                    tile.tile.isHidden = true
+                    tile.header.isHidden = true
+                    tile.rows.forEach { $0.isHidden = true }
+                }
+            } else {
+                for tile in card.projects {
+                    layoutTile(tile, x: outer + inset, width: width - inset * 2, y: &y,
+                               expanded: !tile.header.isCollapsed)
+                    y += Self.cardGap - 2
+                }
+                if !card.projects.isEmpty { y += inset - (Self.cardGap - 2) }
+            }
+            card.card.frame = NSRect(x: outer, y: top, width: width, height: y - top)
+            y += Self.cardGap
+        }
+
+        if let orphanTile {
+            layoutTile(orphanTile, x: outer, width: bounds.width - outer * 2, y: &y, expanded: true)
+            y += Self.cardGap
+        }
+        return y
+    }
+
+    /// Trilho: a pastilha do workspace e, sob ela, as pastilhas das bancadas.
+    /// Projeto e cards não aparecem — 52pt não têm onde pôr hierarquia.
+    private func layoutRail() -> CGFloat {
+        var y: CGFloat = 0
+        let width = bounds.width - 4
+        func rail(_ tiles: [ProjectTile], collapsed: Bool) {
+            for tile in tiles {
+                tile.tile.isHidden = true
+                tile.header.isHidden = true
+                for row in tile.rows {
+                    row.isHidden = collapsed
+                    guard !collapsed else { continue }
+                    row.frame = NSRect(x: 2, y: y, width: width, height: Self.rowHeight)
+                    y += Self.rowHeight + Self.rowGap
+                }
+            }
+        }
+        for card in cards {
+            card.card.isHidden = true
+            card.header.frame = NSRect(x: 2, y: y, width: width, height: Self.rowHeight)
+            y += Self.rowHeight
+            rail(card.projects, collapsed: card.header.isCollapsed)
+            y += 6
+        }
+        if let orphanTile { rail([orphanTile], collapsed: false) }
+        return y
     }
 
     private func showCreateMenu() {
         let menu = NSMenu()
+        menu.addItem(withTitle: "Novo workspace…", action: #selector(createWorkspace), keyEquivalent: "")
+        menu.addItem(.separator())
+        // Por pasta livre: o app acha o projeto pela pasta — ou cria um. Continua
+        // aqui porque é o atalho de quem ainda não desenhou workspace nenhum.
         menu.addItem(withTitle: "Nova bancada…", action: #selector(createPlain), keyEquivalent: "")
         menu.addItem(withTitle: "Nova bancada a partir de worktree…",
                      action: #selector(createFromWorktree), keyEquivalent: "")
@@ -431,6 +888,7 @@ final class Sidebar: NSView {
                    in: self)
     }
 
+    @objc private func createWorkspace() { onCreateWorkspace?() }
     @objc private func createPlain() { onCreate?() }
     @objc private func createFromWorktree() { onCreateFromWorktree?() }
 
@@ -439,9 +897,27 @@ final class Sidebar: NSView {
     }
 
     /// Chamado pelo laço da UI com o resumo de TODAS as bancadas vivas, não só a
-    /// que está na tela.
+    /// que está na tela. Os grupos somam o que têm embaixo.
     func showActivity(_ summaries: [String: ActivitySummary]) {
         for row in rows { row.show(summaries[row.name] ?? ActivitySummary()) }
+        for group in groups {
+            let members: [Int]
+            switch group.item {
+            case .workspace(let id): members = tree.indices(inWorkspace: id)
+            case .project(_, let id): members = tree.indices(inProject: id)
+            case .orphans: members = tree.orphans
+            case .workbench: members = []
+            }
+            var total = ActivitySummary()
+            for index in members where index < tree.workbenches.count {
+                guard let s = summaries[tree.workbenches[index].name] else { continue }
+                total.starting += s.starting
+                total.working += s.working
+                total.attention += s.attention
+                total.done += s.done
+            }
+            group.show(total)
+        }
     }
 
     func markLive(_ index: Int) {

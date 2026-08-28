@@ -22,6 +22,11 @@ struct WorkbenchConfig: Codable {
     /// ele, e editar o template depois não mexe em quem já nasceu.
     var template: String?
 
+    /// Projeto (id) a que a bancada pertence, na árvore workspace → projeto →
+    /// bancada (ADR-043). Ausente = ainda não conciliado; `WorkspaceStore.reconcile`
+    /// resolve pelo repositório principal da pasta.
+    var project: String?
+
     /// Quem pode acionar quem, dentro desta bancada.
     var edges: [EdgeConfig]?
 
@@ -54,7 +59,7 @@ struct WorkbenchConfig: Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, path, nodes, template, edges, maxVisits, view, mosaic
+        case id, name, path, nodes, template, project, edges, maxVisits, view, mosaic
     }
 
     /// Escrito à mão só por causa do `id`: o decoder sintetizado exige a chave
@@ -66,6 +71,7 @@ struct WorkbenchConfig: Codable {
         path = try c.decode(String.self, forKey: .path)
         nodes = try c.decodeIfPresent([NodeConfig].self, forKey: .nodes) ?? []
         template = try c.decodeIfPresent(String.self, forKey: .template)
+        project = try c.decodeIfPresent(String.self, forKey: .project)
         edges = try c.decodeIfPresent([EdgeConfig].self, forKey: .edges)
         maxVisits = try c.decodeIfPresent(Int.self, forKey: .maxVisits)
         view = try c.decodeIfPresent(ViewMode.self, forKey: .view)
@@ -73,13 +79,14 @@ struct WorkbenchConfig: Codable {
     }
 
     init(id: String = WorkbenchConfig.newID(), name: String, path: String, nodes: [NodeConfig],
-         template: String? = nil, edges: [EdgeConfig]? = nil, maxVisits: Int? = nil,
-         view: ViewMode? = nil, mosaic: MosaicLayout? = nil) {
+         template: String? = nil, project: String? = nil, edges: [EdgeConfig]? = nil,
+         maxVisits: Int? = nil, view: ViewMode? = nil, mosaic: MosaicLayout? = nil) {
         self.id = id
         self.name = name
         self.path = path
         self.nodes = nodes
         self.template = template
+        self.project = project
         self.edges = edges
         self.maxVisits = maxVisits
         self.view = view

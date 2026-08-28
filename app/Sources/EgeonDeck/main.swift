@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var agents: [String: AgentProfile] = [:]
     /// Criados sob demanda e mantidos vivos: trocar de aba não mata terminal.
     var shells: [Int: WorkbenchShell] = [:]
+    /// A árvore por cima das bancadas: workspace → projeto (ADR-043). A lista de
+    /// bancadas continua plana; isto só diz de quem cada uma é.
+    var workspaces: [WorkspaceConfig] = []
     /// Controllers de aresta, um por bancada, criados sob demanda. As closures
     /// deles leem `configs[index]` e `shells[index]` na hora da chamada, então o
     /// controller do slot N vale para o que estiver no slot N — inclusive depois
@@ -72,9 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Log.reset()
         configs = WorkbenchStore.load()
+        workspaces = WorkspaceStore.load() ?? []
         agents = AgentStore.load()
         Log.write("Egeon Deck iniciando — \(configs.count) bancadas, "
-                  + "\(agents.count) perfis de agente")
+                  + "\(workspaces.count) workspaces, \(agents.count) perfis de agente")
+        reconcileWorkspaces()
 
         // Escrito no arranque, e não na primeira worktree: é um arquivo feito
         // para ser lido e ajustado, e para isso precisa existir antes.
@@ -112,11 +117,20 @@ ShellHook.install()
         window.titlebarAppearsTransparent = true
         window.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 1)
 
-        let sidebar = Sidebar(configs: configs)
+        let sidebar = Sidebar(workspaces: workspaces, configs: configs)
         sidebar.onSelect = { [weak self] index in self?.activate(index) }
         sidebar.onToggleCollapse = { [weak self] in self?.root.toggleCollapsed() }
         sidebar.onCreate = { [weak self] in self?.createWorkbench() }
         sidebar.onCreateFromWorktree = { [weak self] in self?.createWorkbenchFromWorktree() }
+        sidebar.onCreateInProject = { [weak self] id in self?.createWorkbench(inProject: id) }
+        sidebar.onCreateFromWorktreeInProject = { [weak self] id in
+            self?.createWorkbenchFromWorktree(inProject: id)
+        }
+        sidebar.onCreateWorkspace = { [weak self] in self?.createWorkspace() }
+        sidebar.onEditWorkspace = { [weak self] id in self?.editWorkspace(id) }
+        sidebar.onRemoveWorkspace = { [weak self] id in self?.confirmRemoveWorkspace(id) }
+        sidebar.onRemoveProject = { [weak self] ws, id in self?.confirmRemoveProject(ws, id) }
+        sidebar.onToggleGroup = { [weak self] item in self?.toggleGroup(item) }
         sidebar.onRename = { [weak self] index in self?.renameWorkbench(index) }
         sidebar.onDuplicateAsWorktree = { [weak self] index in
             self?.duplicateWorkbenchAsWorktree(index)
@@ -135,6 +149,7 @@ ShellHook.install()
         CodeServer.shared.start()
 
         AppControl.workbenchNames = { [weak self] in self?.configs.map(\.name) ?? [] }
+        AppControl.workspacesSnapshot = { [weak self] in self?.workspacesSnapshot() ?? [:] }
         AppControl.canvasGeometry = { [weak self] in self?.canvasGeometry() ?? [:] }
         AppControl.makeWorktree = { [weak self] target, branch, nodeBranches in
             self?.makeWorktree(target: target, branch: branch, nodeBranches: nodeBranches)
@@ -352,6 +367,7 @@ ShellHook.install()
         let shell = shells[index] ?? build(index)
         let previous = activeIndex
         activeIndex = index
+        revealInSidebar(index)
         root.show(shell)
         // O layout da barra é do MODO, e o modo é por bancada: entrar numa bancada em
         // mosaico tem de tirar a barra de cima do conteúdo.
@@ -373,16 +389,23 @@ ShellHook.install()
 
     /// Pasta primeiro, nome depois: o nome quase sempre é o da pasta, então
     /// perguntar na ordem inversa faria você digitar o que o app já sabe.
-    private func createWorkbench() {
-        let panel = NSOpenPanel()
-        panel.title = "Pasta da bancada"
-        panel.message = "Escolha a pasta — pode ser um repositório ou uma worktree."
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Usar esta pasta"
-
-        guard panel.runModal() == .OK, let folder = panel.url else { return }
+    /// Com `project`, a pasta já está decidida — é a do projeto — e a bancada
+    /// nasce dele. Sem, você escolhe a pasta e o app acha (ou cria) o projeto.
+    private func createWorkbench(inProject projectID: String? = nil) {
+        let folder: URL
+        if let projectID, let project = project(withID: projectID) {
+            folder = project.url
+        } else {
+            let panel = NSOpenPanel()
+            panel.title = "Pasta da bancada"
+            panel.message = "Escolha a pasta — pode ser um repositório ou uma worktree."
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            panel.prompt = "Usar esta pasta"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            folder = url
+        }
         guard let (name, template) = askWorkbenchNameAndTemplate(
             suggested: folder.lastPathComponent) else { return }
 
@@ -391,7 +414,8 @@ ShellHook.install()
             name: WorkbenchStore.availableName(basedOn: name, taken: configs.map(\.name)),
             path: (folder.path as NSString).abbreviatingWithTildeInPath,
             nodes: preset?.instantiate() ?? [],
-            template: template)
+            template: template,
+            project: projectID)
 
         // O modo vem do preset: um template desenhado em mosaico abre em mosaico.
         config.view = preset?.view
@@ -402,7 +426,7 @@ ShellHook.install()
         if config.nodes.isEmpty { config.nodes = [] }
 
         configs.append(config)
-        root.sidebar.reload(configs)
+        reconcileWorkspaces()
         Log.write("bancada \"\(config.name)\" criada em \(config.path)"
                   + (template.map { " a partir do template \"\($0)\"" } ?? " vazia"))
         schedulePersist()
@@ -413,15 +437,21 @@ ShellHook.install()
     ///
     /// O ponto de partida é o HEAD atual, em uma branch nova — o git recusa a
     /// mesma branch em duas worktrees, por design.
-    private func createWorkbenchFromWorktree() {
-        let panel = NSOpenPanel()
-        panel.title = "Repositório de origem"
-        panel.message = "Escolha o repositório. A worktree sai do commit em que ele está agora."
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Usar este repositório"
-        guard panel.runModal() == .OK, let repo = panel.url else { return }
+    private func createWorkbenchFromWorktree(inProject projectID: String? = nil) {
+        let repo: URL
+        if let projectID, let project = project(withID: projectID) {
+            repo = project.url
+        } else {
+            let panel = NSOpenPanel()
+            panel.title = "Repositório de origem"
+            panel.message = "Escolha o repositório. A worktree sai do commit em que ele está agora."
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            panel.prompt = "Usar este repositório"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            repo = url
+        }
 
         let status: Worktree.Status
         do {
@@ -456,11 +486,12 @@ ShellHook.install()
                                              taken: configs.map(\.name)),
             path: (created.path as NSString).abbreviatingWithTildeInPath,
             nodes: form.template.flatMap { WorkbenchTemplateStore.template(named: $0)?.instantiate() } ?? [],
-            template: form.template)
+            template: form.template,
+            project: projectID)
         if config.nodes.isEmpty { config.nodes = [] }
 
         configs.append(config)
-        root.sidebar.reload(configs)
+        reconcileWorkspaces()
         schedulePersist()
         activate(configs.count - 1)
 
@@ -553,13 +584,15 @@ ShellHook.install()
                 path: worktreePath,
                 nodes: nodes,
                 template: origin.template,
+                // A worktree é do mesmo projeto que a origem: saiu dela.
+                project: origin.project,
                 edges: origin.edges,
                 maxVisits: origin.maxVisits,
                 view: origin.view,
                 mosaic: origin.mosaic)
             configs.append(config)
             alvo = configs.count - 1
-            root.sidebar.reload(configs)
+            reloadSidebar()
             activate(alvo)
             Log.write("bancada \"\(origin.name)\" duplicada em \"\(config.name)\" "
                       + "(\(nodes.count) nós, worktree \(created.path))")
@@ -578,7 +611,7 @@ ShellHook.install()
                 if index == activeIndex { root.show(NSView()) }
             }
             activeIndex = -1
-            root.sidebar.reload(configs)
+            reloadSidebar()
             activate(index)
             Log.write("bancada \"\(origin.name)\" movida para a worktree \(created.path) "
                       + "— \(nodes.count) nós reiniciados lá")
@@ -990,9 +1023,7 @@ ShellHook.install()
 
         configs[index].name = name
         shells[index]?.nodes.forEach { $0.workbenchRenamed(to: name) }
-        root.sidebar.reload(configs)
-        root.sidebar.select(activeIndex)
-        markLiveWorkbenches()
+        reloadSidebar()
         Log.write("bancada \"\(current)\" renomeada para \"\(name)\"")
         schedulePersist()
     }
@@ -1277,7 +1308,7 @@ ShellHook.install()
         for (key, shell) in shells { wire(shell, index: key) }
 
         activeIndex = -1
-        root.sidebar.reload(configs)
+        reloadSidebar()
         Log.write("bancada \"\(name)\" removida")
         schedulePersist()
 
@@ -1286,6 +1317,193 @@ ShellHook.install()
 
     private func markLiveWorkbenches() {
         root.sidebar.markLive(indices: Set(shells.keys))
+    }
+
+    // MARK: - Workspaces e projetos (ADR-043)
+
+    private func reloadSidebar() {
+        root.sidebar.reload(workspaces: workspaces, configs: configs)
+        root.sidebar.select(activeIndex)
+        markLiveWorkbenches()
+    }
+
+    private func project(withID id: String) -> ProjectConfig? {
+        for space in workspaces { if let p = space.project(withID: id) { return p } }
+        return nil
+    }
+
+    /// Toda bancada ganha projeto; o que mudou vai para o disco na hora. Roda na
+    /// carga e a cada bancada criada por pasta livre. O `mainRepo` é git de
+    /// verdade: bancada em worktree cai no projeto do checkout principal.
+    private func reconcileWorkspaces() {
+        let result = WorkspaceStore.reconcile(workspaces: workspaces, workbenches: configs,
+                                              mainRepo: { Worktree.mainRepo(of: $0) })
+        result.notes.forEach { Log.write("workspaces: \($0)") }
+        guard result.changed else { return }
+        workspaces = result.workspaces
+        configs = result.workbenches
+        WorkspaceStore.save(workspaces)
+        schedulePersist()
+        if root != nil { reloadSidebar() }
+    }
+
+    /// Ativar uma bancada escondida por grupo recolhido — pelo socket, ou pela
+    /// remoção da vizinha — abre o caminho até ela, senão a seleção some.
+    private func revealInSidebar(_ index: Int) {
+        let tree = WorkspaceTree(workspaces: workspaces, workbenches: configs)
+        guard let (wsID, pid) = tree.ancestors(of: index),
+              let w = workspaces.firstIndex(where: { $0.id == wsID }) else { return }
+        var changed = false
+        if workspaces[w].isCollapsed { workspaces[w].collapsed = nil; changed = true }
+        if let p = workspaces[w].projects.firstIndex(where: { $0.id == pid }),
+           workspaces[w].projects[p].isCollapsed {
+            workspaces[w].projects[p].collapsed = nil
+            changed = true
+        }
+        guard changed else { return }
+        WorkspaceStore.save(workspaces)
+        reloadSidebar()
+    }
+
+    private func toggleGroup(_ item: SidebarItem) {
+        switch item {
+        case .workspace(let id):
+            guard let w = workspaces.firstIndex(where: { $0.id == id }) else { return }
+            workspaces[w].collapsed = workspaces[w].isCollapsed ? nil : true
+        case .project(let wsID, let id):
+            guard let w = workspaces.firstIndex(where: { $0.id == wsID }),
+                  let p = workspaces[w].projects.firstIndex(where: { $0.id == id }) else { return }
+            workspaces[w].projects[p].collapsed = workspaces[w].projects[p].isCollapsed ? nil : true
+        case .workbench, .orphans:
+            return
+        }
+        WorkspaceStore.save(workspaces)
+        reloadSidebar()
+    }
+
+    private func createWorkspace() {
+        guard let form = WorkspaceForm.ask() else { return }
+        var space = WorkspaceConfig(name: form.name,
+                                    projects: form.folders.map(ProjectConfig.forFolder))
+        if let source = form.iconSource {
+            do { try WorkspaceStore.installIcon(from: source, into: &space) }
+            catch { presentError("Não consegui copiar a imagem", error) }
+        }
+        workspaces.append(space)
+        WorkspaceStore.save(workspaces)
+        Log.write("workspace \"\(space.name)\" criado com \(space.projects.count) projeto(s)")
+        // Bancada que já apontava para uma dessas pastas continua no projeto
+        // antigo: pertencimento é por id, e trocar de teto é decisão sua.
+        reloadSidebar()
+    }
+
+    private func editWorkspace(_ id: String) {
+        guard let w = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        guard let form = WorkspaceForm.ask(existing: workspaces[w]) else { return }
+        var space = workspaces[w]
+        space.name = form.name
+
+        // Pasta que já era projeto mantém o id — é ele que as bancadas guardam.
+        // Pasta tirada com bancada dentro fica: senão a bancada viraria órfã
+        // sem você ter pedido isso.
+        let tree = WorkspaceTree(workspaces: workspaces, workbenches: configs)
+        var kept: [ProjectConfig] = []
+        var refused: [String] = []
+        for project in space.projects {
+            let stillWanted = form.folders.contains { project.owns(path: $0) }
+            if stillWanted {
+                kept.append(project)
+            } else if !tree.indices(inProject: project.id).isEmpty {
+                kept.append(project)
+                refused.append(project.name)
+            }
+        }
+        for folder in form.folders where !kept.contains(where: { $0.owns(path: folder) }) {
+            kept.append(ProjectConfig.forFolder(folder))
+        }
+        space.projects = kept
+
+        if form.clearIcon { WorkspaceStore.removeIcon(of: &space) }
+        if let source = form.iconSource {
+            do { try WorkspaceStore.installIcon(from: source, into: &space) }
+            catch { presentError("Não consegui copiar a imagem", error) }
+        }
+        workspaces[w] = space
+        WorkspaceStore.save(workspaces)
+        Log.write("workspace \"\(space.name)\" editado — \(space.projects.count) projeto(s)")
+        reloadSidebar()
+
+        if !refused.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Projeto com bancadas fica"
+            alert.informativeText = "Remova antes as bancadas de: \(refused.joined(separator: ", "))."
+            alert.runModal()
+        }
+    }
+
+    private func confirmRemoveWorkspace(_ id: String) {
+        guard let w = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        let tree = WorkspaceTree(workspaces: workspaces, workbenches: configs)
+        let members = tree.indices(inWorkspace: id)
+        let alert = NSAlert()
+        if !members.isEmpty {
+            alert.messageText = "\"\(workspaces[w].name)\" ainda tem \(members.count) bancada(s)"
+            alert.informativeText = "Remova as bancadas antes de remover o workspace."
+            alert.runModal()
+            return
+        }
+        alert.messageText = "Remover o workspace \"\(workspaces[w].name)\"?"
+        alert.informativeText = "Só a organização some; nenhuma pasta é tocada."
+        alert.addButton(withTitle: "Remover")
+        alert.addButton(withTitle: "Cancelar")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        var space = workspaces.remove(at: w)
+        WorkspaceStore.removeIcon(of: &space)
+        try? FileManager.default.removeItem(at: Flavor.current.workspaceDirectory(space.id))
+        WorkspaceStore.save(workspaces)
+        Log.write("workspace \"\(space.name)\" removido")
+        reloadSidebar()
+    }
+
+    private func confirmRemoveProject(_ workspaceID: String, _ projectID: String) {
+        guard let w = workspaces.firstIndex(where: { $0.id == workspaceID }),
+              let p = workspaces[w].projects.firstIndex(where: { $0.id == projectID }) else { return }
+        let project = workspaces[w].projects[p]
+        let tree = WorkspaceTree(workspaces: workspaces, workbenches: configs)
+        let members = tree.indices(inProject: projectID)
+        let alert = NSAlert()
+        if !members.isEmpty {
+            alert.messageText = "\"\(project.name)\" ainda tem \(members.count) bancada(s)"
+            alert.informativeText = "Remova as bancadas antes de tirar o projeto do workspace."
+            alert.runModal()
+            return
+        }
+        alert.messageText = "Tirar \"\(project.name)\" de \"\(workspaces[w].name)\"?"
+        alert.informativeText = "A pasta \(project.path) não é tocada."
+        alert.addButton(withTitle: "Tirar")
+        alert.addButton(withTitle: "Cancelar")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        workspaces[w].projects.remove(at: p)
+        WorkspaceStore.save(workspaces)
+        Log.write("projeto \"\(project.name)\" tirado do workspace \"\(workspaces[w].name)\"")
+        reloadSidebar()
+    }
+
+    /// A árvore, para verificar por fora.
+    private func workspacesSnapshot() -> [String: Any] {
+        let tree = WorkspaceTree(workspaces: workspaces, workbenches: configs)
+        return [
+            "workspaces": workspaces.map { space in
+                ["id": space.id, "name": space.name, "icon": space.icon ?? "",
+                 "collapsed": space.isCollapsed,
+                 "projects": space.projects.map { project in
+                     ["id": project.id, "name": project.name, "path": project.path,
+                      "collapsed": project.isCollapsed,
+                      "workbenches": tree.indices(inProject: project.id).map { configs[$0].name }]
+                 }] as [String: Any]
+            },
+            "orphans": tree.orphans.map { configs[$0].name },
+        ]
     }
 
     // MARK: - Templates

@@ -339,6 +339,12 @@ final class ControlSocket {
             respond(fd, status: payload["ok"] as? Bool == true ? "200 OK" : "404 Not Found",
                     json: payload)
 
+        case ("GET", _, _) where route.contains("/workspaces"):
+            // /workspaces — a árvore da barra lateral (ADR-043), para conferir
+            // conciliação e pertencimento sem abrir a barra.
+            let payload = DispatchQueue.main.sync { AppControl.workspacesSnapshot?() ?? [:] }
+            respond(fd, status: "200 OK", json: payload)
+
         case ("GET", _, _) where route.contains("/peers"):
             // /peers — quem QUEM PERGUNTA pode acionar. Sem parâmetro de
             // identidade: o remetente sai do processo do outro lado do socket.

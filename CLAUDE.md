@@ -35,7 +35,9 @@ app/Sources/EgeonDeck/
 │   │   └ Features/EditorNode (EditorNode + CodeServer)
 │   ├── Notifications/   Activity, HookEvent, Spinner, AttentionSound
 │   ├── Trace/           trilha da bancada — TraceEntry, TraceLog, ShellHook
-│   └── Workbench/       WorkbenchConfig, Store, WorkbenchTemplate, worktree
+│   ├── Workbench/       WorkbenchConfig, Store, WorkbenchTemplate, worktree
+│   └── Workspace/       workspace → projeto: WorkspaceConfig, Store, Tree,
+│                        pastilha (imagem/inicial) e formulário (ADR-043)
 └── main.swift       AppDelegate — único fora de módulo; vira App aos poucos
 ```
 
@@ -51,6 +53,11 @@ app/Sources/EgeonDeck/
 
 ## Conceitos, em uma linha cada
 
+- **Workspace → Projeto → Bancada** (ADR-043) — workspace é nome + foto (ou a
+  inicial) + pastas; cada pasta é um projeto; a bancada guarda o `project`
+  (id) a que pertence. Bancada em worktree é do projeto do repositório
+  principal. Todos os workspaces ficam à vista na barra, expansíveis; o
+  arquivo é `workspaces.json`, e `GET /workspaces` devolve a árvore.
 - **Bancada** — uma frente de trabalho: pasta + nós abertos sobre ela.
 - **Nó** — um card: `editor` · `shell` · `agent` · `web`. `NodeConfig` é a
   montagem; conversa nunca é copiada junto (`withoutConversation`).
@@ -115,11 +122,11 @@ app/Sources/EgeonDeck/
 - **Teste unitário é parte da entrega**: código novo com lógica testável —
   modelo, parsing, guarda, controller — nasce com teste em `EgeonDeckTests`,
   e lógica que se move ganha teste junto. `swift test` antes de commitar.
-  A cobertura hoje é pequena (118 testes); a regra existe para ela só crescer.
+  A cobertura hoje é pequena (190 testes); a regra existe para ela só crescer.
 - **Verificar é executar, compilar não é verificar**: dispare por `/dispatch`,
   confira por `/peek` e pelo log. Rotas úteis: `/targets` `/dispatch` `/peek`
-  `/chat` `/compose` `/edge` `/layout` `/geometry` `/status` — socket unix,
-  HTTP mínimo:
+  `/chat` `/compose` `/edge` `/layout` `/geometry` `/status` `/workspaces` —
+  socket unix, HTTP mínimo:
   `curl --unix-socket ~/.egeon-dev/sock http://eg/targets`
 - Config do usuário em `~/.egeon/` (tudo editável à mão); `bin/egeon`,
   `agent-hook.sh` e `claude-hooks.json` são regenerados a cada arranque.

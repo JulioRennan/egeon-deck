@@ -2812,3 +2812,76 @@ responde tem a citação e o "→".
 - Clique dentro do texto (que é `NSTextView` selecionável) não rola para a
   citação; clique no fundo da bolha ou no cabeçalho, sim.
 
+
+## ADR-043 — Workspace → projeto → bancada: a árvore é organização, não coordenação
+
+**Contexto.** Com arestas, bancadas e chat estáveis, a lista plana de bancadas
+na barra lateral virou o gargalo: quem trabalha em dois assuntos com três
+repositórios cada não acha a bancada que quer. A sugestão foi uma hierarquia
+de três níveis — workspace (nome e foto), projeto (uma pasta, quase sempre um
+repositório) e bancada (o que já existia).
+
+**Decisão.** Dois níveis novos **por cima** da bancada, e nada muda por baixo
+dela:
+
+- **Workspace** — `WorkspaceConfig`: `id` (8 hex), `name`, `icon` opcional
+  (arquivo em `~/.egeon*/workspaces/<id>/`), `projects`. Sem imagem, a
+  pastilha mostra a inicial, como a bancada já fazia no trilho.
+- **Projeto** — `ProjectConfig`: `id`, `name`, `path`. As pastas entram no
+  formulário do workspace, de uma vez (`WorkspaceForm`): definir um workspace
+  é dizer "estes repositórios são deste assunto".
+- **Bancada** ganha `project` (id). A lista em `workbenches.json` continua
+  plana e indexada por posição — é o que `main.swift` e o socket usam; a árvore
+  (`WorkspaceTree`) é só o jeito de olhar para ela.
+
+Tudo isso vive em `workspaces.json`, editável à mão como o resto. Módulo novo:
+`Features/Workspace/` (Models: config, store, árvore; Views: pastilha,
+formulário). A barra lateral (`Home/Sidebar`) lista a árvore com rolagem e
+cabeçalhos recolhíveis (`SidebarGroupRow`); o estado de recolhido é gravado
+no arquivo (`collapsed`), não em preferência à parte.
+
+**Três escolhas que definem o comportamento:**
+
+1. **Bancada em worktree é do projeto do repositório principal.** "Duplicar em
+   nova worktree" e "nova bancada a partir de worktree" (ADR-017) produzem
+   pastas que não são a do projeto, mas saíram dela. Tratar cada worktree como
+   projeto encheria a barra de pastas que ninguém escolheu. A conciliação usa
+   `Worktree.mainRepo(of:)`; a duplicação copia o `project` da origem.
+2. **Todos os workspaces ficam à vista, expansíveis.** Workspace não é perfil:
+   trabalhar em dois no mesmo dia é o caso normal, e um seletor que filtra a
+   barra esconderia a bancada laranja do outro assunto. Recolhido, o cabeçalho
+   soma os avisos do que tem embaixo; no trilho, a hierarquia é
+   workspace → bancada (o projeto não cabe em 52pt e não diz nada que a
+   pastilha já não diga).
+3. **Nome de bancada continua único no app inteiro.** É o endereço de dispatch
+   (`deck/revisor`), e escopá-lo por workspace obrigaria a mexer no CLI, nos
+   ganchos e na extensão. Custo aceito: não há `deck` em dois workspaces.
+
+**Conciliação, não migração.** `WorkspaceStore.reconcile` roda na carga e a
+cada bancada criada por pasta livre: bancada sem `project` — ou com id que
+não existe mais — é ligada ao projeto cuja pasta é o repositório principal
+dela, e o que faltar é criado no primeiro workspace (que, na primeira carga,
+é o "Geral", criado na hora). Ninguém perde bancada nenhuma: a que sobrar sem
+projeto aparece num cabeçalho "Sem projeto" em vez de sumir. Pertencimento é
+por **id**, não por pasta: bancada com `project` válido apontando para outra
+pasta fica onde está, porque o arquivo é editado à mão de propósito.
+
+**Desenho: cards aninhados, à la `ExpansionTile`.** O workspace é um card
+(contorno próprio, cabeçalho com a pastilha) e cada projeto é um tile dentro
+dele, com as bancadas por dentro do tile — o que é de um workspace fica
+visivelmente separado do que é do outro. Cabeçalho de projeto e linha de
+bancada têm a **mesma altura e a mesma anatomia** (ícone, nome, caminho), para
+o tile ler como uma lista de peças iguais e não como cabeçalho mais rodapé.
+Cada projeto tem um `+` no cabeçalho para abrir bancada nele.
+
+**Guardas.** Remover workspace ou tirar projeto com bancadas dentro é
+recusado com a lista do que falta remover — a bancada não vira órfã sem você
+pedir. A pasta do projeto nunca é tocada por nenhuma dessas ações.
+
+**Verificação:** `GET /workspaces` devolve a árvore como a barra lista, com os
+nomes das bancadas por projeto e os órfãos.
+
+**Consistência com a ADR-031.** Ela recusou "workspace" como nome da *bancada*
+por conotar "organização inteira" — que é exatamente o que este nível é. E
+"projeto" era o que a bancada não era ("nada impede duas bancadas apontarem
+para o mesmo repositório"): agora é a camada que as agrupa.

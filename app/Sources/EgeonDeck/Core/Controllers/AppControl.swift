@@ -6,6 +6,8 @@ import Foundation
 enum AppControl {
     static var activateWorkbench: ((String) -> Bool)?
     static var workbenchNames: (() -> [String])?
+    /// Workspaces → projetos → nomes de bancada, como a barra lateral lista.
+    static var workspacesSnapshot: (() -> [String: Any])?
 
     /// Troca dois cards de painel no mosaico da bancada ativa.
     ///

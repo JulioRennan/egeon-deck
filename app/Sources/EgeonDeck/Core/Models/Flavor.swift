@@ -50,6 +50,12 @@ enum Flavor {
         workbenchesDirectory.appendingPathComponent(name)
     }
 
+    /// O mesmo para workspace: hoje só a imagem dele mora aqui.
+    var workspacesDirectory: URL { config("workspaces") }
+    func workspaceDirectory(_ id: String) -> URL {
+        workspacesDirectory.appendingPathComponent(id)
+    }
+
     var logPath: String {
         NSString(string: isDev ? "~/egeon-dev.log" : "~/egeon.log").expandingTildeInPath
     }

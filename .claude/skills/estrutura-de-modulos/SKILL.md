@@ -33,7 +33,9 @@ app/Sources/EgeonDeck/
 │   │       └── EditorNode/     EditorNode + CodeServer
 │   ├── Notifications/          Activity, HookEvent, Spinner, AttentionSound
 │   ├── Trace/                  trilha da bancada: TraceEntry, TraceLog
-│   └── Workbench/              WorkbenchConfig, Store, Template, worktree
+│   ├── Workbench/              WorkbenchConfig, Store, Template, worktree
+│   └── Workspace/              workspace → projeto: Config, Store (conciliação),
+│                               Tree (a árvore da barra), pastilha e formulário
 └── main.swift               ← único remanescente; vira módulo App aos poucos
 ```
 
