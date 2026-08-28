@@ -4,7 +4,7 @@ import AppKit
 
 /// Mini-card com fio colorido à esquerda: quem falou, quando, e o trecho —
 /// no máximo duas linhas. Clique rola até a mensagem original.
-final class ChatQuoteView: NSView {
+final class ChatQuoteView: HandView {
     var onClick: (() -> Void)?
 
     private let author = NSTextField(labelWithString: "")

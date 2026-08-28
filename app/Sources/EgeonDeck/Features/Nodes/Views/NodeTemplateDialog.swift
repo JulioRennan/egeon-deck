@@ -47,19 +47,19 @@ final class NodeTemplateDialog {
     // MARK: - Campos
 
     private let nameField = NSTextField()
-    private let kindPicker = NSPopUpButton()
-    private let agentPicker = NSPopUpButton()
+    private let kindPicker = HandPopUpButton()
+    private let agentPicker = HandPopUpButton()
     private let cmdField = NSTextField()
     private let cwdField = NSTextField()
-    private let cwdBrowse = NSButton(title: "Escolher…", target: nil, action: nil)
+    private let cwdBrowse = HandButton(title: "Escolher…", target: nil, action: nil)
     private let promptField = NSTextView()
-    private let saveBox = NSButton(checkboxWithTitle: "Salvar como componente reutilizável",
+    private let saveBox = HandButton(checkboxWithTitle: "Salvar como componente reutilizável",
                                    target: nil, action: nil)
     private let promptLabel = NSTextField(labelWithString: "PAPEL (mensagem enviada ao subir)")
     private let agentLabel = NSTextField(labelWithString: "CLI")
-    private let configPicker = NSPopUpButton()
+    private let configPicker = HandPopUpButton()
     private let configLabel = NSTextField(labelWithString: "CONFIGURAÇÃO")
-    private let modelPicker = NSPopUpButton()
+    private let modelPicker = HandPopUpButton()
     private let modelLabel = NSTextField(labelWithString: "MODELO")
     private static let defaultModelOption = "padrão do CLI"
     private var promptScroll: NSScrollView?

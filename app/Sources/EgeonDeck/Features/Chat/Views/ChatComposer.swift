@@ -24,7 +24,7 @@ final class ChatComposer: NSView {
     private let scroll = NSScrollView()
     private let textView = ComposerTextView()
     private let placeholder = PassthroughLabel(labelWithString: "")
-    private let send = NSImageView()
+    private let send = HandImageView()
     private let microcopy = NSTextField(labelWithString: "")
 
     /// Teto do crescimento: ~6 linhas. Daí em diante o texto rola por dentro.
@@ -297,6 +297,8 @@ private final class ChipView: NSView {
             x += width + 7
         }
     }
+
+    override func resetCursorRects() { HandCursor.fill(self) }
 
     override func mouseDown(with event: NSEvent) { onClick?() }
 }

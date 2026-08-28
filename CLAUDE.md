@@ -142,6 +142,8 @@ app/Sources/EgeonDeck/
 
 - **Comentário só de porquê** — decisão contraintuitiva, armadilha de
   plataforma. Nada de narrar código, numerar etapas ou `// MARK:` de 3 linhas.
+- **Onde se clica, o ponteiro diz** — mão (`HandCursor`) em toda view que
+  responde a clique; seta só onde se arrasta ou não há ação (ADR-048).
 - **Português** em comentários, docs, logs e commits.
 - **Decisões viram ADR** em `docs/01-decisoes.md` — leia antes de propor rota
   para editor, portal de janela, tmux ou detecção de ociosidade: já custaram

@@ -764,9 +764,9 @@ ShellHook.install()
         // Radio e não popup: as duas saídas são diferentes o bastante para
         // precisarem estar visíveis lado a lado — uma reinicia processos, a outra
         // não.
-        let newWorkbenchRadio = NSButton(radioButtonWithTitle:
+        let newWorkbenchRadio = HandButton(radioButtonWithTitle:
             "Abrir uma bancada nova na worktree", target: nil, action: nil)
-        let moveRadio = NSButton(radioButtonWithTitle:
+        let moveRadio = HandButton(radioButtonWithTitle:
             "Mudar esta bancada para a worktree", target: nil, action: nil)
 
         // Precisa continuar vivo enquanto o modal roda: é ele quem responde pelos
@@ -899,7 +899,7 @@ ShellHook.install()
 
         // Duplicando, os nós vêm da bancada de origem e não há template a escolher
         // — mostrar um seletor aqui só ofereceria uma decisão já tomada.
-        let picker = NSPopUpButton(frame: NSRect(x: 0, y: y, width: width, height: 22))
+        let picker = HandPopUpButton(frame: NSRect(x: 0, y: y, width: width, height: 22))
         let vazio = "Começar vazia"
         if origin == nil {
             picker.addItem(withTitle: vazio)
@@ -982,7 +982,7 @@ ShellHook.install()
         field.placeholderString = "nome da bancada"
         container.addSubview(field)
 
-        let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        let picker = HandPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         let vazio = "Começar vazia"
         picker.addItem(withTitle: vazio)
         let templates = WorkbenchTemplateStore.names
@@ -1056,7 +1056,7 @@ ShellHook.install()
 
         var checkbox: NSButton?
         if !deletable.isEmpty {
-            let box = NSButton(
+            let box = HandButton(
                 checkboxWithTitle: deletable.count == 1
                     ? "Também apagar a worktree do disco"
                     : "Também apagar as \(deletable.count) worktrees do disco",

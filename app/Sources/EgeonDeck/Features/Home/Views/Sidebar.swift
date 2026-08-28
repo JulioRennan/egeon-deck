@@ -262,6 +262,8 @@ final class SidebarRow: NSView {
         dot.layer?.backgroundColor = (isLive ? NSColor.systemGreen : NSColor(calibratedWhite: 1, alpha: 0.22)).cgColor
     }
 
+    override func resetCursorRects() { HandCursor.fill(self) }
+
     override func mouseDown(with event: NSEvent) { onClick?(index) }
 
     /// Renomear e remover ficam no menu de contexto: são raros o bastante para
@@ -491,6 +493,12 @@ final class SidebarGroupRow: NSView {
         }
         statusLabel.attributedStringValue = text
         needsLayout = true
+    }
+
+    override func resetCursorRects() {
+        // A pilha de órfãs é rótulo, não linha: não abre nem fecha.
+        if case .orphans = item { return }
+        HandCursor.fill(self)
     }
 
     override func mouseDown(with event: NSEvent) {

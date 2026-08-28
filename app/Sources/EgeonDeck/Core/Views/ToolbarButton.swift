@@ -50,6 +50,8 @@ final class ToolbarButton: NSView {
         trackingArea = area
     }
 
+    override func resetCursorRects() { HandCursor.fill(self) }
+
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
 
@@ -71,10 +73,6 @@ final class ToolbarButton: NSView {
     override func rightMouseDown(with event: NSEvent) {
         guard onLongPress != nil else { super.rightMouseDown(with: event); return }
         onLongPress?()
-    }
-
-    override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .arrow)
     }
 
     private func restyle() {

@@ -171,6 +171,8 @@ private final class ParticipantRow: NSView {
         statusField?.frame = NSRect(x: bounds.width - 34, y: 16, width: 24, height: 13)
     }
 
+    override func resetCursorRects() { HandCursor.fill(self, when: !dead) }
+
     override func mouseDown(with event: NSEvent) {
         guard !dead else { return }
         onClick?()

@@ -62,7 +62,7 @@ final class ChatListPopup: NSView {
     private func rebuild() {
         rowViews.forEach { $0.removeFromSuperview() }
         rowViews = items.enumerated().map { index, item in
-            let row = NSView()
+            let row = HandView()
             row.wantsLayer = true
             row.layer?.cornerRadius = 9
             if index == selected {

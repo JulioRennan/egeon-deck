@@ -86,7 +86,7 @@ final class WebNode: NodeView {
     private let forwardButton = ToolbarButton(symbols: ["chevron.right"], tooltip: "Avançar", size: 24)
     private let reloadButton = ToolbarButton(symbols: ["arrow.clockwise"], tooltip: "Recarregar", size: 24)
     private let urlField = NSTextField()
-    private let profilePicker = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let profilePicker = HandPopUpButton(frame: .zero, pullsDown: false)
 
     private static let newProfileItem = "Novo perfil…"
 

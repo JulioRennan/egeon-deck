@@ -174,6 +174,9 @@ final class CanvasToolbar: NSView {
         fitAll.frame = NSRect(x: x, y: y, width: 32, height: 32)
     }
 
+    /// Só o número é clicável na barra; o resto é fundo (os botões têm o seu).
+    override func resetCursorRects() { addCursorRect(zoomLabel.frame, cursor: .pointingHand) }
+
     override func mouseDown(with event: NSEvent) {
         // Clicar no número volta para 100%; clicar no vazio da barra não deve
         // vazar para o overlay de criação atrás.

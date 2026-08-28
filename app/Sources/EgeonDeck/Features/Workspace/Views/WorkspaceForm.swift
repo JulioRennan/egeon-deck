@@ -53,13 +53,13 @@ final class WorkspaceForm: NSObject, NSTableViewDataSource, NSTableViewDelegate 
         nameField.frame = NSRect(x: 54, y: 210, width: width - 54, height: 24)
         container.addSubview(nameField)
 
-        let pick = NSButton(title: "Imagem…", target: self, action: #selector(pickImage))
+        let pick = HandButton(title: "Imagem…", target: self, action: #selector(pickImage))
         pick.bezelStyle = .rounded
         pick.controlSize = .small
         pick.frame = NSRect(x: 54, y: 184, width: 84, height: 22)
         container.addSubview(pick)
 
-        let none = NSButton(title: "Sem imagem", target: self, action: #selector(dropImage))
+        let none = HandButton(title: "Sem imagem", target: self, action: #selector(dropImage))
         none.bezelStyle = .rounded
         none.controlSize = .small
         none.frame = NSRect(x: 142, y: 184, width: 96, height: 22)
@@ -84,13 +84,13 @@ final class WorkspaceForm: NSObject, NSTableViewDataSource, NSTableViewDelegate 
         scroll.borderType = .bezelBorder
         container.addSubview(scroll)
 
-        let add = NSButton(title: "Adicionar pastas…", target: self, action: #selector(addFolders))
+        let add = HandButton(title: "Adicionar pastas…", target: self, action: #selector(addFolders))
         add.bezelStyle = .rounded
         add.controlSize = .small
         add.frame = NSRect(x: 0, y: 0, width: 130, height: 22)
         container.addSubview(add)
 
-        let remove = NSButton(title: "Tirar selecionadas", target: self, action: #selector(removeSelected))
+        let remove = HandButton(title: "Tirar selecionadas", target: self, action: #selector(removeSelected))
         remove.bezelStyle = .rounded
         remove.controlSize = .small
         remove.frame = NSRect(x: 134, y: 0, width: 130, height: 22)

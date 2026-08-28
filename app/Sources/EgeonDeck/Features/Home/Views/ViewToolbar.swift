@@ -61,8 +61,9 @@ final class ModeButton: NSView {
 
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
+    override func resetCursorRects() { HandCursor.fill(self) }
+
     override func mouseDown(with event: NSEvent) { onClick?() }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
 
     /// Selecionado é preenchimento CHEIO, e não texto colorido: dentro da pílula os
     /// dois botões dividem o mesmo fundo, e só a cor da letra deixava "em qual eu

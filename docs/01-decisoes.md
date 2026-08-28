@@ -2995,3 +2995,28 @@ Nada disso muda o que abre: cada passo continua alternando pelo seu título
 
 **Verificação:** `ChatBlocksTests.testContiguousStepsShareOneBox` desenha o
 grupo como `┌┘ / ┌· / ·· / ·┘`; na tela, três `echo` seguidos numa moldura só.
+
+## ADR-048 — Onde se clica, o ponteiro diz: mão em tudo que age
+
+O padrão do macOS é seta até em cima de botão. Num app que é quase todo view
+desenhada à mão — pastilha, aba, linha da barra, chip, título de passo — a
+seta não distingue o que age do que só está escrito, e o clicável só aparece
+por tentativa. A regra aqui passa a ser a da web: **cursor de mão em tudo que
+responde a clique**.
+
+`HandCursor.fill` no `resetCursorRects` da view, e três embrulhos para o que
+o AppKit não cobre: `HandView` (view crua clicável), `HandButton` /
+`HandPopUpButton` (com a seta de volta quando desabilitados) e
+`HandImageView`. Cursor **rect**, nunca `cursorUpdate`: é por rect que o
+AppKit resolve o ponteiro, e o `NSTextView` põe o I-beam assim — um override
+de `cursorUpdate` por baixo dele nunca é chamado (foi o que fez a mão do
+título do passo não aparecer).
+
+**Ficam com a seta, de propósito:** a faixa da barra de título (ali se arrasta
+a janela), o fundo do canvas, o cabeçalho do card (arrasto), a alça de
+redimensionar (cruz), a linha morta da coluna de participantes e a pilha de
+órfãs da barra — onde o clique não faz nada.
+
+**Verificação:** `HandCursorTests` olha em tempo de execução se cada classe
+clicável sobrescreve `resetCursorRects` — é o que pega a view nova que nasceu
+muda e a regressão de quem perdeu o override.

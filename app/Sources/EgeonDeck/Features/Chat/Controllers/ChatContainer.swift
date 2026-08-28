@@ -827,5 +827,7 @@ private final class ChevronButton: NSView {
         icon.frame = bounds
     }
 
+    override func resetCursorRects() { HandCursor.fill(self) }
+
     override func mouseDown(with event: NSEvent) { onClick?() }
 }

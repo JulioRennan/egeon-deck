@@ -284,7 +284,7 @@ final class TerminalNode: NodeView {
         // Pull-down, e não popup: o título é o modelo LITERAL em uso, e o menu
         // são os apelidos que se pode pedir. Num popup o título seria o item
         // escolhido — "sonnet", "padrão" — que é justamente o que não informa.
-        let picker = NSPopUpButton(frame: .zero, pullsDown: true)
+        let picker = HandPopUpButton(frame: .zero, pullsDown: true)
         picker.controlSize = .small
         picker.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
         picker.isBordered = false
