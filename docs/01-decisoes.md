@@ -3089,3 +3089,37 @@ arrastando para o fim, mas abrir estando no fim passa a acompanhar o
 crescimento (`holdBottom` só quando você não está lá). Sem isso o que você
 acabou de abrir nascia atrás do composer — e parecia que a bolha não tinha
 crescido.
+
+## ADR-051 — Reposicionar workspace, projeto e bancada
+
+A árvore da ADR-043 nasceu na ordem em que as coisas foram criadas, e ordem de
+criação não é ordem de importância. Agora as três camadas se reposicionam,
+arrastando na barra:
+
+- **workspace** entre workspaces;
+- **projeto** dentro do workspace ou **para outro** — as bancadas seguem, sem
+  serem tocadas: elas apontam para o projeto, não para o workspace;
+- **bancada** dentro do projeto ou **para outro projeto** (aí o `project` dela
+  muda, que é o que a ADR-043 já previa como o vínculo).
+
+**O cuidado é a bancada.** A lista dela é plana e **indexada por posição**, e é
+por índice que o app inteiro a endereça: `shells`, `activeIndex`, o socket.
+Por isso `WorkspaceMove.workbench` devolve, além da lista nova, o mapa
+`índice antigo → novo`, e o `AppDelegate` remapeia `shells`, religa o `wire`
+de cada shell e corrige o `activeIndex` — o mesmo cuidado que remover já
+tomava. Sem o mapa, o terminal na tela passaria a apontar para outra bancada.
+
+**O arrasto.** Laço próprio (`SidebarDrag.track`), não `NSPasteboard`: o
+destino é a própria barra, e o que se ganharia em interoperar com outros apps
+não se usa. O clique só vale se você não andou mais que 4pt — sem isso,
+escolher uma bancada com a mão trêmula a mudaria de lugar. A `Sidebar` calcula
+o alvo (`drop(for:at:)`: sempre "dentro deste pai, nesta posição"), mostra uma
+guia onde vai cair e desbota o que está indo. Arrastando para baixo dentro do
+próprio pai, a linha que sai não conta como obstáculo — senão ela cai sempre
+uma posição antes.
+
+**Verificação:** `GET /move?kind=workspace|project|workbench&id=…&parent=…&to=N`
+faz a mesma operação de fora — arrastar não é dirigível sem Acessibilidade
+(ADR-003) — e devolve a árvore resultante. `WorkspaceMoveTests` cobre as
+listas e o mapa; `SidebarDropTests`, a conta do alvo com a barra montada e o
+laço do arrasto de ponta a ponta.

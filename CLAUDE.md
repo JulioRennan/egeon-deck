@@ -57,7 +57,10 @@ app/Sources/EgeonDeck/
   inicial) + pastas; cada pasta é um projeto; a bancada guarda o `project`
   (id) a que pertence. Bancada em worktree é do projeto do repositório
   principal. Todos os workspaces ficam à vista na barra, expansíveis; o
-  arquivo é `workspaces.json`, e `GET /workspaces` devolve a árvore.
+  arquivo é `workspaces.json`, e `GET /workspaces` devolve a árvore. Os três
+  níveis se **reposicionam arrastando** na barra — bancada muda de projeto, e
+  o mapa de índices leva junto os terminais na tela (ADR-051); `GET /move`
+  faz o mesmo de fora.
 - **Bancada** — uma frente de trabalho: pasta + nós abertos sobre ela.
 - **Nó** — um card: `editor` · `shell` · `agent` · `web`. `NodeConfig` é a
   montagem; conversa nunca é copiada junto (`withoutConversation`).

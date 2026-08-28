@@ -131,6 +131,15 @@ ShellHook.install()
         sidebar.onRemoveWorkspace = { [weak self] id in self?.confirmRemoveWorkspace(id) }
         sidebar.onRemoveProject = { [weak self] ws, id in self?.confirmRemoveProject(ws, id) }
         sidebar.onToggleGroup = { [weak self] item in self?.toggleGroup(item) }
+        sidebar.onMoveWorkspace = { [weak self] id, position in
+            _ = self?.moveWorkspace(id, to: position)
+        }
+        sidebar.onMoveProject = { [weak self] id, workspace, position in
+            _ = self?.moveProject(id, toWorkspace: workspace, at: position)
+        }
+        sidebar.onMoveWorkbench = { [weak self] index, project, position in
+            _ = self?.moveWorkbench(index, toProject: project, at: position)
+        }
         sidebar.onRename = { [weak self] index in self?.renameWorkbench(index) }
         sidebar.onDuplicateAsWorktree = { [weak self] index in
             self?.duplicateWorkbenchAsWorktree(index)
@@ -264,6 +273,21 @@ ShellHook.install()
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return }
             self.shells[index]?.chat.focusFromOutside(id)
+        }
+        AppControl.moveInTree = { [weak self] kind, id, parent, position in
+            guard let self else { return ["ok": false, "error": "app indisponível"] }
+            let ok: Bool
+            switch kind {
+            case "workspace": ok = self.moveWorkspace(id, to: position)
+            case "project":   ok = self.moveProject(id, toWorkspace: parent, at: position)
+            case "workbench":
+                guard let index = self.configs.firstIndex(where: { $0.name == id || $0.id == id })
+                else { return ["ok": false, "error": "bancada desconhecida '\(id)'"] }
+                ok = self.moveWorkbench(index, toProject: parent, at: position)
+            default:
+                return ["ok": false, "error": "kind é workspace, project ou workbench"]
+            }
+            return ["ok": ok, "tree": AppControl.workspacesSnapshot?() ?? [:]]
         }
         AppControl.chatExpandStep = { [weak self] name, blockId in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
@@ -1318,6 +1342,43 @@ ShellHook.install()
         schedulePersist()
 
         if !configs.isEmpty { activate(min(index, configs.count - 1)) }
+    }
+
+    // MARK: - Reposicionar na árvore (ADR-051)
+
+    func moveWorkspace(_ id: String, to position: Int) -> Bool {
+        guard let moved = WorkspaceMove.workspace(id, to: position, in: workspaces) else { return false }
+        workspaces = moved
+        WorkspaceStore.save(workspaces)
+        reloadSidebar()
+        return true
+    }
+
+    func moveProject(_ id: String, toWorkspace target: String, at position: Int) -> Bool {
+        guard let moved = WorkspaceMove.project(id, toWorkspace: target, at: position,
+                                                in: workspaces) else { return false }
+        workspaces = moved
+        WorkspaceStore.save(workspaces)
+        reloadSidebar()
+        return true
+    }
+
+    /// A bancada é endereçada por POSIÇÃO no app inteiro: mover a lista sem
+    /// levar `shells` e `activeIndex` junto deixaria o terminal da tela
+    /// apontando para outra bancada — o mesmo cuidado que remover já toma.
+    func moveWorkbench(_ index: Int, toProject project: String, at position: Int) -> Bool {
+        guard let moved = WorkspaceMove.workbench(index, toProject: project, at: position,
+                                                  in: configs) else { return false }
+        configs = moved.list
+        var reindexed: [Int: WorkbenchShell] = [:]
+        for (key, shell) in shells { reindexed[moved.map[key] ?? key] = shell }
+        shells = reindexed
+        // wire() capturou o índice antigo por valor; religa com o novo.
+        for (key, shell) in shells { wire(shell, index: key) }
+        if activeIndex >= 0 { activeIndex = moved.map[activeIndex] ?? activeIndex }
+        reloadSidebar()
+        schedulePersist()
+        return true
     }
 
     private func markLiveWorkbenches() {

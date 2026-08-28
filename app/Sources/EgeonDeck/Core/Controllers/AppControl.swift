@@ -126,6 +126,11 @@ enum AppControl {
     static var chatScroll: ((_ workbench: String, _ edge: String) -> Void)?
     /// Escolhe o participante em foco por fora, como o clique na coluna.
     static var chatFocus: ((_ workbench: String, _ id: String) -> Void)?
+    /// Reposiciona um item da árvore: workspace, projeto ou bancada (ADR-051).
+    /// `parent` é o workspace do projeto ou o projeto da bancada.
+    static var moveInTree: ((_ kind: String, _ id: String, _ parent: String,
+                            _ position: Int) -> [String: Any])?
+
     /// Abre ou recolhe um passo por fora, como o clique no título dele: clique
     /// sintético exige Acessibilidade, que a assinatura ad-hoc perde a cada
     /// build (ADR-003).

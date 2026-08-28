@@ -339,6 +339,19 @@ final class ControlSocket {
             respond(fd, status: payload["ok"] as? Bool == true ? "200 OK" : "404 Not Found",
                     json: payload)
 
+        case ("GET", _, _) where route.contains("/move"):
+            // /move?kind=workspace|project|workbench&id=<id>&to=<n>[&parent=<id>]
+            // — reposiciona na árvore. Arrastar não é dirigível de fora sem
+            // Acessibilidade (ADR-003), e esta é a mesma operação.
+            let query = Self.query(in: route)
+            let payload = DispatchQueue.main.sync {
+                AppControl.moveInTree?(query["kind"] ?? "", query["id"] ?? "",
+                                       query["parent"] ?? "", Int(query["to"] ?? "") ?? 0)
+            }
+            let ok = payload?["ok"] as? Bool ?? false
+            respond(fd, status: ok ? "200 OK" : "400 Bad Request",
+                    json: payload ?? ["ok": false, "error": "app sem árvore"])
+
         case ("GET", _, _) where route.contains("/workspaces"):
             // /workspaces — a árvore da barra lateral (ADR-043), para conferir
             // conciliação e pertencimento sem abrir a barra.

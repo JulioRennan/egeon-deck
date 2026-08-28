@@ -264,7 +264,16 @@ final class SidebarRow: NSView {
 
     override func resetCursorRects() { HandCursor.fill(self) }
 
-    override func mouseDown(with event: NSEvent) { onClick?(index) }
+    /// Arrastar reposiciona (ADR-051); o clique só vale se você não arrastou.
+    var onDrag: ((SidebarDrag) -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        SidebarDrag.track(event, in: self, item: .workbench(index: index),
+                          drag: onDrag) { [weak self] in
+            guard let self else { return }
+            self.onClick?(self.index)
+        }
+    }
 
     /// Renomear e remover ficam no menu de contexto: são raros o bastante para
     /// não merecerem botão fixo, e um botão de remover por linha convida ao
@@ -501,9 +510,14 @@ final class SidebarGroupRow: NSView {
         HandCursor.fill(self)
     }
 
+    var onDrag: ((SidebarDrag) -> Void)?
+
     override func mouseDown(with event: NSEvent) {
         if case .orphans = item { return }
-        onToggle?(item)
+        SidebarDrag.track(event, in: self, item: item, drag: onDrag) { [weak self] in
+            guard let self else { return }
+            self.onToggle?(self.item)
+        }
     }
 
     private func showCreateMenu() {
@@ -562,7 +576,7 @@ final class SidebarGroupRow: NSView {
 /// `ExpansionTile` aninhado: cabeçalho em cima, filhos por dentro do mesmo
 /// contorno, para o que é de um workspace parecer de fato separado do que é
 /// do outro.
-private final class SidebarCard: NSView {
+final class SidebarCard: NSView {
     init(radius: CGFloat, fill: CGFloat, stroke: CGFloat) {
         super.init(frame: .zero)
         wantsLayer = true
@@ -576,7 +590,7 @@ private final class SidebarCard: NSView {
 }
 
 /// Documento da rolagem: virado, como o resto da barra.
-private final class SidebarList: NSView {
+final class SidebarList: NSView {
     override var isFlipped: Bool { true }
 }
 
@@ -616,18 +630,30 @@ final class Sidebar: NSView {
     }
 
     /// A árvore montada: card por workspace, tile por projeto, linhas dentro.
-    private struct ProjectTile {
+    struct ProjectTile {
         let tile: SidebarCard
         let header: SidebarGroupRow
         let rows: [SidebarRow]
+        /// `nil` no tile dos órfãos: ele não é projeto, e nada cai nele.
+        var projectID: String?
     }
-    private struct WorkspaceCard {
+    struct WorkspaceCard {
         let card: SidebarCard
         let header: SidebarGroupRow
         let projects: [ProjectTile]
+        let workspaceID: String
     }
-    private var cards: [WorkspaceCard] = []
+    var cards: [WorkspaceCard] = []
     private var orphanTile: ProjectTile?
+    /// A linha arrastada agora, e a guia que mostra onde ela cai.
+    var dragged: SidebarItem?
+    let dropLine: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        view.layer?.cornerRadius = 1
+        return view
+    }()
 
     private var rows: [SidebarRow] = []
     private var groups: [SidebarGroupRow] = []
@@ -653,6 +679,10 @@ final class Sidebar: NSView {
     var onRemoveWorkspace: ((_ workspaceID: String) -> Void)?
     var onRemoveProject: ((_ workspaceID: String, _ projectID: String) -> Void)?
     var onToggleGroup: ((SidebarItem) -> Void)?
+    /// Reposicionar arrastando (ADR-051): item, pai de destino e posição.
+    var onMoveWorkspace: ((_ id: String, _ position: Int) -> Void)?
+    var onMoveProject: ((_ id: String, _ workspaceID: String, _ position: Int) -> Void)?
+    var onMoveWorkbench: ((_ index: Int, _ projectID: String, _ position: Int) -> Void)?
     var onRename: ((Int) -> Void)?
     var onDuplicateAsWorktree: ((Int) -> Void)?
     var onRemove: ((Int) -> Void)?
@@ -716,6 +746,7 @@ final class Sidebar: NSView {
         func row(_ index: Int) -> SidebarRow {
             let row = SidebarRow(index: index, config: configs[index])
             row.onClick = { [weak self] in self?.onSelect?($0) }
+            row.onDrag = { [weak self] in self?.handle($0) }
             row.onRename = { [weak self] in self?.onRename?($0) }
             row.onDuplicateAsWorktree = { [weak self] in self?.onDuplicateAsWorktree?($0) }
             row.onRemove = { [weak self] in self?.onRemove?($0) }
@@ -744,9 +775,11 @@ final class Sidebar: NSView {
                 list.addSubview(head)
                 let members = tree.indices(inProject: project.id).map(row)
                 members.forEach { list.addSubview($0) }
-                tiles.append(ProjectTile(tile: tile, header: head, rows: members))
+                tiles.append(ProjectTile(tile: tile, header: head, rows: members,
+                                         projectID: project.id))
             }
-            cards.append(WorkspaceCard(card: card, header: header, projects: tiles))
+            cards.append(WorkspaceCard(card: card, header: header, projects: tiles,
+                                       workspaceID: space.id))
         }
 
         let lost = tree.orphans
@@ -759,7 +792,7 @@ final class Sidebar: NSView {
             list.addSubview(head)
             let members = lost.map(row)
             members.forEach { list.addSubview($0) }
-            orphanTile = ProjectTile(tile: tile, header: head, rows: members)
+            orphanTile = ProjectTile(tile: tile, header: head, rows: members, projectID: nil)
         }
 
         rows.forEach { $0.isCompact = isCompact }
@@ -770,6 +803,7 @@ final class Sidebar: NSView {
 
     private func wire(_ group: SidebarGroupRow) {
         group.onToggle = { [weak self] in self?.onToggleGroup?($0) }
+        group.onDrag = { [weak self] in self?.handle($0) }
         group.onCreateWorkbench = { [weak self] in self?.onCreateInProject?($0) }
         group.onCreateWorkbenchFromWorktree = { [weak self] in self?.onCreateFromWorktreeInProject?($0) }
         group.onEditWorkspace = { [weak self] in self?.onEditWorkspace?($0) }
@@ -934,5 +968,202 @@ final class Sidebar: NSView {
 
     func markLive(indices: Set<Int>) {
         for row in rows { row.isLive = indices.contains(row.index) }
+    }
+}
+
+// MARK: - Arrastar para reposicionar (ADR-051)
+
+/// Um passo do arrasto de uma linha da barra. O laço é da linha; quem decide
+/// onde aquilo cai é a `Sidebar`, que é a única que conhece a árvore inteira.
+struct SidebarDrag {
+    enum Phase { case began, moved, ended, cancelled }
+    let phase: Phase
+    let item: SidebarItem
+    /// Onde o mouse está, em coordenadas da janela.
+    let point: NSPoint
+
+    /// Segura o clique até saber o que ele é: soltou parado é clique, andou
+    /// mais que o limiar é arrasto. Sem isso, escolher uma bancada com a mão
+    /// trêmula a mudaria de lugar.
+    static let threshold: CGFloat = 4
+
+    static func track(_ event: NSEvent, in view: NSView, item: SidebarItem,
+                      drag: ((SidebarDrag) -> Void)?, click: @escaping () -> Void) {
+        let start = event.locationInWindow
+        var dragging = false
+        guard let window = view.window else { return click() }
+
+        while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            let point = next.locationInWindow
+            if next.type == .leftMouseUp {
+                if dragging { drag?(SidebarDrag(phase: .ended, item: item, point: point)) }
+                else { click() }
+                return
+            }
+            if !dragging {
+                let moved = hypot(point.x - start.x, point.y - start.y)
+                guard moved > threshold, drag != nil else { continue }
+                dragging = true
+                drag?(SidebarDrag(phase: .began, item: item, point: point))
+            }
+            drag?(SidebarDrag(phase: .moved, item: item, point: point))
+        }
+        if dragging { drag?(SidebarDrag(phase: .cancelled, item: item, point: start)) }
+    }
+}
+
+extension Sidebar {
+    /// Onde uma linha arrastada cai: sempre "dentro de um pai, nesta posição".
+    enum Drop: Equatable {
+        case workspace(position: Int)
+        case project(workspaceID: String, position: Int)
+        case workbench(projectID: String, position: Int)
+    }
+
+    /// O alvo para um ponto em coordenadas da lista. Quem arrasta decide o
+    /// tipo: bancada só cai em projeto, projeto só em workspace, e workspace
+    /// entre workspaces — a árvore não muda de forma no arrasto.
+    func drop(for item: SidebarItem, at point: NSPoint) -> Drop? {
+        switch item {
+        case .workbench(let index):
+            guard let tile = tileHit(point) else { return nil }
+            let rows = tile.tile.rows.filter { !$0.isHidden }
+            var position = rows.filter { point.y > $0.frame.midY }.count
+            // Tirar a própria linha da conta: sem isso, arrastar para baixo
+            // dentro do mesmo projeto para uma posição antes da desejada.
+            if let mine = rows.firstIndex(where: { $0.index == index }),
+               position > mine { position -= 1 }
+            return .workbench(projectID: tile.projectID, position: position)
+        case .project(_, let id):
+            guard let card = cardHit(point) else { return nil }
+            let tiles = card.card.projects.filter { !$0.tile.isHidden }
+            var position = tiles.filter { point.y > $0.tile.frame.midY }.count
+            if let mine = tiles.firstIndex(where: { $0.projectID == id }), position > mine {
+                position -= 1
+            }
+            return .project(workspaceID: card.workspaceID, position: position)
+        case .workspace(let id):
+            let visible = cards.filter { !$0.card.isHidden }
+            var position = visible.filter { point.y > $0.card.frame.midY }.count
+            if let mine = visible.firstIndex(where: { $0.workspaceID == id }), position > mine {
+                position -= 1
+            }
+            return .workspace(position: position)
+        case .orphans:
+            return nil
+        }
+    }
+
+    private func tileHit(_ point: NSPoint) -> (projectID: String, tile: ProjectTile)? {
+        for card in cards where !card.card.isHidden {
+            for tile in card.projects where !tile.tile.isHidden {
+                if tile.tile.frame.insetBy(dx: 0, dy: -Self.cardGap / 2).contains(point),
+                   let id = tile.projectID {
+                    return (id, tile)
+                }
+            }
+        }
+        return nil
+    }
+
+    private func cardHit(_ point: NSPoint) -> (workspaceID: String, card: WorkspaceCard)? {
+        for card in cards where !card.card.isHidden {
+            if card.card.frame.insetBy(dx: 0, dy: -Self.cardGap / 2).contains(point) {
+                return (card.workspaceID, card)
+            }
+        }
+        return nil
+    }
+
+    /// O laço do arrasto, vindo de qualquer linha.
+    func handle(_ drag: SidebarDrag) {
+        let point = list.convert(drag.point, from: nil)
+        switch drag.phase {
+        case .began:
+            dragged = drag.item
+            list.addSubview(dropLine)
+            viewFor(drag.item)?.alphaValue = 0.5
+        case .moved:
+            guard dragged != nil else { return }
+            showDropLine(for: drag.item, at: point)
+        case .cancelled:
+            viewFor(drag.item)?.alphaValue = 1
+            dragged = nil
+            dropLine.removeFromSuperview()
+        case .ended:
+            viewFor(drag.item)?.alphaValue = 1
+            dragged = nil
+            dropLine.removeFromSuperview()
+            guard let target = drop(for: drag.item, at: point) else { return }
+            switch (drag.item, target) {
+            case (.workspace(let id), .workspace(let position)):
+                onMoveWorkspace?(id, position)
+            case (.project(_, let id), .project(let workspaceID, let position)):
+                onMoveProject?(id, workspaceID, position)
+            case (.workbench(let index), .workbench(let projectID, let position)):
+                onMoveWorkbench?(index, projectID, position)
+            default:
+                break
+            }
+        }
+    }
+
+    /// A view da linha que está sendo arrastada, para desbotá-la.
+    private func viewFor(_ item: SidebarItem) -> NSView? {
+        switch item {
+        case .workbench(let index):
+            return cards.flatMap { $0.projects }.flatMap { $0.rows }.first { $0.index == index }
+        case .project(let workspaceID, let id):
+            return cards.first { $0.workspaceID == workspaceID }?
+                .projects.first { $0.projectID == id }?.header
+        case .workspace(let id):
+            return cards.first { $0.workspaceID == id }?.header
+        case .orphans:
+            return nil
+        }
+    }
+
+    /// A linha que mostra onde vai cair.
+    private func showDropLine(for item: SidebarItem, at point: NSPoint) {
+        guard let target = drop(for: item, at: point), let frame = lineFrame(for: target) else {
+            dropLine.isHidden = true
+            return
+        }
+        dropLine.isHidden = false
+        dropLine.frame = frame
+    }
+
+    private func lineFrame(for target: Drop) -> NSRect? {
+        func between(_ frames: [NSRect], _ position: Int, x: CGFloat, width: CGFloat) -> NSRect? {
+            guard !frames.isEmpty || position == 0 else { return nil }
+            let y: CGFloat
+            if frames.isEmpty { return nil }
+            else if position >= frames.count { y = frames[frames.count - 1].maxY }
+            else { y = frames[position].minY }
+            return NSRect(x: x, y: y - 1, width: width, height: 2)
+        }
+        switch target {
+        case .workspace(let position):
+            let frames = cards.filter { !$0.card.isHidden }.map { $0.card.frame }
+            return between(frames, position, x: 8, width: bounds.width - 16)
+        case .project(let workspaceID, let position):
+            guard let card = cards.first(where: { $0.workspaceID == workspaceID }) else { return nil }
+            let tiles = card.projects.filter { !$0.tile.isHidden }.map { $0.tile.frame }
+            return between(tiles, position, x: card.card.frame.minX + Self.cardInset,
+                           width: card.card.frame.width - Self.cardInset * 2)
+        case .workbench(let projectID, let position):
+            guard let tile = cards.flatMap({ $0.projects }).first(where: { $0.projectID == projectID })
+            else { return nil }
+            let rows = tile.rows.filter { !$0.isHidden }.map { $0.frame }
+            guard let frame = between(rows, position, x: tile.tile.frame.minX + Self.cardInset,
+                                      width: tile.tile.frame.width - Self.cardInset * 2)
+            else {
+                // Projeto vazio: a linha vai logo abaixo do cabeçalho dele.
+                let header = tile.header.frame
+                return NSRect(x: header.minX + Self.cardInset, y: header.maxY - 1,
+                              width: header.width - Self.cardInset * 2, height: 2)
+            }
+            return frame
+        }
     }
 }
