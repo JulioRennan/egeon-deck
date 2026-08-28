@@ -215,15 +215,23 @@ final class ChatTextRow: ChatRowView {
         // registrando um `cursorRect` de mão por baixo e o texto pedindo
         // I-beam por cima, o ponteiro piscava entre os dois sem sair do lugar.
         text.toggleHeight = toggleRect.map { $0.maxY - text.frame.minY } ?? 0
+        // A linha é reusada e muda de lugar: os rects registrados estão no
+        // ponto da janela onde ela estava antes.
+        window?.invalidateCursorRects(for: text)
     }
 }
 
 // MARK: - O texto de uma linha
 
 /// O `NSTextView` das linhas. Ele cobre a faixa do título de um passo, então é
-/// ele quem manda no cursor ali: mão na faixa, I-beam no resto. Um dono só —
-/// com a linha registrando mão por baixo e o texto I-beam por cima, o ponteiro
-/// piscava entre os dois sem sair do lugar.
+/// ele quem manda no cursor ali: mão na faixa, I-beam no resto.
+///
+/// Os TRÊS caminhos, e não o que parece o certo: o AppKit resolve o ponteiro
+/// por cursor rect, por `cursorUpdate` de tracking area e pelo `mouseMoved` da
+/// própria `NSTextView` — qual deles chega por último depende da versão e de
+/// quem mais está na hierarquia. Cobrir um só foi o que fez a mão não aparecer
+/// duas vezes seguidas; nenhum deles chama `super`, senão o I-beam volta por
+/// baixo.
 final class StepTextView: NSTextView {
     /// Altura da faixa de título dentro deste texto; zero quando não há o que abrir.
     var toggleHeight: CGFloat = 0 {
@@ -233,10 +241,10 @@ final class StepTextView: NSTextView {
         }
     }
 
-    /// Onde vai cada cursor. `NSTextView` põe o I-beam por CURSOR RECT, não por
-    /// `cursorUpdate`: sobrescrever o segundo não muda nada — ele nunca é
-    /// chamado. Os dois retângulos saem daqui juntos, sem depender de quem
-    /// registrou por último.
+    /// Ponto no espaço deste texto: está na faixa que abre o passo?
+    func isOnToggle(_ point: NSPoint) -> Bool { toggleHeight > 0 && point.y <= toggleHeight }
+
+    /// Onde vai cada cursor.
     func cursorRects(in bounds: NSRect) -> [(rect: NSRect, cursor: NSCursor)] {
         guard toggleHeight > 0 else { return [] }
         let strip = NSRect(x: 0, y: 0, width: bounds.width, height: min(toggleHeight, bounds.height))
@@ -245,13 +253,35 @@ final class StepTextView: NSTextView {
         return rest.height > 0 ? [(strip, .pointingHand), (rest, .iBeam)] : [(strip, .pointingHand)]
     }
 
+    private func set(at point: NSPoint) {
+        (isOnToggle(point) ? NSCursor.pointingHand : NSCursor.iBeam).set()
+    }
+
     override func resetCursorRects() {
         let rects = cursorRects(in: bounds)
         guard !rects.isEmpty else { return super.resetCursorRects() }
         for (rect, cursor) in rects { addCursorRect(rect, cursor: cursor) }
     }
 
-    /// A faixa muda de lugar quando a linha muda de tamanho.
+    override func cursorUpdate(with event: NSEvent) {
+        guard toggleHeight > 0 else { return super.cursorUpdate(with: event) }
+        set(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard toggleHeight > 0 else { return super.mouseMoved(with: event) }
+        set(at: convert(event.locationInWindow, from: nil))
+    }
+
+    /// A linha da tabela é reusada: quando ela entra na janela (ou muda de
+    /// tamanho), os rects registrados são de outra medida.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Sem isto o `mouseMoved` não chega — e ele é um dos três caminhos.
+        window?.acceptsMouseMovedEvents = true
+        window?.invalidateCursorRects(for: self)
+    }
+
     override func setFrameSize(_ newSize: NSSize) {
         let changed = newSize != frame.size
         super.setFrameSize(newSize)

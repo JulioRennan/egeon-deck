@@ -115,6 +115,20 @@ final class ChatStepToggleTests: XCTestCase {
         XCTAssertTrue(rects[1].rect.contains(row.text.convert(onOutput, from: row)), "no comando é texto")
         XCTAssertEqual(rects[0].rect.width, row.text.bounds.width)
 
+        // E o cursor que sai de fato, pelos outros dois caminhos do AppKit.
+        func cursor(at point: NSPoint, _ send: (NSEvent) -> Void) -> NSCursor {
+            NSCursor.arrow.set()
+            let event = NSEvent.mouseEvent(with: .mouseMoved, location: row.convert(point, to: nil),
+                                           modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                           context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
+            send(event)
+            return NSCursor.current
+        }
+        XCTAssertEqual(cursor(at: onTitle, row.text.cursorUpdate), NSCursor.pointingHand)
+        XCTAssertEqual(cursor(at: onOutput, row.text.cursorUpdate), NSCursor.iBeam)
+        XCTAssertEqual(cursor(at: onTitle, row.text.mouseMoved), NSCursor.pointingHand)
+        XCTAssertEqual(cursor(at: onOutput, row.text.mouseMoved), NSCursor.iBeam)
+
         // Sem nada além do título, não há faixa.
         let bare = ChatBlock(id: "b|u1|1", messageKey: "r|u1",
                              kind: .step(from: front, step: ChatStep(glyph: "→", text: "Lê"), expanded: true))
