@@ -86,7 +86,10 @@ app/Sources/EgeonDeck/
   CLI. Botão de limpar a bancada (barra lateral, botão direito): `clear` do perfil em cada
   agente + chat arquivado como `chat-archive/chat-<início>_<fim>.jsonl` e trilha
   como `trace-archive/trace-<início>_<fim>.md`
-  (`POST /workbench/clear`; só o chat: `POST /chat/clear`) (ADR-037).
+  (`POST /workbench/clear`; só o chat: `POST /chat/clear`) (ADR-037). A thread
+  desce sozinha quando você está no fim: o fim é medido depois do passe de
+  layout, a descida animada em curso conta como fim, e enviar sempre desce
+  (ADR-045).
 
 ## Funcionalidades, por cima
 

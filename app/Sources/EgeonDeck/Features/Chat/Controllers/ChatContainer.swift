@@ -96,6 +96,10 @@ final class ChatContainer: NSView {
     /// Abrir um passo não é mensagem nova: a thread não deve correr para o
     /// fim por causa disso, mesmo que você esteja lá.
     private var holdBottom = false
+    /// Você mandou mensagem: a próxima montagem desce, esteja você onde
+    /// estiver — como em qualquer mensageiro, enviar te leva ao fim. Fica de
+    /// pé até uma montagem mudar algo de fato; a sua entra nela.
+    private var forceBottom = false
 
     func toggleStep(_ block: ChatBlock) {
         if expandedSteps.contains(block.id) { expandedSteps.remove(block.id) } else { expandedSteps.insert(block.id) }
@@ -470,10 +474,11 @@ final class ChatContainer: NSView {
         messages = output.messages
         pending = output.pending
         loadingMore = false
-        let wasAtBottom = thread.isAtBottom && !holdBottom
+        let wasAtBottom = (thread.isAtBottom && !holdBottom) || forceBottom
         holdBottom = false
         let result = thread.apply(output.blocks, metrics: output.metrics)
         guard result.changed else { return }
+        forceBottom = false
         threadRebuilds += 1
         // Puxar para o fim só se você já estava lá — quem subiu para ler não
         // pode ser arrastado de volta a cada mensagem. Linha nova entra com
@@ -549,6 +554,7 @@ final class ChatContainer: NSView {
         }
         pending.append(.init(text: text, target: target.id, sentAt: Date(),
                              knownTurnIds: Set(turns(of: target).map(\.id))))
+        forceBottom = true
         refresh()
     }
 

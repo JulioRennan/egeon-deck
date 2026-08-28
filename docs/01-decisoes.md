@@ -2912,3 +2912,33 @@ mesmo com você lá (`holdBottom`): não é mensagem nova.
 
 **Verificação:** `ChatStepToggleTests` — o toggle no container remonta com o
 passo aberto e a edição como diff, e a linha só alterna na faixa do título.
+
+## ADR-045 — O auto-scroll do chat: o fim é medido depois do layout, e a descida em curso conta como fim
+
+**Sintoma.** "Mando mensagem e às vezes ele não desce, mesmo eu estando no
+fim." Não era intermitência: eram três buracos que, uma vez caídos, se
+mantêm — a thread passa a se achar "subiu para ler" e nunca mais desce
+sozinha até você rolar na mão.
+
+**As três causas, e o que cada uma virou:**
+
+1. **O fim era medido antes de a tabela crescer.** `bottomY` lia
+   `tableView.bounds.height` logo depois do `insertRows`, e o `NSTableView`
+   só cresce no passe de layout: a rolagem ia para o fim ANTIGO, parando
+   uma mensagem inteira acima — mais que os 40pt de folga do `isAtBottom`.
+   Agora `bottomY` força `layoutSubtreeIfNeeded()` antes de medir.
+2. **A descida animada parecia "subiu para ler".** A animação leva 0,35s e a
+   bolha ao vivo remonta a cada tique: a montagem que chegava no meio do
+   caminho via o clip longe do fim e desligava o auto-scroll. Agora
+   `scrollingToBottom` marca a descida a caminho e `isAtBottom` a conta como
+   fim; a bandeira cai no fim da animação (com token, para o completion de
+   uma animação substituída não desligar a da vez) ou quando você pega a
+   thread na mão (`willStartLiveScroll` → `stopScrolling`). Rolagem seca
+   passou a cancelar a animação em curso pelo animator com duração zero —
+   antes as duas brigavam e a animação vencia.
+3. **Enviar de um ponto acima do fim não descia.** Como em qualquer
+   mensageiro, enviar leva ao fim: `sendMessage` marca `forceBottom`, que
+   vale para a primeira montagem que mude algo (a que traz o seu eco).
+
+**Verificação:** `ChatScrollTests` — os três casos, cada um falhando sem a
+sua correção.

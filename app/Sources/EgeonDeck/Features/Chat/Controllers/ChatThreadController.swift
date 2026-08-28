@@ -54,11 +54,18 @@ final class ChatThreadController: NSObject, NSTableViewDataSource, NSTableViewDe
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled),
                                                name: NSView.boundsDidChangeNotification,
                                                object: scrollView.contentView)
+        // Você pegou a thread na mão: uma descida ainda em curso para de
+        // valer na hora, senão ela te arrastaria de volta para o fim.
+        NotificationCenter.default.addObserver(self, selector: #selector(liveScrollStarted),
+                                               name: NSScrollView.willStartLiveScrollNotification,
+                                               object: scrollView)
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
 
     @objc private func scrolled() { onScroll?() }
+
+    @objc private func liveScrollStarted() { stopScrolling() }
 
     /// A largura para a qual as linhas devem ser medidas.
     var width: CGFloat { scrollView.contentSize.width }
@@ -193,7 +200,18 @@ final class ChatThreadController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     // MARK: Rolagem
 
+    /// Uma descida animada ainda a caminho. Enquanto ela corre, a thread
+    /// conta como estando no fim: a montagem que chega no meio do caminho —
+    /// a bolha ao vivo crescendo, o pending confirmando — via o clip parado
+    /// longe do fim e concluía que você tinha subido para ler; daí em diante
+    /// nada mais descia sozinho.
+    private(set) var scrollingToBottom = false
+    /// Qual descida está valendo: o completion de uma animação substituída
+    /// chega depois e não pode desligar a bandeira da que a substituiu.
+    private var scrollToken = 0
+
     var isAtBottom: Bool {
+        if scrollingToBottom { return true }
         let visible = scrollView.contentView.documentVisibleRect
         return visible.maxY >= tableView.bounds.height - 40
     }
@@ -201,17 +219,46 @@ final class ChatThreadController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// Perto do começo do que está carregado: hora de trazer mais histórico.
     var isNearTop: Bool { scrollView.contentView.documentVisibleRect.minY < 300 }
 
-    private var bottomY: CGFloat { max(0, tableView.bounds.height - scrollView.contentSize.height) }
+    /// O fim de verdade. A tabela só cresce no passe de layout: sem forçá-lo,
+    /// a linha recém-inserida ainda não conta, a rolagem para no fim ANTIGO —
+    /// abaixo da tolerância do `isAtBottom` — e o auto-scroll morre ali.
+    private var bottomY: CGFloat {
+        tableView.layoutSubtreeIfNeeded()
+        return max(0, tableView.bounds.height - scrollView.contentSize.height)
+    }
 
-    func scrollToBottom(animated: Bool) { scroll(to: bottomY, animated: animated) }
+    func scrollToBottom(animated: Bool) {
+        let y = bottomY
+        if animated { scrollingToBottom = true }
+        scroll(to: y, animated: animated)
+    }
+
     func scrollToTop(animated: Bool) { scroll(to: 0, animated: animated) }
+
+    /// Para onde estiver indo e fica onde está.
+    func stopScrolling() {
+        scrollingToBottom = false
+        scrollToken += 1
+        let clip = scrollView.contentView
+        NSAnimationContext.runAnimationGroup { $0.duration = 0
+            clip.animator().setBoundsOrigin(clip.bounds.origin)
+        }
+    }
 
     /// Rolagem com movimento, como no WhatsApp: pular seco perde a noção de
     /// para onde se foi. Seca para acompanhar a bolha ao vivo e a caixa
     /// empurrando a thread — animar a cada linha gravada é tremor.
     func scroll(to y: CGFloat, animated: Bool) {
         let clip = scrollView.contentView
+        scrollToken += 1
+        let token = scrollToken
         guard animated else {
+            scrollingToBottom = false
+            // Duração zero pelo animator é o que cancela uma animação em
+            // curso: sem isso ela continua e desfaz esta rolagem logo depois.
+            NSAnimationContext.runAnimationGroup { $0.duration = 0
+                clip.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
+            }
             clip.setBoundsOrigin(NSPoint(x: 0, y: y))
             scrollView.reflectScrolledClipView(clip)
             onScroll?()
@@ -222,7 +269,8 @@ final class ChatThreadController: NSObject, NSTableViewDataSource, NSTableViewDe
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             clip.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
         } completionHandler: { [weak self] in
-            guard let self else { return }
+            guard let self, token == self.scrollToken else { return }
+            self.scrollingToBottom = false
             self.scrollView.reflectScrolledClipView(clip)
             self.onScroll?()
         }
