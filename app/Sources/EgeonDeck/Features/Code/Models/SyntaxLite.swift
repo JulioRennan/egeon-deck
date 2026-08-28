@@ -50,6 +50,24 @@ enum SyntaxLite {
                                    "private", "protected", "readonly", "static", "declare", "namespace",
                                    "string", "number", "boolean", "any", "never", "unknown"],
                         lineComment: "//", quotes: ["\"", "'", "`"])
+        case .swift:
+            return Spec(keywords: ["func", "var", "let", "class", "struct", "enum", "protocol",
+                                   "extension", "init", "deinit", "self", "super", "return", "if",
+                                   "else", "guard", "for", "in", "while", "repeat", "switch", "case",
+                                   "default", "break", "continue", "fallthrough", "where", "do", "try",
+                                   "catch", "throw", "throws", "rethrows", "defer", "import", "typealias",
+                                   "associatedtype", "some", "any", "as", "is", "nil", "true", "false",
+                                   "public", "private", "fileprivate", "internal", "open", "static",
+                                   "final", "lazy", "weak", "unowned", "override", "mutating", "inout",
+                                   "async", "await", "actor", "convenience", "required", "subscript",
+                                   "willSet", "didSet", "get", "set", "operator", "indirect"],
+                        lineComment: "//")
+        case .shell:
+            return Spec(keywords: ["if", "then", "elif", "else", "fi", "for", "in", "do", "done",
+                                   "while", "until", "case", "esac", "function", "return", "local",
+                                   "export", "set", "unset", "echo", "cd", "exit", "source", "trap",
+                                   "read", "shift", "eval", "true", "false"],
+                        lineComment: "#", quotes: ["\"", "'", "`"])
         case .json:
             return Spec(keywords: ["true", "false", "null"])
         case .html:

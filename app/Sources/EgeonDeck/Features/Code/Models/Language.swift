@@ -6,7 +6,7 @@ import Foundation
 /// que o Linguist do GitHub faz por cima, e não paga o custo aqui — o passo
 /// já traz o caminho. Sem extensão conhecida é `plain`, sem cor.
 enum Language: String, CaseIterable, Equatable {
-    case python, html, dart, typescript, json, plain
+    case python, html, dart, typescript, json, swift, shell, plain
 
     static func detect(path: String) -> Language {
         let name = path.split(separator: "/").last.map(String.init) ?? path
@@ -17,6 +17,8 @@ enum Language: String, CaseIterable, Equatable {
         case "dart":                      return .dart
         case "ts", "tsx", "js", "jsx", "mjs", "cjs": return .typescript
         case "json", "jsonc":             return .json
+        case "swift":                     return .swift
+        case "sh", "bash", "zsh":         return .shell
         default:                          return .plain
         }
     }
@@ -29,6 +31,8 @@ enum Language: String, CaseIterable, Equatable {
         case "dart":                              return .dart
         case "typescript", "ts", "tsx", "javascript", "js", "jsx": return .typescript
         case "json", "jsonc":                     return .json
+        case "swift":                             return .swift
+        case "sh", "bash", "shell", "zsh":        return .shell
         default:                                  return .plain
         }
     }

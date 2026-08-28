@@ -77,7 +77,8 @@ enum ChatBlocks {
     /// A thread inteira em linhas. `live` é o turno em curso de cada agente
     /// (id do turno e o status); `typing`, quem trabalha sem turno gravado;
     /// `expanded`, os ids dos passos que você abriu — todo o resto fica só no
-    /// título. Passo sem nada além do título é sempre inteiro.
+    /// título. Passo sem nada além do título é sempre inteiro, e passo com
+    /// diff nunca recolhe.
     static func build(messages: [ChatMessage],
                       live: [String: (turnId: String, status: ChatLive)],
                       typing: [ChatParticipant],
@@ -115,11 +116,15 @@ enum ChatBlocks {
                     case .text(let text):
                         for kind in split(text, from: agent) { add(kind) }
                     case .step(let step):
-                        let open = !step.isExpandable || expanded.contains("b|\(turn.id)|\(index)")
-                        if open, let diff = step.diff, !diff.isEmpty {
+                        // Diff nunca recolhe: ver o que mudou no arquivo é o
+                        // que sempre interessa — é o passo de comando, com o
+                        // seu despejo de saída, que nasce só no título.
+                        if let diff = step.diff, !diff.isEmpty {
                             add(.diff(from: agent, file: step.text, diff: diff))
                         } else {
-                            add(.step(from: agent, step: step, expanded: open))
+                            add(.step(from: agent, step: step,
+                                      expanded: !step.isExpandable
+                                          || expanded.contains("b|\(turn.id)|\(index)")))
                         }
                     }
                 }

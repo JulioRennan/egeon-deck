@@ -85,6 +85,43 @@ final class ChatStepTests: XCTestCase {
         XCTAssertEqual(turn.steps[2].detail, "path: app/\npattern: foo")
     }
 
+    /// Leitura mostra o que foi lido, e com o formatador: o conteúdo vira a
+    /// saída do passo (com teto), e a linguagem sai da extensão do arquivo
+    /// citado no título — sem `content`, continua a conta de linhas.
+    func testReadShowsTheFileContentHighlightedByExtension() throws {
+        let code = "import Foundation\nlet answer = 42  // nota"
+        let jsonl = [
+            line("user", at: "2026-08-25T17:00:00Z", #"{"content":"faz"}"#),
+            line("assistant", at: "2026-08-25T17:00:01Z",
+                 #"{"content":[{"type":"tool_use","id":"r1","name":"Read","input":{"file_path":"/x/app/N.swift"}}]}"#),
+            line("user", at: "2026-08-25T17:00:02Z",
+                 #"{"content":[{"type":"tool_result","tool_use_id":"r1","content":"lido"}]}"#,
+                 extra: #","toolUseResult":{"type":"text","file":{"filePath":"/x/app/N.swift","content":"import Foundation\nlet answer = 42  // nota","numLines":2,"totalLines":2}}"#),
+        ].joined(separator: "\n")
+        let turn = try XCTUnwrap(ClaudeTranscript.parse(jsonl).first)
+        let step = turn.steps[0]
+        XCTAssertEqual(step.text, "read app/N.swift")
+        XCTAssertEqual(step.output, code)
+        XCTAssertTrue(step.isExpandable, "há o que abrir")
+
+        // Recolhido: só o título e a conta. Aberto: o texto, com as cores.
+        let closed = ChatBlockLayout.render(step, expanded: false).string
+        XCTAssertTrue(closed.hasSuffix("⎿ 2 linhas"), closed)
+        XCTAssertFalse(closed.contains("import"))
+
+        let open = ChatBlockLayout.render(step)
+        let text = open.string as NSString
+        func color(of word: String) -> NSColor? {
+            let range = text.range(of: word)
+            guard range.location != NSNotFound else { return nil }
+            return open.attribute(.foregroundColor, at: range.location, effectiveRange: nil) as? NSColor
+        }
+        let base = NSColor(calibratedWhite: 0.62, alpha: 1)
+        XCTAssertEqual(color(of: "import"), CodePalette.color(for: .keyword, base: base))
+        XCTAssertEqual(color(of: "42"), CodePalette.color(for: .number, base: base))
+        XCTAssertEqual(color(of: "// nota"), CodePalette.color(for: .comment, base: base))
+    }
+
     func testOutputIsCappedByLinesAndBytes() {
         let many = (1...100).map(String.init).joined(separator: "\n")
         let capped = ChatStep.capped(many)

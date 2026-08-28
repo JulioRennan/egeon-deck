@@ -1,9 +1,10 @@
 import XCTest
 @testable import EgeonDeck
 
-/// Os passos da bolha nascem só no título e abrem por clique: o container
-/// guarda o que você abriu por id e remonta; a linha entrega o clique do
-/// título ao toggle e deixa o resto da caixa com o texto.
+/// Os passos de comando da bolha nascem só no título e abrem por clique: o
+/// container guarda o que você abriu por id e remonta; a linha entrega o
+/// clique do título ao toggle e deixa o resto da caixa com o texto. O diff
+/// fica de fora disso — nasce aberto e assim fica.
 @MainActor
 final class ChatStepToggleTests: XCTestCase {
     private let t0 = Date(timeIntervalSince1970: 1_787_678_363)
@@ -46,22 +47,24 @@ final class ChatStepToggleTests: XCTestCase {
 
         let blocks = container.thread.blocks
         let step = try XCTUnwrap(blocks.first { $0.id == "b|u1|0" })
-        let edit = try XCTUnwrap(blocks.first { $0.id == "b|u1|1" })
         XCTAssertTrue(isStep(step, expanded: false))
-        XCTAssertTrue(isStep(edit, expanded: false), "diff recolhido é um passo com +a −b")
+        guard case .diff(_, "a.swift", _) = try XCTUnwrap(blocks.first { $0.id == "b|u1|1" }).kind
+        else { return XCTFail("o diff nasce aberto") }
 
         container.toggleStep(step)
-        container.toggleStep(edit)
         settle { container.thread.blocks.contains { self.isStep($0, expanded: true) } }
-        XCTAssertEqual(container.expandedSteps, ["b|u1|0", "b|u1|1"])
+        XCTAssertEqual(container.expandedSteps, ["b|u1|0"])
         let open = container.thread.blocks
         XCTAssertTrue(isStep(try XCTUnwrap(open.first { $0.id == "b|u1|0" }), expanded: true))
         guard case .diff(_, "a.swift", _) = try XCTUnwrap(open.first { $0.id == "b|u1|1" }).kind
-        else { return XCTFail("edição aberta vira diff") }
+        else { return XCTFail("o diff continua aberto") }
 
-        container.toggleStep(step)
+        // Pelo id é como a rota de teste alterna, sem clique.
+        container.toggleStep(id: "b|u1|0")
         settle { container.thread.blocks.contains { $0.id == "b|u1|0" && self.isStep($0, expanded: false) } }
-        XCTAssertEqual(container.expandedSteps, ["b|u1|1"])
+        XCTAssertEqual(container.expandedSteps, [])
+        container.toggleStep(id: "não existe")
+        XCTAssertEqual(container.expandedSteps, [], "id desconhecido não abre nada")
     }
 
     func testRowTogglesOnlyOnTheTitleStrip() throws {

@@ -261,8 +261,13 @@ enum ClaudeTranscript {
             step.diff = cappedDiff(lines) ?? step.diff
         }
         if let payload, let file = payload["file"] as? [String: Any], let n = file["numLines"] as? Int {
-            output = "\(n) linha\(n == 1 ? "" : "s")"
-                + ((file["totalLines"] as? Int).map { $0 > n ? " de \($0)" : "" } ?? "")
+            // O que foi lido, e não só "119 linhas": recolhido o passo mostra a
+            // conta, aberto mostra o texto realçado pela extensão do arquivo
+            // (ADR-044/046). O teto do `capped` é o que impede o arquivo
+            // inteiro de virar histórico.
+            let total = (file["totalLines"] as? Int).map { $0 > n ? " de \($0)" : "" } ?? ""
+            let content = (file["content"] as? String) ?? ""
+            output = content.isEmpty ? "\(n) linha\(n == 1 ? "" : "s")\(total)" : content
         } else if let payload, payload["stdout"] != nil || payload["stderr"] != nil {
             let out = (payload["stdout"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let err = (payload["stderr"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

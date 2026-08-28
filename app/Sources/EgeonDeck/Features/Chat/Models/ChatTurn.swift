@@ -56,11 +56,10 @@ struct ChatStep: Equatable, Codable {
     static let maxOutputBytes = 2048
     static let maxDiffLines = 200
 
-    /// Tem mais que o título: comando, saída ou diff. Na bolha o passo nasce
-    /// recolhido — só o título — e é isto que decide se há o que abrir.
-    var isExpandable: Bool {
-        detail != nil || output != nil || diffCounts != nil
-    }
+    /// Tem mais que o título: comando ou saída. Na bolha o passo nasce
+    /// recolhido — só o título — e é isto que decide se há o que abrir. Diff
+    /// não conta: ele nunca recolhe.
+    var isExpandable: Bool { detail != nil || output != nil }
 
     /// `+a −b` do diff, para o cabeçalho do grupo.
     var diffCounts: (added: Int, removed: Int)? {

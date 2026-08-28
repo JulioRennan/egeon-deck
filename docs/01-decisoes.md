@@ -2942,3 +2942,34 @@ sozinha até você rolar na mão.
 
 **Verificação:** `ChatScrollTests` — os três casos, cada um falhando sem a
 sua correção.
+
+## ADR-046 — Leitura mostra o que foi lido, com o formatador; diff nunca recolhe
+
+Duas emendas à ADR-044, das duas pontas opostas:
+
+**O que sempre aparece.** Passo de **edição não recolhe**: o diff é o que
+mais interessa numa resposta, e escondê-lo atrás de um título troca o ganho
+de silêncio por perda de informação. `ChatBlocks.build` manda todo passo com
+`diff` para o bloco `.diff` (o `DiffView` lado a lado), aberto, sempre — só o
+passo de comando, com o seu despejo de saída, nasce só no título. Por
+consequência, `ChatStep.isExpandable` deixou de contar o diff.
+
+**O que passou a aparecer, e com cor.** O passo de leitura guardava só "119
+linhas": o conteúdo era descartado na leitura do transcript. Agora guarda o
+texto lido (com o teto do `capped`, que é o que impede o arquivo inteiro de
+virar histórico), e a bolha o desenha com o **formatador** — `CodePalette` +
+`SyntaxLite`, linguagem pela extensão do arquivo citado no título (ADR-041).
+Recolhido continua sendo uma linha com `⎿ n linhas`; aberto é o arquivo com
+realce. Sem `content` no transcript (leitura de imagem, CLI antigo), continua
+a conta de linhas.
+
+**O formatador aprendeu Swift e shell.** Faltava justamente a linguagem em que
+este app é escrito: `cat Foo.swift` e `read Foo.swift` saíam sem cor nenhuma.
+`Language` ganhou `.swift` (`swift`) e `.shell` (`sh`, `bash`, `zsh`), com as
+suas specs no `SyntaxLite`.
+
+**Verificação:** `/chat?target=…&expand=<bloco>` alterna um passo por fora — o
+retrato do chat passou a listar `blocks` (id, tipo, aberto), e clique
+sintético exige Acessibilidade, que a assinatura ad-hoc perde a cada build
+(ADR-003). Conferido no app: leitura aberta sai com `import`, `enum` e
+`return` coloridos, e as duas edições desenham lado a lado sem clique nenhum.

@@ -1,7 +1,7 @@
 import XCTest
 @testable import EgeonDeck
 
-/// Linguagem pela extensão, e o tokenizador por linha das quatro da v0.
+/// Linguagem pela extensão, e o tokenizador por linha.
 final class SyntaxLiteTests: XCTestCase {
     func testLanguageComesFromExtensionOnly() {
         XCTAssertEqual(Language.detect(path: "app/main.py"), .python)
@@ -9,6 +9,8 @@ final class SyntaxLiteTests: XCTestCase {
         XCTAssertEqual(Language.detect(path: "src/App.tsx"), .typescript)
         XCTAssertEqual(Language.detect(path: "index.HTML"), .html)
         XCTAssertEqual(Language.detect(path: "config.json"), .json)
+        XCTAssertEqual(Language.detect(path: "Sources/EgeonDeck/ChatBlock.swift"), .swift)
+        XCTAssertEqual(Language.detect(path: "app/dev.sh"), .shell)
         XCTAssertEqual(Language.detect(path: "Makefile"), .plain)
         XCTAssertEqual(Language.detect(path: ".env"), .plain)
     }
@@ -16,11 +18,26 @@ final class SyntaxLiteTests: XCTestCase {
     func testLanguageFromFenceLabelAndFromCommand() {
         XCTAssertEqual(Language.named("python"), .python)
         XCTAssertEqual(Language.named("TS"), .typescript)
-        XCTAssertEqual(Language.named("swift"), .plain)
+        XCTAssertEqual(Language.named("swift"), .swift)
+        XCTAssertEqual(Language.named("bash"), .shell)
+        XCTAssertEqual(Language.named("cobol"), .plain)
         XCTAssertEqual(Language.detect(inCommand: "cat app/build/x/config.json"), .json)
         XCTAssertEqual(Language.detect(inCommand: "head -20 'lib/main.dart' | grep x"), .dart)
         XCTAssertEqual(Language.detect(inCommand: "ls -la"), .plain)
+        // O passo de leitura: a linguagem sai do arquivo citado no título.
+        XCTAssertEqual(Language.detect(inCommand: "read Chat/Models/ChatBlock.swift"), .swift)
         XCTAssertEqual(Language.detect(inCommand: "git log --oneline -2"), .plain)
+    }
+
+    func testSwiftAndShellTokens() {
+        let swift = SyntaxLite.tokens("private let name = \"oi\"  // nota", language: .swift)
+        XCTAssertEqual(swift.filter { $0.kind == .keyword }.map(\.text), ["private", "let"])
+        XCTAssertEqual(swift.filter { $0.kind == .string }.map(\.text), ["\"oi\""])
+        XCTAssertEqual(swift.filter { $0.kind == .comment }.map(\.text), ["// nota"])
+
+        let shell = SyntaxLite.tokens("for f in *.swift; do echo 1; done  # laço", language: .shell)
+        XCTAssertEqual(shell.filter { $0.kind == .keyword }.map(\.text), ["for", "in", "do", "echo", "done"])
+        XCTAssertEqual(shell.filter { $0.kind == .comment }.map(\.text), ["# laço"])
     }
 
     func testFencedBlockKeepsItsLabel() {

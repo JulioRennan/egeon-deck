@@ -265,6 +265,11 @@ ShellHook.install()
             else { return }
             self.shells[index]?.chat.focusFromOutside(id)
         }
+        AppControl.chatExpandStep = { [weak self] name, blockId in
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
+            else { return }
+            self.shells[index]?.chat.toggleStep(id: blockId)
+        }
         AppControl.chatCompose = { [weak self] name, text, send in
             guard let self,
                   let index = self.configs.firstIndex(where: { $0.name == name }),

@@ -101,6 +101,13 @@ final class ChatContainer: NSView {
     /// pé até uma montagem mudar algo de fato; a sua entra nela.
     private var forceBottom = false
 
+    /// O mesmo toggle, pelo id do bloco — é como a rota de teste alterna um
+    /// passo sem clique.
+    func toggleStep(id: String) {
+        guard let block = thread.blocks.first(where: { $0.id == id }) else { return }
+        toggleStep(block)
+    }
+
     func toggleStep(_ block: ChatBlock) {
         if expandedSteps.contains(block.id) { expandedSteps.remove(block.id) } else { expandedSteps.insert(block.id) }
         expandedVersion += 1
@@ -600,6 +607,24 @@ final class ChatContainer: NSView {
                          "firstResponder": composer.firstResponderDescription],
             "popup": popupInfo,
             "pending": pending.count,
+            // As linhas montadas, para conferir de fora o que está aberto.
+            "blocks": thread.blocks.map { block -> [String: Any] in
+                var kind = "prose"
+                var expanded = true
+                switch block.kind {
+                case .prompt:  kind = "prompt"
+                case .header:  kind = "header"
+                case .prose:   kind = "prose"
+                case .code:    kind = "code"
+                case .status:  kind = "status"
+                case .typing:  kind = "typing"
+                case .diff:    kind = "diff"
+                case .step(_, let step, let open):
+                    kind = "step"
+                    expanded = open || !step.isExpandable
+                }
+                return ["id": block.id, "kind": kind, "expanded": expanded]
+            },
             "messages": messages.map { message -> [String: Any] in
                 let quote = message.quote.map { ["author": $0.authorId ?? "você", "text": $0.text] }
                 switch message {
