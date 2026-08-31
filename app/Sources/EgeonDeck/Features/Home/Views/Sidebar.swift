@@ -327,7 +327,7 @@ final class SidebarGroupRow: NSView {
     /// Quantos itens moram aqui — projetos no workspace, bancadas no projeto.
     /// A pastilha monta no canto do ícone, como um selo: ao lado do nome ela
     /// comia o título, que é o que se lê para achar a coisa.
-    private let countLabel = NSTextField(labelWithString: "")
+    private let countLabel = CountSeal()
     /// Criar bancada direto do projeto, sem passar pelo botão direito.
     private var addButton: ToolbarButton?
     private var lastBadge = ""
@@ -435,19 +435,7 @@ final class SidebarGroupRow: NSView {
         statusLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         statusLabel.alignment = .right
         addSubview(statusLabel)
-        countLabel.font = .monospacedDigitSystemFont(ofSize: 9.5, weight: .bold)
-        countLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.7)
-        countLabel.alignment = .center
-        countLabel.wantsLayer = true
-        // Selo opaco com anel escuro: ele monta em cima do ícone, e sem o anel
-        // o número se mistura ao desenho embaixo.
-        countLabel.layer?.backgroundColor = NSColor(srgbRed: 0.16, green: 0.18, blue: 0.22,
-                                                    alpha: 1).cgColor
-        countLabel.layer?.borderWidth = 1.5
-        countLabel.layer?.borderColor = NSColor(srgbRed: 0.09, green: 0.10, blue: 0.13,
-                                                alpha: 1).cgColor
-        countLabel.layer?.cornerRadius = 7.5
-        countLabel.stringValue = count == 0 ? "" : "\(count)"
+        countLabel.value = count
         countLabel.isHidden = count == 0
         addSubview(countLabel)
         if let addButton { addSubview(addButton) }
@@ -500,12 +488,10 @@ final class SidebarGroupRow: NSView {
         // O selo monta no canto do ícone; o título fica com a linha inteira.
         if !countLabel.isHidden {
             let anchor = badge?.frame ?? icon.frame
-            let font = countLabel.font ?? .systemFont(ofSize: 9.5)
-            let text = ceil(NSAttributedString(string: countLabel.stringValue,
-                                               attributes: [.font: font]).size().width)
-            let side = max(15, text + 9)
-            countLabel.frame = NSRect(x: anchor.maxX - side + 6, y: anchor.maxY - 9,
-                                      width: side, height: 15)
+            let size = countLabel.size
+            countLabel.frame = NSRect(x: anchor.maxX - size.width + 6,
+                                      y: anchor.maxY - size.height + 6,
+                                      width: size.width, height: size.height)
         }
         let available = max(0, right - x - 4)
         nameLabel.frame = NSRect(x: x, y: 7, width: available, height: 17)
@@ -1230,5 +1216,65 @@ extension Sidebar {
             }
             return frame
         }
+    }
+}
+
+// MARK: - Selo de contagem
+
+/// O número de itens de um nível, montado no canto do ícone.
+///
+/// View desenhada, e não `NSTextField` com fundo: o rótulo centra o texto na
+/// caixa dele, que não é a caixa do glifo — o dígito ficava visivelmente fora
+/// do centro do círculo. Aqui o número é centrado pela **altura da caixa alta**
+/// (`capHeight`), que é o que o olho lê como centro num círculo pequeno.
+final class CountSeal: NSView {
+    var value = 0 {
+        didSet {
+            guard value != oldValue else { return }
+            needsDisplay = true
+            needsLayout = true
+        }
+    }
+
+    private static let font = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .bold)
+    private static let fill = NSColor(srgbRed: 0.16, green: 0.18, blue: 0.22, alpha: 1)
+    private static let ring = NSColor(srgbRed: 0.09, green: 0.10, blue: 0.13, alpha: 1)
+    private static let ink = NSColor(calibratedWhite: 1, alpha: 0.78)
+    private static let minSide: CGFloat = 16
+
+    override var isFlipped: Bool { true }
+
+    private var text: NSAttributedString {
+        NSAttributedString(string: "\(value)", attributes: [.font: Self.font,
+                                                            .foregroundColor: Self.ink])
+    }
+
+    /// Redondo enquanto couber; vira cápsula quando o número é largo.
+    var size: NSSize {
+        let width = ceil(text.size().width) + 10
+        return NSSize(width: max(Self.minSide, width), height: Self.minSide)
+    }
+
+    override var intrinsicContentSize: NSSize { size }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: 0.75, dy: 0.75)
+        let radius = rect.height / 2
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        Self.fill.setFill()
+        path.fill()
+        Self.ring.setStroke()
+        path.lineWidth = 1.5
+        path.stroke()
+
+        let string = text
+        let measured = string.size()
+        // Centro ótico: o glifo do dígito ocupa do baseline ao `capHeight`, e é
+        // esse bloco que precisa ficar no meio — não a linha inteira, que traz
+        // ascender e descender vazios junto.
+        let baseline = (bounds.height + Self.font.capHeight) / 2
+        let origin = NSPoint(x: (bounds.width - measured.width) / 2,
+                             y: baseline - Self.font.ascender)
+        string.draw(at: origin)
     }
 }

@@ -28,6 +28,40 @@ final class SidebarDropTests: XCTestCase {
         return (bar, spaces, benches)
     }
 
+    /// O dígito fica no meio do selo — medido no pixel, que é onde o olho
+    /// reclamou: o rótulo antes centrava a caixa do texto, não o glifo.
+    func testCountSealCentersTheDigit() throws {
+        for value in [1, 5, 12] {
+            let seal = CountSeal()
+            seal.value = value
+            seal.frame = NSRect(origin: .zero, size: seal.size)
+            let rep = try XCTUnwrap(seal.bitmapImageRepForCachingDisplay(in: seal.bounds))
+            seal.cacheDisplay(in: seal.bounds, to: rep)
+
+            // As linhas de pixel onde o dígito (claro) aparece, ignorando o
+            // anel escuro e o fundo do selo.
+            let scale = CGFloat(rep.pixelsHigh) / seal.bounds.height
+            var rows: [Int] = []
+            var columns: [Int] = []
+            for y in 0..<rep.pixelsHigh {
+                for x in 0..<rep.pixelsWide {
+                    guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5,
+                          color.brightnessComponent > 0.55 else { continue }
+                    rows.append(y)
+                    columns.append(x)
+                }
+            }
+            let top = try XCTUnwrap(rows.min()), bottom = try XCTUnwrap(rows.max())
+            let left = try XCTUnwrap(columns.min()), right = try XCTUnwrap(columns.max())
+            let centerY = CGFloat(top + bottom) / 2 / scale
+            let centerX = CGFloat(left + right) / 2 / scale
+            XCTAssertEqual(centerY, seal.bounds.midY, accuracy: 1,
+                           "\(value): o dígito não está no meio na vertical")
+            XCTAssertEqual(centerX, seal.bounds.midX, accuracy: 1,
+                           "\(value): nem na horizontal")
+        }
+    }
+
     func testWorkbenchDropsIntoTheProjectUnderTheCursor() throws {
         let (bar, _, _) = sidebar()
         let tiles = bar.cards.flatMap { $0.projects }
