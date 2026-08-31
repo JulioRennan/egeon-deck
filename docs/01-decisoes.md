@@ -3123,3 +3123,31 @@ faz a mesma operação de fora — arrastar não é dirigível sem Acessibilidad
 (ADR-003) — e devolve a árvore resultante. `WorkspaceMoveTests` cobre as
 listas e o mapa; `SidebarDropTests`, a conta do alvo com a barra montada e o
 laço do arrasto de ponta a ponta.
+
+## ADR-052 — A gaveta do workspace: projeto guardado sai da frente
+
+Cinco repositórios num workspace, quatro deles parados, e a barra inteira
+ocupada por pastas que ninguém vai abrir hoje. Cada workspace ganha uma
+**gaveta**: os projetos em uso ficam em cima, os guardados descem para dentro
+dela, atrás de uma tampa que diz quantos são.
+
+**Guardar é escolha sua, não dedução por tempo.** A primeira ideia era marcar
+como inativo o projeto sem bancada usada nas últimas 48h; ela cai por não ser
+verdade — projeto parado há meses pode ser o que você abre amanhã, e a barra
+mudaria sozinha de manhã. Guarda-se **arrastando** para dentro da gaveta (ou
+pelo menu do projeto, que é o caminho que se acha sem adivinhar), e tira-se do
+mesmo jeito. Fica em `ProjectConfig.stored`, no `workspaces.json`, como o
+`collapsed` já ficava.
+
+**A gaveta aparece sempre, mesmo vazia** ("gaveta vazia"): é o alvo para onde
+se arrasta o primeiro projeto, e sem ela guardar não teria onde começar. Vazia
+ela não abre nem mostra chevron — só recebe. Guardar pelo menu abre a gaveta
+junto, senão o projeto sumiria sem explicação.
+
+A lista `projects` continua **uma só**, na ordem em que você a deixou; os dois
+lados são um filtro (`activeProjects` / `storedProjects`), e a posição de
+queda é contada dentro do lado — `WorkspaceMove.project` recebe o lado de
+destino e resolve o índice na lista única.
+
+**Verificação:** `GET /move?kind=store|unstore&id=<projeto>&parent=<workspace>`
+e `kind=drawer&id=<workspace>` fazem o mesmo de fora.

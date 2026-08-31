@@ -14,9 +14,16 @@ final class SidebarDropTests: XCTestCase {
         WorkbenchConfig(name: name, path: "~/x", nodes: [], project: project)
     }
 
+    private func stored(_ id: String) -> ProjectConfig {
+        ProjectConfig(id: id, name: id, path: "~/\(id)", stored: true)
+    }
+
     /// Dois workspaces, o primeiro com dois projetos e três bancadas.
-    private func sidebar() -> (Sidebar, [WorkspaceConfig], [WorkbenchConfig]) {
-        let spaces = [WorkspaceConfig(id: "w1", name: "Um", projects: [project("p1"), project("p2")]),
+    private func sidebar(drawer: [ProjectConfig] = [],
+                         open: Bool = false) -> (Sidebar, [WorkspaceConfig], [WorkbenchConfig]) {
+        let spaces = [WorkspaceConfig(id: "w1", name: "Um",
+                                      projects: [project("p1"), project("p2")] + drawer,
+                                      storedOpen: open ? true : nil),
                       WorkspaceConfig(id: "w2", name: "Dois", projects: [project("p3")])]
         let benches = [bench("um", "p1"), bench("dois", "p1"), bench("três", "p2")]
         let bar = Sidebar(workspaces: spaces, configs: benches)
@@ -129,6 +136,48 @@ final class SidebarDropTests: XCTestCase {
         XCTAssertNil(bar.dropLine.superview)
     }
 
+    /// A gaveta: soltar abaixo da tampa guarda o projeto; acima dela, tira.
+    func testDroppingBelowTheDrawerStoresTheProject() throws {
+        let (bar, _, _) = sidebar(drawer: [stored("p9")], open: true)
+        let card = bar.cards[0]
+        let drawer = card.drawer
+        XCTAssertEqual(card.projects.count, 2, "em uso continuam em cima")
+        XCTAssertEqual(card.stored.count, 1)
+
+        // Logo abaixo da tampa entra na frente do que já está guardado; mais
+        // abaixo do primeiro, atrás dele.
+        let below = NSPoint(x: drawer.frame.midX, y: drawer.frame.maxY + 4)
+        XCTAssertEqual(bar.drop(for: .project(workspaceID: "w1", id: "p1"), at: below),
+                       .project(workspaceID: "w1", position: 0, stored: true))
+        let deeper = NSPoint(x: drawer.frame.midX, y: card.stored[0].tile.frame.maxY - 2)
+        XCTAssertEqual(bar.drop(for: .project(workspaceID: "w1", id: "p1"), at: deeper),
+                       .project(workspaceID: "w1", position: 1, stored: true))
+
+        let above = NSPoint(x: drawer.frame.midX, y: card.projects[0].tile.frame.minY + 2)
+        XCTAssertEqual(bar.drop(for: .project(workspaceID: "w1", id: "p9"), at: above),
+                       .project(workspaceID: "w1", position: 0, stored: false))
+
+        // A gaveta existe mesmo sem nada dentro: é o alvo do primeiro projeto
+        // que se guarda.
+        let (empty, _, _) = sidebar()
+        let lidOfEmpty = empty.cards[0].drawer
+        XCTAssertFalse(lidOfEmpty.isHidden)
+        XCTAssertTrue(empty.cards[0].stored.isEmpty)
+        XCTAssertEqual(empty.drop(for: .project(workspaceID: "w1", id: "p1"),
+                                  at: NSPoint(x: lidOfEmpty.frame.midX,
+                                              y: lidOfEmpty.frame.maxY - 2)),
+                       .project(workspaceID: "w1", position: 0, stored: true))
+
+        // Gaveta fechada: os guardados somem do layout, e soltar na tampa
+        // continua guardando.
+        let (shut, _, _) = sidebar(drawer: [stored("p9")], open: false)
+        let lid = shut.cards[0].drawer
+        XCTAssertTrue(shut.cards[0].stored.allSatisfy { $0.tile.isHidden })
+        XCTAssertEqual(shut.drop(for: .project(workspaceID: "w1", id: "p1"),
+                                 at: NSPoint(x: lid.frame.midX, y: lid.frame.maxY - 2)),
+                       .project(workspaceID: "w1", position: 0, stored: true))
+    }
+
     func testProjectAndWorkspaceTargets() throws {
         let (bar, _, _) = sidebar()
         let w1 = bar.cards[0], w2 = bar.cards[1]
@@ -138,14 +187,14 @@ final class SidebarDropTests: XCTestCase {
         let p3 = w2.projects[0].tile.frame
         XCTAssertEqual(bar.drop(for: .project(workspaceID: "w1", id: "p1"),
                                 at: NSPoint(x: p3.midX, y: p3.maxY - 2)),
-                       .project(workspaceID: "w2", position: 1))
+                       .project(workspaceID: "w2", position: 1, stored: false))
         XCTAssertEqual(bar.drop(for: .project(workspaceID: "w1", id: "p1"),
                                 at: NSPoint(x: p3.midX, y: p3.minY + 2)),
-                       .project(workspaceID: "w2", position: 0))
+                       .project(workspaceID: "w2", position: 0, stored: false))
         // Sobre o topo do próprio workspace, vai para a primeira posição.
         XCTAssertEqual(bar.drop(for: .project(workspaceID: "w1", id: "p2"),
                                 at: NSPoint(x: w1.card.frame.midX, y: w1.projects[0].tile.frame.minY + 2)),
-                       .project(workspaceID: "w1", position: 0))
+                       .project(workspaceID: "w1", position: 0, stored: false))
 
         // Workspace: pela metade do card de baixo, troca de lugar com ele.
         XCTAssertEqual(bar.drop(for: .workspace(id: "w1"),

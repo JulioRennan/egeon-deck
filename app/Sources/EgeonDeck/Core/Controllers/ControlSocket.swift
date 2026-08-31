@@ -340,7 +340,8 @@ final class ControlSocket {
                     json: payload)
 
         case ("GET", _, _) where route.contains("/move"):
-            // /move?kind=workspace|project|workbench&id=<id>&to=<n>[&parent=<id>]
+            // /move?kind=workspace|project|workbench|store|unstore|drawer
+            //      &id=<id>&to=<n>[&parent=<id>]
             // — reposiciona na árvore. Arrastar não é dirigível de fora sem
             // Acessibilidade (ADR-003), e esta é a mesma operação.
             let query = Self.query(in: route)

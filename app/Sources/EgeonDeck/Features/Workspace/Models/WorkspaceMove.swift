@@ -24,17 +24,33 @@ enum WorkspaceMove {
     }
 
     /// Projeto para um workspace (o mesmo ou outro), na posição `position`
-    /// dentro dele. Mudar de workspace não toca nas bancadas: elas seguem o
-    /// projeto pelo `project` que já guardam.
+    /// **dentro do lado dele** — em uso ou guardado (ADR-052). `stored` nil
+    /// mantém o lado em que ele estava. Mudar de workspace não toca nas
+    /// bancadas: elas seguem o projeto pelo `project` que já guardam.
     static func project(_ id: String, toWorkspace target: String, at position: Int,
-                        in spaces: [WorkspaceConfig]) -> [WorkspaceConfig]? {
+                        stored: Bool? = nil, in spaces: [WorkspaceConfig]) -> [WorkspaceConfig]? {
         guard let source = spaces.firstIndex(where: { $0.project(withID: id) != nil }),
               let destination = spaces.firstIndex(where: { $0.id == target }),
               let from = spaces[source].projects.firstIndex(where: { $0.id == id })
         else { return nil }
         var out = spaces
-        let moved = out[source].projects.remove(at: from)
-        out[destination].projects.insert(moved, at: clamp(position, out[destination].projects.count))
+        var moved = out[source].projects.remove(at: from)
+        if let stored { moved.stored = stored ? true : nil }
+
+        // A posição é a do lado; a lista é uma só. O lugar sai dos vizinhos do
+        // mesmo lado: sem nenhum, guardado vai para o fim e em uso para antes
+        // do primeiro guardado.
+        let list = out[destination].projects
+        let siblings = list.indices.filter { list[$0].isStored == moved.isStored }
+        let landing: Int
+        if siblings.isEmpty {
+            landing = moved.isStored ? list.count : (list.firstIndex { $0.isStored } ?? list.count)
+        } else if position >= siblings.count {
+            landing = siblings[siblings.count - 1] + 1
+        } else {
+            landing = siblings[max(0, position)]
+        }
+        out[destination].projects.insert(moved, at: clamp(landing, list.count))
         return out == spaces ? nil : out
     }
 

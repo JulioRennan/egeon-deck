@@ -60,6 +60,30 @@ final class WorkspaceMoveTests: XCTestCase {
         XCTAssertEqual(empty.list.last?.project, "p9")
     }
 
+    /// Guardar é escolha, não dedução: o projeto muda de lado da gaveta e a
+    /// posição passa a ser contada entre os do lado novo (ADR-052).
+    func testProjectGoesInAndOutOfTheDrawer() throws {
+        let spaces = [WorkspaceConfig(id: "a", name: "a", projects: [
+            project("p1"), project("p2"), ProjectConfig(id: "p3", name: "p3", path: "~/p3", stored: true)])]
+
+        let stored = try XCTUnwrap(WorkspaceMove.project("p1", toWorkspace: "a", at: 0,
+                                                         stored: true, in: spaces))
+        XCTAssertEqual(stored[0].activeProjects.map(\.id), ["p2"])
+        XCTAssertEqual(stored[0].storedProjects.map(\.id), ["p1", "p3"])
+
+        // De volta ao uso, no fim do lado de cima — e antes do primeiro guardado.
+        let back = try XCTUnwrap(WorkspaceMove.project("p3", toWorkspace: "a", at: 9,
+                                                       stored: false, in: spaces))
+        XCTAssertEqual(back[0].activeProjects.map(\.id), ["p1", "p2", "p3"])
+        XCTAssertTrue(back[0].storedProjects.isEmpty)
+        XCTAssertEqual(back[0].projects.map(\.id), ["p1", "p2", "p3"], "guardado sai de baixo da lista")
+
+        // Sem dizer o lado, ele fica onde estava.
+        let same = try XCTUnwrap(WorkspaceMove.project("p1", toWorkspace: "a", at: 1, in: spaces))
+        XCTAssertEqual(same[0].activeProjects.map(\.id), ["p2", "p1"])
+        XCTAssertEqual(same[0].storedProjects.map(\.id), ["p3"])
+    }
+
     /// O mapa é o que salva os terminais na tela: cada índice antigo tem de
     /// achar a sua bancada na lista nova.
     func testMapPointsEveryMovedIndexToItsNewHome() throws {

@@ -379,6 +379,9 @@ final class SidebarGroupRow: NSView {
         setup()
     }
 
+    /// Projeto guardado: o menu oferece o caminho de volta, e vice-versa.
+    private var isStoredProject = false
+
     init(workspaceID: String, project: ProjectConfig, workbenches: Int) {
         item = .project(workspaceID: workspaceID, id: project.id)
         badge = nil
@@ -394,8 +397,10 @@ final class SidebarGroupRow: NSView {
             ? NSColor(calibratedWhite: 1, alpha: 0.42)
             : NSColor.systemRed.withAlphaComponent(0.85)
         count = workbenches
-        icon.image = ToolbarButton.symbol(["folder.fill", "folder"])
-        icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: 0.5)
+        isStoredProject = project.isStored
+        icon.image = ToolbarButton.symbol(project.isStored
+            ? ["archivebox.fill", "archivebox", "folder"] : ["folder.fill", "folder"])
+        icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: project.isStored ? 0.32 : 0.5)
         let add = ToolbarButton(symbols: ["plus"], tooltip: "Nova bancada neste projeto", size: 20)
         add.onClick = { [weak self] in self?.showCreateMenu() }
         addButton = add
@@ -571,6 +576,9 @@ final class SidebarGroupRow: NSView {
             menu.addItem(withTitle: "Nova bancada em worktree…",
                          action: #selector(createWorkbenchFromWorktree), keyEquivalent: "")
             menu.addItem(.separator())
+            menu.addItem(withTitle: isStoredProject ? "Tirar da gaveta" : "Guardar na gaveta",
+                         action: #selector(toggleStored), keyEquivalent: "")
+            menu.addItem(.separator())
             menu.addItem(withTitle: "Tirar projeto do workspace…", action: #selector(removeProject),
                          keyEquivalent: "")
         case .workbench, .orphans:
@@ -592,6 +600,15 @@ final class SidebarGroupRow: NSView {
     @objc private func createWorkbenchFromWorktree() {
         if case .project(_, let id) = item { onCreateWorkbenchFromWorktree?(id) }
     }
+    /// Guardar e desguardar pelo menu — o arrasto faz o mesmo, mas menu é o
+    /// que se acha sem adivinhar.
+    var onToggleStored: ((_ workspaceID: String, _ projectID: String, _ stored: Bool) -> Void)?
+
+    @objc private func toggleStored() {
+        guard case .project(let workspaceID, let id) = item else { return }
+        onToggleStored?(workspaceID, id, !isStoredProject)
+    }
+
     @objc private func removeProject() {
         if case .project(let ws, let id) = item { onRemoveProject?(ws, id) }
     }
@@ -670,8 +687,14 @@ final class Sidebar: NSView {
     struct WorkspaceCard {
         let card: SidebarCard
         let header: SidebarGroupRow
+        /// Os projetos em uso; os guardados ficam na gaveta.
         let projects: [ProjectTile]
+        let drawer: DrawerRow
+        let stored: [ProjectTile]
         let workspaceID: String
+
+        /// Tudo que a queda pode acertar, dos dois lados da gaveta.
+        var allProjects: [ProjectTile] { projects + stored }
     }
     var cards: [WorkspaceCard] = []
     private var orphanTile: ProjectTile?
@@ -708,10 +731,15 @@ final class Sidebar: NSView {
     var onEditWorkspace: ((_ workspaceID: String) -> Void)?
     var onRemoveWorkspace: ((_ workspaceID: String) -> Void)?
     var onRemoveProject: ((_ workspaceID: String, _ projectID: String) -> Void)?
+    /// Guardar o projeto na gaveta do workspace, ou tirá-lo de lá (ADR-052).
+    var onToggleStored: ((_ workspaceID: String, _ projectID: String, _ stored: Bool) -> Void)?
+    /// Abrir ou fechar a gaveta de um workspace.
+    var onToggleDrawer: ((_ workspaceID: String) -> Void)?
     var onToggleGroup: ((SidebarItem) -> Void)?
     /// Reposicionar arrastando (ADR-051): item, pai de destino e posição.
     var onMoveWorkspace: ((_ id: String, _ position: Int) -> Void)?
-    var onMoveProject: ((_ id: String, _ workspaceID: String, _ position: Int) -> Void)?
+    var onMoveProject: ((_ id: String, _ workspaceID: String, _ position: Int,
+                         _ stored: Bool) -> Void)?
     var onMoveWorkbench: ((_ index: Int, _ projectID: String, _ position: Int) -> Void)?
     var onRename: ((Int) -> Void)?
     var onDuplicateAsWorktree: ((Int) -> Void)?
@@ -796,8 +824,7 @@ final class Sidebar: NSView {
             wire(header)
             groups.append(header)
             list.addSubview(header)
-            var tiles: [ProjectTile] = []
-            for project in space.projects {
+            func tile(for project: ProjectConfig) -> ProjectTile {
                 let tile = SidebarCard(radius: 9, fill: 0.04, stroke: 0.06)
                 list.addSubview(tile)
                 let members = tree.indices(inProject: project.id)
@@ -810,10 +837,23 @@ final class Sidebar: NSView {
                 list.addSubview(line)
                 let rowsOfProject = members.map(row)
                 rowsOfProject.forEach { list.addSubview($0) }
-                tiles.append(ProjectTile(tile: tile, header: head, divider: line,
-                                         rows: rowsOfProject, projectID: project.id))
+                return ProjectTile(tile: tile, header: head, divider: line,
+                                   rows: rowsOfProject, projectID: project.id)
             }
-            cards.append(WorkspaceCard(card: card, header: header, projects: tiles,
+
+            let active = space.activeProjects.map(tile)
+            let stored = space.storedProjects
+            // A gaveta aparece SEMPRE, mesmo vazia: é o alvo para onde se
+            // arrasta o primeiro projeto, e sem ela guardar não teria onde
+            // começar.
+            let drawer = DrawerRow(count: stored.count, open: space.isStoredOpen)
+            drawer.onClick = { [weak self] in self?.onToggleDrawer?(space.id) }
+            list.addSubview(drawer)
+            // Os tiles guardados nascem montados mesmo com a gaveta fechada: é
+            // o layout que os esconde, e assim abrir não remonta a barra.
+            let storedTiles = stored.map(tile)
+            cards.append(WorkspaceCard(card: card, header: header, projects: active,
+                                       drawer: drawer, stored: storedTiles,
                                        workspaceID: space.id))
         }
 
@@ -854,6 +894,7 @@ final class Sidebar: NSView {
         group.onEditWorkspace = { [weak self] in self?.onEditWorkspace?($0) }
         group.onRemoveWorkspace = { [weak self] in self?.onRemoveWorkspace?($0) }
         group.onRemoveProject = { [weak self] in self?.onRemoveProject?($0, $1) }
+        group.onToggleStored = { [weak self] in self?.onToggleStored?($0, $1, $2) }
     }
 
     override func layout() {
@@ -879,6 +920,13 @@ final class Sidebar: NSView {
         let inset = Self.cardInset
         let outer: CGFloat = 8
         var y: CGFloat = 2
+
+        func hide(_ tile: ProjectTile) {
+            tile.tile.isHidden = true
+            tile.header.isHidden = true
+            tile.divider.isHidden = true
+            tile.rows.forEach { $0.isHidden = true }
+        }
 
         func layoutTile(_ tile: ProjectTile, x: CGFloat, width: CGFloat, y: inout CGFloat,
                         expanded: Bool) {
@@ -913,11 +961,8 @@ final class Sidebar: NSView {
             card.header.frame = NSRect(x: outer, y: y, width: width, height: Self.rowHeight)
             y += Self.rowHeight
             if card.header.isCollapsed {
-                for tile in card.projects {
-                    tile.tile.isHidden = true
-                    tile.header.isHidden = true
-                    tile.rows.forEach { $0.isHidden = true }
-                }
+                card.drawer.isHidden = true
+                for tile in card.allProjects { hide(tile) }
             } else {
                 for tile in card.projects {
                     layoutTile(tile, x: outer + inset, width: width - inset * 2, y: &y,
@@ -925,6 +970,23 @@ final class Sidebar: NSView {
                     y += Self.cardGap - 2
                 }
                 if !card.projects.isEmpty { y += inset - (Self.cardGap - 2) }
+                let drawer = card.drawer
+                drawer.isHidden = false
+                drawer.frame = NSRect(x: outer + inset, y: y, width: width - inset * 2,
+                                      height: DrawerRow.height)
+                y += DrawerRow.height
+                if drawer.isOpen, !card.stored.isEmpty {
+                    y += 2
+                    for tile in card.stored {
+                        layoutTile(tile, x: outer + inset, width: width - inset * 2, y: &y,
+                                   expanded: !tile.header.isCollapsed)
+                        y += Self.cardGap - 2
+                    }
+                    y += inset - (Self.cardGap - 2)
+                } else {
+                    for tile in card.stored { hide(tile) }
+                    y += inset
+                }
             }
             card.card.frame = NSRect(x: outer, y: top, width: width, height: y - top)
             y += Self.cardGap
@@ -957,9 +1019,10 @@ final class Sidebar: NSView {
         }
         for card in cards {
             card.card.isHidden = true
+            card.drawer.isHidden = true
             card.header.frame = NSRect(x: 2, y: y, width: width, height: Self.rowHeight)
             y += Self.rowHeight
-            rail(card.projects, collapsed: card.header.isCollapsed)
+            rail(card.allProjects, collapsed: card.header.isCollapsed)
             y += 6
         }
         if let orphanTile { rail([orphanTile], collapsed: false) }
@@ -1067,7 +1130,8 @@ extension Sidebar {
     /// Onde uma linha arrastada cai: sempre "dentro de um pai, nesta posição".
     enum Drop: Equatable {
         case workspace(position: Int)
-        case project(workspaceID: String, position: Int)
+        /// `stored` diz de que lado da gaveta o projeto cai (ADR-052).
+        case project(workspaceID: String, position: Int, stored: Bool)
         case workbench(projectID: String, position: Int)
     }
 
@@ -1087,12 +1151,16 @@ extension Sidebar {
             return .workbench(projectID: tile.projectID, position: position)
         case .project(_, let id):
             guard let card = cardHit(point) else { return nil }
-            let tiles = card.card.projects.filter { !$0.tile.isHidden }
+            // Abaixo da tampa da gaveta é dentro dela — é assim que se guarda
+            // um projeto: arrastando para lá.
+            let stored = point.y > card.card.drawer.frame.midY
+            let side = stored ? card.card.stored : card.card.projects
+            let tiles = side.filter { !$0.tile.isHidden }
             var position = tiles.filter { point.y > $0.tile.frame.midY }.count
             if let mine = tiles.firstIndex(where: { $0.projectID == id }), position > mine {
                 position -= 1
             }
-            return .project(workspaceID: card.workspaceID, position: position)
+            return .project(workspaceID: card.workspaceID, position: position, stored: stored)
         case .workspace(let id):
             let visible = cards.filter { !$0.card.isHidden }
             var position = visible.filter { point.y > $0.card.frame.midY }.count
@@ -1107,7 +1175,7 @@ extension Sidebar {
 
     private func tileHit(_ point: NSPoint) -> (projectID: String, tile: ProjectTile)? {
         for card in cards where !card.card.isHidden {
-            for tile in card.projects where !tile.tile.isHidden {
+            for tile in card.allProjects where !tile.tile.isHidden {
                 if tile.tile.frame.insetBy(dx: 0, dy: -Self.cardGap / 2).contains(point),
                    let id = tile.projectID {
                     return (id, tile)
@@ -1149,8 +1217,8 @@ extension Sidebar {
             switch (drag.item, target) {
             case (.workspace(let id), .workspace(let position)):
                 onMoveWorkspace?(id, position)
-            case (.project(_, let id), .project(let workspaceID, let position)):
-                onMoveProject?(id, workspaceID, position)
+            case (.project(_, let id), .project(let workspaceID, let position, let stored)):
+                onMoveProject?(id, workspaceID, position, stored)
             case (.workbench(let index), .workbench(let projectID, let position)):
                 onMoveWorkbench?(index, projectID, position)
             default:
@@ -1166,7 +1234,7 @@ extension Sidebar {
             return cards.flatMap { $0.projects }.flatMap { $0.rows }.first { $0.index == index }
         case .project(let workspaceID, let id):
             return cards.first { $0.workspaceID == workspaceID }?
-                .projects.first { $0.projectID == id }?.header
+                .allProjects.first { $0.projectID == id }?.header
         case .workspace(let id):
             return cards.first { $0.workspaceID == id }?.header
         case .orphans:
@@ -1197,11 +1265,17 @@ extension Sidebar {
         case .workspace(let position):
             let frames = cards.filter { !$0.card.isHidden }.map { $0.card.frame }
             return between(frames, position, x: 8, width: bounds.width - 16)
-        case .project(let workspaceID, let position):
+        case .project(let workspaceID, let position, let stored):
             guard let card = cards.first(where: { $0.workspaceID == workspaceID }) else { return nil }
-            let tiles = card.projects.filter { !$0.tile.isHidden }.map { $0.tile.frame }
-            return between(tiles, position, x: card.card.frame.minX + Self.cardInset,
-                           width: card.card.frame.width - Self.cardInset * 2)
+            let side = stored ? card.stored : card.projects
+            let tiles = side.filter { !$0.tile.isHidden }.map { $0.tile.frame }
+            let x = card.card.frame.minX + Self.cardInset
+            let width = card.card.frame.width - Self.cardInset * 2
+            guard let frame = between(tiles, position, x: x, width: width) else {
+                // Gaveta fechada ou vazia: a guia encosta na tampa dela.
+                return NSRect(x: x, y: card.drawer.frame.maxY - 1, width: width, height: 2)
+            }
+            return frame
         case .workbench(let projectID, let position):
             guard let tile = cards.flatMap({ $0.projects }).first(where: { $0.projectID == projectID })
             else { return nil }
@@ -1276,5 +1350,62 @@ final class CountSeal: NSView {
         let origin = NSPoint(x: (bounds.width - measured.width) / 2,
                              y: baseline - Self.font.ascender)
         string.draw(at: origin)
+    }
+}
+
+// MARK: - A gaveta dos guardados
+
+/// A linha que abre e fecha os projetos guardados de um workspace (ADR-052).
+///
+/// Discreta de propósito: ela é a tampa de uma gaveta, não um projeto — quem
+/// tem cinco repositórios e trabalha em um não quer os outros quatro
+/// disputando atenção com o que está aberto.
+final class DrawerRow: NSView {
+    static let height: CGFloat = 26
+
+    private(set) var isOpen: Bool
+    private let count: Int
+    private let label = NSTextField(labelWithString: "")
+    private let chevron = NSImageView()
+    var onClick: (() -> Void)?
+
+    init(count: Int, open: Bool) {
+        self.count = count
+        self.isOpen = open
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        label.font = .systemFont(ofSize: 10.5, weight: .semibold)
+        label.textColor = NSColor(calibratedWhite: 1, alpha: 0.38)
+        switch count {
+        case 0:  label.stringValue = "gaveta vazia"
+        case 1:  label.stringValue = "1 guardado"
+        default: label.stringValue = "\(count) guardados"
+        }
+        addSubview(label)
+        chevron.image = ToolbarButton.symbol([open ? "chevron.down" : "chevron.right"])
+        chevron.contentTintColor = NSColor(calibratedWhite: 1, alpha: 0.3)
+        chevron.imageScaling = .scaleProportionallyDown
+        // Vazia não abre nada; ela fica ali como alvo de queda.
+        chevron.isHidden = count == 0
+        addSubview(chevron)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        guard count > 0 else { return }
+        onClick?()
+    }
+
+    override func resetCursorRects() { HandCursor.fill(self, when: count > 0) }
+
+    override func layout() {
+        super.layout()
+        chevron.frame = NSRect(x: 10, y: bounds.midY - 5, width: 10, height: 10)
+        let x: CGFloat = count == 0 ? 12 : 26
+        label.frame = NSRect(x: x, y: bounds.midY - 7, width: bounds.width - x - 10, height: 14)
     }
 }

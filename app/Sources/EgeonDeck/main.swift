@@ -134,9 +134,13 @@ ShellHook.install()
         sidebar.onMoveWorkspace = { [weak self] id, position in
             _ = self?.moveWorkspace(id, to: position)
         }
-        sidebar.onMoveProject = { [weak self] id, workspace, position in
-            _ = self?.moveProject(id, toWorkspace: workspace, at: position)
+        sidebar.onMoveProject = { [weak self] id, workspace, position, stored in
+            _ = self?.moveProject(id, toWorkspace: workspace, at: position, stored: stored)
         }
+        sidebar.onToggleStored = { [weak self] workspace, id, stored in
+            self?.storeProject(id, in: workspace, stored: stored)
+        }
+        sidebar.onToggleDrawer = { [weak self] id in self?.toggleDrawer(id) }
         sidebar.onMoveWorkbench = { [weak self] index, project, position in
             _ = self?.moveWorkbench(index, toProject: project, at: position)
         }
@@ -280,12 +284,19 @@ ShellHook.install()
             switch kind {
             case "workspace": ok = self.moveWorkspace(id, to: position)
             case "project":   ok = self.moveProject(id, toWorkspace: parent, at: position)
+            case "store", "unstore":
+                self.storeProject(id, in: parent, stored: kind == "store")
+                ok = true
+            case "drawer":
+                self.toggleDrawer(id)
+                ok = true
             case "workbench":
                 guard let index = self.configs.firstIndex(where: { $0.name == id || $0.id == id })
                 else { return ["ok": false, "error": "bancada desconhecida '\(id)'"] }
                 ok = self.moveWorkbench(index, toProject: parent, at: position)
             default:
-                return ["ok": false, "error": "kind é workspace, project ou workbench"]
+                return ["ok": false,
+                        "error": "kind é workspace, project, workbench, store, unstore ou drawer"]
             }
             return ["ok": ok, "tree": AppControl.workspacesSnapshot?() ?? [:]]
         }
@@ -1354,9 +1365,10 @@ ShellHook.install()
         return true
     }
 
-    func moveProject(_ id: String, toWorkspace target: String, at position: Int) -> Bool {
+    func moveProject(_ id: String, toWorkspace target: String, at position: Int,
+                     stored: Bool? = nil) -> Bool {
         guard let moved = WorkspaceMove.project(id, toWorkspace: target, at: position,
-                                                in: workspaces) else { return false }
+                                                stored: stored, in: workspaces) else { return false }
         workspaces = moved
         WorkspaceStore.save(workspaces)
         reloadSidebar()
@@ -1379,6 +1391,26 @@ ShellHook.install()
         reloadSidebar()
         schedulePersist()
         return true
+    }
+
+    /// Guardar o projeto na gaveta do workspace (ou tirá-lo de lá) pelo menu:
+    /// vai para o fim do lado de destino, que é onde a mão o deixaria.
+    private func storeProject(_ id: String, in workspace: String, stored: Bool) {
+        _ = moveProject(id, toWorkspace: workspace, at: Int.max, stored: stored)
+        // Guardar com a gaveta fechada faria o projeto sumir sem explicação.
+        if stored, let w = workspaces.firstIndex(where: { $0.id == workspace }),
+           !workspaces[w].isStoredOpen {
+            workspaces[w].storedOpen = true
+            WorkspaceStore.save(workspaces)
+            reloadSidebar()
+        }
+    }
+
+    private func toggleDrawer(_ workspace: String) {
+        guard let w = workspaces.firstIndex(where: { $0.id == workspace }) else { return }
+        workspaces[w].storedOpen = workspaces[w].isStoredOpen ? nil : true
+        WorkspaceStore.save(workspaces)
+        reloadSidebar()
     }
 
     private func markLiveWorkbenches() {
