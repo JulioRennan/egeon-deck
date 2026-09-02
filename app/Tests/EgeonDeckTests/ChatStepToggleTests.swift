@@ -144,27 +144,72 @@ final class ChatStepToggleTests: XCTestCase {
         XCTAssertEqual(container.thread.blocks.filter { $0.id.hasPrefix("b|") }.count, 1,
                        "no resumo só a prosa acompanha a capa")
 
+        func openSteps() -> [String] {
+            container.thread.blocks.compactMap {
+                if case .step(_, _, true) = $0.kind { return $0.id } else { return nil }
+            }
+        }
+
         container.toggleStep(try cover())
         settle { level() == .titles && container.thread.blocks.contains { $0.id == "b|u1|0" } }
         XCTAssertEqual(level(), .titles)
 
-        // Um passo aberto à mão dentro do grupo.
-        container.toggleStep(id: "b|u1|0")
-        settle { container.expandedSteps.contains("b|u1|0") }
-
+        // Sem nada aberto à mão, o clique aprofunda — e detalhar é abrir os
+        // passos de verdade, não sobrescrevê-los.
         container.toggleStep(try cover())
-        settle { container.thread.blocks.contains {
-            if case .step(_, _, let open) = $0.kind { return open } else { return false } } }
+        settle { openSteps().count == 2 }
         XCTAssertEqual(level(), .details)
-        XCTAssertTrue(container.thread.blocks.contains {
-            if case .step(_, _, let open) = $0.kind { return open } else { return false }
-        })
+        XCTAssertEqual(container.expandedSteps, ["b|u1|0", "b|u1|1"])
+
+        // E cada um continua seu: clicar num passo aberto pela capa o fecha.
+        container.toggleStep(id: "b|u1|0")
+        settle { openSteps() == ["b|u1|1"] }
+        XCTAssertEqual(openSteps(), ["b|u1|1"], "o passo aberto pela capa fecha no clique")
 
         container.toggleStep(try cover())
         settle { !container.thread.blocks.contains { $0.id == "b|u1|0" } }
         XCTAssertEqual(level(), .summary)
         XCTAssertEqual(container.expandedSteps, [], "fechar a capa limpa o que estava aberto dentro")
         XCTAssertFalse(container.thread.blocks.contains { $0.id == "b|u1|0" })
+    }
+
+    /// Abrir a capa, abrir um passo dentro dela e clicar na capa de novo: ela
+    /// FECHA. Aprofundar ali desfazia o que você tinha acabado de abrir e
+    /// deixava tudo aberto e sem resposta ao clique (ADR-053).
+    func testCoverClosesWhenAStepWasOpenedByHand() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("chat-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = ChatHistory(workbenches: root)
+        var turn = ChatTurn(id: "u1", prompt: "faz", promptAt: t0)
+        let steps = [ChatStep(glyph: "$", text: "um", detail: "a", output: "1"),
+                     ChatStep(glyph: "$", text: "dois", detail: "b", output: "2")]
+        turn.steps = steps
+        turn.parts = steps.map(ChatPart.step) + [.text("ok")]
+        turn.replyText = "ok"
+        turn.replyAt = t0.addingTimeInterval(2)
+        history.append(ChatRecord(node: "a", turn: turn), workbench: "w")
+        history.flush()
+
+        let container = ChatContainer(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
+        container.participants = { [self.front] }
+        container.historyFile = { history.current(forWorkbench: "w") }
+        container.needsLayout = true
+        container.layoutSubtreeIfNeeded()
+        container.refresh()
+        settle { container.thread.blocks.contains { $0.id == "g|u1|0" } }
+        func cover() throws -> ChatBlock {
+            try XCTUnwrap(container.thread.blocks.first { $0.id == "g|u1|0" })
+        }
+
+        container.toggleStep(try cover())
+        settle { container.thread.blocks.contains { $0.id == "b|u1|0" } }
+        container.toggleStep(id: "b|u1|0")
+        settle { container.expandedSteps.contains("b|u1|0") }
+
+        container.toggleStep(try cover())
+        settle { !container.thread.blocks.contains { $0.id == "b|u1|0" } }
+        XCTAssertEqual(container.groupLevels["g|u1|0"], .summary)
+        XCTAssertEqual(container.expandedSteps, [])
     }
 
     func testRowTogglesOnlyOnTheTitleStrip() throws {

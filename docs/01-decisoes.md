@@ -3151,3 +3151,31 @@ destino e resolve o índice na lista única.
 
 **Verificação:** `GET /move?kind=store|unstore&id=<projeto>&parent=<workspace>`
 e `kind=drawer&id=<workspace>` fazem o mesmo de fora.
+
+## ADR-053 — A capa fecha o que você abriu, e `details` não sobrescreve o passo
+
+A ADR-049 deu à capa um ciclo de três níveis, e a ADR-050 fez de cada passo
+dela uma sub-bolha clicável. As duas juntas tinham um buraco: abrir a capa,
+abrir uma sub e clicar na capa de novo **abria tudo** em vez de fechar — o
+terceiro clique era `titles → details`, e o `details` montava todo passo com
+`expanded: true` a despeito do que você tinha aberto. Dali em diante o clique
+numa sub-bolha não mudava nada (o bloco saía igual, a tabela não tinha o que
+recarregar) e a bolha parecia travada, com todos os passos abertos.
+
+Duas emendas, e o ciclo da ADR-049 fica de pé:
+
+1. **A capa nunca desfaz o que você abriu à mão.** `next` passa a receber
+   `opened` — se algum passo daquela capa está aberto, o clique vai para
+   `summary` (fecha), não para `details`. Sem nada aberto, aprofunda como
+   antes: `summary → titles → details → summary`.
+2. **`details` abre os passos, não os sobrescreve.** Entrar nele põe os ids
+   deles em `expandedSteps` (`formUnion`), e a montagem volta a olhar só o
+   `expanded`. Cada sub-bolha continua sua: a que a capa abriu fecha no
+   clique como qualquer outra.
+
+Quais passos são "da capa" continua saindo da montagem, não do id — as linhas
+de passo aninhadas (`depth > 0`) logo abaixo dela.
+
+**Verificação:** `ChatStepToggleTests.testCoverClosesWhenAStepWasOpenedByHand`
+e `testClickingTheGroupCoverCyclesTheLevels`, que agora fecha um passo aberto
+pela capa.

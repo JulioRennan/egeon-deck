@@ -98,15 +98,19 @@ final class ChatBlocksTests: XCTestCase {
             if case .step(_, _, let open) = $0.kind { return !open } else { return false }
         }, "no primeiro clique os passos ainda são só título")
 
-        // Outro clique: cada passo com comando e saída.
+        // Detalhar não é um estado que sobrescreve o passo: quem abre é o
+        // `expanded`, que o container preenche ao entrar em `details`.
         let details = ChatBlocks.build(messages: messages, live: [:], typing: [],
+                                       expanded: ["b|u1|0", "b|u1|1", "b|u1|2"],
                                        groups: ["g|u1|0": .details])
         XCTAssertTrue(details[2...4].allSatisfy {
             if case .step(_, _, let open) = $0.kind { return open } else { return false }
         })
-        XCTAssertEqual(ChatGroupLevel.summary.next, .titles)
-        XCTAssertEqual(ChatGroupLevel.titles.next, .details)
-        XCTAssertEqual(ChatGroupLevel.details.next, .summary, "o ciclo volta ao começo")
+        XCTAssertEqual(ChatGroupLevel.summary.next(opened: false), .titles)
+        XCTAssertEqual(ChatGroupLevel.titles.next(opened: false), .details)
+        XCTAssertEqual(ChatGroupLevel.titles.next(opened: true), .summary,
+                       "com passo aberto à mão, a capa fecha em vez de aprofundar")
+        XCTAssertEqual(ChatGroupLevel.details.next(opened: true), .summary, "o ciclo volta ao começo")
     }
 
     func testLiveTurnGetsStatusRowAndNoTime() {

@@ -31,7 +31,16 @@ enum ChatGroupLevel: Int, Equatable {
     /// Tudo aberto: cada passo com comando e saída.
     case details = 2
 
-    var next: ChatGroupLevel { ChatGroupLevel(rawValue: (rawValue + 1) % 3) ?? .summary }
+    /// Para onde o clique na capa leva. `opened` é "você já abriu algum passo
+    /// desta capa à mão": aí o clique FECHA, em vez de aprofundar — a capa
+    /// nunca desfaz o que você acabou de abrir (ADR-053).
+    func next(opened: Bool) -> ChatGroupLevel {
+        switch self {
+        case .summary: return .titles
+        case .titles:  return opened ? .summary : .details
+        case .details: return .summary
+        }
+    }
     var showsSteps: Bool { self != .summary }
 }
 
@@ -151,10 +160,14 @@ enum ChatBlocks {
                     add(.group(from: agent, count: run.count, last: run[run.count - 1].0.text,
                                level: level), id: groupId)
                     guard level.showsSteps else { return }
+                    // Quem manda no passo é sempre o `expanded`, mesmo em
+                    // `details`: o nível ABRE os passos (o container põe os
+                    // ids lá) e sai da frente, senão fechar um deles não
+                    // teria efeito nenhum (ADR-053).
                     for (step, id) in run {
                         add(.step(from: agent, step: step,
-                                  expanded: !step.isExpandable || level == .details
-                                      || expanded.contains(id)), id: id, depth: 1)
+                                  expanded: !step.isExpandable || expanded.contains(id)),
+                            id: id, depth: 1)
                     }
                 }
                 for part in turn.chain {

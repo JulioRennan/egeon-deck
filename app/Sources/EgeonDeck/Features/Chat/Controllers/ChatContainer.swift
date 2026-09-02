@@ -111,18 +111,31 @@ final class ChatContainer: NSView {
         toggleStep(block)
     }
 
+    /// Os passos de uma capa. Não sai do id — sai da montagem: são as linhas
+    /// de passo aninhadas logo abaixo dela.
+    private func steps(under cover: ChatBlock) -> [String] {
+        guard let start = thread.blocks.firstIndex(where: { $0.id == cover.id }) else { return [] }
+        var out: [String] = []
+        for below in thread.blocks[(start + 1)...] {
+            guard case .step = below.kind, below.depth > 0 else { break }
+            out.append(below.id)
+        }
+        return out
+    }
+
     func toggleStep(_ block: ChatBlock) {
         if case .group(_, _, _, let level) = block.kind {
-            let next = level.next
+            let inside = steps(under: block)
+            let next = level.next(opened: inside.contains { expandedSteps.contains($0) })
             groupLevels[block.id] = next
+            switch next {
             // Voltar ao resumo esquece o que você tinha aberto lá dentro: a
-            // capa fechada é o estado limpo. Quais são os passos dela não sai
-            // do id — sai da montagem: são as linhas de passo logo abaixo.
-            if next == .summary, let start = thread.blocks.firstIndex(where: { $0.id == block.id }) {
-                for below in thread.blocks[(start + 1)...] {
-                    guard case .step = below.kind else { break }
-                    expandedSteps.remove(below.id)
-                }
+            // capa fechada é o estado limpo.
+            case .summary: expandedSteps.subtract(inside)
+            // Detalhar é abrir todos de uma vez, e cada um continua seu: o
+            // clique num passo aberto assim o fecha como qualquer outro.
+            case .details: expandedSteps.formUnion(inside)
+            case .titles:  break
             }
         } else if expandedSteps.contains(block.id) {
             expandedSteps.remove(block.id)
