@@ -14,16 +14,18 @@ final class NodeTemplateTests: XCTestCase {
         let template = NodeTemplateStore.capture(from: node, name: "Revisor")
         XCTAssertEqual(template.kind, .agent)
         XCTAssertEqual(template.agent, "claude")
-        XCTAssertEqual(template.cmd, "claude --foo")
         XCTAssertEqual(template.cwd, "packages/api")
         XCTAssertEqual(template.prompt, "revise")
-        XCTAssertEqual(template.model, "opus")
+        // O que é do CLI mora no mapa dele desde a ADR-057.
+        XCTAssertEqual(template.resolved(for: "claude").cmd, "claude --foo")
+        XCTAssertEqual(template.resolved(for: "claude").model, "opus")
         // NodeTemplate nem tem campo de conversa — a montagem é tudo que existe.
     }
 
     func testInstantiateBuildsNodeWithoutConversation() {
         let template = NodeTemplate(name: "Revisor", kind: .agent, agent: "claude",
-                                    model: "sonnet", cwd: "src", prompt: "revise")
+                                    cwd: "src", prompt: "revise",
+                                    byAgent: ["claude": .init(model: "sonnet")])
         let node = NodeTemplateStore.instantiate(template, id: "revisor-2")
 
         XCTAssertEqual(node.type, .agent)

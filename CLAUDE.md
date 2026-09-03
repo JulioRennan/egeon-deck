@@ -124,7 +124,10 @@ app/Sources/EgeonDeck/
   para todos os agentes dela, somada à do nó. No system prompt as regras entram
   DEPOIS do papel — é o que faz a restrição valer sobre a diretriz geral.
   Editar reinicia o agente e retoma a conversa, como a troca de modelo.
-- Templates de bancada e de nó copiam valores na criação, nunca ficam atados.
+- Templates de bancada e de nó copiam valores na criação, nunca ficam atados. O
+  **componente de nó é cross-CLI** (ADR-057): `name`, `kind`, `cwd`, `prompt` e
+  `rules` valem em qualquer um; comando, config e modelo moram em `byAgent`, e
+  a regra de um CLI SUBSTITUI a geral.
 - Trilha da bancada: ao fim de cada turno o agente roda `egeon trace` (uma ou
   duas linhas); o app carimba quem/CLI/modelo/conversa e anexa em
   `~/.egeon*/workbenches/<id>/trace.md` — um arquivo por bancada, para

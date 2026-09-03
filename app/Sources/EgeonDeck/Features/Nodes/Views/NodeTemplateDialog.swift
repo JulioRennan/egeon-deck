@@ -57,6 +57,14 @@ final class NodeTemplateDialog {
                                    target: nil, action: nil)
     private let promptLabel = NSTextField(labelWithString: "PAPEL — quem este terminal é")
     private let rulesField = NSTextView()
+    /// Marcado, o texto das regras é só daquele CLI (`byAgent[cli].rules`) e
+    /// substitui o geral; desmarcado, é o geral (ADR-057).
+    private let rulesOnlyHere = HandButton(checkboxWithTitle: "só para este CLI",
+                                           target: nil, action: nil)
+    /// O componente que está sendo editado. Guardado inteiro porque o formulário
+    /// mostra um CLI por vez: sem ele, salvar com o Claude na tela apagaria o
+    /// que o OpenCode tem de próprio.
+    private var loaded: NodeTemplate?
     private let rulesLabel = NSTextField(
         labelWithString: "REGRAS — como se trabalha aqui (somam às da bancada)")
     private var rulesScroll: NSScrollView?
@@ -87,12 +95,14 @@ final class NodeTemplateDialog {
         if let agent = component.agent, let index = agentKeys.firstIndex(of: agent) {
             agentPicker.selectItem(at: index)
         }
-        reloadConfigPicker(select: component.config)
-        reloadModelPicker(select: component.model)
-        cmdField.stringValue = component.cmd ?? ""
+        let resolved = component.resolved(for: component.agent)
+        reloadConfigPicker(select: resolved.config)
+        reloadModelPicker(select: resolved.model)
+        cmdField.stringValue = resolved.cmd ?? ""
         cwdField.stringValue = component.cwd ?? ""
         promptField.string = component.prompt ?? ""
-        rulesField.string = component.rules ?? ""
+        rulesField.string = resolved.rules ?? ""
+        loaded = component
         updateAgentFields()
 
         // Escolher um preset não é o fim da tarefa: quase sempre você quer
@@ -125,16 +135,32 @@ final class NodeTemplateDialog {
         let prompt = promptField.string.trimmingCharacters(in: .whitespacesAndNewlines)
         let rules = rulesField.string.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // O componente é o papel; o que é do CLI vai para o mapa dele, e o dos
+        // OUTROS CLIs fica de pé — o formulário mostra um por vez (ADR-057).
+        let base = loaded ?? initial
+        var byAgent = base.byAgent ?? [:]
+        let onlyHere = rulesOnlyHere.state == .on
+        var generalRules = base.rules
+        if isAgent, let key = selectedAgentKey {
+            var over = byAgent[key] ?? NodeTemplate.Overrides()
+            over.cmd = cmd.isEmpty ? nil : cmd
+            over.config = selectedConfig
+            over.model = selectedModel
+            over.rules = (onlyHere && !rules.isEmpty) ? rules : nil
+            byAgent[key] = over.isEmpty ? nil : over
+            if !onlyHere { generalRules = rules.isEmpty ? nil : rules }
+        } else {
+            generalRules = rules.isEmpty ? nil : rules
+        }
+
         let component = NodeTemplate(
             name: name,
             kind: isAgent ? .agent : .shell,
             agent: isAgent ? selectedAgentKey : nil,
-            cmd: cmd.isEmpty ? nil : cmd,
-            config: isAgent ? selectedConfig : nil,
-            model: isAgent ? selectedModel : nil,
             cwd: cwd.isEmpty ? nil : Self.normalizedFolder(cwd),
             prompt: (isAgent && !prompt.isEmpty) ? prompt : nil,
-            rules: (isAgent && !rules.isEmpty) ? rules : nil)
+            rules: isAgent ? generalRules : nil,
+            byAgent: byAgent.isEmpty ? nil : byAgent)
 
         return Result(component: component, saveAsNodeTemplate: saveBox.state == .on)
     }
@@ -210,7 +236,7 @@ final class NodeTemplateDialog {
         configPicker.target = self
         configPicker.action = #selector(configChanged)
         container.addSubview(configPicker)
-        reloadConfigPicker(select: initial.config)
+        reloadConfigPicker(select: initial.resolved(for: initial.agent).config)
 
         // Na mesma linha da configuração: as duas são "com o quê este CLI sobe".
         modelLabel.font = .systemFont(ofSize: 10, weight: .semibold)
@@ -219,11 +245,11 @@ final class NodeTemplateDialog {
         container.addSubview(modelLabel)
         modelPicker.frame = NSRect(x: 270, y: 358, width: 150, height: 22)
         container.addSubview(modelPicker)
-        reloadModelPicker(select: initial.model)
+        reloadModelPicker(select: initial.resolved(for: initial.agent).model)
 
         container.addSubview(caption("COMANDO — vazio usa o padrão do CLI", y: 338))
         cmdField.frame = NSRect(x: 0, y: 312, width: width, height: 22)
-        cmdField.stringValue = initial.cmd ?? ""
+        cmdField.stringValue = initial.resolved(for: initial.agent).cmd ?? ""
         cmdField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         // Duas instalações do mesmo CLI se distinguem aqui.
         cmdField.placeholderString = "ex: claude --model opus"
@@ -268,15 +294,22 @@ final class NodeTemplateDialog {
         // prompt — e é ela que faz a regra valer sobre o papel (ADR-056).
         rulesLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         rulesLabel.textColor = .secondaryLabelColor
-        rulesLabel.frame = NSRect(x: 0, y: 124, width: width, height: 13)
+        rulesLabel.frame = NSRect(x: 0, y: 124, width: width - 130, height: 13)
         container.addSubview(rulesLabel)
+
+        rulesOnlyHere.frame = NSRect(x: width - 128, y: 120, width: 128, height: 18)
+        rulesOnlyHere.font = .systemFont(ofSize: 10)
+        rulesOnlyHere.target = self
+        rulesOnlyHere.action = #selector(rulesScopeChanged)
+        container.addSubview(rulesOnlyHere)
 
         let rulesBox = NSScrollView(frame: NSRect(x: 0, y: 34, width: width, height: 84))
         rulesBox.hasVerticalScroller = true
         rulesBox.borderType = .bezelBorder
         rulesField.frame = NSRect(x: 0, y: 0, width: width, height: 84)
         rulesField.font = .systemFont(ofSize: 11)
-        rulesField.string = initial.rules ?? ""
+        loaded = loaded ?? initial
+        showRules(of: initial.agent)
         rulesField.isRichText = false
         rulesField.autoresizingMask = [.width]
         rulesBox.documentView = rulesField
@@ -414,11 +447,19 @@ final class NodeTemplateDialog {
     /// A lista vem do perfil: trocar de CLI troca os modelos. A escolha anterior
     /// volta só se o CLI novo a conhecer; um nome que não está na lista (escrito
     /// à mão no JSON) entra como item extra para não ser perdido ao editar.
+    /// A escolha anterior só volta se o CLI novo a conhecer — a mesma regra do
+    /// `reloadConfigPicker`, e pelo mesmo motivo: `opus` não diz nada ao Codex,
+    /// e o app anexaria `--model opus` a um binário que não tem esse modelo.
+    /// Modelo escrito à mão no `components.json` continua valendo: só é
+    /// descartado quando o CLI declara uma lista e o valor não está nela.
     private func reloadModelPicker(select value: String?) {
         modelPicker.removeAllItems()
         modelPicker.addItem(withTitle: Self.defaultModelOption)
-        var options = selectedAgentKey.flatMap { agents[$0]?.models } ?? []
-        if let value, !value.isEmpty, !options.contains(value) { options.append(value) }
+        let known = selectedAgentKey.flatMap { agents[$0]?.models } ?? []
+        var options = known
+        if let value, !value.isEmpty, !options.contains(value), known.isEmpty {
+            options.append(value)
+        }
         modelPicker.addItems(withTitles: options)
         if let value, let index = options.firstIndex(of: value) {
             modelPicker.selectItem(at: index + 1)
@@ -432,7 +473,20 @@ final class NodeTemplateDialog {
         configValues[safe: configPicker.indexOfSelectedItem] ?? nil
     }
 
+    /// Mostra as regras do CLI selecionado: as dele quando tem override, as
+    /// gerais quando não.
+    private func showRules(of cli: String?) {
+        let base = loaded ?? initial
+        let own = base.overrides(for: cli).rules
+        rulesOnlyHere.state = own == nil ? .off : .on
+        rulesField.string = own ?? base.rules ?? ""
+    }
+
+    /// Marcar e desmarcar não perde o que você digitou — só muda de quem é.
+    @objc private func rulesScopeChanged() {}
+
     @objc private func agentChanged() {
+        showRules(of: selectedAgentKey)
         // Trocar de CLI troca o conjunto de configurações: as do Claude Code não
         // dizem nada ao Codex. A escolha anterior é oferecida de volta só se a
         // CLI nova a conhecer.

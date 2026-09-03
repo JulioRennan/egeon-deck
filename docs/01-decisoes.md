@@ -3338,3 +3338,59 @@ Guardado por `WorkbenchConfigTests.testRulesSurviveARoundTrip`.
 `SystemPromptOrderTests` (marcador → catálogo → papel → regras) ·
 `WorkbenchConfigTests` · e no DEV, `ps` mostrando o bloco montado no
 `--append-system-prompt` de um agente com regra de bancada e de nó.
+
+## ADR-057 — O componente é o papel: o que é de CLI vai para `byAgent`
+
+O componente de nó já nascia como "o que este terminal é" (ADR da camada do
+meio, no cabeçalho do `NodeTemplate`), mas quatro campos de CLI tinham vazado
+para dentro dele: `agent`, `cmd`, `config` e `model`. Resultado: trocar de
+Claude Code para OpenCode significava montar o revisor de novo do zero.
+
+**Cross-CLI são `name`, `kind`, `prompt`, `rules`** — e `cwd`, que é da bancada,
+não do CLI. O resto mora em `byAgent`, mapa por chave do `agents.json`:
+
+```json
+{
+  "name": "revisor", "kind": "agent", "agent": "claude",
+  "prompt": "você revisa o diff", "rules": "escreva em português",
+  "byAgent": {
+    "claude":   { "model": "opus", "config": "~/.claude-agro" },
+    "opencode": { "rules": "aqui, comente em inglês" }
+  }
+}
+```
+
+**A regra de um CLI SUBSTITUI a geral** — override, não soma: quem escreve regra
+para um CLI está reescrevendo aquele trecho, não acrescentando ao que já existe.
+No formulário isso é um checkbox ("só para este CLI") ao lado do campo REGRAS:
+marcado, o texto vira `byAgent[cli].rules`; desmarcado, é o geral. O formulário
+mostra um CLI por vez e guarda o componente inteiro, senão salvar com o Claude
+na tela apagaria o que o OpenCode tem de próprio.
+
+**Sem migração de disco:** componente escrito antes disto tem `cmd`/`config`/
+`model` na raiz, e o decoder os lê como o mapa do CLI que ele declara. Só a
+escrita usa a forma nova.
+
+### O bug que a análise achou
+
+`reloadModelPicker` acrescentava à lista o modelo que o CLI novo não conhece e o
+mantinha selecionado — trocar Claude → Codex guardava `opus`, e o Codex declara
+`model: ["--model", "{model}"]`, então receberia `--model opus`. O
+`reloadConfigPicker` ao lado já fazia o certo ("as do Claude Code não dizem nada
+ao Codex"). Agora a escolha só volta se o CLI novo a conhecer; CLI sem lista
+declarada (`models: []`) continua aceitando o que estiver escrito à mão no
+`components.json`.
+
+### O que este ADR NÃO resolve
+
+O componente atravessa, mas o terminal do outro lado é menor: só o perfil do
+Claude Code declara `systemPrompt`, `reportSession`, `resume` e `newSession`. Ao
+virar OpenCode, o mesmo componente perde o system prompt (papel e regras viram
+mensagem injetada, gastando um turno), o marcador `[[ED:*]]` — e com ele o
+estado por gancho, voltando ao silêncio da ADR-008 —, o registro de turno no
+chat e a conversa retomada no rebuild. Isso não é do componente: é `agents.json`
+magro, e se resolve por dado quando se souber quais flags cada CLI tem. Até lá,
+a troca degrada em silêncio, com uma linha no log.
+
+**Verificação:** `NodeTemplateCrossCLITests` (papel atravessa, CLI não vaza,
+regra substitui, legado vira mapa, captura separa) · `NodeTemplateTests`.
