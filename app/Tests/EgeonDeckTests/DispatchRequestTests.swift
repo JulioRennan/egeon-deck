@@ -24,7 +24,7 @@ final class DispatchRequestTests: XCTestCase {
         let req = try request(
             #"{"target":"ws/t1","kind":"task","file":"a.swift","text":"troque X"}"#)
         XCTAssertEqual(req.buildPrompt(),
-                       "[egeon] a.swift\n\ntroque X\n\nAplique no código.")
+                       "[ED] a.swift\n\ntroque X\n\nAplique no código.")
     }
 
     func testReviewQuotesEveryLineOfTheSelection() throws {
@@ -38,7 +38,7 @@ final class DispatchRequestTests: XCTestCase {
         XCTAssertTrue(prompt.contains("  > um\n  > dois"))
         XCTAssertTrue(prompt.contains("L3"))
         XCTAssertTrue(prompt.contains("    ajuste"))
-        XCTAssertTrue(prompt.hasPrefix("[egeon] review de doc.md"))
+        XCTAssertTrue(prompt.hasPrefix("[ED] review de doc.md"))
     }
 
     func testReviewWithoutCommentsIsNothing() throws {
@@ -53,7 +53,7 @@ final class DispatchRequestTests: XCTestCase {
         let req = try request(
             #"{"target":"ws/t1","kind":"task","from":"deck/claude-2","text":"revise"}"#)
         let prompt = try XCTUnwrap(req.buildPrompt())
-        XCTAssertEqual(prompt, "[egeon] mensagem de deck/claude-2\n\nrevise")
+        XCTAssertEqual(prompt, "[ED] mensagem de deck/claude-2\n\nrevise")
         XCTAssertFalse(prompt.contains("autoriza"))
     }
 

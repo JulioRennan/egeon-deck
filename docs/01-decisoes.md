@@ -3248,3 +3248,29 @@ gatilhos, corpo, escrita em toda configuração) ·
 `egeon peers` e `egeon peek` rodados de dentro de um agente, com o CLI
 anunciando "3 skills available" e o peek sem aresta recusado com
 `não existe ligação de você para 'X'`.
+
+## ADR-055 — Uma tag só no que o app injeta: `[ED]`
+
+Tudo o que o app põe num prompt vinha marcado com `[egeon]`, enquanto o fim de
+turno usa `[[ED:ok]]`/`[[ED:ask]]`. Duas marcas para a mesma coisa — "isto aqui
+é o app falando, não o usuário" —, e quem lê o terminal tinha de decorar as
+duas. **Passa a ser `[ED]`**, uma constante só (`DispatchRequest.tag`), nos três
+prompts que o app monta:
+
+```
+[ED] mensagem de bancada/id     entrega de outro agente
+[ED] review de <arquivo>        review vindo da extensão
+[ED] <arquivo>                  task
+```
+
+O rodapé continua fora (ADR-038); isto é só a marca.
+
+**`[egeon]` continua sendo desembrulhado.** O histórico do chat
+(`chat.jsonl`) e os transcripts do CLI já gravados estão cheios de mensagens com
+a marca antiga, e o chat descobre o remetente justamente por esse prefixo
+(`ClaudeTranscript.agentEnvelope`): parar de reconhecê-lo faria toda bolha
+anterior perder o "✦ fulano". Ler as duas custa uma linha; reescrever histórico
+não é opção.
+
+**Verificação:** `DispatchRequestTests` (os três prompts com a tag nova) e
+`ChatThreadTests.testOldEgeonTagIsStillUnwrapped`.

@@ -113,7 +113,7 @@ final class ClaudeTranscriptTests: XCTestCase {
     // remetente e só o texto, sem o cabeçalho.
     func testAgentEnvelopeIsUnwrapped() {
         let wrapped = """
-        [egeon] mensagem de deck/front
+        [ED] mensagem de deck/front
 
         o /nodes devolve o estado calculado?
         """
@@ -121,6 +121,19 @@ final class ClaudeTranscriptTests: XCTestCase {
         XCTAssertEqual(envelope?.from, "deck/front")
         XCTAssertEqual(envelope?.text, "o /nodes devolve o estado calculado?")
         XCTAssertNil(ClaudeTranscript.agentEnvelope("oi"))
+    }
+
+    // `[egeon]` foi a marca até a ADR-055, e o histórico do chat e os
+    // transcripts do CLI já gravados estão cheios dela: quem parar de
+    // reconhecê-la faz a bolha antiga perder o remetente.
+    func testOldEgeonTagIsStillUnwrapped() {
+        let envelope = ClaudeTranscript.agentEnvelope("""
+            [egeon] mensagem de deck/front
+
+            e a mensagem de ontem?
+            """)
+        XCTAssertEqual(envelope?.from, "deck/front")
+        XCTAssertEqual(envelope?.text, "e a mensagem de ontem?")
     }
 
     func testSendStepCarriesTarget() {

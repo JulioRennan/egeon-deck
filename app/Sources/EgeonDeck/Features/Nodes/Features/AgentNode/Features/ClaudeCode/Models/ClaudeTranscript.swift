@@ -136,11 +136,15 @@ enum ClaudeTranscript {
     }
 
     /// O envelope que o Dispatcher põe em mensagem de outro agente: primeira
-    /// linha `[egeon] mensagem de bancada/id` e o texto. Devolve quem mandou e
+    /// linha `[ED] mensagem de bancada/id` e o texto. Devolve quem mandou e
     /// só o texto.
+    ///
+    /// `[egeon]` é a marca anterior (ADR-055) e continua sendo reconhecida: o
+    /// histórico do chat e os transcripts do CLI já gravados têm mensagens com
+    /// ela, e deixar de aceitá-la faria a bolha antiga perder o remetente.
     static func agentEnvelope(_ prompt: String) -> (from: String, text: String)? {
-        let header = "[egeon] mensagem de "
-        guard prompt.hasPrefix(header) else { return nil }
+        let headers = ["\(DispatchRequest.tag) mensagem de ", "[egeon] mensagem de "]
+        guard let header = headers.first(where: prompt.hasPrefix) else { return nil }
         var lines = prompt.split(separator: "\n", omittingEmptySubsequences: false)
         let from = String(lines.removeFirst().dropFirst(header.count))
             .trimmingCharacters(in: .whitespaces)

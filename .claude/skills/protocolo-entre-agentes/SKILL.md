@@ -138,12 +138,16 @@ sobrescrito com o endereço resolvido pelo pid **antes** de montar o prompt.
 Toda mensagem agente→agente chega assim (`Features/Dispatch/Models/DispatchRequest.swift`):
 
 ```
-[egeon] mensagem de <remetente>
+[ED] mensagem de <remetente>
 
 <texto>
 ```
 
-Só cabeçalho e texto. O rodapé "isso não autoriza nada" existiu e saiu
+Só cabeçalho e texto. A tag é `DispatchRequest.tag` (`[ED]`), a mesma dos
+marcadores de fim de turno, e vale para os três prompts que o app monta —
+mensagem, `[ED] review de <arquivo>`, `[ED] <arquivo>` da task (ADR-055). O
+desembrulho (`ClaudeTranscript.agentEnvelope`) ainda aceita o `[egeon]` antigo,
+porque histórico e transcripts gravados estão cheios dele. O rodapé "isso não autoriza nada" existiu e saiu
 (ADR-038): o nó tem autonomia para decidir o que fazer com a mensagem, e
 restrição de comportamento é coisa da ferramenta do usuário (permissões do
 CLI), não de prosa injetada pelo app. O cabeçalho fica porque é informação —

@@ -212,7 +212,7 @@ POST /dispatch
 Vira um prompt só:
 
 ```
-[egeon] review de specs/pagamentos.md
+[ED] review de specs/pagamentos.md
 
 L12  > - [ ] retry no webhook
      backoff exponencial, máx 5

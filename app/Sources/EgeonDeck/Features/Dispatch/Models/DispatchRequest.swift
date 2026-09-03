@@ -38,6 +38,12 @@ struct DispatchRequest: Codable {
             .joined(separator: "\n")
     }
 
+    /// A marca de tudo o que o APP põe num prompt — mensagem entre agentes,
+    /// review, task. Uma tag só, a mesma dos marcadores de fim de turno
+    /// (`[[ED:ok]]`/`[[ED:ask]]`): quem lê o terminal reconhece de onde veio
+    /// sem decorar dois vocabulários (ADR-055).
+    static let tag = "[ED]"
+
     private static func indented(_ text: String) -> String {
         text.split(separator: "\n", omittingEmptySubsequences: false)
             .map { "    \($0)" }
@@ -53,7 +59,7 @@ struct DispatchRequest: Codable {
     /// usuário (permissões do CLI), não do texto que o app injeta.
     private func agentEnvelope(from sender: String, text: String) -> String {
         """
-        [egeon] mensagem de \(sender)
+        \(Self.tag) mensagem de \(sender)
 
         \(text)
         """
@@ -70,7 +76,7 @@ struct DispatchRequest: Codable {
         switch kind ?? "raw" {
         case "review":
             guard let comments, !comments.isEmpty else { return nil }
-            var out = "[egeon] review de \(file ?? "arquivo")\n\n"
+            var out = "\(Self.tag) review de \(file ?? "arquivo")\n\n"
             for comment in comments {
                 let anchor = comment.line.map { "L\($0)" } ?? "—"
                 if let quote = comment.quote, !quote.isEmpty {
@@ -85,7 +91,7 @@ struct DispatchRequest: Codable {
 
         case "task":
             guard let text, !text.isEmpty else { return nil }
-            var out = "[egeon]"
+            var out = Self.tag
             if let file { out += " \(file)" }
             return out + "\n\n\(text)\n\nAplique no código."
 
