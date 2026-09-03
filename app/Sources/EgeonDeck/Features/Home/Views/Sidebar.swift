@@ -19,6 +19,7 @@ final class SidebarRow: NSView {
     var onDuplicateAsWorktree: ((Int) -> Void)?
     var onRemove: ((Int) -> Void)?
     var onEditVisitLimit: ((Int) -> Void)?
+    var onEditRules: ((Int) -> Void)?
     /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
     var onClear: ((Int) -> Void)?
 
@@ -285,6 +286,8 @@ final class SidebarRow: NSView {
         // repositório e quais nós replicar — no + você teria de informar os dois.
         menu.addItem(withTitle: "Duplicar em nova worktree…",
                      action: #selector(duplicateFromMenu), keyEquivalent: "")
+        menu.addItem(withTitle: "Regras da bancada…",
+                     action: #selector(rulesFromMenu), keyEquivalent: "")
         menu.addItem(withTitle: "Limite de conversa entre agentes…",
                      action: #selector(visitLimitFromMenu), keyEquivalent: "")
         menu.addItem(.separator())
@@ -305,6 +308,7 @@ final class SidebarRow: NSView {
     @objc private func duplicateFromMenu() { onDuplicateAsWorktree?(index) }
     @objc private func removeFromMenu() { onRemove?(index) }
     @objc private func visitLimitFromMenu() { onEditVisitLimit?(index) }
+    @objc private func rulesFromMenu() { onEditRules?(index) }
     @objc private func clearFromMenu() { onClear?(index) }
 }
 
@@ -745,6 +749,7 @@ final class Sidebar: NSView {
     var onDuplicateAsWorktree: ((Int) -> Void)?
     var onRemove: ((Int) -> Void)?
     var onEditVisitLimit: ((Int) -> Void)?
+    var onEditRules: ((Int) -> Void)?
     /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
     var onClear: ((Int) -> Void)?
 
@@ -809,6 +814,7 @@ final class Sidebar: NSView {
             row.onDuplicateAsWorktree = { [weak self] in self?.onDuplicateAsWorktree?($0) }
             row.onRemove = { [weak self] in self?.onRemove?($0) }
             row.onEditVisitLimit = { [weak self] in self?.onEditVisitLimit?($0) }
+            row.onEditRules = { [weak self] in self?.onEditRules?($0) }
             row.onClear = { [weak self] in self?.onClear?($0) }
             rows.append(row)
             return row

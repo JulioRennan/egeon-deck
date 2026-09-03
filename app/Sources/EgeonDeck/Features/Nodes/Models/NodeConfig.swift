@@ -33,6 +33,15 @@ struct NodeConfig: Codable {
     /// Mensagem entregue ao agente quando ele sobe — o papel deste terminal.
     /// Entra na fila do Dispatcher, que espera a TUI aceitar stdin.
     var prompt: String?
+
+    /// As regras que valem para este terminal, somadas às da bancada.
+    ///
+    /// Separadas do papel porque não são a mesma coisa: papel é quem o agente é
+    /// e muda de nó para nó; regra é como se trabalha aqui, e a maior parte
+    /// delas é da bancada inteira. E porque a ordem importa — elas entram DEPOIS
+    /// do papel no system prompt, que é o que faz a restrição específica valer
+    /// contra a diretriz geral (ADR-056).
+    var rules: String?
     /// Componente que originou o nó. Só registro: os valores foram copiados, e
     /// editar o componente depois não mexe em quem já nasceu.
     var component: String?

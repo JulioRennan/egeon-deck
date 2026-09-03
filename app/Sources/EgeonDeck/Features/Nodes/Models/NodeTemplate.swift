@@ -39,6 +39,10 @@ struct NodeTemplate: Codable {
     /// que espera o `warmupMs` do perfil e o silêncio do pty: injetar antes de a
     /// TUI ter leitor de stdin perde o texto.
     var prompt: String?
+    /// As regras deste terminal, somadas às da bancada (ADR-056). Copiadas na
+    /// criação como todo o resto: editar o componente depois não mexe em quem
+    /// já nasceu.
+    var rules: String?
 
     /// Nome legível do que este terminal roda, para o cabeçalho do nó.
     func displayAgent(using agents: [String: AgentProfile]) -> String? {
@@ -119,7 +123,8 @@ enum NodeTemplateStore {
                   config: node.config,
                   model: node.model,
                   cwd: node.cwd,
-                  prompt: node.prompt)
+                  prompt: node.prompt,
+                  rules: node.rules)
     }
 
     /// Instancia o componente como nó, com id único dentro da bancada.
@@ -131,6 +136,7 @@ enum NodeTemplateStore {
         node.model = component.model
         node.cwd = component.cwd
         node.prompt = component.prompt
+        node.rules = component.rules
         node.component = component.name
         return node
     }

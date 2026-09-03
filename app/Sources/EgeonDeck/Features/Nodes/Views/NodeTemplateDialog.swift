@@ -55,7 +55,11 @@ final class NodeTemplateDialog {
     private let promptField = NSTextView()
     private let saveBox = HandButton(checkboxWithTitle: "Salvar como componente reutilizável",
                                    target: nil, action: nil)
-    private let promptLabel = NSTextField(labelWithString: "PAPEL (mensagem enviada ao subir)")
+    private let promptLabel = NSTextField(labelWithString: "PAPEL — quem este terminal é")
+    private let rulesField = NSTextView()
+    private let rulesLabel = NSTextField(
+        labelWithString: "REGRAS — como se trabalha aqui (somam às da bancada)")
+    private var rulesScroll: NSScrollView?
     private let agentLabel = NSTextField(labelWithString: "CLI")
     private let configPicker = HandPopUpButton()
     private let configLabel = NSTextField(labelWithString: "CONFIGURAÇÃO")
@@ -71,7 +75,7 @@ final class NodeTemplateDialog {
     private static let browseConfigOption = "Escolher pasta…"
     /// Altura do formulário. Numa view não-flipped o y cresce para cima, então
     /// os campos do topo são posicionados a partir daqui.
-    private static let formHeight: CGFloat = 382
+    private static let formHeight: CGFloat = 492
 
     /// Preenche o formulário a partir de um componente salvo e leva para a aba de
     /// detalhes. Os campos seguem editáveis: o preset é ponto de partida, não
@@ -88,6 +92,7 @@ final class NodeTemplateDialog {
         cmdField.stringValue = component.cmd ?? ""
         cwdField.stringValue = component.cwd ?? ""
         promptField.string = component.prompt ?? ""
+        rulesField.string = component.rules ?? ""
         updateAgentFields()
 
         // Escolher um preset não é o fim da tarefa: quase sempre você quer
@@ -118,6 +123,7 @@ final class NodeTemplateDialog {
         let cmd = cmdField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let cwd = cwdField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt = promptField.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rules = rulesField.string.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let component = NodeTemplate(
             name: name,
@@ -127,7 +133,8 @@ final class NodeTemplateDialog {
             config: isAgent ? selectedConfig : nil,
             model: isAgent ? selectedModel : nil,
             cwd: cwd.isEmpty ? nil : Self.normalizedFolder(cwd),
-            prompt: (isAgent && !prompt.isEmpty) ? prompt : nil)
+            prompt: (isAgent && !prompt.isEmpty) ? prompt : nil,
+            rules: (isAgent && !rules.isEmpty) ? rules : nil)
 
         return Result(component: component, saveAsNodeTemplate: saveBox.state == .on)
     }
@@ -166,14 +173,14 @@ final class NodeTemplateDialog {
             return field
         }
 
-        container.addSubview(caption("NOME", y: 366))
-        nameField.frame = NSRect(x: 0, y: 340, width: width, height: 22)
+        container.addSubview(caption("NOME", y: 476))
+        nameField.frame = NSRect(x: 0, y: 450, width: width, height: 22)
         nameField.stringValue = initial.name
         nameField.placeholderString = "revisor, front end, build…"
         container.addSubview(nameField)
 
-        container.addSubview(caption("TIPO", y: 320))
-        kindPicker.frame = NSRect(x: 0, y: 294, width: 180, height: 22)
+        container.addSubview(caption("TIPO", y: 430))
+        kindPicker.frame = NSRect(x: 0, y: 404, width: 180, height: 22)
         kindPicker.addItems(withTitles: [Self.shellOption, Self.agentOption])
         kindPicker.selectItem(withTitle: initial.kind == .agent ? Self.agentOption : Self.shellOption)
         kindPicker.target = self
@@ -182,10 +189,10 @@ final class NodeTemplateDialog {
 
         agentLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         agentLabel.textColor = .secondaryLabelColor
-        agentLabel.frame = NSRect(x: 200, y: 320, width: 220, height: 13)
+        agentLabel.frame = NSRect(x: 200, y: 430, width: 220, height: 13)
         container.addSubview(agentLabel)
 
-        agentPicker.frame = NSRect(x: 200, y: 294, width: 220, height: 22)
+        agentPicker.frame = NSRect(x: 200, y: 404, width: 220, height: 22)
         agentPicker.addItems(withTitles: agentKeys.map { agents[$0]?.displayName ?? $0 })
         if let agent = initial.agent, let index = agentKeys.firstIndex(of: agent) {
             agentPicker.selectItem(at: index)
@@ -196,10 +203,10 @@ final class NodeTemplateDialog {
 
         configLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         configLabel.textColor = .secondaryLabelColor
-        configLabel.frame = NSRect(x: 0, y: 274, width: width, height: 13)
+        configLabel.frame = NSRect(x: 0, y: 384, width: width, height: 13)
         container.addSubview(configLabel)
 
-        configPicker.frame = NSRect(x: 0, y: 248, width: 260, height: 22)
+        configPicker.frame = NSRect(x: 0, y: 358, width: 260, height: 22)
         configPicker.target = self
         configPicker.action = #selector(configChanged)
         container.addSubview(configPicker)
@@ -208,22 +215,22 @@ final class NodeTemplateDialog {
         // Na mesma linha da configuração: as duas são "com o quê este CLI sobe".
         modelLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         modelLabel.textColor = .secondaryLabelColor
-        modelLabel.frame = NSRect(x: 270, y: 274, width: 150, height: 13)
+        modelLabel.frame = NSRect(x: 270, y: 384, width: 150, height: 13)
         container.addSubview(modelLabel)
-        modelPicker.frame = NSRect(x: 270, y: 248, width: 150, height: 22)
+        modelPicker.frame = NSRect(x: 270, y: 358, width: 150, height: 22)
         container.addSubview(modelPicker)
         reloadModelPicker(select: initial.model)
 
-        container.addSubview(caption("COMANDO — vazio usa o padrão do CLI", y: 228))
-        cmdField.frame = NSRect(x: 0, y: 202, width: width, height: 22)
+        container.addSubview(caption("COMANDO — vazio usa o padrão do CLI", y: 338))
+        cmdField.frame = NSRect(x: 0, y: 312, width: width, height: 22)
         cmdField.stringValue = initial.cmd ?? ""
         cmdField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         // Duas instalações do mesmo CLI se distinguem aqui.
         cmdField.placeholderString = "ex: claude --model opus"
         container.addSubview(cmdField)
 
-        container.addSubview(caption("PASTA — relativa à raiz da bancada", y: 182))
-        cwdField.frame = NSRect(x: 0, y: 156, width: width - 96, height: 22)
+        container.addSubview(caption("PASTA — relativa à raiz da bancada", y: 292))
+        cwdField.frame = NSRect(x: 0, y: 266, width: width - 96, height: 22)
         cwdField.stringValue = initial.cwd ?? ""
         cwdField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         cwdField.placeholderString = "ex: deck-backend — vazio usa a raiz"
@@ -232,7 +239,7 @@ final class NodeTemplateDialog {
         // O campo continua editável ao lado do botão: digitar é o jeito de escrever
         // um caminho que ainda não existe em disco, e o painel não escolhe pasta
         // inexistente.
-        cwdBrowse.frame = NSRect(x: width - 90, y: 154, width: 90, height: 26)
+        cwdBrowse.frame = NSRect(x: width - 90, y: 264, width: 90, height: 26)
         cwdBrowse.bezelStyle = .rounded
         cwdBrowse.controlSize = .small
         cwdBrowse.font = .systemFont(ofSize: 11)
@@ -242,10 +249,10 @@ final class NodeTemplateDialog {
 
         promptLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         promptLabel.textColor = .secondaryLabelColor
-        promptLabel.frame = NSRect(x: 0, y: 136, width: width, height: 13)
+        promptLabel.frame = NSRect(x: 0, y: 246, width: width, height: 13)
         container.addSubview(promptLabel)
 
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 34, width: width, height: 96))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 144, width: width, height: 96))
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
         promptField.frame = NSRect(x: 0, y: 0, width: width, height: 96)
@@ -256,6 +263,25 @@ final class NodeTemplateDialog {
         scroll.documentView = promptField
         container.addSubview(scroll)
         promptScroll = scroll
+
+        // Abaixo do papel porque é a ordem em que os dois entram no system
+        // prompt — e é ela que faz a regra valer sobre o papel (ADR-056).
+        rulesLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        rulesLabel.textColor = .secondaryLabelColor
+        rulesLabel.frame = NSRect(x: 0, y: 124, width: width, height: 13)
+        container.addSubview(rulesLabel)
+
+        let rulesBox = NSScrollView(frame: NSRect(x: 0, y: 34, width: width, height: 84))
+        rulesBox.hasVerticalScroller = true
+        rulesBox.borderType = .bezelBorder
+        rulesField.frame = NSRect(x: 0, y: 0, width: width, height: 84)
+        rulesField.font = .systemFont(ofSize: 11)
+        rulesField.string = initial.rules ?? ""
+        rulesField.isRichText = false
+        rulesField.autoresizingMask = [.width]
+        rulesBox.documentView = rulesField
+        container.addSubview(rulesBox)
+        rulesScroll = rulesBox
 
         saveBox.frame = NSRect(x: 0, y: 4, width: width, height: 18)
         saveBox.state = .off

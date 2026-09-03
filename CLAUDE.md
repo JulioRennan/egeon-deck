@@ -119,6 +119,11 @@ app/Sources/EgeonDeck/
 - Worktree por bancada E por terminal (formulário decide pela branch).
 - Modelo por nó de agente: formulário e pull-down no cabeçalho; trocar reinicia
   o processo e retoma a conversa. Lista vem do `agents.json` (`models`).
+- **Papel e regras** são campos separados (ADR-056): papel é quem o terminal é;
+  regra é como se trabalha, e a da **bancada** (menu de contexto na barra) vale
+  para todos os agentes dela, somada à do nó. No system prompt as regras entram
+  DEPOIS do papel — é o que faz a restrição valer sobre a diretriz geral.
+  Editar reinicia o agente e retoma a conversa, como a troca de modelo.
 - Templates de bancada e de nó copiam valores na criação, nunca ficam atados.
 - Trilha da bancada: ao fim de cada turno o agente roda `egeon trace` (uma ou
   duas linhas); o app carimba quem/CLI/modelo/conversa e anexa em

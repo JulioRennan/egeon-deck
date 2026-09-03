@@ -3274,3 +3274,67 @@ não é opção.
 
 **Verificação:** `DispatchRequestTests` (os três prompts com a tag nova) e
 `ChatThreadTests.testOldEgeonTagIsStillUnwrapped`.
+
+## ADR-056 — Regras: um campo ao lado do papel, herdado da bancada
+
+O nó tinha um campo de texto só, o **papel** ("você é o revisor deste repo").
+Regra de trabalho — "peça antes de commitar", "escreva em português", "rode os
+testes antes de dizer que terminou" — cabia ali, misturada, e era reescrita em
+cada terminal.
+
+**Agora são dois campos**, `NodeConfig.rules` e `WorkbenchConfig.rules`, e o
+system prompt fica assim:
+
+```
+protocolo do marcador     formato, vale para tudo
+catálogo (egeon)          topologia
+PAPEL                     quem este terminal é
+REGRAS                    como se trabalha aqui
+```
+
+### Por que campo separado, e não mais texto no papel
+
+Só se paga por causa da **herança**: a regra é quase sempre da frente de
+trabalho, não de um terminal. Escrita uma vez na bancada, vale para os quatro
+agentes; o nó soma as dele. Sem isso seria um segundo `textarea` concatenado no
+mesmo lugar — dava para escrever no papel e pronto.
+
+### Por que as regras vêm DEPOIS do papel
+
+Não é arranjo visual. Medindo adesão a princípios em agentes
+([arXiv:2506.02357](https://arxiv.org/pdf/2506.02357)), quando uma diretriz
+geral conflita com uma restrição específica, o agente resolve **a favor da
+ação** — "implemente rápido" ganha de "não commite". A restrição precisa vir
+depois do que ela limita, e o app diz a precedência em uma linha
+(`AgentRules.header`): "valem sobre o papel acima; quando um pedido conflitar
+com uma delas, siga a regra e diga por quê".
+
+Isso não contradiz a ADR-038, que tirou prosa restritiva do envelope: lá era o
+APP restringindo o agente por sua conta; aqui é o USUÁRIO configurando o próprio
+terminal, que é exatamente o que aquela ADR dizia ser o lugar certo da decisão.
+
+### O que o formulário ensina
+
+O rótulo e o diálogo da bancada pedem: uma por linha, curtas, dizendo o que
+**fazer** e o porquê quando não for óbvio. Enquadramento positivo tem adesão
+quase perfeita, enquanto o negativo varia muito — processar "não use X" exige
+ativar X para depois suprimir. E poucas: a orientação da Anthropic para
+`CLAUDE.md` é ficar abaixo de ~200 linhas, e regra demais dilui todas.
+
+### Editar reinicia o agente
+
+O system prompt só é lido no arranque. Editar as regras de um nó cai na mesma
+comparação que já decide se o processo reinicia (`sameProcess`); editar as da
+bancada reergue os agentes dela (`restartAgents`). A conversa fica — o id é
+nosso e o CLI a retoma, como na troca de modelo.
+
+**A armadilha que custou uma rodada:** `WorkbenchConfig` decodifica à mão, e um
+campo que não entra nos `CodingKeys` **e** no `init(from:)` some do disco na
+primeira gravação, sem erro nenhum. Só apareceu porque a verificação foi feita
+em disco, com o app subindo de verdade — compilar e testar em memória não pega.
+Guardado por `WorkbenchConfigTests.testRulesSurviveARoundTrip`.
+
+**Verificação:** `AgentRulesTests` (moldura, ordem, texto intocado) ·
+`SystemPromptOrderTests` (marcador → catálogo → papel → regras) ·
+`WorkbenchConfigTests` · e no DEV, `ps` mostrando o bloco montado no
+`--append-system-prompt` de um agente com regra de bancada e de nó.

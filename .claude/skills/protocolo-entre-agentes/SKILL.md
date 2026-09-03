@@ -173,6 +173,17 @@ a pessoal e não alcança nó com `cmd` trocado. Reescrita a cada arranque, como
 `bin/egeon` e `claude-hooks.json`; o corpo avisa que é gerado. Guardada por
 `ClaudeSkillTests`.
 
+### A ordem do system prompt (ADR-056)
+
+`AgentProfile.systemPromptText(role:catalog:rules:)` monta, nesta ordem:
+**marcador** (formato) → **catálogo** (topologia) → **PAPEL** (`NodeConfig.prompt`)
+→ **REGRAS** (`AgentRules.block`, que soma `WorkbenchConfig.rules` e
+`NodeConfig.rules`). As regras por último não é arranjo: diretriz geral em
+conflito com restrição específica é resolvida a favor da ação, então a restrição
+tem de vir depois do que ela limita — e `AgentRules.header` diz a precedência.
+Editar regras reinicia o agente (`sameProcess` no nó, `restartAgents` na
+bancada); a conversa fica.
+
 Texto que o agente vê no system prompt sobre a topologia:
 `main.swift:~1403` ("Este terminal é um nó do Egeon Deck e tem vizinhos
 endereçáveis…") — instrui `egeon peers`/`send`, avisa que lista vazia é normal,

@@ -42,6 +42,14 @@ struct WorkbenchConfig: Codable {
     /// legítimo. O que precisa de teto é a volta.
     var maxVisits: Int?
 
+    /// As regras desta bancada: valem para TODO agente que abre aqui, e cada nó
+    /// pode somar as suas.
+    ///
+    /// É o que faz o campo existir em vez de estar dentro do papel: "não commite
+    /// sem me perguntar" é da frente de trabalho, não de um terminal — escrito
+    /// uma vez, vale para os quatro (ADR-056).
+    var rules: String?
+
     /// De que jeito esta bancada estava sendo olhada. Ausente = canvas.
     ///
     /// Por bancada e não global: uma frente com um editor e quatro agentes pede
@@ -59,7 +67,7 @@ struct WorkbenchConfig: Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, path, nodes, template, project, edges, maxVisits, view, mosaic
+        case id, name, path, nodes, template, project, edges, maxVisits, rules, view, mosaic
     }
 
     /// Escrito à mão só por causa do `id`: o decoder sintetizado exige a chave
@@ -74,13 +82,15 @@ struct WorkbenchConfig: Codable {
         project = try c.decodeIfPresent(String.self, forKey: .project)
         edges = try c.decodeIfPresent([EdgeConfig].self, forKey: .edges)
         maxVisits = try c.decodeIfPresent(Int.self, forKey: .maxVisits)
+        rules = try c.decodeIfPresent(String.self, forKey: .rules)
         view = try c.decodeIfPresent(ViewMode.self, forKey: .view)
         mosaic = try c.decodeIfPresent(MosaicLayout.self, forKey: .mosaic)
     }
 
     init(id: String = WorkbenchConfig.newID(), name: String, path: String, nodes: [NodeConfig],
          template: String? = nil, project: String? = nil, edges: [EdgeConfig]? = nil,
-         maxVisits: Int? = nil, view: ViewMode? = nil, mosaic: MosaicLayout? = nil) {
+         maxVisits: Int? = nil, rules: String? = nil,
+         view: ViewMode? = nil, mosaic: MosaicLayout? = nil) {
         self.id = id
         self.name = name
         self.path = path
@@ -89,6 +99,7 @@ struct WorkbenchConfig: Codable {
         self.project = project
         self.edges = edges
         self.maxVisits = maxVisits
+        self.rules = rules
         self.view = view
         self.mosaic = mosaic
     }

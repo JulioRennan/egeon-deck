@@ -304,16 +304,25 @@ struct AgentProfile: Codable {
     var injectConfig: InjectConfig { inject ?? InjectConfig() }
     var attentionConfig: AttentionConfig { attention ?? AttentionConfig() }
 
-    /// O que entra no system prompt do agente: o protocolo de marcador e o papel
-    /// deste terminal, nessa ordem. Nil quando não há nem um nem outro.
+    /// O que entra no system prompt do agente, nesta ordem: protocolo de
+    /// marcador, catálogo de vizinhos, papel deste terminal e as regras. Nil
+    /// quando não há nada.
     ///
     /// O protocolo vem primeiro porque é regra de formato e vale para tudo; o
     /// papel é o assunto, e assunto depois de regra é o que o modelo lê melhor.
-    func systemPromptText(role: String?, catalog: String? = nil) -> String? {
+    ///
+    /// **As regras vêm por último, depois do papel**, e não é arranjo: medindo
+    /// adesão a princípios, uma diretriz geral que conflita com uma restrição
+    /// específica é resolvida a favor da ação — "implemente rápido" ganha de
+    /// "não commite" quando a restrição vem antes. Depois, ela limita o que já
+    /// foi dito (ADR-056).
+    func systemPromptText(role: String?, catalog: String? = nil,
+                          rules: String? = nil) -> String? {
         var parts: [String] = []
         if let marker = attentionConfig.activeMarker { parts.append(marker.resolvedInstruction) }
         if let catalog, !catalog.isEmpty { parts.append(catalog) }
         if let role, !role.isEmpty { parts.append(role) }
+        if let rules, !rules.isEmpty { parts.append(rules) }
         return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 

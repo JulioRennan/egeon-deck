@@ -146,4 +146,19 @@ final class WorkbenchIDTests: XCTestCase {
         let b = WorkbenchConfig(name: "deck", path: "/tmp/a", nodes: [])
         XCTAssertNotEqual(a.id, b.id)
     }
+    /// `WorkbenchConfig` decodifica à mão: campo novo que não entra nos
+    /// `CodingKeys` E no `init(from:)` some do disco na primeira gravação, sem
+    /// erro nenhum — foi o que aconteceu com as regras (ADR-056).
+    func testRulesSurviveARoundTrip() throws {
+        let json = """
+            {"name":"deck","path":"/tmp","nodes":[],
+             "rules":"escreva em português\\npeça antes de commitar"}
+            """
+        let decoded = try JSONDecoder().decode(WorkbenchConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.rules, "escreva em português\npeça antes de commitar")
+
+        let again = try JSONDecoder().decode(WorkbenchConfig.self,
+                                             from: JSONEncoder().encode(decoded))
+        XCTAssertEqual(again.rules, decoded.rules, "gravar e reler não pode perder a regra")
+    }
 }

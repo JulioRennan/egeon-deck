@@ -151,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         sidebar.onRemove = { [weak self] index in self?.confirmRemoveWorkbench(index) }
         sidebar.onEditVisitLimit = { [weak self] index in self?.editVisitLimit(index) }
+        sidebar.onEditRules = { [weak self] index in self?.editWorkbenchRules(index) }
         sidebar.onClear = { [weak self] index in self?.confirmClearWorkbench(index) }
         root = RootView(sidebar: sidebar)
         window.contentView = root
@@ -1817,9 +1818,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static func launchPlan(for node: NodeConfig,
                                    profile: AgentProfile?,
-                                   catalog: String?) -> (command: String,
-                                                         promptToInject: String?,
-                                                         hooked: Bool) {
+                                   catalog: String?,
+                                   rules: String?) -> (command: String,
+                                                       promptToInject: String?,
+                                                       hooked: Bool) {
         let base = node.cmd
             ?? profile.map { $0.command.joined(separator: " ") }
             ?? "exec /bin/zsh -l"
@@ -1833,7 +1835,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let modelSuffix = modelFlags.isEmpty ? ""
             : " " + modelFlags.map(AppEnvironment.shellQuote).joined(separator: " ")
 
-        guard let text = profile.systemPromptText(role: node.prompt, catalog: catalog)
+        guard let text = profile.systemPromptText(role: node.prompt, catalog: catalog, rules: rules)
         else { return (base + modelSuffix, nil, false) }
 
         if let arguments = profile.systemPromptArguments(for: text), profile.runsOwnBinary(base) {
@@ -1849,11 +1851,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // CLI sem flag de system prompt (ou `cmd` trocado por outro programa):
-        // resta injetar como primeira mensagem. Vale a pena junto de um papel
-        // que já ia ser injetado de qualquer jeito; só pelo protocolo, não —
-        // seria gastar um turno em toda bancada para um marcador que se dilui
-        // depois de vinte mensagens. Aí o terminal fica só com o silêncio.
-        guard let role = node.prompt, !role.isEmpty else {
+        // resta injetar como primeira mensagem. Vale a pena junto de um papel ou
+        // de regras, que já iam ser injetados de qualquer jeito; só pelo
+        // protocolo, não — seria gastar um turno em toda bancada para um
+        // marcador que se dilui depois de vinte mensagens. Aí o terminal fica
+        // só com o silêncio.
+        let hasRole = !(node.prompt ?? "").isEmpty || !(rules ?? "").isEmpty
+        guard hasRole else {
             if profile.attentionConfig.activeMarker != nil {
                 Log.write("agente \(profile.displayName): sem flag de system prompt, "
                           + "o protocolo de marcador não sobe — a detecção fica só no "
@@ -1990,7 +1994,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let launch = Self.launchPlan(
                 for: node, profile: profile,
-                catalog: Self.catalog(for: node, in: config, agents: agents))
+                catalog: Self.catalog(for: node, in: config, agents: agents),
+                rules: AgentRules.block(workbench: config.rules, node: node.rules))
 
             let terminal = TerminalNode(frame: frame, address: address, title: title,
                                         cwd: config.directory(for: node),
@@ -2296,6 +2301,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.write("bancada \(configs[index].name): teto de visitas = \(configs[index].visitLimit)")
     }
 
+    /// As regras da bancada: valem para todo agente que abre aqui (ADR-056).
+    ///
+    /// Salvar reinicia os agentes da bancada — o system prompt só é lido no
+    /// arranque, e regra que não sobe não é regra. A conversa fica: o id é
+    /// nosso e o CLI a retoma, como na troca de modelo.
+    private func editWorkbenchRules(_ index: Int) {
+        guard index >= 0, index < configs.count else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Regras — \(configs[index].name)"
+        alert.informativeText = "Como se trabalha nesta bancada. Vale para todo agente que "
+            + "abre aqui, somado às regras de cada terminal, e entra no system prompt depois "
+            + "do papel — quando um pedido conflita com uma regra, vale a regra.\n\n"
+            + "Uma por linha, curtas, dizendo o que FAZER (\"peça antes de commitar\" adere "
+            + "muito melhor que \"não commite\") e o porquê quando não for óbvio. Poucas: "
+            + "regra demais dilui todas."
+        alert.addButton(withTitle: "Salvar")
+        alert.addButton(withTitle: "Cancelar")
+
+        let field = NSTextView()
+        field.string = configs[index].rules ?? ""
+        field.font = .systemFont(ofSize: 11)
+        field.isRichText = false
+        field.frame = NSRect(x: 0, y: 0, width: 420, height: 150)
+        field.autoresizingMask = [.width]
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 420, height: 150))
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        scroll.documentView = field
+        alert.accessoryView = scroll
+        alert.window.initialFirstResponder = field
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let typed = field.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rules: String? = typed.isEmpty ? nil : typed
+        guard rules != configs[index].rules else { return }
+
+        configs[index].rules = rules
+        schedulePersist()
+        Log.write("bancada \(configs[index].name): regras "
+                  + (rules == nil ? "removidas" : "atualizadas") + " — reiniciando os agentes")
+        restartAgents(in: index)
+    }
+
+    /// Reergue os agentes de uma bancada no lugar em que estão, com o system
+    /// prompt refeito. Só os agentes: shell, editor e navegador não leem regra.
+    private func restartAgents(in index: Int) {
+        guard index >= 0, index < configs.count, let shell = shells[index] else { return }
+        for node in shell.nodes {
+            guard let config = configs[index].nodes.first(where: { $0.id == node.nodeID }),
+                  config.type == .agent else { continue }
+            let frame = shell.canvasFrame(of: config.id) ?? node.frame
+            shell.detach(node)
+            shell.attach(makeNode(config, in: configs[index], frame: frame))
+        }
+    }
+
     /// Remover é irreversível dentro do app — o nó sai do canvas e do
     /// workbenches.json — então passa por confirmação, com o aviso que o próprio
     /// tipo de nó dá sobre o que se perde.
@@ -2464,6 +2526,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && updated.config == current.config
             && updated.cwd == current.cwd
             && updated.prompt == current.prompt
+            // O system prompt só é lido no arranque: regra editada com o
+            // processo de pé não valeria nada até o próximo rebuild.
+            && updated.rules == current.rules
 
         configs[index].nodes[position] = updated
 
