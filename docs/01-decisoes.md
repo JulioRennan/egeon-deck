@@ -3360,12 +3360,26 @@ não do CLI. O resto mora em `byAgent`, mapa por chave do `agents.json`:
 }
 ```
 
-**A regra de um CLI SUBSTITUI a geral** — override, não soma: quem escreve regra
-para um CLI está reescrevendo aquele trecho, não acrescentando ao que já existe.
-No formulário isso é um checkbox ("só para este CLI") ao lado do campo REGRAS:
-marcado, o texto vira `byAgent[cli].rules`; desmarcado, é o geral. O formulário
-mostra um CLI por vez e guarda o componente inteiro, senão salvar com o Claude
-na tela apagaria o que o OpenCode tem de próprio.
+**Papel e regras são gerais, e a exceção por CLI é dinâmica** — sem checkbox de
+escopo. Quem decide de quem é o texto é o CLI que estava na tela quando você
+escreveu (`NodeTemplate.remembering`): trocar de CLI guarda o que está nos
+campos no CLI que sai e mostra o que o que entra tem. Duas bordas fazem a regra
+ser usável:
+
+- **o primeiro texto vale para todos** — senão o componente nasceria preso ao
+  CLI em que foi escrito;
+- **texto igual ao geral não vira exceção** — senão um trecho editado uma vez
+  nunca mais voltaria a valer para todos.
+
+Regra de CLI SUBSTITUI a geral, não soma. O formulário mostra um CLI por vez e
+guarda o componente inteiro, senão salvar com o Claude Code na tela apagaria o
+que o Codex tem de próprio.
+
+**A memória viaja no NÓ, não só no componente** (`NodeConfig.byAgent`): os
+campos soltos do nó continuam sendo o que vale AGORA — é deles que o arranque
+monta a linha de comando —, e o mapa guarda o resto. É o que faz reabrir o
+formulário, trocar para o Codex, ajustar, e voltar ao Claude Code devolver o que
+o Claude tinha.
 
 **Sem migração de disco:** componente escrito antes disto tem `cmd`/`config`/
 `model` na raiz, e o decoder os lê como o mapa do CLI que ele declara. Só a
@@ -3392,5 +3406,7 @@ chat e a conversa retomada no rebuild. Isso não é do componente: é `agents.js
 magro, e se resolve por dado quando se souber quais flags cada CLI tem. Até lá,
 a troca degrada em silêncio, com uma linha no log.
 
-**Verificação:** `NodeTemplateCrossCLITests` (papel atravessa, CLI não vaza,
-regra substitui, legado vira mapa, captura separa) · `NodeTemplateTests`.
+**Verificação:** `NodeTemplateCrossCLITests` — papel atravessa, CLI não vaza,
+regra substitui, legado vira mapa, captura separa, o mapa sobrevive no
+`workbenches.json`, e o caminho inteiro do usuário: escrever no Claude Code,
+editar no Codex, e o do Claude continuar lá · `NodeTemplateTests`.

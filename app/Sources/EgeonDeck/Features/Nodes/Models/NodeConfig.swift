@@ -42,6 +42,14 @@ struct NodeConfig: Codable {
     /// do papel no system prompt, que é o que faz a restrição específica valer
     /// contra a diretriz geral (ADR-056).
     var rules: String?
+
+    /// O que você configurou para CADA CLI neste terminal.
+    ///
+    /// Os campos soltos acima são o que vale AGORA, para o CLI em uso — é deles
+    /// que o arranque monta a linha de comando. Este mapa é a memória do resto:
+    /// trocar para o Codex, ajustar o modelo e as regras dele e voltar para o
+    /// Claude Code devolve o que o Claude tinha, sem reconfigurar (ADR-057).
+    var byAgent: [String: NodeTemplate.Overrides]?
     /// Componente que originou o nó. Só registro: os valores foram copiados, e
     /// editar o componente depois não mexe em quem já nasceu.
     var component: String?

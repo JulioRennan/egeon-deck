@@ -34,6 +34,64 @@ final class NodeTemplateCrossCLITests: XCTestCase {
         XCTAssertNil(component.resolved(for: "codex").model, "CLI sem mapa não herda nada")
     }
 
+    /// O caminho que o usuário descreveu: escreve com o Claude Code na tela,
+    /// reabre no Codex, edita ali — e o do Claude continua lá.
+    func testEditingUnderAnotherCLIKeepsWhatTheFirstOneHad() {
+        // Componente novo: o primeiro texto vale para TODOS, senão ele nasceria
+        // preso ao CLI em que foi escrito.
+        let novo = NodeTemplate(name: "cleber", kind: .agent, agent: "claude")
+        let comClaude = novo.remembering(cli: "claude", cmd: nil, config: "~/.claude",
+                                         model: "opus", prompt: "teste claude", rules: nil)
+        XCTAssertEqual(comClaude.prompt, "teste claude", "o primeiro texto é geral")
+        XCTAssertNil(comClaude.overrides(for: "claude").prompt)
+
+        // Agora no Codex, com outro papel: a diferença fica sendo dele.
+        let comCodex = comClaude.remembering(cli: "codex", cmd: nil, config: nil,
+                                             model: nil, prompt: "teste codex", rules: nil)
+        XCTAssertEqual(comCodex.resolved(for: "codex").prompt, "teste codex")
+        XCTAssertEqual(comCodex.resolved(for: "claude").prompt, "teste claude",
+                       "o do Claude Code não foi tocado")
+        XCTAssertEqual(comCodex.resolved(for: "claude").model, "opus")
+        XCTAssertNil(comCodex.resolved(for: "codex").model, "modelo não atravessa")
+
+        // E voltar ao texto geral desfaz a exceção — senão um trecho editado uma
+        // vez nunca mais voltaria a valer para todos.
+        let devolta = comCodex.remembering(cli: "codex", cmd: nil, config: nil, model: nil,
+                                           prompt: "teste claude", rules: nil)
+        XCTAssertNil(devolta.overrides(for: "codex").prompt)
+        XCTAssertEqual(devolta.resolved(for: "codex").prompt, "teste claude")
+    }
+
+    /// Trocar de CLI no formulário não pode apagar o que os outros tinham.
+    func testRememberingOneCLIKeepsTheOthers() {
+        let base = template()
+            .remembering(cli: "codex", cmd: nil, config: "~/.codex", model: nil,
+                         prompt: nil, rules: "regra do codex")
+        XCTAssertEqual(base.resolved(for: "claude").model, "opus")
+        XCTAssertEqual(base.resolved(for: "opencode").rules, "aqui, comente em inglês")
+        XCTAssertEqual(base.resolved(for: "codex").rules, "regra do codex")
+        XCTAssertEqual(base.rules, "escreva em português", "o geral fica de pé")
+    }
+
+    /// A memória viaja com o nó: é o que faz reabrir o formulário e trocar de
+    /// CLI devolver o que aquele CLI tinha.
+    func testTheAgentMapSurvivesInTheNode() throws {
+        var component = template()
+        component.agent = "claude"
+        let node = NodeTemplateStore.instantiate(component, id: "rev")
+        XCTAssertEqual(node.byAgent?["opencode"]?.rules, "aqui, comente em inglês")
+
+        let decoded = try JSONDecoder().decode(NodeConfig.self,
+                                               from: JSONEncoder().encode(node))
+        XCTAssertEqual(decoded.byAgent?["opencode"]?.rules, "aqui, comente em inglês",
+                       "gravar e reler o workbenches.json não pode perder a memória")
+
+        // E o nó volta a ser componente sem perder nada.
+        let again = NodeTemplateStore.capture(from: decoded, name: "revisor")
+        XCTAssertEqual(again.resolved(for: "opencode").rules, "aqui, comente em inglês")
+        XCTAssertEqual(again.resolved(for: "claude").model, "opus")
+    }
+
     /// Regra por CLI SUBSTITUI a geral — override, não soma.
     func testRulesOverrideRatherThanAdd() {
         let component = template()

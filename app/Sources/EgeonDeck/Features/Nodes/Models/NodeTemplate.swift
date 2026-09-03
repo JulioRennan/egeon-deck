@@ -48,12 +48,16 @@ struct NodeTemplate: Codable {
         var config: String?
         /// Modelo pedido ao CLI. Nulo é o padrão dele.
         var model: String?
-        /// **Substitui** o `rules` da base quando presente — override, e não
-        /// soma: quem escreve regra para um CLI está reescrevendo aquele
-        /// trecho, não acrescentando ao geral.
+        /// O papel escrito com este CLI na tela, quando você escreveu um
+        /// diferente. Vazio = vale o geral.
+        var prompt: String?
+        /// As regras escritas com este CLI na tela. **Substituem** as gerais —
+        /// override, e não soma.
         var rules: String?
 
-        var isEmpty: Bool { cmd == nil && config == nil && model == nil && rules == nil }
+        var isEmpty: Bool {
+            cmd == nil && config == nil && model == nil && prompt == nil && rules == nil
+        }
     }
 
     /// Os valores efetivos para um CLI: o que vem da base, com o que aquele CLI
@@ -62,13 +66,56 @@ struct NodeTemplate: Codable {
         var cmd: String?
         var config: String?
         var model: String?
+        var prompt: String?
         var rules: String?
     }
 
+    /// Comando, configuração e modelo saem SÓ do mapa: eles não atravessam CLI
+    /// nenhum. Papel e regras são gerais, e o mapa só entra quando você escreveu
+    /// algo diferente com aquele CLI na tela (ADR-057).
     func resolved(for cli: String?) -> Resolved {
         let over = cli.flatMap { byAgent?[$0] }
         return Resolved(cmd: over?.cmd, config: over?.config, model: over?.model,
-                        rules: over?.rules ?? rules)
+                        prompt: over?.prompt ?? prompt, rules: over?.rules ?? rules)
+    }
+
+    /// Guarda o que estava na tela no CLI que estava na tela.
+    ///
+    /// É esta a regra que substitui um checkbox de escopo: quem decide de quem
+    /// é o texto é o CLI selecionado quando você escreveu. Papel e regras são
+    /// gerais até você mudá-los com outro CLI aberto — aí a diferença passa a
+    /// ser daquele CLI, e o anterior continua com o que tinha (ADR-057).
+    ///
+    /// Duas bordas que fazem a regra ser usável:
+    /// - **o primeiro texto vale para todos**, senão o componente nasceria
+    ///   preso ao CLI em que foi escrito;
+    /// - **texto igual ao geral não vira exceção**, senão um trecho nunca mais
+    ///   voltaria a ser de todos depois de editado uma vez.
+    func remembering(cli: String?, cmd: String?, config: String?, model: String?,
+                     prompt: String?, rules: String?) -> NodeTemplate {
+        guard let cli else { return self }
+        var out = self
+        var over = out.byAgent?[cli] ?? Overrides()
+        over.cmd = cmd
+        over.config = config
+        over.model = model
+
+        let virgin = out.prompt == nil && out.rules == nil
+            && (out.byAgent ?? [:]).allSatisfy { $0.value.prompt == nil && $0.value.rules == nil }
+        if virgin {
+            out.prompt = prompt
+            out.rules = rules
+            over.prompt = nil
+            over.rules = nil
+        } else {
+            over.prompt = prompt == out.prompt ? nil : prompt
+            over.rules = rules == out.rules ? nil : rules
+        }
+
+        var byAgent = out.byAgent ?? [:]
+        byAgent[cli] = over.isEmpty ? nil : over
+        out.byAgent = byAgent.isEmpty ? nil : byAgent
+        return out
     }
 
     /// O que este CLI guarda de próprio, para o formulário mostrar ao trocar.
@@ -214,13 +261,18 @@ enum NodeTemplateStore {
     /// regras do nó viram as gerais: quem captura um terminal não está dizendo
     /// que elas valem só ali (ADR-057).
     static func capture(from node: NodeConfig, name: String) -> NodeTemplate {
-        let over = NodeTemplate.Overrides(cmd: node.cmd, config: node.config,
-                                          model: node.model, rules: nil)
+        // O que vale agora é do CLI em uso; o que os outros tinham vem junto.
+        var byAgent = node.byAgent ?? [:]
+        if let key = node.agent {
+            var over = byAgent[key] ?? NodeTemplate.Overrides()
+            over.cmd = node.cmd
+            over.config = node.config
+            over.model = node.model
+            byAgent[key] = over.isEmpty ? nil : over
+        }
         return NodeTemplate(name: name, kind: node.type, agent: node.agent,
                             cwd: node.cwd, prompt: node.prompt, rules: node.rules,
-                            byAgent: (node.agent.flatMap { key in
-                                over.isEmpty ? nil : [key: over]
-                            }))
+                            byAgent: byAgent.isEmpty ? nil : byAgent)
     }
 
     /// Instancia o componente como nó, com id único dentro da bancada. O que é
@@ -233,8 +285,11 @@ enum NodeTemplateStore {
         node.config = resolved.config
         node.model = resolved.model
         node.cwd = component.cwd
-        node.prompt = component.prompt
+        node.prompt = resolved.prompt
         node.rules = resolved.rules
+        // A memória dos outros CLIs viaja com o nó: é o que faz voltar para o
+        // Claude Code depois de mexer no Codex devolver o que era.
+        node.byAgent = component.byAgent
         node.component = component.name
         return node
     }

@@ -57,14 +57,13 @@ final class NodeTemplateDialog {
                                    target: nil, action: nil)
     private let promptLabel = NSTextField(labelWithString: "PAPEL — quem este terminal é")
     private let rulesField = NSTextView()
-    /// Marcado, o texto das regras é só daquele CLI (`byAgent[cli].rules`) e
-    /// substitui o geral; desmarcado, é o geral (ADR-057).
-    private let rulesOnlyHere = HandButton(checkboxWithTitle: "só para este CLI",
-                                           target: nil, action: nil)
-    /// O componente que está sendo editado. Guardado inteiro porque o formulário
-    /// mostra um CLI por vez: sem ele, salvar com o Claude na tela apagaria o
-    /// que o OpenCode tem de próprio.
+    /// O componente em edição, com o que CADA CLI tem. O formulário mostra um
+    /// por vez: sem guardar o resto, salvar com o Claude Code na tela apagaria
+    /// o que o Codex tinha de próprio (ADR-057).
     private var loaded: NodeTemplate?
+    /// Qual CLI está na tela agora. Trocar guarda o que você digitou no CLI que
+    /// sai, antes de mostrar o que entra.
+    private var shownAgent: String?
     private let rulesLabel = NSTextField(
         labelWithString: "REGRAS — como se trabalha aqui (somam às da bancada)")
     private var rulesScroll: NSScrollView?
@@ -100,9 +99,10 @@ final class NodeTemplateDialog {
         reloadModelPicker(select: resolved.model)
         cmdField.stringValue = resolved.cmd ?? ""
         cwdField.stringValue = component.cwd ?? ""
-        promptField.string = component.prompt ?? ""
-        rulesField.string = resolved.rules ?? ""
+        // O preset traz o que ele tem para cada CLI junto: escolher um componente
+        // e trocar de CLI depois devolve o que aquele CLI tinha lá.
         loaded = component
+        showTexts(of: component.agent)
         updateAgentFields()
 
         // Escolher um preset não é o fim da tarefa: quase sempre você quer
@@ -130,37 +130,24 @@ final class NodeTemplateDialog {
         if name.isEmpty {
             name = isAgent ? (selectedAgentKey ?? "agente") : "sh"
         }
-        let cmd = cmdField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let cwd = cwdField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let prompt = promptField.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rules = rulesField.string.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // O componente é o papel; o que é do CLI vai para o mapa dele, e o dos
-        // OUTROS CLIs fica de pé — o formulário mostra um por vez (ADR-057).
-        let base = loaded ?? initial
-        var byAgent = base.byAgent ?? [:]
-        let onlyHere = rulesOnlyHere.state == .on
-        var generalRules = base.rules
-        if isAgent, let key = selectedAgentKey {
-            var over = byAgent[key] ?? NodeTemplate.Overrides()
-            over.cmd = cmd.isEmpty ? nil : cmd
-            over.config = selectedConfig
-            over.model = selectedModel
-            over.rules = (onlyHere && !rules.isEmpty) ? rules : nil
-            byAgent[key] = over.isEmpty ? nil : over
-            if !onlyHere { generalRules = rules.isEmpty ? nil : rules }
-        } else {
-            generalRules = rules.isEmpty ? nil : rules
+        // O que está na tela é do CLI que está na tela: a mesma regra da troca
+        // de CLI, aplicada de novo na saída (ADR-057).
+        rememberShown()
+        var base = loaded ?? initial
+        base.name = name
+        base.kind = isAgent ? .agent : .shell
+        base.agent = isAgent ? selectedAgentKey : nil
+        base.cwd = cwd.isEmpty ? nil : Self.normalizedFolder(cwd)
+        if !isAgent {
+            // Shell não tem CLI, papel nem regra — e não pode carregar o mapa
+            // de um agente que ele deixou de ser.
+            base.prompt = nil
+            base.rules = nil
+            base.byAgent = nil
         }
-
-        let component = NodeTemplate(
-            name: name,
-            kind: isAgent ? .agent : .shell,
-            agent: isAgent ? selectedAgentKey : nil,
-            cwd: cwd.isEmpty ? nil : Self.normalizedFolder(cwd),
-            prompt: (isAgent && !prompt.isEmpty) ? prompt : nil,
-            rules: isAgent ? generalRules : nil,
-            byAgent: byAgent.isEmpty ? nil : byAgent)
+        let component = base
 
         return Result(component: component, saveAsNodeTemplate: saveBox.state == .on)
     }
@@ -294,14 +281,8 @@ final class NodeTemplateDialog {
         // prompt — e é ela que faz a regra valer sobre o papel (ADR-056).
         rulesLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         rulesLabel.textColor = .secondaryLabelColor
-        rulesLabel.frame = NSRect(x: 0, y: 124, width: width - 130, height: 13)
+        rulesLabel.frame = NSRect(x: 0, y: 124, width: width, height: 13)
         container.addSubview(rulesLabel)
-
-        rulesOnlyHere.frame = NSRect(x: width - 128, y: 120, width: 128, height: 18)
-        rulesOnlyHere.font = .systemFont(ofSize: 10)
-        rulesOnlyHere.target = self
-        rulesOnlyHere.action = #selector(rulesScopeChanged)
-        container.addSubview(rulesOnlyHere)
 
         let rulesBox = NSScrollView(frame: NSRect(x: 0, y: 34, width: width, height: 84))
         rulesBox.hasVerticalScroller = true
@@ -309,7 +290,7 @@ final class NodeTemplateDialog {
         rulesField.frame = NSRect(x: 0, y: 0, width: width, height: 84)
         rulesField.font = .systemFont(ofSize: 11)
         loaded = loaded ?? initial
-        showRules(of: initial.agent)
+        showTexts(of: initial.agent)
         rulesField.isRichText = false
         rulesField.autoresizingMask = [.width]
         rulesBox.documentView = rulesField
@@ -473,25 +454,42 @@ final class NodeTemplateDialog {
         configValues[safe: configPicker.indexOfSelectedItem] ?? nil
     }
 
-    /// Mostra as regras do CLI selecionado: as dele quando tem override, as
-    /// gerais quando não.
-    private func showRules(of cli: String?) {
+    /// Papel e regras do CLI que entra: os dele quando você escreveu algo
+    /// diferente ali, os gerais quando não. Papel e regras são gerais — trocar
+    /// de CLI não esvazia os campos.
+    private func showTexts(of cli: String?) {
         let base = loaded ?? initial
-        let own = base.overrides(for: cli).rules
-        rulesOnlyHere.state = own == nil ? .off : .on
-        rulesField.string = own ?? base.rules ?? ""
+        let own = base.overrides(for: cli)
+        promptField.string = own.prompt ?? base.prompt ?? ""
+        rulesField.string = own.rules ?? base.rules ?? ""
+        shownAgent = cli
     }
 
-    /// Marcar e desmarcar não perde o que você digitou — só muda de quem é.
-    @objc private func rulesScopeChanged() {}
+    /// Guarda o que está na tela no CLI que estava selecionado — a regra mora
+    /// no `NodeTemplate`; aqui só se colhem os campos.
+    private func rememberShown() {
+        guard let cli = shownAgent else { return }
+        loaded = (loaded ?? initial).remembering(
+            cli: cli, cmd: trimmed(cmdField.stringValue), config: selectedConfig,
+            model: selectedModel, prompt: trimmed(promptField.string),
+            rules: trimmed(rulesField.string))
+    }
+
+    private func trimmed(_ text: String) -> String? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
 
     @objc private func agentChanged() {
-        showRules(of: selectedAgentKey)
+        rememberShown()
         // Trocar de CLI troca o conjunto de configurações: as do Claude Code não
         // dizem nada ao Codex. A escolha anterior é oferecida de volta só se a
         // CLI nova a conhecer.
-        reloadConfigPicker(select: selectedConfig)
-        reloadModelPicker(select: selectedModel)
+        let entering = loaded?.overrides(for: selectedAgentKey) ?? NodeTemplate.Overrides()
+        reloadConfigPicker(select: entering.config)
+        reloadModelPicker(select: entering.model)
+        cmdField.stringValue = entering.cmd ?? ""
+        showTexts(of: selectedAgentKey)
         updateAgentFields()
     }
 
