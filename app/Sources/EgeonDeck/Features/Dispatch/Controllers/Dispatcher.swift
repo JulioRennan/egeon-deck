@@ -954,6 +954,20 @@ final class Dispatcher {
             }
     }
 
+    /// Ler a tela de outro terminal vale para quem?
+    ///
+    /// De fora (você, pelo socket) vale para qualquer alvo — é a rota de
+    /// verificação do dia a dia. De dentro de um terminal, só para quem ele já
+    /// pode acionar: espiar um nó com que não há aresta seria olhar fora da
+    /// topologia que o canvas mostra, e a aresta é onde essa decisão mora
+    /// (ADR-012).
+    ///
+    /// Estática e sobre a lista pronta: a decisão é a regra, não o estado.
+    static func mayPeek(_ address: String, from origin: String?, peers: [String]) -> Bool {
+        guard let origin else { return true }
+        return address == origin || peers.contains(address)
+    }
+
     private func link(from: String, to: String) -> EdgeConfig? {
         let workbench = String(from.split(separator: "/").first ?? "")
         func id(_ address: String) -> String { String(address.split(separator: "/").last ?? "") }

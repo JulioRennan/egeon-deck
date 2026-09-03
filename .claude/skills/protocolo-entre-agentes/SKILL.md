@@ -89,7 +89,8 @@ descobre quem fala pelo pid do outro lado da conexão
 |---|---|---|
 | `egeon peers` | `GET /peers` | lista `{address, cli, role}` das arestas **saindo** do chamador (`peers(of:)`). Vazia = ninguém ligado agora; muda em tempo real. Conexão fora de terminal → `[]`. |
 | `egeon send <endereço> <<'MB' … MB` | `POST /message?target=` (endereço percent-encoded por `enc()`) corpo = texto puro (heredoc, sem JSON para o agente não errar escape) | `enfileirado para X; N na fila; envio a/b` ou erro de guarda |
-| `egeon status` | `GET /status` | estado do próprio terminal; fora de terminal: `"esta conexão não veio de um terminal"` |
+| `egeon peek <endereço> [linhas]` | `GET /peek?target=&lines=` | o que o vizinho exibe agora, sem interromper. `Dispatcher.mayPeek`: de dentro de um terminal só alcança quem está em `peers(of:)` (ou ele mesmo) — 403 `não existe ligação de você para 'X'`; de fora (origem nil) alcança qualquer nó (ADR-054) |
+| `egeon status` | `GET /status` | quem ELE é e como está: `address`, `role`, `workbench`, `cli`, `model`, `pending`, `peers`. Fora de terminal: `"esta conexão não veio de um terminal"` |
 | `egeon trace [texto]` (ou heredoc) | `POST /trace` corpo = texto puro | `{ok, address, file}`; anexa em `workbenches/<WorkbenchConfig.id>/trace.md` com carimbo hora · endereço (pid) · CLI · modelo · conversa (`AppControl.nodeIdentity`, ADR-036). Vazio → 400; fora de terminal → 403. O system prompt pede uma chamada ao fim de TODO turno, antes do marcador. No Claude Code o comando passa pela permissão de Bash: `Bash(egeon:*)` em `permissions.allow` (README, seção do `egeon`). |
 
 `resolve(_:siblingOf:)`: agente pode escrever só o `id` do vizinho; o app
@@ -148,6 +149,20 @@ restrição de comportamento é coisa da ferramenta do usuário (permissões do
 CLI), não de prosa injetada pelo app. O cabeçalho fica porque é informação —
 sem ele o agente confunde pedido com conteúdo, e o chat não sabe de quem foi
 (`ClaudeTranscript.agentEnvelope` lê `from` dali).
+
+### A skill do Claude Code (ADR-054)
+
+Prosa no system prompt não compete com a ferramenta de subagente do CLI: quando
+você diz "pede pro revisor", quem decide é a DESCRIÇÃO de uma ferramenta, e a
+única que casava era a do subagente. Por isso o app publica
+`ClaudeSkill.body` — `SKILL.md` com `name: egeon`, `user-invocable: false` e
+`when_to_use` carregando os gatilhos em português ("pede pro", "delega isso",
+"monta um time", "em paralelo") — em
+`~/.egeon*/claude/.claude/skills/egeon/SKILL.md`, entregue por
+`--add-dir` (`AgentProfile.skills`, dado do perfil). **Nunca no `~/.claude` do
+usuário**, e a pasta apontada guarda só a skill porque `--add-dir` também dá
+acesso de arquivo. Reescrita a cada arranque, como `bin/egeon` e
+`claude-hooks.json`. Guardada por `ClaudeSkillTests`.
 
 Texto que o agente vê no system prompt sobre a topologia:
 `main.swift:~1403` ("Este terminal é um nó do Egeon Deck e tem vizinhos

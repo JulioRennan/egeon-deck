@@ -85,8 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // para ser lido e ajustado, e para isso precisa existir antes.
         Worktree.installCopyScript()
         ClaudeHooks.install()
-EgeonCLI.install()
-ShellHook.install()
+        ClaudeSkill.install()
+        EgeonCLI.install()
+        ShellHook.install()
 
         buildMenu()
 
@@ -1787,6 +1788,8 @@ ShellHook.install()
             Use o comando `egeon`:
 
               egeon peers                     quem você pode acionar agora
+              egeon status                    quem VOCÊ é: endereço, papel, bancada
+              egeon peek <endereço> [linhas]  o que ele mostra agora, sem interromper
               egeon send <endereço> <<'MB'    manda o texto para ele
               (o que você quer dizer)
               MB
@@ -1796,7 +1799,10 @@ ShellHook.install()
 
             Lista vazia significa que ninguém está ligado a você neste momento; \
             ela muda enquanto você trabalha, então consulte na hora em vez de \
-            confiar na memória. Acionar não é obrigatório, e responder a uma \
+            confiar na memória. Quando o pedido for para outro agente, olhe os \
+            vizinhos ANTES de abrir um subagente do seu próprio CLI: o vizinho \
+            está aberto na tela do usuário, o subagente morre no fim do seu \
+            turno. Acionar não é obrigatório, e responder a uma \
             mensagem também não. Endereço fora da lista é recusado, e uma cadeia \
             longa demais de agentes falando entre si também — quando isso \
             acontecer, volte a falar com o usuário em vez de insistir.
@@ -1837,6 +1843,13 @@ ShellHook.install()
             // turno e o pedido de permissão (ADR-024).
             let report = profile.reportArguments(hookFile: ClaudeHooks.settingsFile.path)
             if let report { extras += report }
+            // E a pasta de skills: o catálogo do system prompt diz o que o
+            // `egeon` faz, mas quem compete com a ferramenta de subagente do CLI
+            // — na hora em que você pede "um agente para isso" — é a descrição
+            // de uma skill (ADR-054).
+            if let skills = profile.skillArguments(directory: ClaudeSkill.directory.path) {
+                extras += skills
+            }
             let flags = " " + extras.map(AppEnvironment.shellQuote).joined(separator: " ")
             return (conversationCommand(base: base, flags: flags, node: node, profile: profile),
                     nil, report != nil)

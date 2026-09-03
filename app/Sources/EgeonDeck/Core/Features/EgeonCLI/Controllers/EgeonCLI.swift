@@ -34,15 +34,18 @@ enum EgeonCLI {
     /// É de propósito: quem pergunta é identificado pelo app a partir do processo
     /// do outro lado do socket. Um parâmetro aqui seria só uma sugestão — e as
     /// guardas de cadeia não podem depender de algo que o agente escreve.
-    private static var body: String {
+    /// Interno e não privado: o que o script oferece é contrato com o agente, e
+    /// o teste guarda esse contrato.
+    static var body: String {
         """
         #!/usr/bin/env bash
         # Egeon Deck — falar com os outros terminais desta bancada.
         #
         #   egeon peers              quem você pode acionar
         #   egeon send <endereço>    manda o stdin para ele
+        #   egeon peek <endereço>    o que ele mostra agora, sem interromper
         #   egeon trace [texto]      registra na trilha da bancada (texto ou stdin)
-        #   egeon status             como está este terminal
+        #   egeon status             quem você é e como está este terminal
         #
         # Você não diz quem você é: o app descobre pelo processo que abriu a
         # conexão. Não adianta passar o endereço de outro terminal.
@@ -69,6 +72,12 @@ enum EgeonCLI {
             # Codificado: endereço com espaço no nome da bancada quebrava a linha HTTP.
             api POST "/message?target=$(enc "$2")" --data-binary @-
             ;;
+          peek)
+            [ $# -ge 2 ] || { echo "uso: egeon peek <endereço> [linhas]" >&2; exit 2; }
+            # Só de quem você já pode acionar: ler a tela de um terminal com que
+            # você não tem aresta seria bisbilhotar fora da topologia.
+            api GET "/peek?target=$(enc "$2")${3:+&lines=$3}"
+            ;;
           trace)
             # Texto nos argumentos ou no stdin: uma linha cabe na chamada, e o
             # heredoc é para quando vem mais que isso.
@@ -83,7 +92,7 @@ enum EgeonCLI {
             api GET /status
             ;;
           *)
-            sed -n '2,9p' "$0" | cut -c3-
+            sed -n '2,10p' "$0" | cut -c3-
             exit 2
             ;;
         esac

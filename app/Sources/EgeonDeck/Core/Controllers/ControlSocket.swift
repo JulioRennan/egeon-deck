@@ -378,9 +378,20 @@ final class ControlSocket {
                 guard let origin = Dispatcher.shared.target(callingOn: fd) else {
                     return ["detail": "esta conexão não veio de um terminal"]
                 }
-                return ["address": origin.address,
-                        "pending": origin.pending,
-                        "peers": Dispatcher.shared.peers(of: origin.address).count]
+                // Quem VOCÊ é vem antes de como você está: o agente não sabe
+                // o próprio papel nem o próprio endereço, e sem isso ele não
+                // tem como escolher entre delegar e fazer (ADR-054).
+                var payload: [String: Any] = [
+                    "address": origin.address,
+                    "pending": origin.pending,
+                    "peers": Dispatcher.shared.peers(of: origin.address).count]
+                if let role = AppControl.nodeRole?(origin.address) { payload["role"] = role }
+                if let identity = AppControl.nodeIdentity?(origin.address) {
+                    payload["cli"] = identity.cli
+                    payload["model"] = identity.model
+                }
+                payload["workbench"] = String(origin.address.split(separator: "/").first ?? "")
+                return payload
             }
             respond(fd, status: "200 OK", json: payload)
 
@@ -420,12 +431,27 @@ final class ControlSocket {
                     json: payload ?? ["ok": false, "error": "bancada desconhecida '\(target)'"])
 
         case ("GET", _, _) where route.contains("/peek"):
-            // /peek?target=ws/id — mostra o que o terminal realmente exibe.
+            // /peek?target=ws/id[&lines=n] — mostra o que o terminal realmente
+            // exibe. De dentro de um terminal (`egeon peek`), só de vizinho.
             let target = Self.target(in: route)
-            let lines = DispatchQueue.main.sync { Dispatcher.shared.target(target)?.peek() }
-            if let lines {
+            let count = Self.query(in: route)["lines"].flatMap(Int.init) ?? 20
+            enum Peek { case lines([String]), forbidden, unknown }
+            let result = DispatchQueue.main.sync { () -> Peek in
+                let origin = Dispatcher.shared.target(callingOn: fd)?.address
+                let peers = origin.map { Dispatcher.shared.peers(of: $0).map(\.address) } ?? []
+                guard Dispatcher.mayPeek(target, from: origin, peers: peers) else { return .forbidden }
+                guard let node = Dispatcher.shared.target(target) else { return .unknown }
+                return .lines(node.peek(lines: max(1, min(count, 200))))
+            }
+            switch result {
+            case .lines(let lines):
                 respond(fd, status: "200 OK", json: ["target": target, "lines": lines])
-            } else {
+            case .forbidden:
+                respond(fd, status: "403 Forbidden",
+                        json: ["ok": false,
+                               "error": "não existe ligação de você para '\(target)' — "
+                                   + "desenhe a aresta no canvas"])
+            case .unknown:
                 respond(fd, status: "404 Not Found",
                         json: ["ok": false, "error": "alvo desconhecido '\(target)'"])
             }

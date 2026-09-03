@@ -3179,3 +3179,54 @@ de passo aninhadas (`depth > 0`) logo abaixo dela.
 **Verificação:** `ChatStepToggleTests.testCoverClosesWhenAStepWasOpenedByHand`
 e `testClickingTheGroupCoverCyclesTheLevels`, que agora fecha um passo aberto
 pela capa.
+
+## ADR-054 — O vizinho compete com o subagente: uma skill, não mais prosa
+
+Pedir "manda o revisor olhar isso" abria um **subagente do próprio CLI** em vez
+de acionar o terminal ao lado. Não é desatenção do modelo: o catálogo que o app
+injeta no system prompt (`egeon peers`/`send`/`trace`) é prosa que entrou vinte
+mensagens atrás, e quem decide o caminho naquele instante é a **descrição de uma
+ferramenta**. A única descrição que casava com a frase era a do subagente.
+
+O Maestri resolve isso instalando skills e escrevendo a descrição com as frases
+do usuário ("ask [name] to…", "assemble a team", "delegate parallel work"), mais
+uma regra de reuso — `list` antes de recrutar. É o mesmo mecanismo do subagente,
+disputado no mesmo momento.
+
+**O app publica uma skill (`ClaudeSkill`)** com os gatilhos em português ("pede
+pro", "delega isso", "monta um time", "em paralelo") e a regra: quando o pedido
+for para outro agente, `egeon peers` primeiro; subagente do CLI é para busca que
+você mesmo vai consumir, não para "pede pro fulano".
+
+**Entregue por `--add-dir`, nunca escrita no `~/.claude` do usuário** — a mesma
+regra dos ganchos (ADR-024): a configuração dele não é lugar para o app mexer.
+`--add-dir` é a única porta documentada para carregar `.claude/skills` de fora da
+pasta pessoal, e como ele também dá acesso de arquivo, a pasta apontada
+(`~/.egeon*/claude`) guarda só a skill. Por flavor, como todo o resto. A flag é
+dado do perfil (`AgentProfile.skills`, `["--add-dir", "{dir}"]`), então um CLI
+que não saiba receber pasta de skills simplesmente não a recebe.
+
+**Duas peças a mais, para o vizinho ser escolha informada:**
+
+- `egeon status` diz **quem você é** — endereço, papel, bancada, CLI e modelo.
+  Sem isso o agente não sabia o próprio papel, e escolher entre fazer e delegar
+  depende de saber que chapéu se está usando.
+- `egeon peek <endereço> [linhas]` lê a tela do vizinho **sem interromper**. Só
+  alcança quem o chamador já pode acionar (`Dispatcher.mayPeek`): a aresta que
+  autoriza o `send` é a que autoriza o olhar. De fora (você, pelo socket)
+  continua alcançando qualquer nó — é a rota de verificação do dia a dia.
+
+O catálogo do system prompt continua, encurtado ao que é topologia: ele é a rede
+dos CLIs que não têm skill (Codex, Gemini, OpenCode).
+
+**Fica de fora, por ora:** `egeon ask` síncrono — mandar e esperar a resposta do
+vizinho, que é o que de fato empata a balança contra o subagente (ele devolve
+resultado; o `send` não devolve nada). Precisa de decisão própria sobre timeout,
+sobre o que fazer quando o destinatário pergunta algo no meio, e sobre como isso
+conta nas guardas de cadeia.
+
+**Verificação:** `ClaudeSkillTests` (frontmatter, gatilhos, corpo, escrita) ·
+`PeekGuardTests` (a guarda e a ajuda do script) · e no DEV, `egeon status`,
+`egeon peers` e `egeon peek` rodados de dentro de um agente, com o CLI
+anunciando "3 skills available" e o peek sem aresta recusado com
+`não existe ligação de você para 'X'`.

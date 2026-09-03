@@ -213,6 +213,15 @@ struct AgentProfile: Codable {
     /// não aparece na conversa e não se dilui depois de vinte mensagens.
     var systemPrompt: [String]?
 
+    /// Como apontar ao CLI uma pasta de skills nossa, com `{dir}` substituído.
+    ///
+    /// O catálogo do system prompt diz o que o `egeon` faz, mas não compete com
+    /// a ferramenta de subagente do próprio CLI: quando você pede "um agente
+    /// para isso", o que dispara é a descrição de uma skill, não prosa no
+    /// prompt. Então o app publica uma skill e a entrega por flag — sem tocar
+    /// no `~/.claude` do usuário, como já é regra dos ganchos (ADR-054).
+    var skills: [String]?
+
     /// O comando de barra que zera a conversa dentro da TUI (`/clear` no
     /// Claude Code). Injetado como prompt pelo "limpar a bancada"; nil quando
     /// o CLI não tem um — aí o terminal é pulado, não morto.
@@ -371,6 +380,13 @@ struct AgentProfile: Codable {
         return reportSession.map { $0.replacingOccurrences(of: "{file}", with: hookFile) }
     }
 
+    /// Argumentos que entregam a pasta de skills do app, ou nil quando o CLI
+    /// não sabe recebê-la.
+    func skillArguments(directory: String) -> [String]? {
+        guard let skills, !skills.isEmpty else { return nil }
+        return skills.map { $0.replacingOccurrences(of: "{dir}", with: directory) }
+    }
+
     /// Esta linha de comando ainda é o binário que o perfil declara?
     ///
     /// Quem trocou o `cmd` do nó pode ter trocado de programa, e anexar
@@ -429,6 +445,13 @@ enum AgentStore {
                   padrão.command == profile.command else { continue }
             updated[key]?.reportSession = padrão.reportSession
             changed.append("\(key).reportSession")
+        }
+
+        for (key, profile) in map where profile.skills == nil {
+            guard let padrão = defaults[key], padrão.skills != nil,
+                  padrão.command == profile.command else { continue }
+            updated[key]?.skills = padrão.skills
+            changed.append("\(key).skills")
         }
 
         // `configEnv` e `configGlob` descrevem a configuração DAQUELE CLI, então

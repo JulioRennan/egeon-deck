@@ -18,6 +18,11 @@ extension AgentProfile {
             newSession: ["--session-id", "{sessionId}"],
             reportSession: ["--settings", "{file}"],
             systemPrompt: ["--append-system-prompt", "{prompt}"],
+            // `--add-dir` dá acesso a arquivo à pasta, mas também é a única
+            // porta documentada para carregar `.claude/skills` de fora do
+            // `~/.claude` do usuário. Por isso a pasta que apontamos só tem a
+            // skill dentro (ADR-054).
+            skills: ["--add-dir", "{dir}"],
             clear: "/clear",
             // Apelidos que o CLI resolve para a versão corrente de cada família —
             // os que o `claude --help` cita (fable, opus, sonnet) mais os que o
