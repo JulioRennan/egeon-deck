@@ -285,8 +285,10 @@ enum NodeTemplateStore {
         node.config = resolved.config
         node.model = resolved.model
         node.cwd = component.cwd
-        node.prompt = resolved.prompt
-        node.rules = resolved.rules
+        // Os GERAIS: a exceção de cada CLI vai no mapa, e o efetivo sai dos dois
+        // na hora de subir.
+        node.prompt = component.prompt
+        node.rules = component.rules
         // A memória dos outros CLIs viaja com o nó: é o que faz voltar para o
         // Claude Code depois de mexer no Codex devolver o que era.
         node.byAgent = component.byAgent

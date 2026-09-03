@@ -73,6 +73,32 @@ final class NodeTemplateCrossCLITests: XCTestCase {
         XCTAssertEqual(base.rules, "escreva em português", "o geral fica de pé")
     }
 
+    /// O caminho inteiro pela UI, que é onde o vazamento apareceu: o texto
+    /// escrito com um CLI na tela não pode virar o GERAL ao reabrir o
+    /// formulário — senão ele reaparece em todos os outros.
+    func testReopeningDoesNotPromoteOneCLIsTextToGeneral() {
+        // Escreve com o Claude Code, depois com o Gemini.
+        let novo = NodeTemplate(name: "cleber", kind: .agent, agent: "claude")
+        let claude = novo.remembering(cli: "claude", cmd: nil, config: nil, model: nil,
+                                      prompt: "teste claude", rules: nil)
+        var comGemini = claude.remembering(cli: "gemini", cmd: nil, config: nil, model: nil,
+                                           prompt: "teste gemini", rules: nil)
+        comGemini.agent = "gemini"
+
+        // Vira nó rodando Gemini, e o nó volta a ser componente — que é o que
+        // acontece toda vez que o formulário reabre.
+        let node = NodeTemplateStore.instantiate(comGemini, id: "cleber")
+        XCTAssertEqual(node.effectivePrompt, "teste gemini", "é o que sobe no Gemini")
+        XCTAssertEqual(node.prompt, "teste claude", "mas o geral continua o geral")
+
+        let reaberto = NodeTemplateStore.capture(from: node, name: "cleber")
+        XCTAssertEqual(reaberto.resolved(for: "claude").prompt, "teste claude",
+                       "abrir com o Claude Code na tela não pode mostrar o do Gemini")
+        XCTAssertEqual(reaberto.resolved(for: "gemini").prompt, "teste gemini")
+        XCTAssertEqual(reaberto.resolved(for: "codex").prompt, "teste claude",
+                       "um CLI sem exceção vê o geral")
+    }
+
     /// A memória viaja com o nó: é o que faz reabrir o formulário e trocar de
     /// CLI devolver o que aquele CLI tinha.
     func testTheAgentMapSurvivesInTheNode() throws {
@@ -107,7 +133,8 @@ final class NodeTemplateCrossCLITests: XCTestCase {
         XCTAssertEqual(node.agent, "opencode")
         XCTAssertNil(node.model, "o modelo do Claude não sobe num OpenCode")
         XCTAssertNil(node.config)
-        XCTAssertEqual(node.rules, "aqui, comente em inglês")
+        XCTAssertEqual(node.effectiveRules, "aqui, comente em inglês")
+        XCTAssertEqual(node.rules, "escreva em português", "o geral fica no geral")
         XCTAssertEqual(node.prompt, "você revisa o diff")
         XCTAssertEqual(node.component, "revisor")
     }

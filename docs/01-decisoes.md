@@ -3375,11 +3375,13 @@ Regra de CLI SUBSTITUI a geral, não soma. O formulário mostra um CLI por vez e
 guarda o componente inteiro, senão salvar com o Claude Code na tela apagaria o
 que o Codex tem de próprio.
 
-**A memória viaja no NÓ, não só no componente** (`NodeConfig.byAgent`): os
-campos soltos do nó continuam sendo o que vale AGORA — é deles que o arranque
-monta a linha de comando —, e o mapa guarda o resto. É o que faz reabrir o
-formulário, trocar para o Codex, ajustar, e voltar ao Claude Code devolver o que
-o Claude tinha.
+**A memória viaja no NÓ, não só no componente** (`NodeConfig.byAgent`). E o nó
+guarda o GERAL em `prompt`/`rules`, não o efetivo: quem sobe é
+`effectivePrompt`/`effectiveRules`, que olham a exceção do CLI em uso antes do
+geral. A primeira tentativa guardou o efetivo, e o formulário vazava — reabrir
+capturava o texto do CLI em uso COMO geral, e o papel escrito no Gemini
+aparecia no Claude Code. Comando, configuração e modelo continuam nos campos
+soltos, porque para eles não existe "geral": são do CLI e de mais ninguém.
 
 **Sem migração de disco:** componente escrito antes disto tem `cmd`/`config`/
 `model` na raiz, e o decoder os lê como o mapa do CLI que ele declara. Só a

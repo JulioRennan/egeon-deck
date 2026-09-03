@@ -211,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { return nil }
             return self?.configs.first { $0.name == parts[0] }?
-                .nodes.first { $0.id == parts[1] }?.prompt
+                .nodes.first { $0.id == parts[1] }?.effectivePrompt
         }
         AppControl.nodeIdentity = { [weak self] address in
             let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
@@ -1835,7 +1835,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let modelSuffix = modelFlags.isEmpty ? ""
             : " " + modelFlags.map(AppEnvironment.shellQuote).joined(separator: " ")
 
-        guard let text = profile.systemPromptText(role: node.prompt, catalog: catalog, rules: rules)
+        guard let text = profile.systemPromptText(role: node.effectivePrompt, catalog: catalog,
+                                                  rules: rules)
         else { return (base + modelSuffix, nil, false) }
 
         if let arguments = profile.systemPromptArguments(for: text), profile.runsOwnBinary(base) {
@@ -1856,7 +1857,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // protocolo, não — seria gastar um turno em toda bancada para um
         // marcador que se dilui depois de vinte mensagens. Aí o terminal fica
         // só com o silêncio.
-        let hasRole = !(node.prompt ?? "").isEmpty || !(rules ?? "").isEmpty
+        let hasRole = !(node.effectivePrompt ?? "").isEmpty || !(rules ?? "").isEmpty
         guard hasRole else {
             if profile.attentionConfig.activeMarker != nil {
                 Log.write("agente \(profile.displayName): sem flag de system prompt, "
@@ -1995,7 +1996,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let launch = Self.launchPlan(
                 for: node, profile: profile,
                 catalog: Self.catalog(for: node, in: config, agents: agents),
-                rules: AgentRules.block(workbench: config.rules, node: node.rules))
+                rules: AgentRules.block(workbench: config.rules, node: node.effectiveRules))
 
             let terminal = TerminalNode(frame: frame, address: address, title: title,
                                         cwd: config.directory(for: node),
@@ -2525,10 +2526,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && updated.cmd == current.cmd
             && updated.config == current.config
             && updated.cwd == current.cwd
-            && updated.prompt == current.prompt
-            // O system prompt só é lido no arranque: regra editada com o
-            // processo de pé não valeria nada até o próximo rebuild.
-            && updated.rules == current.rules
+            // O EFETIVO, não o geral: mudar só a exceção do CLI em uso muda o
+            // system prompt, e ele só é lido no arranque.
+            && updated.effectivePrompt == current.effectivePrompt
+            && updated.effectiveRules == current.effectiveRules
 
         configs[index].nodes[position] = updated
 
