@@ -71,6 +71,24 @@ final class ClaudeSkillTests: XCTestCase {
                       "lista vazia é aresta que falta, não motivo para inventar substituto")
     }
 
+    /// O outro lado da conversa: quem RECEBE tem de fechar o ciclo. Sem isso um
+    /// agente parava esperando o usuário e o que o acionou ficava no escuro,
+    /// sem saber se o pedido tinha sido entendido, estava andando ou tinha
+    /// morrido (ADR-058).
+    func testBodyTeachesAnsweringWhoeverCalledYou() {
+        let body = ClaudeSkill.body
+        XCTAssertTrue(body.contains("[ED] mensagem de"),
+                      "o agente precisa reconhecer o pedido que veio de outro")
+        XCTAssertTrue(body.contains("egeon send <quem mandou>"),
+                      "a volta é pelo mesmo comando, endereçada a quem mandou")
+        // As três regras da volta, cada uma resolvendo um jeito de deixar o
+        // outro lado no escuro.
+        XCTAssertTrue(body.contains("Termine respondendo a ele"), "terminou: avise")
+        XCTAssertTrue(body.contains("avise o remetente"), "empacou: avise antes de parar")
+        XCTAssertTrue(body.contains("fecha o ciclo, não abre outro"),
+                      "e a volta não pode virar conversa infinita")
+    }
+
     /// No ROOT do base path, que é onde o CLI procura skill pessoal.
     func testSkillLivesAtTheRootOfEachConfig() {
         let path = ClaudeSkill.skillFile(in: URL(fileURLWithPath: "/tmp/.claude-agro")).path

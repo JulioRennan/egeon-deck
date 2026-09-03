@@ -154,6 +154,15 @@ CLI), não de prosa injetada pelo app. O cabeçalho fica porque é informação 
 sem ele o agente confunde pedido com conteúdo, e o chat não sabe de quem foi
 (`ClaudeTranscript.agentEnvelope` lê `from` dali).
 
+### A volta é obrigação de quem recebe (ADR-058)
+
+A skill e o catálogo mandam **responder a quem acionou**: terminou, `egeon send`
+para o remetente com o que entregou ou por que não deu; vai parar para perguntar
+ao usuário, avise ANTES de parar; e a volta fecha o ciclo — não se responde a
+agradecimento. O app avisa o USUÁRIO (ganchos, laranja/verde), nunca o agente
+que delegou: quem sabe o que foi feito é quem fez. A volta gasta `maxSends` da
+seta `B → A`, que é própria, e conta uma visita.
+
 ### A skill do Claude Code (ADR-054)
 
 Prosa no system prompt não compete com a ferramenta de subagente do CLI: quando

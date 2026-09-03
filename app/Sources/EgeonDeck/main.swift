@@ -1798,6 +1798,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               pedido: … — entrega: …
               MB
 
+            Mensagem que chega marcada com `[ED] mensagem de <alguém>` veio de um \
+            terminal que parou e espera o seu resultado — ele não vê a sua tela. \
+            Termine respondendo a ele com `egeon send`, uma ou duas linhas: o que \
+            você entregou, ou por que não deu. E se você parar para perguntar algo \
+            ao usuário no meio, avise o remetente ANTES de parar: quem para calado \
+            deixa o outro esperando sem saber de nada.
+
             Lista vazia significa que ninguém está ligado a você neste momento; \
             ela muda enquanto você trabalha, então consulte na hora em vez de \
             confiar na memória. Quando o pedido for para outro agente, olhe os \

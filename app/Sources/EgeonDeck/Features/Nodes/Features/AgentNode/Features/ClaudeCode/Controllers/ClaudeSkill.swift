@@ -135,12 +135,37 @@ enum ClaudeSkill {
         ## Mandar trabalho
 
         `egeon send` **entrega e volta na hora**: ele enfileira a mensagem, não
-        espera a resposta. Depois de mandar, o normal é encerrar o seu turno
-        dizendo ao usuário para quem você passou — quem avisa quando o vizinho
+        espera a resposta. Ao mandar, **diga o que você espera de volta** — o
+        outro não vê a sua tela nem a sua conversa. Depois, encerre o seu turno
+        dizendo ao usuário para quem você passou; quem avisa quando o vizinho
         termina é o app, não você. Não fique em laço de `peek` esperando.
 
         Use `egeon peek` quando quiser mesmo conferir o estado de alguém sem
         mandar nada: ele lê a tela do vizinho e não interrompe o trabalho dele.
+
+        ## Quem te acionou continua esperando
+
+        Mensagem que chega marcada com `[ED] mensagem de <alguém>` é o pedido de
+        um terminal que parou e ficou esperando o seu resultado. **Ele não vê a
+        sua tela, não lê a sua conversa e não é avisado de nada que você faça.**
+
+        **Termine respondendo a ele**, com `egeon send <quem mandou>`: uma ou
+        duas linhas com o que você entregou, ou por que não deu. É isso que
+        fecha o ciclo — sem a volta, ele não sabe se você entendeu o pedido, se
+        ainda está trabalhando ou se desistiu, e o usuário fica com dois
+        terminais parados sem saber qual deles esperar.
+
+        **Se você parar para perguntar algo ao usuário, avise o remetente
+        antes.** Parar com o marcador de pergunta chama o USUÁRIO, não o
+        vizinho: mande uma linha dizendo que empacou e no quê, e só então pare.
+        Parar calado no meio de um pedido de outro agente é o que deixa o outro
+        lado esperando por horas.
+
+        **A volta fecha o ciclo, não abre outro.** Responda o resultado e pare:
+        nada de responder a um agradecimento, nem de devolver pergunta que o
+        usuário resolve. As guardas de cadeia cortam quando a conversa dá voltas
+        demais, e o corte chega justamente na hora em que você teria algo útil a
+        dizer.
 
         A topologia muda enquanto você trabalha — consulte na hora, não confie no
         que viu no começo da conversa. Endereço fora da lista é recusado, e uma

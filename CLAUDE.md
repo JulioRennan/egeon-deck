@@ -113,7 +113,8 @@ app/Sources/EgeonDeck/
   Code o app publica uma **skill** (`ClaudeSkill` → `skills/egeon/SKILL.md` no
   root de CADA `~/.claude*`, porque skill é por configuração e cada nó escolhe a
   sua) para que "pede pro fulano" acione o vizinho em vez de abrir um subagente
-  do CLI (ADR-054).
+  do CLI (ADR-054). Quem **recebe** um pedido de outro agente responde a ele ao
+  terminar — e avisa antes de parar para perguntar ao usuário (ADR-058).
 - Estado do terminal por gancho do CLI (`stop`/`ask`/`prompt` → `/activity`);
   laranja interrompe (permissão), verde só informa (terminou).
 - Worktree por bancada E por terminal (formulário decide pela branch).

@@ -3412,3 +3412,42 @@ a troca degrada em silêncio, com uma linha no log.
 regra substitui, legado vira mapa, captura separa, o mapa sobrevive no
 `workbenches.json`, e o caminho inteiro do usuário: escrever no Claude Code,
 editar no Codex, e o do Claude continuar lá · `NodeTemplateTests`.
+
+## ADR-058 — A volta é obrigação de quem recebe
+
+A skill da ADR-054 ensinava só o lado de quem MANDA: consulte os vizinhos,
+delegue, encerre o turno. Faltava o outro lado, e o buraco aparecia todo dia —
+o agente acionado terminava (ou empacava esperando o usuário) sem dizer nada, e
+quem tinha delegado ficava no escuro: sem saber se o pedido foi entendido, se
+ainda está andando ou se morreu. Dois terminais parados, e o usuário sem saber
+qual deles esperar.
+
+O app avisa o USUÁRIO — é o que os ganchos e o laranja/verde fazem (ADR-024).
+Ele nunca avisou o agente que delegou, e não deveria: quem sabe o que foi feito
+é quem fez.
+
+**Três regras entram na skill e no catálogo do system prompt** (o catálogo é a
+rede dos CLIs sem skill):
+
+1. **Terminou, responda a quem mandou** — `egeon send <remetente>`, uma ou duas
+   linhas: o que entregou, ou por que não deu. A mensagem que chegou traz
+   `[ED] mensagem de <alguém>` (ADR-055), então o endereço da volta está ali.
+2. **Vai parar para perguntar ao usuário? Avise antes.** Parar com `[[ED:ask]]`
+   chama o usuário, não o vizinho. Parar calado no meio de um pedido de outro
+   agente é o caso que mais custava tempo.
+3. **A volta fecha o ciclo, não abre outro** — nada de responder a
+   agradecimento nem de devolver pergunta que o usuário resolve. Sem isso a
+   obrigação de responder viraria pingue-pongue, e as guardas de cadeia
+   (ADR-012) cortariam justamente quando alguém tivesse algo útil a dizer.
+
+E do lado de quem manda, uma linha a mais: **diga o que espera de volta**. O
+outro não vê a sua tela nem a sua conversa.
+
+As guardas não mudam. A volta é uma mensagem como outra qualquer: gasta
+`maxSends` da seta `B → A` (que é própria, não a mesma de `A → B`) e conta uma
+visita. Com os padrões 2 e 4 cabe ida, volta e um ajuste — que é a conversa que
+se quer.
+
+**Verificação:** `ClaudeSkillTests.testBodyTeachesAnsweringWhoeverCalledYou` e,
+no DEV, dois agentes reais: um pediu ao outro a capital da Bolívia e recebeu
+`[ED] mensagem de trace-teste/claude-2` com a resposta, sem ninguém no meio.
