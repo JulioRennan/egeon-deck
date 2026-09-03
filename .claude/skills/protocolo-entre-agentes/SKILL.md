@@ -157,12 +157,17 @@ você diz "pede pro revisor", quem decide é a DESCRIÇÃO de uma ferramenta, e 
 única que casava era a do subagente. Por isso o app publica
 `ClaudeSkill.body` — `SKILL.md` com `name: egeon`, `user-invocable: false` e
 `when_to_use` carregando os gatilhos em português ("pede pro", "delega isso",
-"monta um time", "em paralelo") — em
-`~/.egeon*/claude/.claude/skills/egeon/SKILL.md`, entregue por
-`--add-dir` (`AgentProfile.skills`, dado do perfil). **Nunca no `~/.claude` do
-usuário**, e a pasta apontada guarda só a skill porque `--add-dir` também dá
-acesso de arquivo. Reescrita a cada arranque, como `bin/egeon` e
-`claude-hooks.json`. Guardada por `ClaudeSkillTests`.
+"monta um time", "em paralelo").
+
+**Onde:** `skills/egeon/SKILL.md` no root de CADA configuração do Claude Code no
+disco (`ClaudeSkill.configDirectories`: o `configGlob` `~/.claude*` mais a do
+ambiente). Skill é por configuração, e o formulário do nó deixa escolher qual o
+terminal usa — escrever numa só deixaria sem skill o agente apontado para a
+outra. É a única coisa que o app escreve na config do usuário, e a exceção é
+consciente: `--add-dir` (a alternativa) entra como skill de projeto, sombreia com
+a pessoal e não alcança nó com `cmd` trocado. Reescrita a cada arranque, como
+`bin/egeon` e `claude-hooks.json`; o corpo avisa que é gerado. Guardada por
+`ClaudeSkillTests`.
 
 Texto que o agente vê no system prompt sobre a topologia:
 `main.swift:~1403` ("Este terminal é um nó do Egeon Deck e tem vizinhos

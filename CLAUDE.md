@@ -110,9 +110,10 @@ app/Sources/EgeonDeck/
   tempo real; quem falou vem do pid do socket, nunca do texto. `egeon status` diz
   ao agente quem ELE é (endereço, papel, bancada) e `egeon peek <endereço>` lê a
   tela do vizinho sem interromper — só de quem ele já pode acionar. No Claude
-  Code o app publica uma **skill** (`ClaudeSkill`, por `--add-dir`, nunca no
-  `~/.claude` do usuário) para que "pede pro fulano" acione o vizinho em vez de
-  abrir um subagente do CLI (ADR-054).
+  Code o app publica uma **skill** (`ClaudeSkill` → `skills/egeon/SKILL.md` no
+  root de CADA `~/.claude*`, porque skill é por configuração e cada nó escolhe a
+  sua) para que "pede pro fulano" acione o vizinho em vez de abrir um subagente
+  do CLI (ADR-054).
 - Estado do terminal por gancho do CLI (`stop`/`ask`/`prompt` → `/activity`);
   laranja interrompe (permissão), verde só informa (terminou).
 - Worktree por bancada E por terminal (formulário decide pela branch).

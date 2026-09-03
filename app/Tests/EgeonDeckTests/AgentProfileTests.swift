@@ -15,8 +15,6 @@ final class AgentProfileTests: XCTestCase {
                        ["--settings", "/tmp/h.json"])
         XCTAssertEqual(profile.systemPromptArguments(for: "seja revisor"),
                        ["--append-system-prompt", "seja revisor"])
-        XCTAssertEqual(profile.skillArguments(directory: "/tmp/claude"),
-                       ["--add-dir", "/tmp/claude"])
         // Sabe retomar E criar com id nosso — é o que faz a conversa sobreviver
         // ao rebuild.
         XCTAssertTrue(profile.keepsConversation)
@@ -40,7 +38,6 @@ final class AgentProfileTests: XCTestCase {
             #"{"displayName":"X","command":["x"]}"#.utf8))
         XCTAssertNil(bare.conversationArguments(bare.resume, id: "A"))
         XCTAssertNil(bare.reportArguments(hookFile: "/f"))
-        XCTAssertNil(bare.skillArguments(directory: "/d"))
         XCTAssertNil(bare.systemPromptArguments(for: "p"))
         XCTAssertNil(bare.modelArguments("opus"))
         XCTAssertFalse(bare.offersModels)

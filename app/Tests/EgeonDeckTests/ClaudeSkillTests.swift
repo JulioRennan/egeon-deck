@@ -27,6 +27,27 @@ final class ClaudeSkillTests: XCTestCase {
                       "não é comando que se digita: é o que o agente precisa saber")
     }
 
+    /// O texto é português com travessão, aspas e dois-pontos no meio das frases
+    /// — e um `: ` solto num escalar YAML derruba o frontmatter INTEIRO, sem
+    /// erro visível: o CLI passa a usar o primeiro parágrafo do corpo como
+    /// descrição, e os gatilhos somem. Aconteceu; por isso todo valor de texto
+    /// vai em bloco (`>-`), onde nada disso é sintaxe.
+    func testTextValuesUseBlockScalarsSoPunctuationCannotBreakTheYAML() {
+        let front = frontmatter(of: ClaudeSkill.body)
+        XCTAssertTrue(front.contains("description: >-"), "descrição em bloco")
+        XCTAssertTrue(front.contains("when_to_use: >-"), "gatilhos em bloco")
+
+        for line in front.split(separator: "\n") where !line.hasPrefix(" ") {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            guard !value.isEmpty, value != ">-", value != ">", value != "|" else { continue }
+            // Escalar numa linha só: tem de ser simples o bastante para não
+            // precisar de aspas.
+            XCTAssertFalse(value.contains(": "), "`\(line)` quebra o YAML")
+            XCTAssertFalse(value.contains(" #"), "`\(line)` vira comentário no meio")
+        }
+    }
+
     /// As frases que hoje levam ao subagente têm de estar no frontmatter — é por
     /// ele que o CLI decide carregar a skill, não pelo corpo.
     func testTriggerPhrasesAreInTheFrontmatter() {
@@ -50,29 +71,50 @@ final class ClaudeSkillTests: XCTestCase {
                       "lista vazia é aresta que falta, não motivo para inventar substituto")
     }
 
-    /// Publicada numa pasta NOSSA, por flavor, e não no `~/.claude` do usuário.
-    func testSkillLivesUnderTheFolderHandedToTheCLI() {
-        let path = ClaudeSkill.skillFile.path
-        XCTAssertTrue(path.hasSuffix("/.claude/skills/egeon/SKILL.md"),
-                      "o CLI procura exatamente neste caminho dentro da pasta apontada")
-        XCTAssertTrue(path.hasPrefix(ClaudeSkill.directory.path + "/"),
-                      "tudo o que o `--add-dir` entrega mora sob a pasta apontada")
-        XCTAssertTrue(ClaudeSkill.directory.path.hasPrefix(Flavor.current.configDirectory.path),
-                      "por flavor: o dev não reescreve o que o estável está lendo")
+    /// No ROOT do base path, que é onde o CLI procura skill pessoal.
+    func testSkillLivesAtTheRootOfEachConfig() {
+        let path = ClaudeSkill.skillFile(in: URL(fileURLWithPath: "/tmp/.claude-agro")).path
+        XCTAssertEqual(path, "/tmp/.claude-agro/skills/egeon/SKILL.md")
     }
 
-    func testInstallWritesTheSkillFile() throws {
+    /// Uma máquina tem mais de uma configuração — `~/.claude` e `~/.claude-agro`
+    /// convivem, e cada nó escolhe a sua. A skill vai em TODAS: escrever numa só
+    /// deixa sem ela justamente o agente que aponta para a outra.
+    func testInstallWritesIntoEveryConfig() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("skill-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
+        let configs = [root.appendingPathComponent(".claude"),
+                       root.appendingPathComponent(".claude-agro")]
 
-        let file = try XCTUnwrap(ClaudeSkill.install(into: root))
-        XCTAssertEqual(file, ClaudeSkill.skillFile(in: root))
-        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), ClaudeSkill.body)
+        let written = ClaudeSkill.install(into: configs)
+        XCTAssertEqual(written, configs.map(ClaudeSkill.skillFile(in:)))
+        for file in written {
+            XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), ClaudeSkill.body)
+        }
 
-        // Reescrita a cada arranque: o texto acompanha a versão que subiu.
-        try "velho".write(to: file, atomically: true, encoding: .utf8)
-        ClaudeSkill.install(into: root)
-        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), ClaudeSkill.body)
+        // Reescrita a cada arranque: o texto acompanha a versão que subiu, e o
+        // arquivo avisa quem manda nele.
+        try "velho".write(to: written[0], atomically: true, encoding: .utf8)
+        ClaudeSkill.install(into: configs)
+        XCTAssertEqual(try String(contentsOf: written[0], encoding: .utf8), ClaudeSkill.body)
+        XCTAssertTrue(ClaudeSkill.body.contains("Escrito pelo Egeon Deck"),
+                      "o arquivo mora na config do usuário: tem de dizer que é gerado")
+    }
+
+    /// As configurações vêm do mesmo `configGlob` que o formulário do nó oferece,
+    /// mais a do ambiente — que pode estar fora do padrão `~/.claude*`.
+    func testConfigDirectoriesIncludeTheEnvironmentOne() throws {
+        let profile = AgentProfile.claudeCode
+        XCTAssertEqual(profile.configEnv, "CLAUDE_CONFIG_DIR")
+        XCTAssertEqual(profile.configGlob, "~/.claude*")
+
+        let found = ClaudeSkill.configDirectories()
+        XCTAssertEqual(Set(found.map(\.standardizedFileURL)).count, found.count,
+                       "sem repetir: o do ambiente costuma já estar no glob")
+        if let named = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"], !named.isEmpty {
+            let url = URL(fileURLWithPath: (named as NSString).expandingTildeInPath)
+            XCTAssertTrue(found.contains { $0.standardizedFileURL == url.standardizedFileURL })
+        }
     }
 }

@@ -3198,13 +3198,22 @@ pro", "delega isso", "monta um time", "em paralelo") e a regra: quando o pedido
 for para outro agente, `egeon peers` primeiro; subagente do CLI é para busca que
 você mesmo vai consumir, não para "pede pro fulano".
 
-**Entregue por `--add-dir`, nunca escrita no `~/.claude` do usuário** — a mesma
-regra dos ganchos (ADR-024): a configuração dele não é lugar para o app mexer.
-`--add-dir` é a única porta documentada para carregar `.claude/skills` de fora da
-pasta pessoal, e como ele também dá acesso de arquivo, a pasta apontada
-(`~/.egeon*/claude`) guarda só a skill. Por flavor, como todo o resto. A flag é
-dado do perfil (`AgentProfile.skills`, `["--add-dir", "{dir}"]`), então um CLI
-que não saiba receber pasta de skills simplesmente não a recebe.
+**Escrita no root de CADA configuração do Claude Code que existe no disco** —
+`~/.claude`, `~/.claude-agro`, e o que mais o `configGlob` (`~/.claude*`) achar,
+mais a do ambiente. Skill é por configuração, e uma máquina tem várias: o
+formulário do nó já deixa escolher qual delas o terminal usa, e escrever numa só
+deixaria sem skill justamente o agente apontado para a outra.
+
+É a exceção consciente à regra dos ganchos (ADR-024), que vão por `--settings`
+num arquivo nosso. A primeira tentativa foi manter a regra — a skill numa pasta
+do app, entregue por `--add-dir` — e não se sustenta: `--add-dir` carrega a
+pasta como skill de PROJETO, então quando a pessoal existe as duas coexistem
+sombreando-se, e nó com `cmd` trocado não recebe flag nenhuma e ficaria sem
+skill. Escrever no lugar onde o CLI já procura resolve os dois.
+
+O que o app toca ali é uma pasta só, com nome nosso (`skills/egeon/`), reescrita
+a cada arranque, e o arquivo diz no corpo que é gerado. Nada mais da configuração
+é lido ou alterado.
 
 **Duas peças a mais, para o vizinho ser escolha informada:**
 
@@ -3225,7 +3234,16 @@ resultado; o `send` não devolve nada). Precisa de decisão própria sobre timeo
 sobre o que fazer quando o destinatário pergunta algo no meio, e sobre como isso
 conta nas guardas de cadeia.
 
-**Verificação:** `ClaudeSkillTests` (frontmatter, gatilhos, corpo, escrita) ·
+**A armadilha do frontmatter:** o texto é português com travessão, aspas e
+dois-pontos no meio das frases, e um `: ` solto num escalar YAML derruba o
+frontmatter INTEIRO — sem erro visível. O CLI então usa o primeiro parágrafo do
+corpo como descrição e os gatilhos somem, que é justamente o que a skill existe
+para ter. Aconteceu na primeira publicação: a listagem mostrava "Os outros
+terminais desta bancada". Todo valor de texto vai em bloco (`>-`), onde nada
+disso é sintaxe.
+
+**Verificação:** `ClaudeSkillTests` (frontmatter, YAML sem escalar quebrável,
+gatilhos, corpo, escrita em toda configuração) ·
 `PeekGuardTests` (a guarda e a ajuda do script) · e no DEV, `egeon status`,
 `egeon peers` e `egeon peek` rodados de dentro de um agente, com o CLI
 anunciando "3 skills available" e o peek sem aresta recusado com

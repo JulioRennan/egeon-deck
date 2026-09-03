@@ -105,11 +105,17 @@ egeon trace "pedido: … — entrega: …"   # registra na trilha da bancada
 `peek` só alcança quem o terminal já pode acionar — a aresta do canvas é a mesma
 que autoriza o `send`. De fora (o seu `curl` no socket) alcança qualquer nó.
 
-No Claude Code o app ainda **publica uma skill** apontada por `--add-dir`, numa
-pasta dele (`~/.egeon/claude`), nunca no seu `~/.claude`. Ela existe porque prosa
-no system prompt não compete com a ferramenta de subagente do CLI: quando você
-diz "pede pro revisor", o que decide o caminho é a descrição de uma ferramenta.
-A skill entra nessa disputa e manda olhar os vizinhos primeiro.
+No Claude Code o app ainda **publica uma skill** chamada `egeon`. Ela existe
+porque prosa no system prompt não compete com a ferramenta de subagente do CLI:
+quando você diz "pede pro revisor", o que decide o caminho é a descrição de uma
+ferramenta. A skill entra nessa disputa e manda olhar os vizinhos primeiro.
+
+É o **único** lugar em que o app escreve na sua configuração do Claude Code:
+`skills/egeon/SKILL.md` no root de cada base path que existir — `~/.claude`,
+`~/.claude-agro`, qualquer `~/.claude*` — porque skill é por configuração e cada
+nó escolhe a sua no formulário. A pasta é reescrita a cada arranque do app (o
+arquivo avisa isso no corpo); para se livrar dela, apague `skills/egeon/` com o
+app fechado.
 
 A **trilha** é a memória da bancada: `~/.egeon/workbenches/<id>/trace.md`, um
 Markdown só por bancada, que se lê de cima a baixo para auditar quem fez o quê. A

@@ -1843,13 +1843,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // turno e o pedido de permissão (ADR-024).
             let report = profile.reportArguments(hookFile: ClaudeHooks.settingsFile.path)
             if let report { extras += report }
-            // E a pasta de skills: o catálogo do system prompt diz o que o
-            // `egeon` faz, mas quem compete com a ferramenta de subagente do CLI
-            // — na hora em que você pede "um agente para isso" — é a descrição
-            // de uma skill (ADR-054).
-            if let skills = profile.skillArguments(directory: ClaudeSkill.directory.path) {
-                extras += skills
-            }
             let flags = " " + extras.map(AppEnvironment.shellQuote).joined(separator: " ")
             return (conversationCommand(base: base, flags: flags, node: node, profile: profile),
                     nil, report != nil)

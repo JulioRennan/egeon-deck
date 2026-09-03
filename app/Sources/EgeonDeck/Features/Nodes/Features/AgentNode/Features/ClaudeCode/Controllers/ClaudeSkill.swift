@@ -10,35 +10,62 @@ import Foundation
 /// invisível em vez de falar com o terminal ao lado, que é o que você está vendo
 /// na tela. A skill entra na mesma disputa, com as suas palavras (ADR-054).
 ///
-/// Publicada numa pasta nossa e entregue por `--add-dir`, nunca escrita no
-/// `~/.claude` do usuário — a configuração dele não é lugar para o app mexer, a
-/// mesma regra dos ganchos. Por isso a pasta apontada guarda só isto: `--add-dir`
-/// também dá acesso de arquivo, e o que ela contém é o que o agente ganha.
+/// Skill é **por configuração do CLI**, e uma máquina tem várias: `~/.claude`,
+/// `~/.claude-agro`, a que cada nó escolhe no formulário. Então ela é escrita no
+/// root de CADA base path que existe no disco — é lá que o Claude Code procura,
+/// e um caminho só deixaria o agente que aponta para outra config sem ela.
+///
+/// É a exceção à regra de não escrever na config do usuário (os ganchos vão por
+/// `--settings`, um arquivo nosso): não há flag que entregue skill de fora, e
+/// `--add-dir` — a porta que existe — sombreia mal quando as duas coexistem e
+/// não alcança nó com `cmd` trocado, que não recebe flag nenhuma. Escrever
+/// alcança os dois casos. Uma pasta só, com nome nosso, reescrita a cada
+/// arranque; nada mais na config é tocado (ADR-054).
 enum ClaudeSkill {
-    /// A pasta entregue ao CLI. Por flavor: o dev publica o texto dele sem
-    /// mexer no que os agentes do estável estão lendo.
-    static var directory: URL { Flavor.current.config("claude") }
-    static var skillFile: URL { skillFile(in: directory) }
+    /// O nome da pasta é o nome da skill: é dele que sai o `/egeon`.
+    static let name = "egeon"
 
-    /// Onde o CLI procura, dentro da pasta que recebe: é este caminho exato que
-    /// o `--add-dir` faz o Claude Code varrer.
-    static func skillFile(in directory: URL) -> URL {
-        directory.appendingPathComponent(".claude/skills/egeon/SKILL.md")
+    /// Onde o CLI procura dentro de um base path.
+    static func skillFile(in config: URL) -> URL {
+        config.appendingPathComponent("skills/\(name)/SKILL.md")
+    }
+
+    /// As configurações do Claude Code que existem agora: as do padrão
+    /// `~/.claude*` (o mesmo `configGlob` que o formulário do nó oferece) mais a
+    /// do ambiente, que pode estar fora dele.
+    static func configDirectories(of profile: AgentProfile = .claudeCode) -> [URL] {
+        var out = profile.discoveredConfigs
+        if let named = profile.configEnv.flatMap({ ProcessInfo.processInfo.environment[$0] }),
+           !named.isEmpty {
+            let url = URL(fileURLWithPath: (named as NSString).expandingTildeInPath)
+            if !out.contains(where: { $0.standardizedFileURL == url.standardizedFileURL }) {
+                out.append(url)
+            }
+        }
+        return out
     }
 
     /// Escrita a cada arranque, como o `bin/egeon` e o `claude-hooks.json`: o
     /// texto acompanha a versão do app que subiu, não o que ficou no disco.
+    /// Devolve onde escreveu.
     @discardableResult
-    static func install(into directory: URL = ClaudeSkill.directory) -> URL? {
-        let file = skillFile(in: directory)
-        do {
-            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            try body.write(to: file, atomically: true, encoding: .utf8)
-            return file
-        } catch {
-            Log.write("skill: não consegui escrever \(file.path) — \(error)")
-            return nil
+    static func install(into configs: [URL] = ClaudeSkill.configDirectories()) -> [URL] {
+        // Primeira tentativa: a skill morava numa pasta nossa, entregue por
+        // `--add-dir`. Deixá-la ali é ter duas cópias da mesma skill em disco,
+        // e um dia elas divergem.
+        try? FileManager.default.removeItem(at: Flavor.current.config("claude"))
+
+        return configs.compactMap { config in
+            let file = skillFile(in: config)
+            do {
+                try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
+                                                        withIntermediateDirectories: true)
+                try body.write(to: file, atomically: true, encoding: .utf8)
+                return file
+            } catch {
+                Log.write("skill: não consegui escrever \(file.path) — \(error)")
+                return nil
+            }
         }
     }
 
@@ -49,11 +76,12 @@ enum ClaudeSkill {
         """
         ---
         name: egeon
-        description: Falar com os outros terminais desta bancada do Egeon Deck — \
-        os agentes que o usuário vê no canvas ao lado deste. Use quando o pedido \
-        envolver outro agente: mandar trabalho, pedir revisão, perguntar algo, \
-        ver o que ele está fazendo, ou montar/dividir trabalho entre agentes.
-        when_to_use: >
+        description: >-
+          Falar com os outros terminais desta bancada do Egeon Deck — os agentes
+          que o usuário vê no canvas ao lado deste. Use quando o pedido envolver
+          outro agente — mandar trabalho, pedir revisão, perguntar algo, ver o
+          que ele está fazendo, dividir trabalho entre agentes.
+        when_to_use: >-
           Quando o usuário disser "pede pro <nome>", "manda o <nome> fazer",
           "fala com o <nome>", "avisa o <nome>", "o que o <nome> está fazendo",
           "pergunta pro <nome>", "divide isso entre os agentes", "monta um time",
@@ -63,6 +91,9 @@ enum ClaudeSkill {
         ---
 
         # Os outros terminais desta bancada
+
+        <!-- Escrito pelo Egeon Deck a cada arranque do app. Editar aqui não
+             adianta: a próxima subida sobrescreve. -->
 
         Você é um nó de uma bancada do Egeon Deck. Ao seu lado, no canvas que o
         usuário está vendo, há outros terminais — cada um com o seu agente, o seu
