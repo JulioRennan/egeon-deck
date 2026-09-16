@@ -68,13 +68,23 @@ app/Sources/EgeonDeck/
 - **Nó** — um card: `editor` · `shell` · `agent` · `web`. `NodeConfig` é a
   montagem; conversa nunca é copiada junto (`withoutConversation`).
 - **Endereço** — `bancada/id` (ex. `deck/revisor`); estável. A bancada tem
-  ainda um `id` próprio (8 hex) que sobrevive a rename e não se repete.
+  ainda um `id` próprio (8 hex) que sobrevive a rename e não se repete — é por
+  ele que o app guarda o que é de uma bancada (`shells`, `edgeControllers`,
+  abas); posição na lista envelhece, e `WorkbenchLookup` faz a tradução.
 - **Aresta** — `from` pode acionar `to`. Vive na **bancada**, não no nó; nasce
   bidirecional; guardas: aresta obrigatória, `maxSends`, `maxVisits`, fila.
 - **Conversa** — `conversationId` por nó agente; o CLI chama de sessão.
 - **Visualização** — canvas · mosaico · chat (⌥⌘1/2/3); o card é o MESMO
   `NodeView` reparentado, o dono é o `WorkbenchShell`. Em chat o canvas fica
   montado por baixo, coberto (o pty precisa do passe de layout).
+- **Abas** (ADR-061) — as bancadas ABERTAS numa faixa no topo do conteúdo, com
+  os mesmos badges da barra lateral; a lateral continua sendo o catálogo (tudo
+  que existe). **Fechar a aba não encerra a bancada**: sai da faixa, os
+  terminais seguem rodando e ela volta pela lateral. `openTabs` (à vista) e
+  `shells` (de pé) são conjuntos diferentes. ⌘]/⌘[ percorrem a faixa, ⌘1…⌘9 vão
+  direto, ⌘W fecha a aba. A faixa vai para o disco (`tabOrder`/`tabActive`) e
+  volta no arranque, com teto de seis. Confere-se por `GET /tabs`
+  (`?close=<bancada>` fecha).
 - **Chat** — spec em `docs/03-spec-chat.md`. Participantes com cor própria e
   estado, composer estilo Slack, envio real, thread por turno com passos e
   citações. **Linha do tempo plana** (ADR-042): cada turno de cada agente é

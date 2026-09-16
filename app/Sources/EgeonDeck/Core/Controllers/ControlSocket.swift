@@ -368,6 +368,21 @@ final class ControlSocket {
             respond(fd, status: ok ? "200 OK" : "400 Bad Request",
                     json: payload ?? ["ok": false, "error": "app sem árvore"])
 
+        case ("GET", _, _) where route.contains("/tabs"):
+            // /tabs[?close=<bancada>] — as bancadas abertas, na ordem da faixa,
+            // com os badges; `close` fecha a aba sem encerrar a bancada.
+            let fechar = Self.query(in: route)["close"] ?? ""
+            let payload = DispatchQueue.main.sync { () -> [String: Any] in
+                if !fechar.isEmpty, let close = AppControl.closeTab {
+                    var out = close(fechar)
+                    out.merge(AppControl.tabsSnapshot?() ?? [:]) { a, _ in a }
+                    return out
+                }
+                return AppControl.tabsSnapshot?() ?? [:]
+            }
+            respond(fd, status: payload["ok"] as? Bool == false ? "404 Not Found" : "200 OK",
+                    json: payload)
+
         case ("GET", _, _) where route.contains("/workspaces"):
             // /workspaces — a árvore da barra lateral (ADR-043), para conferir
             // conciliação e pertencimento sem abrir a barra.

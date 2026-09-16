@@ -67,9 +67,24 @@ final class RootView: NSView {
         isMosaic ? Self.margin + sidebarWidth + Self.gap : 0
     }
 
+    /// Quanto a bancada cede à barra lateral.
+    ///
+    /// Aplicado aqui e no `show`, e não só no `layout`: trocar de bancada não
+    /// marca a raiz para layout, e a bancada nova entrava com recuo zero — a
+    /// faixa de abas nascia por baixo do vidro da barra, invisível e sem
+    /// clique.
+    private func applyInsets(to view: NSView?) {
+        guard let shell = view as? WorkbenchShell else { return }
+        shell.contentInset = contentInset
+        // A faixa cede SEMPRE, inclusive no canvas, onde o conteúdo corre por
+        // baixo do vidro de propósito (ADR-025).
+        shell.tabsInset = Self.margin + sidebarWidth + Self.gap
+    }
+
     func show(_ view: NSView) {
         guard content !== view else { return }
         content?.removeFromSuperview()
+        applyInsets(to: view)
         view.frame = contentFrame
         // Abaixo da barra: `addSubview` puro empilharia a bancada nova em cima do
         // vidro, e a barra sumiria na primeira troca de bancada.
@@ -112,6 +127,6 @@ final class RootView: NSView {
         sidebarPanel.frame = NSRect(x: Self.margin, y: Self.top, width: sidebarWidth,
                                     height: max(0, bounds.height - Self.top - Self.margin))
         content?.frame = contentFrame
-        (content as? WorkbenchShell)?.contentInset = contentInset
+        applyInsets(to: content)
     }
 }

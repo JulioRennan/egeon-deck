@@ -3555,3 +3555,71 @@ remoção limpa, caminho com symlink (`/var` × `/private/var`, que fazia o app 
 reconhecer a própria worktree), worktree ainda registrada (a pasta fica), pasta
 trancada (erro `leftovers`) e o bug em si: um escritor em rajada dentro da pasta
 enquanto ela é apagada, com o desfecho obrigatório de pasta e registro fora.
+
+## ADR-061 — As bancadas abertas viram abas, e fechar a aba não encerra nada
+
+**O problema.** A barra lateral é o catálogo: workspace → projeto → bancada,
+tudo que existe. Com dezenas de bancadas em vários projetos, ela deixou de
+responder à pergunta do dia a dia — *o que está aberto agora, e qual delas quer
+alguma coisa de mim?*. Aberto e parado moram na mesma lista vertical, separados
+só por uma bolinha e um aro, e o gerenciamento virou trabalho manual.
+
+**A decisão.** As bancadas **abertas** ganham uma faixa de abas no topo do
+conteúdo, abaixo da barra de visualização — o desenho do VS Code, onde a lateral
+é o Explorer e as abas são o que você abriu. Cada aba traz os **mesmos** badges
+da lateral, na mesma ordem fixa (spinner, laranja, verde — ADR-024): quem
+aprendeu a ler lá não aprende de novo aqui. A aba que pede alguma coisa ganha o
+aro laranja, como a pastilha da barra.
+
+**Fechar a aba não encerra a bancada.** Sai da faixa; os terminais continuam
+rodando, a conversa continua inteira, e ela volta pela barra lateral no mesmo
+estado. Encerrar de verdade continua sendo remover a bancada. É isso que separa
+`openTabs` (o que está à vista) de `shells` (o que está de pé) — dois conjuntos,
+de propósito.
+
+**Uma janela por bancada foi rejeitada.** Foi a primeira escolha, e caiu com uma
+captura do VS Code: o que se queria era a faixa, não janelas do sistema. Elas
+custariam caro e mudariam o que o app já sabe fazer — "estou olhando este
+terminal" é `window.isKeyWindow`, e só uma janela é key, então bancada visível
+num monitor lateral continuaria chamando; o monitor de eventos de cada canvas
+nunca rodou com dois canvases montados; e a barra lateral, que é **global** por
+natureza, teria de virar painel flutuante ou se duplicar. Nada disso paga uma
+faixa de abas.
+
+**Detalhes que custaram medição.**
+
+- A faixa **recua** a largura da barra lateral, inclusive no canvas, onde o
+  conteúdo corre por baixo do vidro de propósito (ADR-025). A primeira versão
+  não recuava: as pastilhas nasciam sob o vidro, invisíveis e sem clique, e nem
+  o print mostrava — foi a rota `/tabs`, com o frame de cada pastilha, que
+  apontou o `inset: 0`.
+- O recuo é aplicado no `show` da raiz, e não só no `layout`: trocar de bancada
+  não marca a raiz para layout, e a bancada nova entrava com recuo zero.
+- **Uma aba só não aparece**: ela não diz nada que a barra de cima já não diga, e
+  comia 34pt do canvas.
+- O espaço do `x` é reservado **sempre**, mesmo escondido: senão o nome encolhe e
+  reticencia no instante em que o mouse passa, e a faixa dança enquanto você a
+  percorre.
+- A faixa é remontada só quando a **lista de ids** muda; o resto é `show`, com o
+  mesmo cache de assinatura da barra lateral — são oito quadros por segundo de
+  spinner, por aba.
+- ⌘] e ⌘[ percorrem a **faixa**, não o catálogo: com dezenas de bancadas,
+  "próxima" só é útil entre as que você abriu. ⌘1…⌘9 vão direto, ⌘W fecha a aba.
+
+**A faixa sobrevive ao fechar do app.** `tabOrder` e `tabActive` no
+`workbenches.json`, ao lado de `view` e `mosaic` — é da mesma natureza: o jeito
+como a bancada estava sendo olhada. Chave ausente = fechada, e arquivo antigo
+carrega sem migração. Na volta, cada bancada **passa pela tela** para montar
+(shell fora da hierarquia nunca recebe passe de layout, e sem layout o terminal
+nasce com zero colunas), e só então a ordem salva é reimposta. Com teto de seis:
+cada bancada sobe vários processos, e um arquivo com dez marcadas faria o
+arranque abrir tudo de uma vez.
+
+**Verificação.** `WorkbenchTabTests` (o que cada aba mostra, os três badges
+juntos, a vizinha que assume ao fechar), `WorkbenchTabsBarTests` (a faixa
+montada de verdade: toda aba com pastilha visível, lado a lado, escondida quando
+vazia) e `WorkbenchTabOrderTests` (round-trip no JSON, arquivo sem a chave).
+No DEV, pelo socket: `GET /tabs` mostra a faixa como texto e o frame de cada
+pastilha; `GET /tabs?close=<bancada>` fecha a aba — e o `/peek` prova que os
+terminais dela continuam respondendo. Fechar e reabrir o app devolve a mesma
+faixa, na mesma ordem, na mesma aba.

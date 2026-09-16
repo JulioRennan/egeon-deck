@@ -121,6 +121,15 @@ enum AppControl {
     /// prompt, então quem implementa só grava quando o valor muda de fato.
     static var recordConversation: ((_ target: String, _ id: String, _ transcript: String?) -> Void)?
 
+    /// A faixa de bancadas abertas como dados: uma linha por aba, a ativa
+    /// marcada e os badges por extenso. Existe pelo mesmo motivo do `/peek`:
+    /// conferir o que está na tela sem comparar pixels.
+    static var tabsSnapshot: (() -> [String: Any])?
+
+    /// Fecha a aba de uma bancada — sem encerrar nada. O x da pastilha não é
+    /// dirigível de fora sem Acessibilidade (ADR-003), e esta é a mesma operação.
+    static var closeTab: ((_ workbench: String) -> [String: Any])?
+
     /// O modo chat de uma bancada como dados: participantes, foco, popup, caixa.
     /// Existe pelo mesmo motivo do `/peek`: conferir a tela sem comparar pixels.
     static var chatState: ((String) -> [String: Any]?)?

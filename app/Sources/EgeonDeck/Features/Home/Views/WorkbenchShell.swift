@@ -14,6 +14,9 @@ final class WorkbenchShell: NSView {
     let canvas = CanvasContainer(frame: .zero)
 
     private let bar = ViewToolbar()
+    /// As bancadas abertas. Vive no shell e não na raiz porque é aqui que a
+    /// barra de cima já mora, e as duas juntas são a moldura da bancada.
+    let tabs = WorkbenchTabsBar(frame: .zero)
     private let banner = NSTextField(labelWithString: "")
     /// O vidro do banner. Entra na hierarquia no lugar do rótulo, e é ele que os
     /// containers usam como referência de z-order.
@@ -71,6 +74,13 @@ final class WorkbenchShell: NSView {
         didSet { if contentInset != oldValue { needsLayout = true } }
     }
 
+    /// Quanto a FAIXA recua — sempre a largura da barra lateral, mesmo no
+    /// canvas, onde o conteúdo corre por baixo do vidro. Aba coberta pela barra
+    /// é aba que não se clica.
+    var tabsInset: CGFloat = 0 {
+        didSet { if tabsInset != oldValue { tabs.leftInset = tabsInset } }
+    }
+
     init(frame frameRect: NSRect, mode: ViewMode) {
         self.mode = mode
         super.init(frame: frameRect)
@@ -80,6 +90,9 @@ final class WorkbenchShell: NSView {
         bar.onSelect = { [weak self] mode in self?.show(mode) }
         bar.select(mode)
         addSubview(bar)
+
+        tabs.isHidden = true
+        addSubview(tabs)
 
         banner.font = .systemFont(ofSize: 12, weight: .semibold)
         banner.textColor = .black
@@ -286,10 +299,14 @@ final class WorkbenchShell: NSView {
 
     // MARK: Layout
 
+    /// Onde o conteúdo da bancada começa: abaixo da barra de cima e, quando há
+    /// mais de uma bancada aberta, abaixo da faixa de abas também.
+    var topInset: CGFloat { ViewToolbar.height + (tabs.isHidden ? 0 : WorkbenchTabsBar.height) }
+
     var contentFrame: NSRect {
-        NSRect(x: contentInset, y: ViewToolbar.height,
+        NSRect(x: contentInset, y: topInset,
                width: max(0, bounds.width - contentInset),
-               height: max(0, bounds.height - ViewToolbar.height))
+               height: max(0, bounds.height - topInset))
     }
 
     var barFrame: NSRect { bar.frame }
@@ -297,11 +314,13 @@ final class WorkbenchShell: NSView {
     override func layout() {
         super.layout()
         bar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: ViewToolbar.height)
+        tabs.frame = NSRect(x: 0, y: ViewToolbar.height, width: bounds.width,
+                            height: WorkbenchTabsBar.height)
         let content = contentFrame
         canvas.frame = content
         mosaic?.frame = content
         chat.frame = content
-        bannerPanel.frame = NSRect(x: bounds.midX - 380, y: ViewToolbar.height + 12,
+        bannerPanel.frame = NSRect(x: bounds.midX - 380, y: topInset + 12,
                                    width: 760, height: 30)
         busy.frame = content
     }
@@ -315,6 +334,17 @@ final class WorkbenchShell: NSView {
         busy.show(text)
         needsLayout = true
     }
+
+    /// As abas da janela. Esconder quando só há uma bancada aberta: uma aba
+    /// sozinha não diz nada que a barra de cima já não diga, e come 34pt.
+    func showTabs(_ list: [WorkbenchTab]) {
+        let hadTabs = !tabs.isHidden
+        tabs.show(list.count > 1 ? list : [])
+        if hadTabs != !tabs.isHidden { needsLayout = true; layoutSubtreeIfNeeded() }
+    }
+
+    /// A faixa está na tela? Para conferir de fora.
+    var tabsAreVisible: Bool { !tabs.isHidden }
 
     func showBanner(_ text: String?) {
         guard let text else { bannerPanel.isHidden = true; return }

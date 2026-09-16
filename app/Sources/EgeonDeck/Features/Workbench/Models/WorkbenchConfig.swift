@@ -60,6 +60,19 @@ struct WorkbenchConfig: Codable {
     /// Proporções dos divisores do mosaico, quando você já arrastou algum.
     var mosaic: MosaicLayout?
 
+    /// Esta bancada estava ABERTA na faixa de abas quando o app fechou, e em que
+    /// ordem. Nulo = fechada; é a chave que faz o app reabrir na semana seguinte
+    /// com o mesmo conjunto de bancadas na tela.
+    ///
+    /// Mora aqui, ao lado de `view` e `mosaic`, porque é da mesma natureza: o
+    /// jeito como esta bancada estava sendo olhada. Um arquivo à parte teria de
+    /// ser conciliado com esta lista, que já tem dono e debounce.
+    var tabOrder: Int?
+
+    /// Esta era a bancada na frente. Separado de `tabOrder` porque são duas
+    /// coisas: a ordem das abas não muda quando você troca de aba.
+    var tabActive: Bool?
+
     var viewMode: ViewMode { view ?? .canvas }
 
     static func newID() -> String {
@@ -68,6 +81,7 @@ struct WorkbenchConfig: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, path, nodes, template, project, edges, maxVisits, rules, view, mosaic
+        case tabOrder, tabActive
     }
 
     /// Escrito à mão só por causa do `id`: o decoder sintetizado exige a chave
@@ -85,12 +99,15 @@ struct WorkbenchConfig: Codable {
         rules = try c.decodeIfPresent(String.self, forKey: .rules)
         view = try c.decodeIfPresent(ViewMode.self, forKey: .view)
         mosaic = try c.decodeIfPresent(MosaicLayout.self, forKey: .mosaic)
+        tabOrder = try c.decodeIfPresent(Int.self, forKey: .tabOrder)
+        tabActive = try c.decodeIfPresent(Bool.self, forKey: .tabActive)
     }
 
     init(id: String = WorkbenchConfig.newID(), name: String, path: String, nodes: [NodeConfig],
          template: String? = nil, project: String? = nil, edges: [EdgeConfig]? = nil,
          maxVisits: Int? = nil, rules: String? = nil,
-         view: ViewMode? = nil, mosaic: MosaicLayout? = nil) {
+         view: ViewMode? = nil, mosaic: MosaicLayout? = nil, tabOrder: Int? = nil,
+         tabActive: Bool? = nil) {
         self.id = id
         self.name = name
         self.path = path
@@ -102,6 +119,8 @@ struct WorkbenchConfig: Codable {
         self.rules = rules
         self.view = view
         self.mosaic = mosaic
+        self.tabOrder = tabOrder
+        self.tabActive = tabActive
     }
 
     var edgeList: [EdgeConfig] { edges ?? [] }

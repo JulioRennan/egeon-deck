@@ -31,7 +31,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// continua valendo depois de a bancada ser reconstruída, renomeada ou
     /// arrastada para outro projeto.
     var edgeControllers: [String: EdgeController] = [:]
-    var activeIndex = -1
+    /// A bancada que está na sua frente, por id.
+    ///
+    /// Era uma posição, e posição não sobrevive a arrastar a barra: o mapa do
+    /// movimento tinha de corrigi-la a cada reordenação. Com uma janela por
+    /// bancada isto passa a ser "a janela que tem o foco"; até lá, é a que está
+    /// na tela. `nil` = nenhuma.
+    var activeID: String?
+
+    /// A mesma coisa como posição, para quem fala com a barra lateral — que
+    /// desenha uma árvore ordenada. `-1` = nenhuma.
+    var activeIndex: Int { activeID.flatMap { index(ofID: $0) } ?? -1 }
+
+    /// As bancadas ABERTAS, na ordem em que você as abriu — é a faixa de abas.
+    ///
+    /// Separada de `shells` de propósito: fechar a aba tira da faixa e **não**
+    /// encerra os terminais (o shell continua montado, a bancada continua
+    /// trabalhando). Encerrar de verdade continua sendo remover a bancada.
+    var openTabs: [String] = []
 
     /// O shell de uma POSIÇÃO na lista. A barra lateral desenha uma árvore
     /// ordenada e fala por índice; o armazenamento é por id. A tradução mora
@@ -298,6 +315,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppControl.recordConversation = { [weak self] target, id, transcript in
             self?.recordConversation(target: target, id: id, transcript: transcript)
         }
+        AppControl.tabsSnapshot = { [weak self] in
+            guard let self else { return [:] }
+            let list = self.tabs()
+            return ["open": list.map(\.line),
+                    "active": self.activeID.flatMap { self.config(ofID: $0)?.name } ?? "",
+                    "visible": self.shell(at: self.activeIndex)?.tabsAreVisible ?? false,
+                    "placement": self.shell(at: self.activeIndex)?.tabs.placement ?? [],
+                    "inset": self.shell(at: self.activeIndex)?.tabsInset ?? -1,
+                    "count": list.count]
+        }
+        AppControl.closeTab = { [weak self] name in
+            guard let self, let id = WorkbenchLookup.id(ofName: name, in: self.configs)
+            else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
+            guard self.openTabs.contains(id) else {
+                return ["ok": false, "error": "'\(name)' não está na faixa"]
+            }
+            self.closeTab(id)
+            return ["ok": true, "closed": name]
+        }
         AppControl.chatState = { [weak self] name in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return nil }
@@ -390,7 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if configs.isEmpty {
             Log.write("nenhuma bancada configurada — use + na barra lateral")
         } else {
-            activate(0)
+            restoreTabs()
         }
 
         Dispatcher.shared.start()
@@ -405,7 +441,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         badgeTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.shell(at: self.activeIndex)?.refreshBadges()
-            self.root.sidebar.showActivity(Dispatcher.shared.activitySummary())
+            let activity = Dispatcher.shared.activitySummary()
+            self.root.sidebar.showActivity(activity)
+            // A faixa mostra o MESMO estado da barra lateral, e no mesmo quadro
+            // do spinner: são os dois lugares onde uma bancada que não está na
+            // tela consegue te chamar.
+            self.shell(at: self.activeIndex)?.showTabs(
+                WorkbenchTabs.build(open: self.openTabs, configs: self.configs,
+                                    active: self.activeID, activity: activity))
         }
     }
 
@@ -430,6 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sair não pode se perder.
         persistTimer?.invalidate()
         for index in liveIndices { syncFrames(index: index) }
+        recordTabOrder()
         WorkbenchStore.save(configs)
 
         control.stop()
@@ -444,7 +488,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard index >= 0, index < configs.count, index != activeIndex else { return }
         let shell = shell(at: index) ?? build(index)
         let previous = activeIndex
-        activeIndex = index
+        activeID = configs[index].id
+        if !openTabs.contains(configs[index].id) {
+            openTabs.append(configs[index].id)
+            schedulePersist()
+        }
+        refreshTabs()
         revealInSidebar(index)
         root.show(shell)
         // O layout da barra é do MODO, e o modo é por bancada: entrar numa bancada em
@@ -461,6 +510,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Dispatcher.shared.workbenchOpened(configs[index].name)
         Log.write("bancada ativa: \(configs[index].name)")
+    }
+
+    // MARK: - A faixa de bancadas abertas
+
+    /// Reabre as bancadas que estavam na faixa quando o app fechou, na mesma
+    /// ordem, e volta para a que estava na frente.
+    ///
+    /// Com teto: cada bancada sobe vários processos, e um arquivo com dez
+    /// marcadas — depois de um crash, por exemplo — faria o arranque abrir tudo
+    /// de uma vez. O resto continua na barra lateral, a um clique.
+    private func restoreTabs() {
+        let saved = configs.enumerated()
+            .filter { $0.element.tabOrder != nil }
+            .sorted { ($0.element.tabOrder ?? 0) < ($1.element.tabOrder ?? 0) }
+        guard !saved.isEmpty else { return activate(0) }
+
+        let teto = 6
+        if saved.count > teto {
+            Log.write("abas: \(saved.count) bancadas estavam abertas — reabrindo as \(teto) "
+                      + "primeiras; as outras continuam na barra lateral")
+        }
+        let list = Array(saved.prefix(teto))
+        // Cada uma tem de passar pela tela: um shell montado fora da hierarquia
+        // nunca recebe passe de layout, e sem layout o terminal nasce com zero
+        // colunas (ver `WorkbenchShell.place`). Por isso abrir é ativar.
+        for (index, _) in list { activate(index) }
+        // E a ordem da faixa é a do arquivo, não a ordem em que elas subiram.
+        openTabs = list.map { $0.element.id }
+        let front = list.first { $0.element.tabActive == true } ?? list[0]
+        activeID = nil
+        activate(front.offset)
+        Log.write("abas restauradas: \(list.map { $0.element.name }.joined(separator: ", "))")
+    }
+
+    /// A faixa vai para o disco junto com o resto da bancada.
+    private func recordTabOrder() {
+        for i in configs.indices {
+            configs[i].tabOrder = openTabs.firstIndex(of: configs[i].id)
+            configs[i].tabActive = configs[i].id == activeID ? true : nil
+        }
+    }
+
+    /// Redesenha a faixa do shell na tela. Só ele: as abas são a moldura da
+    /// bancada que você está vendo, e as outras redesenham quando chegarem à
+    /// frente.
+    private func refreshTabs() {
+        guard let shell = shell(at: activeIndex) else { return }
+        shell.showTabs(tabs())
+    }
+
+    private func tabs() -> [WorkbenchTab] {
+        WorkbenchTabs.build(open: openTabs, configs: configs, active: activeID,
+                            activity: Dispatcher.shared.activitySummary())
+    }
+
+    /// Fechar a aba: sai da faixa e a bancada continua exatamente como estava —
+    /// terminais rodando, conversa inteira, pronta para voltar pela barra
+    /// lateral. Fechar não é encerrar.
+    private func closeTab(_ id: String) {
+        guard openTabs.contains(id) else { return }
+        let next = WorkbenchTabs.neighbour(of: id, in: openTabs)
+        openTabs.removeAll { $0 == id }
+        if activeID == id {
+            if let next, let index = index(ofID: next) {
+                activeID = nil
+                activate(index)
+            } else {
+                // Última aba: a bancada some da tela, e a barra lateral volta a
+                // ser o único caminho de volta — como era antes de ela abrir.
+                activeID = nil
+                root.show(NSView())
+                reloadSidebar()
+            }
+        }
+        refreshTabs()
+        schedulePersist()
+        Log.write("aba fechada: \(configs.first { $0.id == id }?.name ?? id) "
+                  + "— a bancada continua de pé")
     }
 
     // MARK: - Criar, renomear e remover bancada
@@ -688,7 +815,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 shells[id] = nil
                 if index == activeIndex { root.show(NSView()) }
             }
-            activeIndex = -1
+            activeID = nil
             reloadSidebar()
             activate(index)
             Log.write("bancada \"\(origin.name)\" movida para a worktree \(created.path) "
@@ -1423,8 +1550,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configs.remove(at: index)
         shells[removed] = nil
         edgeControllers[removed] = nil
+        openTabs.removeAll { $0 == removed }
 
-        activeIndex = -1
+        activeID = nil
         reloadSidebar()
         Log.write("bancada \"\(name)\" removida")
         schedulePersist()
@@ -1459,7 +1587,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let moved = WorkspaceMove.workbench(index, toProject: project, at: position,
                                                   in: configs) else { return false }
         configs = moved.list
-        if activeIndex >= 0 { activeIndex = moved.map[activeIndex] ?? activeIndex }
+        // `activeID` não precisa de correção nenhuma: o id não se move com a lista.
         reloadSidebar()
         schedulePersist()
         return true
@@ -2190,6 +2318,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let index = self.index(ofID: id) else { return }
             self.recordMosaicLayout(layout, index: index)
         }
+        shell.tabs.onPick = { [weak self] picked in
+            guard let self, let index = self.index(ofID: picked) else { return }
+            self.activate(index)
+        }
+        shell.tabs.onClose = { [weak self] in self?.closeTab($0) }
         guard let index = index(ofID: id) else { return }
         shell.mosaicLayout = configs[index].mosaic
         shell.setWorkbench(name: configs[index].name, path: configs[index].path)
@@ -2955,6 +3088,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         persistTimer?.invalidate()
         persistTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { [weak self] _ in
             guard let self else { return }
+            self.recordTabOrder()
             WorkbenchStore.save(self.configs)
         }
     }
@@ -3021,7 +3155,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Menu
 
-    @objc func nextWorkbench() { activate((activeIndex + 1) % max(1, configs.count)) }
+    /// ⌘] e ⌘[ percorrem a FAIXA, não a lista inteira: com dezenas de bancadas
+    /// no catálogo, "próxima" só é útil entre as que você abriu.
+    @objc func nextWorkbench() { stepTab(1) }
+    @objc func previousWorkbench() { stepTab(-1) }
+
+    private func stepTab(_ delta: Int) {
+        let list = openTabs.isEmpty ? configs.map(\.id) : openTabs
+        guard !list.isEmpty else { return }
+        let current = activeID.flatMap { list.firstIndex(of: $0) } ?? 0
+        let next = list[((current + delta) % list.count + list.count) % list.count]
+        if let index = index(ofID: next) { activate(index) }
+    }
+
+    /// ⌘1…⌘9 vão direto à aba daquela posição, como em qualquer editor.
+    @objc func pickTabByNumber(_ sender: NSMenuItem) {
+        let n = sender.tag - 1
+        guard n >= 0, n < openTabs.count, let index = index(ofID: openTabs[n]) else { return }
+        activate(index)
+    }
+
+    /// ⌘W fecha a aba da frente. Fechar não encerra: os terminais continuam.
+    @objc func closeActiveTab() {
+        guard let id = activeID else { return }
+        closeTab(id)
+    }
 
     private var activeCanvas: CanvasContainer? { shell(at: activeIndex)?.canvas }
 
@@ -3043,6 +3201,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // do editor, a tecla deixaria de comentar. No terminal ela não tem
             // dono, e ali a barra continua respondendo.
             return !(shell(at: activeIndex)?.focusIsInsideEditor ?? false)
+        }
+
+        // ⌘1…⌘9: a aba tem de existir, senão a tecla vira um beep.
+        if menuItem.action == #selector(pickTabByNumber(_:)) {
+            let n = menuItem.tag - 1
+            guard n >= 0, n < openTabs.count else { return false }
+            menuItem.title = config(ofID: openTabs[n])?.name ?? "Aba \(menuItem.tag)"
+            menuItem.isHidden = false
+            return true
+        }
+        if menuItem.action == #selector(closeActiveTab) { return activeID != nil }
+        if menuItem.action == #selector(nextWorkbench)
+            || menuItem.action == #selector(previousWorkbench) {
+            return openTabs.count > 1 || configs.count > 1
         }
 
         let modeItems: [Selector: ViewMode] = [
@@ -3086,6 +3258,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "Próxima bancada", action: #selector(nextWorkbench), keyEquivalent: "]")
+        appMenu.addItem(withTitle: "Bancada anterior", action: #selector(previousWorkbench),
+                        keyEquivalent: "[")
+        // Fechar a aba, e não a janela: a bancada continua rodando e volta pela
+        // barra lateral. É por isso que ⌘W não pode ser o do sistema aqui.
+        appMenu.addItem(withTitle: "Fechar a aba", action: #selector(closeActiveTab),
+                        keyEquivalent: "w")
+        for n in 1...9 {
+            let item = appMenu.addItem(withTitle: "Aba \(n)", action: #selector(pickTabByNumber(_:)),
+                                       keyEquivalent: "\(n)")
+            item.tag = n
+            item.isHidden = true
+            item.isAlternate = false
+        }
         // ⇧⌘T e não ⌘T: o ⌘T agora arma a ferramenta de terminal, e dois itens
         // com o mesmo atalho fazem só o primeiro do menu disparar.
         appMenu.addItem(withTitle: "Copiar alvos de dispatch",
