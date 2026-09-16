@@ -16,17 +16,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     var configs: [WorkbenchConfig] = []
     var agents: [String: AgentProfile] = [:]
-    /// Criados sob demanda e mantidos vivos: trocar de aba não mata terminal.
-    var shells: [Int: WorkbenchShell] = [:]
+    /// Criados sob demanda e mantidos vivos: trocar de bancada não mata terminal.
+    ///
+    /// Por **id** e não por posição: a lista se reordena (arrasto na barra) e
+    /// encolhe (remoção), e um shell chaveado por posição obrigava a reindexar o
+    /// dicionário e a religar as closures que haviam capturado o número. Ver
+    /// `WorkbenchLookup`.
+    var shells: [String: WorkbenchShell] = [:]
     /// A árvore por cima das bancadas: workspace → projeto (ADR-043). A lista de
     /// bancadas continua plana; isto só diz de quem cada uma é.
     var workspaces: [WorkspaceConfig] = []
     /// Controllers de aresta, um por bancada, criados sob demanda. As closures
-    /// deles leem `configs[index]` e `shells[index]` na hora da chamada, então o
-    /// controller do slot N vale para o que estiver no slot N — inclusive depois
-    /// de a bancada ser reconstruída.
-    var edgeControllers: [Int: EdgeController] = [:]
+    /// deles resolvem a bancada pelo id na hora da chamada, então o controller
+    /// continua valendo depois de a bancada ser reconstruída, renomeada ou
+    /// arrastada para outro projeto.
+    var edgeControllers: [String: EdgeController] = [:]
     var activeIndex = -1
+
+    /// O shell de uma POSIÇÃO na lista. A barra lateral desenha uma árvore
+    /// ordenada e fala por índice; o armazenamento é por id. A tradução mora
+    /// aqui, num lugar só.
+    func shell(at index: Int) -> WorkbenchShell? {
+        guard let id = WorkbenchLookup.id(at: index, in: configs) else { return nil }
+        return shells[id]
+    }
+
+    func workbenchID(at index: Int) -> String? {
+        WorkbenchLookup.id(at: index, in: configs)
+    }
+
+    func index(ofID id: String) -> Int? {
+        WorkbenchLookup.index(ofID: id, in: configs)
+    }
+
+    func config(ofID id: String) -> WorkbenchConfig? {
+        index(ofID: id).map { configs[$0] }
+    }
+
+    /// As posições das bancadas que estão montadas — o que a barra lateral
+    /// pinta como "de pé".
+    var liveIndices: Set<Int> {
+        Set(shells.keys.compactMap { WorkbenchLookup.index(ofID: $0, in: configs) })
+    }
 
     let control = ControlSocket()
     var badgeTimer: Timer?
@@ -176,7 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard parts.count == 2,
                   let index = self.configs.firstIndex(where: { $0.name == parts[0] })
             else { return "bancada desconhecida '\(target)'" }
-            guard let node = self.shells[index]?.nodes.first(where: { $0.nodeID == parts[1] })
+            guard let node = self.shell(at: index)?.nodes.first(where: { $0.nodeID == parts[1] })
             else { return "nó desconhecido '\(target)'" }
             guard let config = self.configs[index].nodes.first(where: { $0.id == parts[1] }),
                   config.type == .agent,
@@ -187,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         AppControl.setViewMode = { [weak self] raw in
             guard let self, let mode = ViewMode(rawValue: raw),
-                  let shell = self.shells[self.activeIndex] else { return nil }
+                  let shell = self.shell(at: self.activeIndex) else { return nil }
             shell.show(mode)
             return mode.rawValue
         }
@@ -256,7 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let archived = ChatHistory.shared.archive(workbench: config.id)
             // A thread guarda eco e turno ao vivo em memória: arquivar o arquivo
             // sem avisá-la deixava mensagem órfã na tela (ADR-059).
-            self.shells[index]?.chat.clearedHistory()
+            self.shell(at: index)?.chat.clearedHistory()
             guard let archived else {
                 return ["ok": true, "workbench": name, "archived": NSNull(),
                         "detail": "conversa já estava vazia"]
@@ -270,20 +301,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppControl.chatState = { [weak self] name in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return nil }
-            var out = self.shells[index]?.chat.snapshot() ?? [:]
+            var out = self.shell(at: index)?.chat.snapshot() ?? [:]
             out["workbench"] = name
-            out["mode"] = (self.shells[index]?.mode ?? self.configs[index].viewMode).rawValue
+            out["mode"] = (self.shell(at: index)?.mode ?? self.configs[index].viewMode).rawValue
             return out
         }
         AppControl.chatScroll = { [weak self] name, edge in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return }
-            self.shells[index]?.chat.scroll(edge)
+            self.shell(at: index)?.chat.scroll(edge)
         }
         AppControl.chatFocus = { [weak self] name, id in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return }
-            self.shells[index]?.chat.focusFromOutside(id)
+            self.shell(at: index)?.chat.focusFromOutside(id)
         }
         AppControl.moveInTree = { [weak self] kind, id, parent, position in
             guard let self else { return ["ok": false, "error": "app indisponível"] }
@@ -310,12 +341,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppControl.chatExpandStep = { [weak self] name, blockId in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return }
-            self.shells[index]?.chat.toggleStep(id: blockId)
+            self.shell(at: index)?.chat.toggleStep(id: blockId)
         }
         AppControl.chatCompose = { [weak self] name, text, send in
             guard let self,
                   let index = self.configs.firstIndex(where: { $0.name == name }),
-                  let shell = self.shells[index], shell.mode == .chat
+                  let shell = self.shell(at: index), shell.mode == .chat
             else { return nil }
             return shell.chat.compose(text, send: send)
         }
@@ -335,7 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self,
                   let index = self.configs.firstIndex(where: { $0.name == workbench })
             else { return ["ok": false, "error": "bancada desconhecida '\(workbench)'"] }
-            guard self.shells[index]?.swapInMosaic(first, second) == true else {
+            guard self.shell(at: index)?.swapInMosaic(first, second) == true else {
                 return ["ok": false,
                         "error": "não trocou — nó desconhecido, ou a bancada não está em mosaico"]
             }
@@ -373,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // bancadas inativas, cujo canvas nem existe na hierarquia de views.
         badgeTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.shells[self.activeIndex]?.refreshBadges()
+            self.shell(at: self.activeIndex)?.refreshBadges()
             self.root.sidebar.showActivity(Dispatcher.shared.activitySummary())
         }
     }
@@ -398,7 +429,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // O debounce pode estar pendente; um arrasto feito segundos antes de
         // sair não pode se perder.
         persistTimer?.invalidate()
-        for index in shells.keys { syncFrames(index: index) }
+        for index in liveIndices { syncFrames(index: index) }
         WorkbenchStore.save(configs)
 
         control.stop()
@@ -411,7 +442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func activate(_ index: Int) {
         guard index >= 0, index < configs.count, index != activeIndex else { return }
-        let shell = shells[index] ?? build(index)
+        let shell = shell(at: index) ?? build(index)
         let previous = activeIndex
         activeIndex = index
         revealInSidebar(index)
@@ -652,9 +683,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // O canvas inteiro é remontado: um pty não muda de diretório depois
             // de aberto, e reconstruir reaproveita o mesmo caminho de sempre em
             // vez de um segundo, quase igual, só para esta situação.
-            if let shell = shells[index] {
+            if let shell = shell(at: index), let id = workbenchID(at: index) {
                 shell.nodes.forEach { $0.prepareForRemoval() }
-                shells[index] = nil
+                shells[id] = nil
                 if index == activeIndex { root.show(NSView()) }
             }
             activeIndex = -1
@@ -679,20 +710,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Em fila e não em paralelo: cada cópia é `node_modules` inteiro, e disparar
     /// todas juntas faz o disco brigar consigo mesmo — o tempo total piora.
     private func copyUnversioned(_ pending: [(repo: String, path: String)], into index: Int) {
-        guard let first = pending.first else { shells[index]?.showBanner(nil); return }
+        guard let first = pending.first else { shell(at: index)?.showBanner(nil); return }
         let rest = Array(pending.dropFirst())
         let repo = (first.repo as NSString).lastPathComponent
 
-        shells[index]?.showBanner("Copiando o que o git não versiona em \(repo) "
+        shell(at: index)?.showBanner("Copiando o que o git não versiona em \(repo) "
                                   + "(.env, node_modules, build…)"
                                   + (rest.isEmpty ? "" : " — e mais \(rest.count)"))
 
         Worktree.copyUnversioned(from: first.repo, to: first.path) { [weak self] summary in
             guard let self else { return }
-            self.shells[index]?.showBanner("\(repo): \(summary)")
+            self.shell(at: index)?.showBanner("\(repo): \(summary)")
             guard !rest.isEmpty else {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
-                    self?.shells[index]?.showBanner(nil)
+                    self?.shell(at: index)?.showBanner(nil)
                 }
                 return
             }
@@ -1069,7 +1100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let name = WorkbenchStore.availableName(basedOn: typed, taken: taken)
 
         configs[index].name = name
-        shells[index]?.nodes.forEach { $0.workbenchRenamed(to: name) }
+        shell(at: index)?.nodes.forEach { $0.workbenchRenamed(to: name) }
         reloadSidebar()
         Log.write("bancada \"\(current)\" renomeada para \"\(name)\"")
         schedulePersist()
@@ -1078,7 +1109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func confirmRemoveWorkbench(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
         let config = configs[index]
-        let live = shells[index] != nil
+        let live = shell(at: index) != nil
         // TODAS as worktrees da bancada, e não só a pasta dela: desde o worktree por
         // terminal (ADR-017), uma bancada pode ter aberto worktree em três
         // repositórios diferentes. Apagar só a da bancada deixava as outras no disco
@@ -1225,7 +1256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
             alvo = parts.count == 2
                 ? configs.firstIndex(where: { $0.name == parts[0] })
-                    .flatMap { shells[$0]?.nodes.first { $0.nodeID == parts[1] } }
+                    .flatMap { shell(at: $0)?.nodes.first { $0.nodeID == parts[1] } }
                 : nil
         }
         guard let node = alvo else { return "erro: nó desconhecido '\(target)'" }
@@ -1380,23 +1411,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let name = configs[index].name
 
         // Solta os processos antes de perder a referência à bancada na tela.
-        if let shell = shells[index] {
+        if let shell = shell(at: index) {
             shell.nodes.forEach { $0.prepareForRemoval() }
             if index == activeIndex { root.show(NSView()) }
         }
 
-        // As bancadas na tela são indexadas por posição, e remover do meio desloca
-        // todo mundo à direita — reindexar aqui evita uma delas apontando para a
-        // bancada errada.
+        // Shell e controller são chaveados por id: remover do meio desloca as
+        // posições, e nenhum dos dois se importa. Antes isto era um bloco de
+        // reindexação seguido de religar todas as closures.
+        let removed = configs[index].id
         configs.remove(at: index)
-        var reindexed: [Int: WorkbenchShell] = [:]
-        for (key, shell) in shells where key != index {
-            reindexed[key > index ? key - 1 : key] = shell
-        }
-        shells = reindexed
-
-        // wire() capturou o índice antigo por valor; religa com o novo.
-        for (key, shell) in shells { wire(shell, index: key) }
+        shells[removed] = nil
+        edgeControllers[removed] = nil
 
         activeIndex = -1
         reloadSidebar()
@@ -1426,18 +1452,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// A bancada é endereçada por POSIÇÃO no app inteiro: mover a lista sem
-    /// levar `shells` e `activeIndex` junto deixaria o terminal da tela
-    /// apontando para outra bancada — o mesmo cuidado que remover já toma.
+    /// Arrastar bancada na barra muda a POSIÇÃO dela. Os shells não se mexem:
+    /// são por id (ver `WorkbenchLookup`). O que ainda anda por posição é
+    /// `activeIndex`, e o mapa do movimento diz para onde ele foi.
     func moveWorkbench(_ index: Int, toProject project: String, at position: Int) -> Bool {
         guard let moved = WorkspaceMove.workbench(index, toProject: project, at: position,
                                                   in: configs) else { return false }
         configs = moved.list
-        var reindexed: [Int: WorkbenchShell] = [:]
-        for (key, shell) in shells { reindexed[moved.map[key] ?? key] = shell }
-        shells = reindexed
-        // wire() capturou o índice antigo por valor; religa com o novo.
-        for (key, shell) in shells { wire(shell, index: key) }
         if activeIndex >= 0 { activeIndex = moved.map[activeIndex] ?? activeIndex }
         reloadSidebar()
         schedulePersist()
@@ -1465,7 +1486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func markLiveWorkbenches() {
-        root.sidebar.markLive(indices: Set(shells.keys))
+        root.sidebar.markLive(indices: liveIndices)
     }
 
     // MARK: - Workspaces e projetos (ADR-043)
@@ -1704,7 +1725,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configs[activeIndex].template = name
         // A bancada passa a ter origem: o botão de atualizar aparece agora, sem
         // esperar o próximo arranque.
-        shells[activeIndex]?.canvas.originTemplate = name
+        shell(at: activeIndex)?.canvas.originTemplate = name
         schedulePersist()
     }
 
@@ -2075,8 +2096,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func build(_ index: Int) -> WorkbenchShell {
         let shell = WorkbenchShell(frame: root.contentFrame, mode: configs[index].viewMode)
-        shells[index] = shell
-        wire(shell, index: index)
+        shells[configs[index].id] = shell
+        wire(shell, id: configs[index].id)
 
         guard configs[index].exists else {
             shell.showBanner("Caminho não existe: \(configs[index].path) — edite \(Flavor.current.config("workbenches.json").path)")
@@ -2129,19 +2150,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Barra de ações
 
-    private func wire(_ shell: WorkbenchShell, index: Int) {
+    /// Liga um shell recém-montado ao app.
+    ///
+    /// Tudo aqui resolve a POSIÇÃO a partir do id na hora da chamada. Antes o
+    /// índice era capturado por valor, e por isso remover ou arrastar uma
+    /// bancada obrigava a religar todos os shells — um passo fácil de esquecer,
+    /// e cujo sintoma é um botão de fechar que apaga o nó da bancada vizinha.
+    private func wire(_ shell: WorkbenchShell, id: String) {
         // Fechar e configurar nó chegam pelo shell: quem os disparou pode ser o
         // canvas ou o mosaico, e daqui não faz diferença qual.
-        shell.onRequestClose = { [weak self] node in self?.confirmRemoval(of: node, index: index) }
-        shell.onRequestEditNode = { [weak self] node in self?.editNode(node, index: index) }
+        shell.onRequestClose = { [weak self] node in
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.confirmRemoval(of: node, index: index)
+        }
+        shell.onRequestEditNode = { [weak self] node in
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.editNode(node, index: index)
+        }
         shell.onRequestNodeWorktree = { [weak self] node in
-            self?.nodeWorktree(node, index: index)
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.nodeWorktree(node, index: index)
         }
         shell.onRequestNodeModel = { [weak self] node, model in
-            self?.changeModel(of: node, to: model, index: index)
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.changeModel(of: node, to: model, index: index)
         }
         shell.onModeChanged = { [weak self] mode in
-            guard let self else { return }
+            guard let self, let index = self.index(ofID: id) else { return }
             self.recordViewMode(mode, index: index)
             // Só a bancada na tela manda na barra: as outras trocam de modo pelo
             // socket sem estar visíveis.
@@ -2152,48 +2187,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if index == self.activeIndex { self.root.setMosaic(mode != .canvas) }
         }
         shell.onMosaicLayoutChanged = { [weak self] layout in
-            self?.recordMosaicLayout(layout, index: index)
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.recordMosaicLayout(layout, index: index)
         }
+        guard let index = index(ofID: id) else { return }
         shell.mosaicLayout = configs[index].mosaic
         shell.setWorkbench(name: configs[index].name, path: configs[index].path)
 
-        wireChat(shell.chat, index: index)
+        wireChat(shell.chat, id: id)
 
         let canvas = shell.canvas
         // Lido na hora do enquadrar, não guardado: a barra lateral recolhe e abre.
         canvas.visibleInsets = { [weak self] in
             NSEdgeInsets(top: 0, left: self?.root.floatingSidebarInset ?? 0, bottom: 0, right: 0)
         }
-        canvas.onPlace = { [weak self] tool, rect in self?.place(tool, rect: rect, index: index) }
+        canvas.onPlace = { [weak self] tool, rect in
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.place(tool, rect: rect, index: index)
+        }
         canvas.onLayoutChanged = { [weak self] in
-            self?.syncFrames(index: index)
-            self?.schedulePersist()
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.syncFrames(index: index)
+            self.schedulePersist()
         }
         canvas.onSaveTemplate = { [weak self] in self?.saveCurrentAsTemplate() }
-        canvas.onUpdateTemplate = { [weak self] in self?.updateOriginTemplate(index) }
+        canvas.onUpdateTemplate = { [weak self] in
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.updateOriginTemplate(index)
+        }
         canvas.originTemplate = configs[index].template
-        canvas.onNewWorktree = { [weak self] in self?.duplicateWorkbenchAsWorktree(index) }
+        canvas.onNewWorktree = { [weak self] in
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.duplicateWorkbenchAsWorktree(index)
+        }
         canvas.nodeTemplateNames = { NodeTemplateStore.names }
-        canvas.onConfigureTerminal = { [weak self] in self?.configureNewTerminal(index: index) }
+        canvas.onConfigureTerminal = { [weak self] in
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.configureNewTerminal(index: index)
+        }
         edgeController(for: index)?.wire()
     }
 
+    /// O controller de aresta da bancada. As closures resolvem pelo **id** na
+    /// hora da chamada: assim ele continua correto depois de a bancada mudar de
+    /// posição na barra, que era o que obrigava a religar tudo ao arrastar.
     private func edgeController(for index: Int) -> EdgeController? {
-        guard index >= 0, index < configs.count else { return nil }
-        if let existing = edgeControllers[index] { return existing }
+        guard let id = workbenchID(at: index) else { return nil }
+        if let existing = edgeControllers[id] { return existing }
         let controller = EdgeController(
-            canvas: { [weak self] in self?.shells[index]?.canvas },
+            canvas: { [weak self] in self?.shells[id]?.canvas },
             config: { [weak self] in
-                guard let self, index >= 0, index < self.configs.count else { return nil }
-                return self.configs[index]
+                guard let self, let i = WorkbenchLookup.index(ofID: id, in: self.configs)
+                else { return nil }
+                return self.configs[i]
             },
             change: { [weak self] mutate in
-                guard let self, index >= 0, index < self.configs.count else { return }
-                mutate(&self.configs[index])
+                guard let self, let i = WorkbenchLookup.index(ofID: id, in: self.configs) else { return }
+                mutate(&self.configs[i])
             },
             persist: { [weak self] in self?.schedulePersist() }
         )
-        edgeControllers[index] = controller
+        edgeControllers[id] = controller
         return controller
     }
 
@@ -2202,27 +2256,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Fechaduras de leitura e envio; nenhuma referência a `NodeView` — em chat
     /// os cards estão cobertos, e o que a tela desenha é estado remontado a
     /// cada leitura.
-    private func wireChat(_ chat: ChatContainer, index: Int) {
+    private func wireChat(_ chat: ChatContainer, id: String) {
         chat.participants = { [weak self] in
-            guard let self, index >= 0, index < self.configs.count else { return [] }
-            let config = self.configs[index]
+            guard let self, let config = self.config(ofID: id) else { return [] }
             return ChatParticipant.from(nodes: config.nodes, workbench: config.name) {
                 Dispatcher.shared.target($0)?.activity
             }
         }
         chat.historyFile = { [weak self] in
-            guard let self, index >= 0, index < self.configs.count else { return nil }
-            return ChatHistory.shared.current(forWorkbench: self.configs[index].id)
+            guard let self, self.config(ofID: id) != nil else { return nil }
+            return ChatHistory.shared.current(forWorkbench: id)
         }
         chat.liveSource = { [weak self] participant in
-            guard let self, index >= 0, index < self.configs.count,
-                  let node = self.configs[index].nodes.first(where: { $0.id == participant.id }),
+            guard let self, let config = self.config(ofID: id),
+                  let node = config.nodes.first(where: { $0.id == participant.id }),
                   let path = node.transcript else { return nil }
             return (URL(fileURLWithPath: path),
                     Dispatcher.shared.target(participant.address)?.turnStartedAt)
         }
         chat.send = { [weak self] text, participant in
-            guard let self, index >= 0, index < self.configs.count else {
+            guard let self, self.config(ofID: id) != nil else {
                 return "bancada sumiu"
             }
             var request = DispatchRequest(target: participant.address)
@@ -2303,7 +2356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             archive: { (ChatHistory.shared.archive(workbench: config.id),
                         TraceLog.shared.archive(workbench: config.id)) },
             onPhase: { [weak self] phase in
-                self?.shells[index]?.showBusy(phase.label)
+                self?.shell(at: index)?.showBusy(phase.label)
             },
             onFinish: { [weak self] result in
                 guard let self else { return }
@@ -2311,7 +2364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // O arquivo saiu do disco; o eco local e o turno ao vivo ainda
                 // estavam na memória do chat, e sem isto voltariam a desenhar
                 // numa thread vazia.
-                self.shells[index]?.chat.clearedHistory()
+                self.shell(at: index)?.chat.clearedHistory()
                 Log.write("bancada \"\(config.name)\" limpa: clear em "
                           + "[\(result.cleared.joined(separator: ", "))]"
                           + (result.skipped.isEmpty ? "" : ", pulados [\(result.skipped.joined(separator: ", "))]")
@@ -2344,16 +2397,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // De volta para o shell também: ele repassa a proporção na hora de montar
         // o mosaico, e sem isto ida e volta ao canvas ressuscitaria a do arranque
         // — o arrasto só sobreviveria depois de fechar o app.
-        shells[index]?.mosaicLayout = layout
+        shell(at: index)?.mosaicLayout = layout
         schedulePersist()
     }
 
     /// Recolher a barra de bancadas ao trilho, ou abrir de volta.
     @objc func toggleSidebarCollapsed() { root.toggleCollapsed() }
 
-    @objc func showCanvasView() { shells[activeIndex]?.show(.canvas) }
-    @objc func showMosaicView() { shells[activeIndex]?.show(.mosaic) }
-    @objc func showChatView() { shells[activeIndex]?.show(.chat) }
+    @objc func showCanvasView() { shell(at: activeIndex)?.show(.canvas) }
+    @objc func showMosaicView() { shell(at: activeIndex)?.show(.mosaic) }
+    @objc func showChatView() { shell(at: activeIndex)?.show(.chat) }
 
     // MARK: - Ligações entre terminais
 
@@ -2440,7 +2493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Reergue os agentes de uma bancada no lugar em que estão, com o system
     /// prompt refeito. Só os agentes: shell, editor e navegador não leem regra.
     private func restartAgents(in index: Int) {
-        guard index >= 0, index < configs.count, let shell = shells[index] else { return }
+        guard index >= 0, index < configs.count, let shell = shell(at: index) else { return }
         for node in shell.nodes {
             guard let config = configs[index].nodes.first(where: { $0.id == node.nodeID }),
                   config.type == .agent else { continue }
@@ -2454,7 +2507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// workbenches.json — então passa por confirmação, com o aviso que o próprio
     /// tipo de nó dá sobre o que se perde.
     private func confirmRemoval(of node: NodeView, index: Int) {
-        guard index >= 0, index < configs.count, let shell = shells[index] else { return }
+        guard index >= 0, index < configs.count, let shell = shell(at: index) else { return }
 
         let name = node.nodeID.isEmpty ? "este nó" : "\"\(node.nodeID)\""
         let alert = NSAlert()
@@ -2501,7 +2554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cria um nó onde a ferramenta foi solta e grava no workbenches.json.
     private func place(_ tool: CanvasTool, rect: NSRect, index: Int) {
         guard let kind = tool.nodeKind, index >= 0, index < configs.count,
-              let shell = shells[index] else { return }
+              let shell = shell(at: index) else { return }
 
         if kind == .shell {
             // Componente escolhido no menu pula o formulário: ele já traz tipo,
@@ -2545,7 +2598,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Abre o formulário e cria o terminal no primeiro lugar livre do canvas.
     private func configureNewTerminal(index: Int) {
-        guard index >= 0, index < configs.count, let canvas = shells[index]?.canvas else { return }
+        guard index >= 0, index < configs.count, let canvas = shell(at: index)?.canvas else { return }
 
         let dialog = NodeTemplateDialog(
             title: "Novo terminal",
@@ -2564,7 +2617,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Materializa um componente como nó. O id vem do nome, então o endereço de
     /// dispatch fica legível: `deck/revisor`.
     private func place(component: NodeTemplate, rect: NSRect, index: Int) {
-        guard index >= 0, index < configs.count, let shell = shells[index] else { return }
+        guard index >= 0, index < configs.count, let shell = shell(at: index) else { return }
 
         let id = nextID(prefix: NodeTemplateStore.identifier(from: component.name),
                         in: configs[index])
@@ -2584,7 +2637,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// mudá-los exige um processo novo — não há como reconfigurar um pty em
     /// andamento. O diálogo avisa antes.
     private func editNode(_ node: NodeView, index: Int) {
-        guard index >= 0, index < configs.count, let shell = shells[index],
+        guard index >= 0, index < configs.count, let shell = shell(at: index),
               let position = configs[index].nodes.firstIndex(where: { $0.id == node.nodeID })
         else { return }
 
@@ -2668,7 +2721,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a conversa FICA: o id é nosso, e o CLI a retoma com o modelo novo. É o
     /// contrário da worktree, onde a conversa é da pasta antiga e vai embora.
     private func changeModel(of node: NodeView, to model: String?, index: Int) {
-        guard index >= 0, index < configs.count, let shell = shells[index],
+        guard index >= 0, index < configs.count, let shell = shell(at: index),
               let position = configs[index].nodes.firstIndex(where: { $0.id == node.nodeID })
         else { return }
         let current = configs[index].nodes[position]
@@ -2738,7 +2791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func repoint(nodeID: String, index: Int, repoRoot: String,
                          branch: String,
                          destination: String) -> Result<Worktree.Created, Error> {
-        guard index >= 0, index < configs.count, let shell = shells[index],
+        guard index >= 0, index < configs.count, let shell = shell(at: index),
               let position = configs[index].nodes.firstIndex(where: { $0.id == nodeID }),
               let node = shell.nodes.first(where: { $0.nodeID == nodeID })
         else { return .failure(Worktree.Failure.notARepo(nodeID)) }
@@ -2874,7 +2927,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// e gravá-lo aqui achataria a montagem do canvas inteira — na volta, todo nó
     /// nasceria do tamanho da coluna em que estava.
     private func syncFrames(index: Int) {
-        guard index >= 0, index < configs.count, let shell = shells[index],
+        guard index >= 0, index < configs.count, let shell = shell(at: index),
               shell.mode == .canvas else { return }
         var byID: [String: NSRect] = [:]
         for node in shell.nodes where !node.nodeID.isEmpty { byID[node.nodeID] = node.frame }
@@ -2912,7 +2965,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// CGEvent. Estimar isso a partir de uma captura de tela erra, sobretudo com
     /// zoom aplicado: 26pt de cabeçalho viram 11pt a 43%.
     private func canvasGeometry() -> [String: Any] {
-        guard let shell = shells[activeIndex], let window else { return [:] }
+        guard let shell = shell(at: activeIndex), let window else { return [:] }
         let canvas = shell.canvas
         let screenHeight = (window.screen ?? NSScreen.main)?.frame.height ?? 0
 
@@ -2970,7 +3023,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func nextWorkbench() { activate((activeIndex + 1) % max(1, configs.count)) }
 
-    private var activeCanvas: CanvasContainer? { shells[activeIndex]?.canvas }
+    private var activeCanvas: CanvasContainer? { shell(at: activeIndex)?.canvas }
 
     @objc func zoomIn() { activeCanvas?.stepZoom(1) }
     @objc func zoomOut() { activeCanvas?.stepZoom(-1) }
@@ -2989,7 +3042,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // consultado ANTES do responder chain: habilitado com o cursor dentro
             // do editor, a tecla deixaria de comentar. No terminal ela não tem
             // dono, e ali a barra continua respondendo.
-            return !(shells[activeIndex]?.focusIsInsideEditor ?? false)
+            return !(shell(at: activeIndex)?.focusIsInsideEditor ?? false)
         }
 
         let modeItems: [Selector: ViewMode] = [
@@ -2998,7 +3051,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             #selector(showChatView): .chat
         ]
         if let action = menuItem.action, let wants = modeItems[action] {
-            guard let mode = shells[activeIndex]?.mode else { return false }
+            guard let mode = shell(at: activeIndex)?.mode else { return false }
             menuItem.state = mode == wants ? .on : .off
             return true
         }
@@ -3009,7 +3062,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             #selector(zoomIn), #selector(zoomOut), #selector(zoomReset)
         ]
         guard let action = menuItem.action, canvasOnly.contains(action) else { return true }
-        guard let shell = shells[activeIndex] else { return false }
+        guard let shell = shell(at: activeIndex) else { return false }
         // Ferramenta e zoom só existem no canvas; fora dele o item some do caminho e
         // a tecla volta para quem tem o foco.
         return shell.mode == .canvas && !shell.canvas.focusIsInsideNode
