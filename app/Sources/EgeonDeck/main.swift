@@ -1147,11 +1147,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // a bancada e com a pasta, em vez de perder a bancada e ficar com a pasta.
         var falhas: [String] = []
         var removidas: [String] = []
+        var sobras: [String] = []
         for wt in deletable {
             do {
                 try Worktree.remove(wt.path)
                 removidas.append("\(wt.repo)/\(wt.branch ?? "?")")
+            } catch Worktree.Failure.leftovers(let path, let reason) {
+                // O git já desfez o registro: a worktree acabou, e o que sobrou é
+                // pasta. Segurar a bancada por causa dela seria segurar por um
+                // problema que a própria remoção resolve — quem está escrevendo lá
+                // dentro é o dev server e o agente DESTA bancada (as órfãs no disco
+                // eram só `.vite` e `.omc`), e eles morrem junto com ela. A faxina
+                // fica para depois disso (ADR-060).
+                Log.write("worktree: \(path) — \(reason); a pasta fica para a faxina "
+                          + "depois que os processos da bancada morrerem")
+                removidas.append("\(wt.repo)/\(wt.branch ?? "?")")
+                sobras.append(path)
             } catch {
+                // No log também: o alerta some com um OK, e é justamente a
+                // mensagem do git que diz por que a pasta resistiu.
+                Log.write("worktree: falha ao apagar \(wt.path) — \(error)")
                 falhas.append("\(wt.repo) · \(wt.branch ?? "?") — \(error)")
             }
         }
@@ -1167,6 +1182,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         removeWorkbench(index)
+        sweepLeftovers(sobras)
+    }
+
+    /// A segunda passada nas pastas que o git deixou para trás.
+    ///
+    /// Depois de a bancada sair: `prepareForRemoval` acabou de mandar SIGTERM, e
+    /// quem ignorou leva SIGKILL meio segundo depois. Antes disso o dev server
+    /// ainda estava recriando `.vite` mais rápido do que qualquer um apaga — é
+    /// por isso que a faxina não roda junto com o `worktree remove`.
+    private func sweepLeftovers(_ paths: [String]) {
+        guard !paths.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            for path in paths {
+                do {
+                    try Worktree.finishRemoval(of: path, registered: false)
+                    Log.write("worktree: \(path) apagada na segunda passada")
+                } catch {
+                    Log.write("worktree: \(path) resistiu — \(error)")
+                }
+            }
+        }
     }
 
     /// PNG do card de um nó, direto do AppKit.
@@ -1221,13 +1257,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let involved = worktrees(of: configs[index])
         var removidas: [String] = []
         var falhas: [String] = []
+        var sobras: [String] = []
 
         if purge {
             for wt in involved where wt.usedBy == nil {
                 do {
                     try Worktree.remove(wt.path)
                     removidas.append(wt.path)
+                } catch Worktree.Failure.leftovers(let path, let reason) {
+                    Log.write("worktree: \(path) — \(reason); faxina depois dos processos")
+                    removidas.append(wt.path)
+                    sobras.append(path)
                 } catch {
+                    Log.write("worktree: falha ao apagar \(wt.path) — \(error)")
                     falhas.append("\(wt.path): \(error)")
                 }
             }
@@ -1238,7 +1280,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         removeWorkbench(index)
+        sweepLeftovers(sobras)
         return ["ok": true, "workbench": name, "removed": removidas,
+                "sweeping": sobras,
                 "kept": involved.filter { $0.usedBy != nil }
                     .map { ["path": $0.path, "usedBy": $0.usedBy ?? ""] },
                 "worktrees": involved.map { ["path": $0.path, "repo": $0.repo,

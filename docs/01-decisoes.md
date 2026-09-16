@@ -3501,3 +3501,57 @@ socket via o estado do meio.
 **Verificação:** `WorkbenchCleanerTests` (não arquiva no disparo, não arquiva
 dentro da folga, não arquiva com agente ocupado, arquiva no teto, pula CLI sem
 `clear`) e `ChatClearTests` (o eco não sobrevive à limpeza).
+
+## ADR-060 — Git que desiste no meio de apagar a worktree não é "não deu"
+
+**O defeito, como ele aparece:** você remove a bancada marcando "também apagar a
+worktree", a pasta some — e mesmo assim vem um alerta de erro e a bancada
+continua na lista. Remover de novo funciona, sem erro nenhum e sem caixinha
+nenhuma.
+
+**Por quê.** `git worktree remove --force` desfaz o REGISTRO da worktree ANTES
+de terminar de apagar a árvore, e não volta atrás. Se ele morre no meio do
+`rm -rf` — e morre —, o registro já se foi. Medido nos dois modos de morrer:
+`failed to delete '…': Directory not empty`, quando alguém cria um arquivo na
+pasta durante a remoção (o watcher do editor, um `npm run dev` num terminal da
+bancada, o Finder escrevendo `.DS_Store`), e `Permission denied`, numa subpasta
+sem escrita.
+
+O que sobrava era o pior dos mundos: pasta meio apagada no disco, alerta
+segurando a bancada (ADR-021: falhou, a bancada não sai) e, na segunda
+tentativa, uma pasta que já não é worktree para o git — `isLinkedWorktree` diz
+não, ela some do diálogo, a bancada sai limpa e o lixo fica no disco para
+sempre. O "apague de novo que funciona" era isso: funcionava porque o app tinha
+parado de ver o problema.
+
+**A decisão.** Registro desfeito é ponto sem volta: o app termina o serviço.
+Falhou o comando, o app pergunta ao repositório principal se aquele caminho
+ainda é worktree registrada — se não é, apaga a pasta ele mesmo e poda. Se ainda
+é, o erro do git é legítimo e sobe como sempre subiu; apagar ali seria passar
+por cima de uma recusa de verdade.
+
+**Com tentativas**, porque o que derruba o git derruba o `removeItem` pelo mesmo
+motivo — medido: sem repetir, a faxina perdia a mesma corrida. Cinco tentativas
+com 200 ms bastam: o escritor é um watcher ou um processo que acabou de levar
+SIGTERM, e ele se cala em seguida. Se nem assim, o erro que sobe é
+`leftovers` — "o git já desfez o registro, a pasta está em X, apague à mão" —, e
+não o "use --force" do git, que não ajudaria ninguém.
+
+A falha também passa a ir para o log nos dois caminhos (diálogo e `GET
+/remove?worktrees=1`). O alerta some com um OK, e era justamente a mensagem do
+git que dizia por que a pasta resistiu.
+
+**E a faxina espera os processos.** As três pastas órfãs encontradas no disco
+tinham dentro exatamente `.vite` e `.omc` — o dev server e o agente DAQUELA
+bancada recriando arquivos enquanto o git apagava. Contra um escritor vivo não há
+número de tentativas que baste, e é por isso que a sobra não segura mais a
+remoção: registro desfeito conta como worktree removida, a bancada sai (e com
+ela morrem os processos, SIGTERM e SIGKILL meio segundo depois) e a pasta é
+varrida 1,5 s depois, quando já não há ninguém escrevendo. O que resistir a isso
+vai para o log com o caminho.
+
+**Verificação:** `WorktreeRemoveTests` roda contra repositórios git de verdade —
+remoção limpa, caminho com symlink (`/var` × `/private/var`, que fazia o app não
+reconhecer a própria worktree), worktree ainda registrada (a pasta fica), pasta
+trancada (erro `leftovers`) e o bug em si: um escritor em rajada dentro da pasta
+enquanto ela é apagada, com o desfecho obrigatório de pasta e registro fora.

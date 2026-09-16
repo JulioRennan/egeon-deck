@@ -19,6 +19,7 @@ enum Worktree {
         case notARepo(String)
         case destinationExists(String)
         case git(command: String, output: String)
+        case leftovers(path: String, reason: String)
 
         var description: String {
             switch self {
@@ -28,6 +29,9 @@ enum Worktree {
                 return "Já existe algo em \(path) — apague a pasta ou escolha outro caminho."
             case .git(let command, let output):
                 return "git \(command) falhou:\n\(output)"
+            case .leftovers(let path, let reason):
+                return "O git já desfez o registro da worktree, mas a pasta \(path) não pôde "
+                    + "ser apagada — \(reason). Apague-a à mão."
             }
         }
     }
@@ -450,10 +454,76 @@ enum Worktree {
         guard let main = mainWorktree(of: path) else {
             throw Failure.notARepo(path)
         }
-        _ = try run(["worktree", "remove", "--force", path], in: main)
+        do {
+            _ = try run(["worktree", "remove", "--force", path], in: main)
+        } catch {
+            // O git desfaz o REGISTRO da worktree ANTES de terminar de apagar a
+            // árvore, e não volta atrás: se ele morre no meio, ela já não existe
+            // para o git. Medido nos dois modos de morrer — "Directory not empty"
+            // (alguém criou arquivo durante a remoção: watcher do editor, um
+            // `npm run dev` num terminal da bancada, o Finder escrevendo
+            // .DS_Store) e "Permission denied".
+            //
+            // O que sobrava era o pior dos mundos: pasta meio apagada no disco,
+            // um alerta segurando a bancada na lista e, na segunda tentativa,
+            // uma pasta que já não é worktree nenhuma — some do diálogo, a
+            // bancada sai e o lixo fica para sempre. Terminar de apagar é o que
+            // você pediu ao marcar a caixa.
+            guard try !finishRemoval(of: path, registered: isRegistered(path, in: main)) else {
+                _ = try? run(["worktree", "prune"], in: main)
+                Log.write("worktree: git parou no meio de \(path) (\(error)) — o registro já "
+                          + "tinha ido, a pasta foi apagada pelo app")
+                return
+            }
+            throw error
+        }
         // Registro órfão sobra quando a pasta já tinha sido apagada à mão.
         _ = try? run(["worktree", "prune"], in: main)
         Log.write("worktree: \(path) removida do disco")
+    }
+
+    /// Este caminho ainda é uma worktree registrada em `main`?
+    ///
+    /// Pelo `worktree list` do repositório, e não por `rev-parse` dentro da
+    /// pasta: no estado que importa aqui a pasta já não responde como git.
+    static func isRegistered(_ path: String, in main: String) -> Bool {
+        guard let listing = try? run(["worktree", "list", "--porcelain"], in: main) else {
+            return false
+        }
+        let target = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        return listing.split(whereSeparator: \.isNewline)
+            .filter { $0.hasPrefix("worktree ") }
+            .contains { line in
+                let listed = String(line.dropFirst("worktree ".count))
+                return URL(fileURLWithPath: listed).resolvingSymlinksInPath().path == target
+            }
+    }
+
+    /// A faxina depois de o git desistir no meio. Devolve se ela foi feita —
+    /// `false` quando a worktree ainda está registrada, e aí o erro do git é
+    /// legítimo e tem de subir.
+    ///
+    /// Com tentativas porque quem derrubou o git derruba o `removeItem` pelo
+    /// mesmo motivo: um arquivo que nasce dentro da pasta no meio da remoção. O
+    /// escritor é um watcher ou um processo que acabou de levar SIGTERM — ele se
+    /// cala em seguida, e insistir por um segundo é o que separa "apagou" de
+    /// "deixou lixo no disco".
+    @discardableResult
+    static func finishRemoval(of path: String, registered: Bool, attempts: Int = 5) throws -> Bool {
+        guard !registered else { return false }
+        var last: Error?
+        for attempt in 1...max(1, attempts) {
+            guard FileManager.default.fileExists(atPath: path) else { return true }
+            do {
+                try FileManager.default.removeItem(atPath: path)
+                return true
+            } catch {
+                last = error
+                if attempt < attempts { Thread.sleep(forTimeInterval: 0.2) }
+            }
+        }
+        throw Failure.leftovers(path: path,
+                                reason: last?.localizedDescription ?? "motivo desconhecido")
     }
 
     /// A branch continua existindo depois de remover a worktree — o trabalho
