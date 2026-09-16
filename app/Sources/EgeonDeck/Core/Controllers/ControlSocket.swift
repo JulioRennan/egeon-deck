@@ -321,9 +321,24 @@ final class ControlSocket {
         case ("POST", _, _) where route.contains("/workbench/clear"):
             // /workbench/clear?target=<bancada> — o botão de limpar, sem o
             // diálogo: `/clear` em todo agente e a conversa arquivada (ADR-037).
+            // A resposta só sai no fim: limpar é mandar o `clear`, ESPERAR os
+            // agentes assentarem e só então arquivar (ADR-059) — responder no
+            // disparo devolvia "ok" antes de a conversa ter saído do lugar, e
+            // quem confere pelo socket via o estado do meio.
             let target = Self.query(in: route)["target"] ?? ""
-            let payload = DispatchQueue.main.sync {
-                AppControl.clearWorkbench?(target) ?? ["ok": false, "error": "app sem canvas"]
+            let done = DispatchSemaphore(value: 0)
+            var payload: [String: Any] = ["ok": false, "error": "app sem canvas"]
+            DispatchQueue.main.async {
+                guard let clear = AppControl.clearWorkbench else { done.signal(); return }
+                clear(target) { result in
+                    payload = result
+                    done.signal()
+                }
+            }
+            // Teto acima do do próprio cleaner: aqui só se protege a conexão
+            // de ficar pendurada se o app nunca responder.
+            if done.wait(timeout: .now() + 90) == .timedOut {
+                payload = ["ok": false, "error": "limpeza não respondeu em 90s"]
             }
             respond(fd, status: payload["ok"] as? Bool == true ? "200 OK" : "404 Not Found",
                     json: payload)

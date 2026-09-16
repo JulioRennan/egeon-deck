@@ -600,6 +600,32 @@ final class ChatContainer: NSView {
         refresh()
     }
 
+    // MARK: Limpeza
+
+    /// A conversa foi arquivada: o que a thread guardava em memória vai junto.
+    ///
+    /// Arquivar move o `chat.jsonl` e nada mais — o eco local de um envio que o
+    /// transcript nunca confirmou e o turno ao vivo ainda em cache continuavam
+    /// aqui dentro e voltavam a desenhar sozinhos numa thread vazia. Era a
+    /// mensagem órfã que sobrava depois de limpar a bancada.
+    func clearedHistory() {
+        pending = []
+        messages = []
+        historyCache = [:]
+        historyVersion += 1
+        for id in Array(liveWatchers.keys) { unwatch(id) }
+        liveCache = [:]
+        liveParsing = []
+        liveVersion += 1
+        expandedSteps = []
+        groupLevels = [:]
+        expandedVersion += 1
+        loadedMessages = Self.windowStep
+        forceBottom = true
+        buildSignature = ""
+        refresh()
+    }
+
     /// Passo do spinner, no timer de 0.12s do app — o mesmo dos badges do
     /// canvas. No tique de 1s ele parecia travado.
     func tick() {

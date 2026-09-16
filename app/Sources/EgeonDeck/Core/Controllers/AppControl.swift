@@ -110,9 +110,12 @@ enum AppControl {
     /// outro. Devolve o payload da rota.
     static var clearChat: ((_ workbench: String) -> [String: Any])?
 
-    /// "Limpar a bancada": o `clear` do perfil em todo agente que tem um, e a
-    /// conversa do chat arquivada. Sem confirmação — a rota é você.
-    static var clearWorkbench: ((_ workbench: String) -> [String: Any])?
+    /// "Limpar a bancada": o `clear` do perfil em todo agente que tem um e,
+    /// DEPOIS de eles assentarem, a conversa e a trilha arquivadas — por isso o
+    /// payload vem por closure e não de volta (ADR-059). Sem confirmação — a
+    /// rota é você.
+    static var clearWorkbench: ((_ workbench: String,
+                                 _ done: @escaping ([String: Any]) -> Void) -> Void)?
 
     /// O CLI avisou qual conversa está aberta neste terminal. Chamado a cada
     /// prompt, então quem implementa só grava quando o valor muda de fato.

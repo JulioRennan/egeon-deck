@@ -18,6 +18,8 @@ final class WorkbenchShell: NSView {
     /// O vidro do banner. Entra na hierarquia no lugar do rótulo, e é ele que os
     /// containers usam como referência de z-order.
     private lazy var bannerPanel = GlassPanel(content: banner, radius: 8, tint: .systemOrange)
+    /// A cortina de "um instante" — limpeza da bancada em curso (ADR-059).
+    private let busy = BusyOverlay(frame: .zero)
     private var mosaic: MosaicContainer?
     /// O modo chat. Criado junto com a bancada e não sob demanda como o mosaico:
     /// não guarda geometria de card, então nasce barato, e main.swift precisa
@@ -84,6 +86,9 @@ final class WorkbenchShell: NSView {
         banner.alignment = .center
         bannerPanel.isHidden = true
         addSubview(bannerPanel)
+
+        busy.isHidden = true
+        addSubview(busy)
 
         // O canvas conhece avisos que só ele sabe dar (componente armado, ciclo
         // de arestas), mas em modo mosaico ele está fora da hierarquia e o aviso
@@ -298,6 +303,17 @@ final class WorkbenchShell: NSView {
         chat.frame = content
         bannerPanel.frame = NSRect(x: bounds.midX - 380, y: ViewToolbar.height + 12,
                                    width: 760, height: 30)
+        busy.frame = content
+    }
+
+    /// A cortina, com o que está acontecendo; `nil` a recolhe. Fica ACIMA de
+    /// tudo, banner incluído: enquanto ela está de pé nada da bancada aceita
+    /// clique.
+    func showBusy(_ text: String?) {
+        guard let text else { busy.hide(); return }
+        addSubview(busy, positioned: .above, relativeTo: bannerPanel)
+        busy.show(text)
+        needsLayout = true
     }
 
     func showBanner(_ text: String?) {

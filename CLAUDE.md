@@ -97,9 +97,14 @@ app/Sources/EgeonDeck/
   **histórico do app** (`ChatHistory`,
   `workbenches/<id>/chat.jsonl`, gravado no `Stop`), não do transcript do
   CLI. Botão de limpar a bancada (barra lateral, botão direito): `clear` do perfil em cada
-  agente + chat arquivado como `chat-archive/chat-<início>_<fim>.jsonl` e trilha
-  como `trace-archive/trace-<início>_<fim>.md`
-  (`POST /workbench/clear`; só o chat: `POST /chat/clear`) (ADR-037). A thread
+  agente e, **depois de eles assentarem**, chat arquivado como
+  `chat-archive/chat-<início>_<fim>.jsonl` e trilha como
+  `trace-archive/trace-<início>_<fim>.md`
+  (`POST /workbench/clear`, que só responde no fim; só o chat:
+  `POST /chat/clear`) (ADR-037/059). Enquanto isso a bancada fica com a cortina
+  de "um instante" (`BusyOverlay`) e não aceita clique; no fim o chat esquece o
+  que guardava em memória (`clearedHistory` — eco não confirmado e turno ao
+  vivo), que era a bolha órfã que sobrava. A thread
   desce sozinha quando você está no fim: o fim é medido depois do passe de
   layout, a descida animada em curso conta como fim, e enviar sempre desce
   (ADR-045).

@@ -244,15 +244,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           workbench: workbenchID)
             }
         }
-        AppControl.clearWorkbench = { [weak self] name in
+        AppControl.clearWorkbench = { [weak self] name, done in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
-            else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
-            return self.clearWorkbench(index)
+            else { return done(["ok": false, "error": "bancada desconhecida '\(name)'"]) }
+            self.clearWorkbench(index, completion: done)
         }
         AppControl.clearChat = { [weak self] name in
-            guard let self, let config = self.configs.first(where: { $0.name == name })
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
-            guard let archived = ChatHistory.shared.archive(workbench: config.id) else {
+            let config = self.configs[index]
+            let archived = ChatHistory.shared.archive(workbench: config.id)
+            // A thread guarda eco e turno ao vivo em memória: arquivar o arquivo
+            // sem avisá-la deixava mensagem órfã na tela (ADR-059).
+            self.shells[index]?.chat.clearedHistory()
+            guard let archived else {
                 return ["ok": true, "workbench": name, "archived": NSNull(),
                         "detail": "conversa já estava vazia"]
             }
@@ -2205,45 +2210,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Limpar")
         alert.addButton(withTitle: "Cancelar")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let result = clearWorkbench(index)
-        Log.write("bancada \"\(config.name)\" limpa pelo botão: \(result)")
+        clearWorkbench(index) { result in
+            Log.write("bancada \"\(config.name)\" limpa pelo botão: \(result)")
+        }
     }
 
     /// O `clear` do perfil vai pela fila do Dispatcher, como um prompt seu:
     /// terminal ocupado recebe quando ficar livre, e a TUI não descarta o
     /// texto no meio de um redraw. Agente cujo CLI não declara `clear` é
     /// pulado e listado — não morto.
-    private func clearWorkbench(_ index: Int) -> [String: Any] {
-        guard index >= 0, index < configs.count else { return ["ok": false, "error": "bancada sumiu"] }
-        let config = configs[index]
-        var cleared: [String] = []
-        var skipped: [String] = []
-        for node in config.nodes where node.type == .agent {
-            let address = config.address(of: node)
-            guard let command = node.agent.flatMap({ agents[$0]?.clear }), !command.isEmpty,
-                  Dispatcher.shared.target(address) != nil else {
-                skipped.append(node.id)
-                continue
-            }
-            var request = DispatchRequest(target: address)
-            request.text = command
-            do {
-                _ = try Dispatcher.shared.dispatch(request, from: nil)
-                cleared.append(node.id)
-            } catch {
-                skipped.append(node.id)
-                Log.write("limpar[\(address)]: \(error)")
-            }
+    ///
+    /// Tem duração, e por isso devolve pelo `completion`: arquivar o chat só
+    /// depois de os agentes assentarem é o que impede o fim do turno velho de
+    /// cair na conversa nova (ADR-059). Enquanto isso a bancada fica com a
+    /// cortina de "um instante" — nada aceita clique.
+    private func clearWorkbench(_ index: Int, completion: (([String: Any]) -> Void)? = nil) {
+        guard index >= 0, index < configs.count else {
+            completion?(["ok": false, "error": "bancada sumiu"]); return
         }
-        let archived = ChatHistory.shared.archive(workbench: config.id)
-        let trace = TraceLog.shared.archive(workbench: config.id)
-        Log.write("bancada \"\(config.name)\" limpa: clear em [\(cleared.joined(separator: ", "))]"
-                  + (skipped.isEmpty ? "" : ", pulados [\(skipped.joined(separator: ", "))]")
-                  + (archived.map { ", chat arquivado em \($0.lastPathComponent)" } ?? ", chat já vazio")
-                  + (trace.map { ", trilha arquivada em \($0.lastPathComponent)" } ?? ", trilha vazia"))
-        return ["ok": true, "workbench": config.name, "cleared": cleared, "skipped": skipped,
-                "archived": archived?.path ?? NSNull(), "trace": trace?.path ?? NSNull()]
+        let config = configs[index]
+        guard cleaners[config.id] == nil else {
+            completion?(["ok": false, "error": "limpeza já em curso nesta bancada"]); return
+        }
+        let profiles = agents
+        let targets = config.nodes.filter { $0.type == .agent }.map { node in
+            WorkbenchCleaner.Agent(id: node.id, address: config.address(of: node),
+                                   command: node.agent.flatMap { profiles[$0]?.clear })
+        }
+        let cleaner = WorkbenchCleaner(
+            agents: targets,
+            dispatch: { agent in
+                guard let command = agent.command,
+                      Dispatcher.shared.target(agent.address) != nil else { return false }
+                var request = DispatchRequest(target: agent.address)
+                request.text = command
+                do {
+                    _ = try Dispatcher.shared.dispatch(request, from: nil)
+                    return true
+                } catch {
+                    Log.write("limpar[\(agent.address)]: \(error)")
+                    return false
+                }
+            },
+            isBusy: { agent in
+                guard let target = Dispatcher.shared.target(agent.address) else { return false }
+                return WorkbenchCleaner.isBusy(activity: target.activity, pending: target.pending)
+            },
+            archive: { (ChatHistory.shared.archive(workbench: config.id),
+                        TraceLog.shared.archive(workbench: config.id)) },
+            onPhase: { [weak self] phase in
+                self?.shells[index]?.showBusy(phase.label)
+            },
+            onFinish: { [weak self] result in
+                guard let self else { return }
+                self.cleaners[config.id] = nil
+                // O arquivo saiu do disco; o eco local e o turno ao vivo ainda
+                // estavam na memória do chat, e sem isto voltariam a desenhar
+                // numa thread vazia.
+                self.shells[index]?.chat.clearedHistory()
+                Log.write("bancada \"\(config.name)\" limpa: clear em "
+                          + "[\(result.cleared.joined(separator: ", "))]"
+                          + (result.skipped.isEmpty ? "" : ", pulados [\(result.skipped.joined(separator: ", "))]")
+                          + (result.chat.map { ", chat arquivado em \($0.lastPathComponent)" } ?? ", chat já vazio")
+                          + (result.trace.map { ", trilha arquivada em \($0.lastPathComponent)" } ?? ", trilha vazia"))
+                var payload = result.payload
+                payload["workbench"] = config.name
+                completion?(payload)
+            })
+        cleaners[config.id] = cleaner
+        cleaner.run()
     }
+
+    /// Limpezas em curso, por id de bancada — o timer do cleaner é dele, mas
+    /// alguém precisa segurá-lo de pé até o fim.
+    private var cleaners: [String: WorkbenchCleaner] = [:]
 
     // MARK: - Visualização
 

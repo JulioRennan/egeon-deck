@@ -3451,3 +3451,53 @@ se quer.
 **Verificação:** `ClaudeSkillTests.testBodyTeachesAnsweringWhoeverCalledYou` e,
 no DEV, dois agentes reais: um pediu ao outro a capital da Bolívia e recebeu
 `[ED] mensagem de trace-teste/claude-2` com a resposta, sem ninguém no meio.
+
+## ADR-059 — Limpar a bancada tem duração: espera, cortina e memória do chat
+
+**Decisão:** limpar a bancada deixa de ser um instante e vira um passo com três
+partes na ordem certa — o `clear` sai para cada agente, a limpeza ESPERA eles
+assentarem, e só então o chat e a trilha são arquivados. Enquanto isso a
+bancada fica coberta por uma cortina com o que está acontecendo, e nada aceita
+clique. No fim, o chat é avisado de que a conversa saiu do lugar.
+
+**O que estava errado.** O botão fazia tudo na mesma linha: despachava o
+`clear` e arquivava `chat.jsonl` e `trace.md` no mesmo instante. Só que o
+`clear` vai pela fila do Dispatcher (ADR-037) — agente ocupado só recebe quando
+ficar livre —, então o turno que ele ainda estava escrevendo era gravado DEPOIS
+do arquivamento, na conversa nova. E o pior sobrava na tela: o eco local de um
+envio ainda não confirmado pelo transcript e o turno ao vivo em cache vivem na
+memória do `ChatContainer`, não no arquivo. Mover o arquivo não os tocava, e a
+conversa recém-limpa abria com uma bolha órfã — um prompt seu de meia hora
+antes, sem resposta, sozinho numa thread vazia.
+
+**Por que esperar, e não só reordenar.** Não existe "arquivar depois" sem
+relógio: entre despachar e o agente engolir o `clear` há a fila, a injeção e o
+tempo da TUI. Duas folgas resolvem o que uma não resolve: um piso de 2,5 s
+antes de olhar (logo após o disparo TODOS parecem parados — é o próprio bug
+disfarçado de espera) e um teto de 45 s (agente atolado numa tarefa longa não
+pode prender a limpeza; estourou, arquiva-se assim mesmo e o payload diz
+`timeout: true`).
+
+**Por que a cortina.** O passo demora segundos, e sem sinal a limpeza parecia
+não ter acontecido. Ela não é enfeite: enquanto o arquivamento não saiu, clicar
+num nó ou mandar mensagem escreveria na conversa que está indo embora. A view
+opaca ao `hitTest` segura isso sem nenhum container abaixo precisar saber que
+existe limpeza.
+
+**Como ficou:** `WorkbenchCleaner` (Features/Workbench/Controllers) orquestra —
+sem estado de bancada, tudo por closure, como o EdgeController: despachar,
+saber se um terminal está ocupado e arquivar entram de fora, e o passo inteiro
+roda em teste sem tela. `BusyOverlay` (Features/Home/Views) é a cortina, e
+`ChatContainer.clearedHistory()` zera o que a thread guardava em memória (eco,
+turno ao vivo, vigias de transcript, passos abertos, janela de rolagem). "Só o
+chat" (`POST /chat/clear`) também avisa a thread — o eco órfão nascia lá
+também.
+
+**Consequência na rota:** `POST /workbench/clear` só responde no fim, com
+`cleared`, `skipped`, `archived`, `trace` e `timeout`. Responder no disparo
+devolvia "ok" antes de a conversa ter saído do lugar, e quem confere pelo
+socket via o estado do meio.
+
+**Verificação:** `WorkbenchCleanerTests` (não arquiva no disparo, não arquiva
+dentro da folga, não arquiva com agente ocupado, arquiva no teto, pula CLI sem
+`clear`) e `ChatClearTests` (o eco não sobrevive à limpeza).
