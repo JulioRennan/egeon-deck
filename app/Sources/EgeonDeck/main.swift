@@ -325,6 +325,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "inset": self.shell(at: self.activeIndex)?.tabsInset ?? -1,
                     "count": list.count]
         }
+        AppControl.moveTab = { [weak self] name, position in
+            guard let self, let id = WorkbenchLookup.id(ofName: name, in: self.configs)
+            else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
+            guard let from = self.openTabs.firstIndex(of: id) else {
+                return ["ok": false, "error": "'\(name)' não está na faixa"]
+            }
+            guard position >= 0, position < self.openTabs.count else {
+                return ["ok": false, "error": "posição fora da faixa (0…\(self.openTabs.count - 1))"]
+            }
+            // Pela view, e não direto no array: é o mesmo caminho do arrasto,
+            // com a mesma animação — verificar o atalho não vale se ele passa
+            // por outro lugar.
+            let order = self.shell(at: self.activeIndex)?.tabs.move(id: id, to: position)
+                ?? TabDragLayout.moved(self.openTabs, from: from, to: position)
+            self.reorderTabs(order)
+            return ["ok": true, "moved": name, "to": position]
+        }
         AppControl.closeTab = { [weak self] name in
             guard let self, let id = WorkbenchLookup.id(ofName: name, in: self.configs)
             else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
@@ -563,6 +580,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func tabs() -> [WorkbenchTab] {
         WorkbenchTabs.build(open: openTabs, configs: configs, active: activeID,
                             activity: Dispatcher.shared.activitySummary())
+    }
+
+    /// Você arrastou uma aba. A ordem da faixa é SUA: ela não é a da barra
+    /// lateral (que é a árvore de projetos) nem a ordem em que as bancadas
+    /// abriram, e é por isso que ela mora em `openTabs` e vai para o disco.
+    private func reorderTabs(_ order: [String]) {
+        guard Set(order) == Set(openTabs) else { return }
+        openTabs = order
+        schedulePersist()
+        // As outras faixas montadas — as das bancadas que estão abertas mas não
+        // na tela — remontam quando chegarem à frente.
+        refreshTabs()
+        Log.write("abas reordenadas: "
+                  + order.compactMap { config(ofID: $0)?.name }.joined(separator: ", "))
     }
 
     /// Fechar a aba: sai da faixa e a bancada continua exatamente como estava —
@@ -2323,6 +2354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.activate(index)
         }
         shell.tabs.onClose = { [weak self] in self?.closeTab($0) }
+        shell.tabs.onReorder = { [weak self] order in self?.reorderTabs(order) }
         guard let index = index(ofID: id) else { return }
         shell.mosaicLayout = configs[index].mosaic
         shell.setWorkbench(name: configs[index].name, path: configs[index].path)
@@ -3214,7 +3246,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if menuItem.action == #selector(closeActiveTab) { return activeID != nil }
         if menuItem.action == #selector(nextWorkbench)
             || menuItem.action == #selector(previousWorkbench) {
-            return openTabs.count > 1 || configs.count > 1
+            guard openTabs.count > 1 || configs.count > 1 else { return false }
+            // Com o cursor dentro de uma caixa de texto, ⌘← e ⌘→ são dela: no
+            // composer do chat elas levam ao início e ao fim da linha, e o menu
+            // é consultado antes do responder chain.
+            let seta = menuItem.keyEquivalent == "\u{2190}" || menuItem.keyEquivalent == "\u{2192}"
+            guard seta else { return true }
+            return !(shell(at: activeIndex)?.focusIsInTextInput ?? false)
         }
 
         let modeItems: [Selector: ViewMode] = [
@@ -3257,9 +3295,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Próxima bancada", action: #selector(nextWorkbench), keyEquivalent: "]")
+        // ⌘→ / ⌘← são o atalho natural para "a aba do lado", e ⌘] / ⌘[ ficam como
+        // segunda via: nas setas o AppKit consulta o menu antes do responder
+        // chain, e dentro de uma caixa de texto elas são início e fim da linha —
+        // `validateMenuItem` devolve a tecla nesse caso.
+        appMenu.addItem(withTitle: "Aba à direita", action: #selector(nextWorkbench),
+                        keyEquivalent: "\u{2192}")
+        appMenu.addItem(withTitle: "Aba à esquerda", action: #selector(previousWorkbench),
+                        keyEquivalent: "\u{2190}")
+        appMenu.addItem(withTitle: "Próxima bancada", action: #selector(nextWorkbench),
+                        keyEquivalent: "]").isHidden = true
         appMenu.addItem(withTitle: "Bancada anterior", action: #selector(previousWorkbench),
-                        keyEquivalent: "[")
+                        keyEquivalent: "[").isHidden = true
         // Fechar a aba, e não a janela: a bancada continua rodando e volta pela
         // barra lateral. É por isso que ⌘W não pode ser o do sistema aqui.
         appMenu.addItem(withTitle: "Fechar a aba", action: #selector(closeActiveTab),

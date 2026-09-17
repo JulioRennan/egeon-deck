@@ -82,9 +82,13 @@ app/Sources/EgeonDeck/
   que existe). **Fechar a aba não encerra a bancada**: sai da faixa, os
   terminais seguem rodando e ela volta pela lateral. `openTabs` (à vista) e
   `shells` (de pé) são conjuntos diferentes. ⌘]/⌘[ percorrem a faixa, ⌘1…⌘9 vão
-  direto, ⌘W fecha a aba. A faixa vai para o disco (`tabOrder`/`tabActive`) e
-  volta no arranque, com teto de seis. Confere-se por `GET /tabs`
-  (`?close=<bancada>` fecha).
+  direto, ⌘W fecha a aba, ⌘→/⌘← vão para a aba do lado (desabilitados dentro de
+  caixa de texto, onde a seta é da edição). **Arrastar a aba reordena**
+  (ADR-062): a pastilha acompanha o cursor e as vizinhas deslizam — a linha de
+  inserção fica só na barra lateral, onde o destino é ambíguo. A faixa vai para
+  o disco (`tabOrder`/`tabActive`) e volta no arranque, com teto de seis.
+  Confere-se por `GET /tabs` (`?close=<bancada>` fecha,
+  `?move=<bancada>&to=<n>` reordena).
 - **Chat** — spec em `docs/03-spec-chat.md`. Participantes com cor própria e
   estado, composer estilo Slack, envio real, thread por turno com passos e
   citações. **Linha do tempo plana** (ADR-042): cada turno de cada agente é

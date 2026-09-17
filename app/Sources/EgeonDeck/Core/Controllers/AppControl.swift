@@ -126,6 +126,10 @@ enum AppControl {
     /// conferir o que está na tela sem comparar pixels.
     static var tabsSnapshot: (() -> [String: Any])?
 
+    /// Reordena a faixa: leva a aba desta bancada para a posição dada. Arrasto
+    /// não é dirigível de fora sem Acessibilidade (ADR-003).
+    static var moveTab: ((_ workbench: String, _ position: Int) -> [String: Any])?
+
     /// Fecha a aba de uma bancada — sem encerrar nada. O x da pastilha não é
     /// dirigível de fora sem Acessibilidade (ADR-003), e esta é a mesma operação.
     static var closeTab: ((_ workbench: String) -> [String: Any])?

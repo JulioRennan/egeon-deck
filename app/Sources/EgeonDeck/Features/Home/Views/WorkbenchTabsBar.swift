@@ -10,6 +10,9 @@ final class WorkbenchTabView: NSView {
     let id: String
     var onClick: ((String) -> Void)?
     var onClose: ((String) -> Void)?
+    /// Passos do arrasto desta pastilha. Quem reordena é a faixa — ela é a
+    /// única que conhece a fila inteira.
+    var onDrag: ((PressDrag.Step<String>) -> Void)?
 
     private let label = NSTextField(labelWithString: "")
     private let badge = NSTextField(labelWithString: "")
@@ -139,11 +142,28 @@ final class WorkbenchTabView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        // O x primeiro: ele é um alvo dentro do alvo, e arrastar a partir dele
+        // seria fechar a aba errada no fim do movimento.
         if !close.isHidden, close.frame.insetBy(dx: -6, dy: -6).contains(point) {
             onClose?(id)
-        } else {
-            onClick?(id)
+            return
         }
+        PressDrag.track(event, in: self, payload: id,
+                        drag: { [weak self] in self?.onDrag?($0) },
+                        click: { [weak self] in
+                            guard let self else { return }
+                            self.onClick?(self.id)
+                        })
+    }
+
+    /// Elevada: a que está na mão sai do plano das outras. Sombra e escala leve,
+    /// porque o que diz "isto está solto" é o descolamento, não a cor.
+    func setLifted(_ on: Bool) {
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = on ? 0.45 : 0
+        layer?.shadowRadius = on ? 8 : 0
+        layer?.shadowOffset = CGSize(width: 0, height: on ? -2 : 0)
+        alphaValue = on ? 0.96 : 1
     }
 
     override func resetCursorRects() {
@@ -161,10 +181,26 @@ final class WorkbenchTabsBar: NSView {
 
     var onPick: ((String) -> Void)?
     var onClose: ((String) -> Void)?
+    /// Você arrastou e soltou: esta é a ordem nova, inteira.
+    var onReorder: (([String]) -> Void)?
 
     private var views: [WorkbenchTabView] = []
     /// Ids na ordem desenhada. Remontar só quando ISTO muda; o resto é `show`.
     private var mounted: [String] = []
+
+    /// O arrasto em curso. Enquanto ele existe, a faixa não é remontada e o
+    /// layout não mexe na pastilha que está na mão.
+    private struct Dragging {
+        let id: String
+        /// Onde o mouse pegou a pastilha, medido da borda esquerda dela: é o que
+        /// faz a aba não pular para o cursor no primeiro pixel.
+        let grab: CGFloat
+        var index: Int
+    }
+    private var dragging: Dragging?
+    /// Larguras congeladas no início do arrasto: recalculá-las a cada passo
+    /// mudava o tamanho das abas enquanto elas deslizavam.
+    private var frozenWidths: [CGFloat] = []
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -183,7 +219,28 @@ final class WorkbenchTabsBar: NSView {
     }
 
     func show(_ tabs: [WorkbenchTab]) {
+        // Com o arrasto em curso, só o ESTADO das pastilhas se atualiza — casado
+        // por id, porque a ordem na tela é a da mão, não a do app. Remontar aqui
+        // arrancaria do cursor a aba que você está segurando; o tique do spinner
+        // chega oito vezes por segundo.
+        guard dragging == nil else {
+            for tab in tabs {
+                views.first { $0.id == tab.id }?.show(tab)
+            }
+            return
+        }
         let ids = tabs.map(\.id)
+        // Mesmas bancadas, outra ordem: quem mandou foi o app (o arrasto já
+        // terminou, ou a rota reordenou). Reordenar as pastilhas que já existem
+        // em vez de recriá-las preserva o hover, o cache do badge e o
+        // movimento — recriar dá um piscar seco no lugar do deslize.
+        if ids != mounted, Set(ids) == Set(mounted), ids.count == views.count {
+            views = ids.compactMap { id in views.first { $0.id == id } }
+            mounted = ids
+            for (view, tab) in zip(views, tabs) { view.show(tab) }
+            place(animated: true)
+            return
+        }
         if ids != mounted {
             mounted = ids
             views.forEach { $0.removeFromSuperview() }
@@ -191,6 +248,7 @@ final class WorkbenchTabsBar: NSView {
                 let view = WorkbenchTabView(tab: tab)
                 view.onClick = { [weak self] in self?.onPick?($0) }
                 view.onClose = { [weak self] in self?.onClose?($0) }
+                view.onDrag = { [weak self] in self?.handle($0) }
                 addSubview(view)
                 return view
             }
@@ -201,22 +259,105 @@ final class WorkbenchTabsBar: NSView {
         isHidden = tabs.isEmpty
     }
 
+    private static let gap: CGFloat = 4
+
+    /// As larguras de agora: cabe o que cabe. Com muitas bancadas abertas as
+    /// pastilhas encolhem até o mínimo legível, todas juntas, em vez de a última
+    /// sumir do lado de fora — quem tem oito bancadas abertas precisa das oito
+    /// à vista.
+    private func widths() -> [CGFloat] {
+        guard !views.isEmpty else { return [] }
+        let available = max(0, bounds.width - leftInset - 8)
+        let wanted = views.reduce(0) { $0 + $1.fittingWidth }
+            + CGFloat(views.count - 1) * Self.gap
+        let scale = wanted > available && wanted > 0 ? available / wanted : 1
+        return views.map { max(52, ($0.fittingWidth * scale).rounded()) }
+    }
+
     override func layout() {
         super.layout()
+        place(animated: false)
+    }
+
+    /// Põe cada pastilha no seu lugar. A que está na mão é pulada: quem manda
+    /// nela é o cursor.
+    private func place(animated: Bool) {
         guard !views.isEmpty else { return }
-        // Cabe o que cabe: com muitas bancadas abertas as pastilhas encolhem até
-        // o mínimo legível, todas juntas, em vez de a última sumir do lado de
-        // fora — quem tem oito bancadas abertas precisa das oito à vista.
-        let available = max(0, bounds.width - leftInset - 8)
-        let wanted = views.reduce(0) { $0 + $1.fittingWidth } + CGFloat(views.count - 1) * 4
-        let scale = wanted > available && wanted > 0 ? available / wanted : 1
-        var x = leftInset + 4
+        let list = dragging == nil ? widths() : frozenWidths
+        guard list.count == views.count else { return }
+        let xs = TabDragLayout.offsets(widths: list, start: leftInset + Self.gap, gap: Self.gap)
         let y = (bounds.height - WorkbenchTabView.height) / 2
-        for view in views {
-            let width = max(52, (view.fittingWidth * scale).rounded())
-            view.frame = NSRect(x: x, y: y, width: width, height: WorkbenchTabView.height)
-            x += width + 4
+
+        func apply() {
+            for (i, view) in views.enumerated() where view.id != dragging?.id {
+                view.frame = NSRect(x: xs[i], y: y, width: list[i],
+                                    height: WorkbenchTabView.height)
+            }
         }
+        guard animated else { return apply() }
+        // 0,12s é o tempo em que o olho lê o movimento como uma aba abrindo
+        // espaço; acima disso a faixa parece pastosa enquanto você arrasta.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.allowsImplicitAnimation = true
+            apply()
+        }
+    }
+
+    // MARK: Arrastar para reordenar
+
+    private func handle(_ step: PressDrag.Step<String>) {
+        switch step.phase {
+        case .began:
+            guard let index = views.firstIndex(where: { $0.id == step.payload }) else { return }
+            frozenWidths = widths()
+            let view = views[index]
+            dragging = Dragging(id: step.payload,
+                                grab: convert(step.origin, from: nil).x - view.frame.minX,
+                                index: index)
+            view.setLifted(true)
+            // Para o topo da pilha, senão ela passa POR BAIXO das vizinhas.
+            addSubview(view, positioned: .above, relativeTo: nil)
+
+        case .moved:
+            guard var current = dragging,
+                  let view = views.first(where: { $0.id == current.id }) else { return }
+            let x = convert(step.point, from: nil).x - current.grab
+            view.frame.origin.x = x
+            let alvo = TabDragLayout.destination(center: x + view.frame.width / 2,
+                                                 dragging: current.index, widths: frozenWidths,
+                                                 start: leftInset + Self.gap, gap: Self.gap)
+            guard alvo != current.index else { return }
+            views = TabDragLayout.moved(views, from: current.index, to: alvo)
+            frozenWidths = TabDragLayout.moved(frozenWidths, from: current.index, to: alvo)
+            current.index = alvo
+            dragging = current
+            place(animated: true)
+
+        case .ended, .cancelled:
+            guard let current = dragging else { return }
+            let view = views.first { $0.id == current.id }
+            view?.setLifted(false)
+            dragging = nil
+            mounted = views.map(\.id)
+            // A pastilha vai para o slot com a mesma animação das vizinhas: solta
+            // no meio do caminho, ela salta — e o salto é o que faz parecer
+            // defeito em vez de encaixe.
+            place(animated: true)
+            if step.phase == .ended { onReorder?(mounted) }
+        }
+    }
+
+    /// Reordena de fora (rota do socket). Arrasto não é dirigível sem
+    /// Acessibilidade (ADR-003), e esta é a mesma operação.
+    @discardableResult
+    func move(id: String, to position: Int) -> [String]? {
+        guard let from = views.firstIndex(where: { $0.id == id }),
+              position >= 0, position < views.count else { return nil }
+        views = TabDragLayout.moved(views, from: from, to: position)
+        mounted = views.map(\.id)
+        place(animated: true)
+        return mounted
     }
 
     /// Onde cada pastilha ficou, para conferir de fora — aba desenhada por baixo

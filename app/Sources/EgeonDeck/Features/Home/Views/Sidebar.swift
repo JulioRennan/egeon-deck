@@ -1102,33 +1102,25 @@ struct SidebarDrag {
     /// Onde o mouse está, em coordenadas da janela.
     let point: NSPoint
 
-    /// Segura o clique até saber o que ele é: soltou parado é clique, andou
-    /// mais que o limiar é arrasto. Sem isso, escolher uma bancada com a mão
-    /// trêmula a mudaria de lugar.
-    static let threshold: CGFloat = 4
+    /// Mantido como nome público daqui; o valor é o do `PressDrag`.
+    static var threshold: CGFloat { PressDrag.threshold }
 
+    /// O laço é o `PressDrag`, dividido com a faixa de abas; aqui só se traduz a
+    /// carga para o que a barra lateral entende.
     static func track(_ event: NSEvent, in view: NSView, item: SidebarItem,
                       drag: ((SidebarDrag) -> Void)?, click: @escaping () -> Void) {
-        let start = event.locationInWindow
-        var dragging = false
-        guard let window = view.window else { return click() }
-
-        while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            let point = next.locationInWindow
-            if next.type == .leftMouseUp {
-                if dragging { drag?(SidebarDrag(phase: .ended, item: item, point: point)) }
-                else { click() }
-                return
+        PressDrag.track(event, in: view, payload: item, drag: drag.map { report in
+            { (step: PressDrag.Step<SidebarItem>) in
+                let phase: Phase
+                switch step.phase {
+                case .began:     phase = .began
+                case .moved:     phase = .moved
+                case .ended:     phase = .ended
+                case .cancelled: phase = .cancelled
+                }
+                report(SidebarDrag(phase: phase, item: step.payload, point: step.point))
             }
-            if !dragging {
-                let moved = hypot(point.x - start.x, point.y - start.y)
-                guard moved > threshold, drag != nil else { continue }
-                dragging = true
-                drag?(SidebarDrag(phase: .began, item: item, point: point))
-            }
-            drag?(SidebarDrag(phase: .moved, item: item, point: point))
-        }
-        if dragging { drag?(SidebarDrag(phase: .cancelled, item: item, point: start)) }
+        }, click: click)
     }
 }
 

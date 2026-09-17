@@ -200,6 +200,16 @@ final class WorkbenchShell: NSView {
         return false
     }
 
+    /// O foco está numa caixa de texto do app — o composer do chat, um campo de
+    /// formulário. Ali ⌘← e ⌘→ são "início" e "fim da linha", e um item de menu
+    /// com esse atalho é consultado ANTES do responder chain: habilitado, ele
+    /// roubaria a tecla de quem está escrevendo.
+    var focusIsInTextInput: Bool {
+        guard let responder = window?.firstResponder else { return false }
+        if let text = responder as? NSTextView { return text.isEditable }
+        return responder is NSTextField
+    }
+
     var terminals: [TerminalNode] { nodes.compactMap { $0 as? TerminalNode } }
 
     func refreshBadges() {

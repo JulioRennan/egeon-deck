@@ -3623,3 +3623,55 @@ No DEV, pelo socket: `GET /tabs` mostra a faixa como texto e o frame de cada
 pastilha; `GET /tabs?close=<bancada>` fecha a aba — e o `/peek` prova que os
 terminais dela continuam respondendo. Fechar e reabrir o app devolve a mesma
 faixa, na mesma ordem, na mesma aba.
+
+## ADR-062 — A aba arrastada acompanha o cursor; a linha de inserção fica na barra lateral
+
+**A decisão.** Reordenar abas é arrastar a pastilha: ela **acompanha o cursor**,
+sai elevada do plano das outras (sombra, sem cor nova) e as vizinhas **deslizam**
+para abrir espaço; ao soltar, ela encaixa no slot com a mesma animação. A ordem
+da faixa é sua e vai para o disco.
+
+**Por que não a linha de inserção da barra lateral.** Lá (ADR-051) o que se
+arrasta fica parado e um risco aparece onde vai cair. Funciona numa árvore, onde
+o destino é ambíguo — outro projeto, outra posição, a gaveta —, e é justamente o
+que o usuário chamou de feio quando pediu isto: "para não ficar feio igual é a
+troca de posição das sessões hoje". Na faixa o destino é uma posição só, numa
+linha, então o movimento pode ser o próprio objeto se mexendo — e aí não há o que
+interpretar.
+
+**A troca acontece no CENTRO, não na borda.** Com pastilhas de larguras
+diferentes — e elas são diferentes, porque o nome manda —, o critério de bordas
+trocava duas vezes no mesmo movimento: a arrastada abria espaço, a vizinha
+escorregava para trás dela e o critério se satisfazia de novo na direção oposta.
+A faixa tremia. Passar o centro da vizinha é estável.
+
+**As larguras congelam no início do arrasto.** Recalculá-las a cada passo mudava
+o tamanho das abas enquanto elas deslizavam, porque a escala depende de quanto
+espaço sobra.
+
+**Remontar é proibido enquanto a mão está na aba.** A faixa é redesenhada oito
+vezes por segundo pelo quadro do spinner; sem a guarda, o tique arrancava do
+cursor a pastilha que você estava segurando. Durante o arrasto só o **estado**
+das pastilhas se atualiza, casado por id. E quando o app manda uma ordem nova
+(fim do arrasto, ou a rota), as pastilhas existentes são **reordenadas** em vez
+de recriadas: recriar perde o hover e o cache do badge, e o deslize vira um
+piscar seco.
+
+**O laço de arrasto agora é um só.** `PressDrag` — soltou parado é clique, andou
+mais que 4pt é arrasto — passou a servir a barra lateral e a faixa. Era código da
+`Sidebar`, e duplicá-lo para as abas seria manter dois limiares.
+
+**⌘→ e ⌘← vão para a aba do lado**, com ⌘] e ⌘[ como segunda via. As setas têm
+uma armadilha: o AppKit consulta o key equivalent do menu **antes** do responder
+chain, e dentro de uma caixa de texto ⌘← e ⌘→ são início e fim da linha — no
+composer do chat, roubá-las seria quebrar a edição. `validateMenuItem` desabilita
+o item quando o foco está num campo editável, e a tecla volta para quem está
+escrevendo. É a mesma defesa do ⌘/ da barra lateral (ADR-025).
+
+**Verificação.** `TabDragLayoutTests` (o destino a partir do centro, encostar não
+basta, arrastar além das pontas prende em vez de estourar, reordenação) e
+`WorkbenchTabsBarTests` (mover reposiciona as pastilhas de verdade; ordem nova do
+app não recria view nenhuma). No DEV: `GET /tabs?move=<bancada>&to=<n>` é o mesmo
+caminho do arrasto — a faixa reordena, o `placement` mostra as pastilhas nos
+lugares novos (lido no meio da animação, elas aparecem a meio caminho) e o
+`workbenches.json` grava a ordem.

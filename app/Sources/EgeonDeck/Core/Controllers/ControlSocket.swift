@@ -369,10 +369,18 @@ final class ControlSocket {
                     json: payload ?? ["ok": false, "error": "app sem árvore"])
 
         case ("GET", _, _) where route.contains("/tabs"):
-            // /tabs[?close=<bancada>] — as bancadas abertas, na ordem da faixa,
-            // com os badges; `close` fecha a aba sem encerrar a bancada.
-            let fechar = Self.query(in: route)["close"] ?? ""
+            // /tabs[?close=<bancada>][?move=<bancada>&to=<n>] — as bancadas
+            // abertas, na ordem da faixa, com os badges; `close` fecha a aba sem
+            // encerrar a bancada e `move` reordena, como o arrasto.
+            let query = Self.query(in: route)
+            let fechar = query["close"] ?? ""
+            let mover = query["move"] ?? ""
             let payload = DispatchQueue.main.sync { () -> [String: Any] in
+                if !mover.isEmpty, let move = AppControl.moveTab {
+                    var out = move(mover, Int(query["to"] ?? "") ?? -1)
+                    out.merge(AppControl.tabsSnapshot?() ?? [:]) { a, _ in a }
+                    return out
+                }
                 if !fechar.isEmpty, let close = AppControl.closeTab {
                     var out = close(fechar)
                     out.merge(AppControl.tabsSnapshot?() ?? [:]) { a, _ in a }

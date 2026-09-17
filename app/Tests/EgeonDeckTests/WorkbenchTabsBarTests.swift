@@ -50,6 +50,42 @@ final class WorkbenchTabsBarTests: XCTestCase {
         XCTAssertFalse(bar([tab("a"), tab("b")]).isHidden)
     }
 
+    /// Reordenar leva a pastilha para o outro lugar de verdade — é o mesmo
+    /// caminho que o arrasto usa no fim do movimento.
+    func testMovingATabRearrangesThePills() {
+        let bar = bar([tab("a", active: true), tab("b"), tab("c")])
+        XCTAssertEqual(pills(bar).map(\.id), ["a", "b", "c"])
+
+        XCTAssertEqual(bar.move(id: "a", to: 2), ["a", "b", "c"].isEmpty ? [] : ["b", "c", "a"])
+        bar.layoutSubtreeIfNeeded()
+        let xs = pills(bar).sorted { $0.frame.minX < $1.frame.minX }.map(\.id)
+        XCTAssertEqual(xs, ["b", "c", "a"], "a ordem na tela não acompanhou")
+    }
+
+    func testMovingToAnImpossiblePlaceDoesNothing() {
+        let bar = bar([tab("a"), tab("b")])
+        XCTAssertNil(bar.move(id: "a", to: 9))
+        XCTAssertNil(bar.move(id: "sumida", to: 0))
+        XCTAssertEqual(pills(bar).map(\.id), ["a", "b"])
+    }
+
+    /// Quem manda na ordem é o app: um `show` na ordem nova reordena as
+    /// pastilhas que já existem, sem recriar nenhuma — recriar perde o hover e o
+    /// cache do badge, e o deslize vira um piscar seco.
+    func testReorderingFromTheAppKeepsTheSameViews() {
+        let bar = bar([tab("a"), tab("b"), tab("c")])
+        let antes = Dictionary(uniqueKeysWithValues: pills(bar).map { ($0.id, ObjectIdentifier($0)) })
+
+        bar.show([tab("c"), tab("a"), tab("b")])
+        bar.layoutSubtreeIfNeeded()
+
+        let depois = pills(bar).sorted { $0.frame.minX < $1.frame.minX }
+        XCTAssertEqual(depois.map(\.id), ["c", "a", "b"])
+        for pill in depois {
+            XCTAssertEqual(ObjectIdentifier(pill), antes[pill.id], "\(pill.id) foi recriada")
+        }
+    }
+
     /// Trocar só o estado não remonta as pastilhas (a identidade delas é o id).
     func testStateChangeKeepsTheSameViews() {
         let bar = bar([tab("a", active: true), tab("b")])
