@@ -28,6 +28,7 @@ struct WorkbenchTab: Equatable {
         var out = isActive ? "▸ " : "  "
         out += name
         if isWorking { out += " ⠿" }
+        if summary.background > 0 { out += " ⏳" }
         if wantsAttention { out += " ●!" }
         if isDone { out += " ●" }
         return out

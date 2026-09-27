@@ -3675,3 +3675,44 @@ app não recria view nenhuma). No DEV: `GET /tabs?move=<bancada>&to=<n>` é o me
 caminho do arrasto — a faixa reordena, o `placement` mostra as pastilhas nos
 lugares novos (lido no meio da animação, elas aparecem a meio caminho) e o
 `workbenches.json` grava a ordem.
+
+## ADR-063 — Terceiro fim de turno: `[[ED:wait]]`, a ampulheta do trabalho de fundo
+
+**Problema.** O turno só sabia acabar de dois jeitos: `ok` (terminei) e `ask`
+(dependo de você). Quando o agente para mas deixa algo correndo — comando com
+`run_in_background`, subagente, vizinho acionado — o card dizia "terminou", ou
+nada, com o agente ainda de pé. Você não sabia se esperava ou se entrava.
+
+**Decisão.** Um terceiro marcador, `[[ED:wait]]`: "parei, mas deixei trabalho
+rodando em segundo plano e volto sozinho quando ele acabar". Vira o estado
+`Activity.background`, rotulado **⏳ em segundo plano** — a ampulheta alterna
+⏳/⌛ devagar (0,6 s), para não se confundir com o spinner de quem trabalha na
+sua frente. Sem som e sem cor de parada: não há nada para você fazer ainda. Na
+barra lateral e nas abas ela tem contagem própria (`ActivitySummary.background`)
+e o mesmo glifo — somada a `working`, a primeira versão mostrava ali o spinner
+comum, e a ampulheta só existia dentro do card.
+
+**É latch, não leitura.** Com gancho, o tick não olha a tela, e sem memória o
+tique seguinte devolvia o card para "pronto". `Target.inBackground` liga no
+`Stop` com `wait` e cai com qualquer entrada nova: `prompt` (o próprio CLI
+dispara `UserPromptSubmit` quando a `task-notification` do trabalho de fundo o
+acorda — medido), `Stop` com outro marcador, você digitando, entrega da fila. O
+pedido de permissão (`Notification`) vale também na ampulheta: o trabalho que
+acorda o agente é tão real quanto um turno seu.
+
+**`agents.json` antigo.** A instrução do marcador fica gravada por extenso no
+arquivo do usuário; instrução sem `{wait}` ganha a linha dele no fim
+(`MarkerConfig.waitLine`), e quem já tem não duplica.
+
+**Corrida achada no caminho.** O `Stop` chegou 300 ms antes de o CLI gravar a
+linha do marcador, e a última linha no transcript era um texto do MESMO turno
+("Comando rodando em background…") — recente, então não era "velha", e sem
+marcador o veredito caía em "terminou". Agora linha recente sem marcador também
+relê (`settleStop`, até 6 × 250 ms). Turno que de fato não tem marcador paga até
+1,5 s a mais para assentar.
+
+**Verificação.** `TranscriptMarkerTests` (`wait` lido do transcript, o mais baixo
+dos três vence, `wait` sai do chat, instrução antiga aprende `wait`) e
+`ActivityTests`. No DEV: `/dispatch` pedindo `sleep 30` em background — log
+`em segundo plano — por gancho Stop, wait no transcript (1 releitura)`, depois
+`prompt` quando a notificação chegou e `terminou … ok`.

@@ -76,6 +76,9 @@ struct MarkerConfig: Codable {
     var done: String = "[[ED:ok]]"
     /// Escrito quando ele parou porque depende de uma resposta sua.
     var ask: String = "[[ED:ask]]"
+    /// Escrito quando ele parou, mas deixou trabalho rodando de fundo e volta
+    /// sozinho (ADR-063).
+    var wait: String = "[[ED:wait]]"
     /// Instrução anexada ao system prompt. `{done}` e `{ask}` são substituídos
     /// pelos marcadores acima.
     var instruction: String = MarkerConfig.defaultInstruction
@@ -89,15 +92,42 @@ struct MarkerConfig: Codable {
         {done} — terminei e não dependo de você.
         {ask} — parei e dependo de uma resposta sua: dúvida, escolha, permissão \
         ou informação que falta.
+        {wait} — parei, mas deixei trabalho rodando em segundo plano (comando em \
+        background, subagente, vizinho acionado) e volto sozinho quando ele acabar.
         Se você fez uma pergunta ao usuário, o marcador é {ask}. Um marcador só, \
         sempre por último.
         """
 
+    /// A linha do `{wait}` para instrução escrita antes dele existir: o
+    /// `agents.json` guarda a instrução por extenso, e sem isto o marcador novo
+    /// nunca chegaria a quem já tinha o arquivo.
+    static let waitLine = """
+        {wait} — parei, mas deixei trabalho rodando em segundo plano (comando em \
+        background, subagente, vizinho acionado) e volto sozinho quando ele acabar.
+        """
+
     var resolvedInstruction: String {
-        instruction
+        let text = instruction.contains("{wait}") ? instruction : instruction + "\n" + Self.waitLine
+        return text
             .replacingOccurrences(of: "{done}", with: done)
             .replacingOccurrences(of: "{ask}", with: ask)
+            .replacingOccurrences(of: "{wait}", with: wait)
     }
+}
+
+extension MarkerConfig {
+    /// O marcador mais recente do texto — o de baixo, porque terminal e
+    /// resposta escrevem para baixo. Mais de um aparece quando a resposta cita o
+    /// protocolo, ou quando a tela ainda mostra o turno passado.
+    func latest(in text: String) -> HookEvent.Marker? {
+        [(HookEvent.Marker.ok, done), (.ask, ask), (.wait, wait)]
+            .compactMap { kind, token in
+                text.range(of: token, options: .backwards).map { (kind, $0.lowerBound) }
+            }
+            .max { $0.1 < $1.1 }?.0
+    }
+
+    var all: [String] { [done, ask, wait] }
 }
 
 /// Como o terminal avisa que parou e precisa de você.
@@ -152,6 +182,7 @@ extension MarkerConfig {
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? fallback.enabled
         done = try container.decodeIfPresent(String.self, forKey: .done) ?? fallback.done
         ask = try container.decodeIfPresent(String.self, forKey: .ask) ?? fallback.ask
+        wait = try container.decodeIfPresent(String.self, forKey: .wait) ?? fallback.wait
         instruction = try container.decodeIfPresent(String.self, forKey: .instruction)
             ?? fallback.instruction
     }

@@ -135,7 +135,9 @@ app/Sources/EgeonDeck/
   do CLI (ADR-054). Quem **recebe** um pedido de outro agente responde a ele ao
   terminar — e avisa antes de parar para perguntar ao usuário (ADR-058).
 - Estado do terminal por gancho do CLI (`stop`/`ask`/`prompt` → `/activity`);
-  laranja interrompe (permissão), verde só informa (terminou).
+  laranja interrompe (permissão), verde só informa (terminou), e a ampulheta
+  "⏳ em segundo plano" é o turno que fechou com `[[ED:wait]]` — trabalho de
+  fundo rodando, o agente volta sozinho (ADR-063).
 - Worktree por bancada E por terminal (formulário decide pela branch).
 - Modelo por nó de agente: formulário e pull-down no cabeçalho; trocar reinicia
   o processo e retoma a conversa. Lista vem do `agents.json` (`models`).

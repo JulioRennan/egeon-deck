@@ -30,6 +30,6 @@ enum HookEvent: String, CaseIterable {
     /// do transcript, não da tela: é o que separa "terminou" de "precisa de
     /// você" sem depender do que a TUI já pintou.
     enum Marker: String {
-        case ok, ask
+        case ok, ask, wait
     }
 }

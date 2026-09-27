@@ -431,14 +431,7 @@ enum ClaudeTranscript {
             guard let text = blocks.last(where: { $0["type"] as? String == "text" })?["text"] as? String
             else { continue }
             let at = (entry["timestamp"] as? String).flatMap(Self.date)
-            let ask = text.range(of: marker.ask, options: .backwards)
-            let done = text.range(of: marker.done, options: .backwards)
-            switch (ask, done) {
-            case let (a?, d?): return LastMarker(marker: a.lowerBound > d.lowerBound ? .ask : .ok, at: at)
-            case (_?, nil):    return LastMarker(marker: .ask, at: at)
-            case (nil, _?):    return LastMarker(marker: .ok, at: at)
-            case (nil, nil):   return LastMarker(marker: nil, at: at)
-            }
+            return LastMarker(marker: marker.latest(in: text), at: at)
         }
         return nil
     }
@@ -469,7 +462,7 @@ enum ClaudeTranscript {
     /// Os marcadores do protocolo Egeon (`[[ED:ok]]`, `[[ED:ask]]`) são para o
     /// app, não para você ler na bolha.
     static func strippingMarkers(_ text: String) -> String {
-        text.replacingOccurrences(of: #"\[\[ED:(ok|ask)\]\]"#, with: "",
+        text.replacingOccurrences(of: #"\[\[ED:(ok|ask|wait)\]\]"#, with: "",
                                   options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }

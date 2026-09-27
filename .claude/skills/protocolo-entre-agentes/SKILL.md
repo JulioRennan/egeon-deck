@@ -17,10 +17,10 @@ Caminhos relativos a `app/Sources/EgeonDeck/`.
 
 | peça | onde | regra |
 |---|---|---|
-| `MarkerConfig` | `Features/Nodes/Features/AgentNode/Models/AgentProfile.swift` | `done = "[[ED:ok]]"`, `ask = "[[ED:ask]]"`, `enabled = true`; instrução em `defaultInstruction`, `{done}`/`{ask}` substituídos em `resolvedInstruction`. ASCII curto numa linha só: TUI estreita quebra marcador longo. |
+| `MarkerConfig` | `Features/Nodes/Features/AgentNode/Models/AgentProfile.swift` | `done = "[[ED:ok]]"`, `ask = "[[ED:ask]]"`, `wait = "[[ED:wait]]"`, `enabled = true`; instrução em `defaultInstruction`, `{done}`/`{ask}`/`{wait}` substituídos em `resolvedInstruction` (instrução antiga sem `{wait}` ganha `waitLine`). `latest(in:)` devolve o mais baixo dos três. ASCII curto numa linha só: TUI estreita quebra marcador longo. |
 | injeção | `…/ClaudeCode/Models/ClaudeProfile.swift:20` | `["--append-system-prompt", "{prompt}"]` — vai no system prompt, não gasta turno. Perfil sem `systemPrompt` (codex/gemini/opencode) não recebe marcador. |
-| leitura | `Features/Dispatch/Controllers/Dispatcher.swift` `verdict(from:)` (~l.511) | Espia as últimas 24 linhas do pty. Com os dois marcadores na tela, vale o **mais baixo** (mais recente). Sem marcador, cai em `questionPatterns` do perfil; sem nada → `.unknown` ("silêncio"). |
-| limpeza no chat | `…/ClaudeCode/Models/ClaudeTranscript.swift:134` | Regex `\[\[ED:(ok|ask)\]\]` removida do texto exibido — marcador é para o app, não para quem lê. |
+| leitura | `Features/Dispatch/Controllers/Dispatcher.swift` `verdict(from:)` (~l.511) | Espia as últimas 24 linhas do pty. Com mais de um marcador na tela, vale o **mais baixo** (mais recente). Sem marcador, cai em `questionPatterns` do perfil; sem nada → `.unknown` ("silêncio"). |
+| limpeza no chat | `…/ClaudeCode/Models/ClaudeTranscript.swift:134` | Regex `\[\[ED:(ok|ask|wait)\]\]` removida do texto exibido — marcador é para o app, não para quem lê. |
 
 Semântica que o agente recebe (é o texto que aparece no seu próprio system
 prompt quando você roda dentro do Deck):
@@ -28,6 +28,8 @@ prompt quando você roda dentro do Deck):
 - `[[ED:ok]]` — terminei e não dependo de você.
 - `[[ED:ask]]` — parei e dependo de resposta sua (dúvida, escolha, permissão,
   informação). **Pergunta ao usuário ⇒ sempre `ask`.**
+- `[[ED:wait]]` — parei, mas deixei trabalho rodando em segundo plano (comando
+  em background, subagente, vizinho acionado) e volto sozinho (ADR-063).
 - Um marcador só, sozinho, na última linha.
 
 ## 2. Ganchos do CLI → estado do terminal
@@ -43,7 +45,7 @@ Antes o alvo ia cru na URL e bancada com espaço ("SPEI + SPI") sumia sem log.
 |---|---|---|---|
 | `SessionStart` | `.start` | `/activity?event=start` | `sessionUp = true`. Com gancho, o terminal fica `.starting` ("preparando") até isto chegar (teto `bootCeiling` 45 s), nunca menos que `warmupMs`. (ADR-034) |
 | `UserPromptSubmit` | `.prompt` | `/conversation?id=&transcript=` | `turnInFlight = true`; informa o `conversationId` aberto (ADR-014). Não é aviso. |
-| `Stop` | `.stop` | `/activity?event=stop&transcript=<path>` | `turnInFlight = false`; gancho diz **quando**, marcador no **transcript** diz **qual** (`ClaudeTranscript.lastMarker`, `settleStop`): linha mais velha que o `prompt` do turno → relê a cada 250 ms até 6×; sem transcript → tela. `ask` → `.asking`, senão `.waiting`. (ADR-034) Assentado, chama `AppControl.turnEnded` → `ClaudeTranscript.lastTurn` → `ChatHistory.append` (ADR-037). |
+| `Stop` | `.stop` | `/activity?event=stop&transcript=<path>` | `turnInFlight = false`; gancho diz **quando**, marcador no **transcript** diz **qual** (`ClaudeTranscript.lastMarker`, `settleStop`): linha mais velha que o `prompt` do turno → relê a cada 250 ms até 6×; sem transcript → tela. `ask` → `.asking`, `wait` → `.background` (latch `inBackground`), senão `.waiting`. Linha deste turno sem marcador também relê — o `Stop` chega antes da linha final (ADR-034/063). Assentado, chama `AppControl.turnEnded` → `ClaudeTranscript.lastTurn` → `ChatHistory.append` (ADR-037). |
 | `Notification` (`matcher: permission_prompt`) | `.ask` | `/activity?event=ask` | Só vale se `turnInFlight || working || starting` — separa "pedido de permissão" (antes do Stop) do "você sumiu há 60s" (depois). → `.asking`. |
 
 `HookEvent` é enum tipado (`Features/Notifications/Models/HookEvent.swift`):
@@ -56,6 +58,7 @@ evento desconhecido morre na borda do socket com `expected = "stop|prompt|ask|st
 | `starting` | ⟳ preparando | acento | não — na Sidebar conta em `ActivitySummary.starting`, não em `working`; bancada só com estes mostra "preparando bancada…" |
 | `ready` | — | acento | não |
 | `working` | ⟳ trabalhando | acento | não |
+| `background` | ⏳ em segundo plano | acento | não — trabalho de fundo; contagem própria no resumo (`ActivitySummary.background`), ⏳ na barra e nas abas. Cai com `prompt`, `Stop`, entrada nova (ADR-063) |
 | `waiting` | ● terminou | verde | **não** — você lê quando olhar |
 | `asking` | ● precisa de você | laranja | **sim** — som (`AttentionConfig.sound`, padrão `Tink`) |
 | `dead` | ✕ processo encerrado | vermelho | não |
@@ -263,6 +266,7 @@ teste — é a regra do CLAUDE.md.
 - **ADR-034** — com gancho, estado por turno e marcador pelo transcript; byte só sem gancho.
 - **ADR-038** — envelope sem rodapé de aviso; restrição é da ferramenta do usuário, guardas estruturais ficam.
 - **ADR-040** — gancho identificado pelo pid da conexão, como o `egeon`; `EGEON_TARGET` não é identidade.
+- **ADR-063** — `[[ED:wait]]`: parou com trabalho de fundo; ampulheta, sem som.
 - **ADR-039** — turno em curso lido ao vivo da cauda do transcript (só enquanto `working`); a bolha do chat desenha a cadeia na ordem.
 
 `docs/03-spec-chat.md` — o chat como vista dessa mesma conversa.

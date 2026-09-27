@@ -147,8 +147,10 @@ final class SidebarRow: NSView {
         // assinatura carrega as três contagens e não o texto: com a MESMA
         // bolinha em dois estados, `●` sozinho é ambíguo — laranja e verde
         // escreveriam igual, e a linha ficaria presa na cor anterior.
-        let signature = "\(summary.starting)/\(summary.working)/\(summary.attention)/\(summary.done)/"
+        let signature = "\(summary.starting)/\(summary.working)/\(summary.background)/"
+            + "\(summary.attention)/\(summary.done)/"
             + (summary.working > 0 || summary.starting > 0 ? String(Spinner.current) : "")
+            + (summary.background > 0 ? String(Spinner.hourglass) : "")
         guard signature != lastBadge else { return }
         lastBadge = signature
 
@@ -197,6 +199,8 @@ final class SidebarRow: NSView {
             add(String(Spinner.current), summary.starting,
                 NSColor(calibratedWhite: 1, alpha: isCompact ? 0.4 : 0.25))
             add(String(Spinner.current), summary.working,
+                NSColor(calibratedWhite: 1, alpha: isCompact ? 0.75 : 0.45))
+            add(String(Spinner.hourglass), summary.background,
                 NSColor(calibratedWhite: 1, alpha: isCompact ? 0.75 : 0.45))
             add("●", summary.attention, .systemOrange)
             add("●", summary.done, .systemGreen)
@@ -512,8 +516,10 @@ final class SidebarGroupRow: NSView {
     func show(_ summary: ActivitySummary) {
         let visible = isCollapsed || isCompact
         let signature = visible
-            ? "\(summary.working + summary.starting)/\(summary.attention)/\(summary.done)/"
+            ? "\(summary.working + summary.starting)/\(summary.background)/"
+                + "\(summary.attention)/\(summary.done)/"
                 + (summary.working + summary.starting > 0 ? String(Spinner.current) : "")
+                + (summary.background > 0 ? String(Spinner.hourglass) : "")
             : ""
         guard signature != lastBadge else { return }
         lastBadge = signature
@@ -530,6 +536,8 @@ final class SidebarGroupRow: NSView {
         }
         if visible, !isCompact {
             add(String(Spinner.current), summary.working + summary.starting,
+                NSColor(calibratedWhite: 1, alpha: 0.45))
+            add(String(Spinner.hourglass), summary.background,
                 NSColor(calibratedWhite: 1, alpha: 0.45))
             add("●", summary.attention, .systemOrange)
             add("●", summary.done, .systemGreen)
@@ -1075,6 +1083,7 @@ final class Sidebar: NSView {
                 guard let s = summaries[tree.workbenches[index].name] else { continue }
                 total.starting += s.starting
                 total.working += s.working
+                total.background += s.background
                 total.attention += s.attention
                 total.done += s.done
             }

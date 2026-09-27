@@ -69,9 +69,10 @@ final class WorkbenchTabView: NSView {
     func show(_ tab: WorkbenchTab) {
         if label.stringValue != tab.name { label.stringValue = tab.name }
 
-        let signature = "\(tab.summary.starting)/\(tab.summary.working)/"
+        let signature = "\(tab.summary.starting)/\(tab.summary.working)/\(tab.summary.background)/"
             + "\(tab.summary.attention)/\(tab.summary.done)/"
             + (tab.isWorking ? String(Spinner.current) : "")
+            + (tab.summary.background > 0 ? String(Spinner.hourglass) : "")
         if signature != lastBadge {
             lastBadge = signature
             badge.attributedStringValue = Self.badgeText(tab)
@@ -101,6 +102,8 @@ final class WorkbenchTabView: NSView {
         add(String(Spinner.current), tab.summary.starting,
             NSColor(calibratedWhite: 1, alpha: 0.3))
         add(String(Spinner.current), tab.summary.working,
+            NSColor(calibratedWhite: 1, alpha: 0.6))
+        add(String(Spinner.hourglass), tab.summary.background,
             NSColor(calibratedWhite: 1, alpha: 0.6))
         add("●", tab.summary.attention, .systemOrange)
         add("●", tab.summary.done, .systemGreen)

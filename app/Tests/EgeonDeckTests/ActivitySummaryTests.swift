@@ -12,6 +12,7 @@ final class ActivitySummaryTests: XCTestCase {
         XCTAssertFalse(ActivitySummary(starting: 1, working: 1).isPreparing)
         XCTAssertFalse(ActivitySummary(starting: 1, attention: 1).isPreparing)
         XCTAssertFalse(ActivitySummary(starting: 1, done: 1).isPreparing)
+        XCTAssertFalse(ActivitySummary(starting: 1, background: 1).isPreparing)
         XCTAssertFalse(ActivitySummary().isPreparing)
     }
 }

@@ -57,6 +57,18 @@ final class WorkbenchTabTests: XCTestCase {
         XCTAssertTrue(tabs[0].isDone)
     }
 
+    /// Trabalho de fundo tem a ampulheta própria, não o spinner de quem
+    /// trabalha (ADR-063).
+    func testBackgroundShowsTheHourglassNotTheSpinner() {
+        let configs = [bench("deck")]
+        var summary = ActivitySummary()
+        summary.background = 1
+        let tabs = WorkbenchTabs.build(open: [configs[0].id], configs: configs,
+                                       active: nil, activity: ["deck": summary])
+        XCTAssertEqual(tabs[0].line, "  deck ⏳")
+        XCTAssertFalse(tabs[0].isWorking)
+    }
+
     /// O estado vem por NOME de bancada (é como o Dispatcher agrega), e a aba é
     /// por id: a ponte é a lista de configs, e renomear não pode apagar o badge.
     func testActivityIsMatchedByWorkbenchName() {

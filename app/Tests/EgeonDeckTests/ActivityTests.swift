@@ -6,7 +6,7 @@ import XCTest
 final class ActivityTests: XCTestCase {
     func testOnlyAskingInterrupts() {
         XCTAssertTrue(Activity.asking.needsAttention)
-        for state: Activity in [.starting, .ready, .working, .waiting, .dead] {
+        for state: Activity in [.starting, .ready, .working, .waiting, .background, .dead] {
             XCTAssertFalse(state.needsAttention, "\(state) não pode interromper")
         }
     }
@@ -24,6 +24,14 @@ final class ActivityTests: XCTestCase {
         XCTAssertNil(Activity.ready.label)
         XCTAssertEqual(Activity.waiting.label, "● terminou")
         XCTAssertEqual(Activity.asking.label, "● precisa de você")
+    }
+
+    // A ampulheta é estado, não aviso: nem cor de parada, nem som (ADR-063).
+    func testBackgroundIsAnHourglassWithoutAlarm() {
+        XCTAssertNil(Activity.background.color)
+        let label = Activity.background.label ?? ""
+        XCTAssertTrue(label.hasSuffix("em segundo plano"))
+        XCTAssertTrue(label.hasPrefix("⏳") || label.hasPrefix("⌛"))
     }
 
     // Spinner fica sem teste: a propriedade dele — girar em fase pelo relógio

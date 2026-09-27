@@ -22,6 +22,33 @@ final class TranscriptMarkerTests: XCTestCase {
         XCTAssertEqual(ClaudeTranscript.lastMarker(in: jsonl, marker: marker)?.marker, .ask)
     }
 
+    // Parou com trabalho de fundo: nem "terminou" nem pergunta (ADR-063).
+    func testWaitMeansBackground() {
+        let jsonl = [user, assistant(text("Deixei o build rodando.\\n\\n[[ED:wait]]"))].joined(separator: "\n")
+        XCTAssertEqual(ClaudeTranscript.lastMarker(in: jsonl, marker: marker)?.marker, .wait)
+    }
+
+    // Com três marcadores na resposta, manda o mais baixo.
+    func testLowestOfTheThreeWins() {
+        XCTAssertEqual(marker.latest(in: "uso [[ED:wait]] ou [[ED:ask]]\n[[ED:ok]]"), .ok)
+        XCTAssertEqual(marker.latest(in: "[[ED:ok]] antes\n[[ED:wait]]"), .wait)
+        XCTAssertNil(marker.latest(in: "nada aqui"))
+    }
+
+    func testWaitIsStrippedFromTheChat() {
+        XCTAssertEqual(ClaudeTranscript.strippingMarkers("Rodando.\n[[ED:wait]]"), "Rodando.")
+    }
+
+    // `agents.json` antigo guarda a instrução por extenso, sem `{wait}`: o
+    // marcador novo entra mesmo assim, e não duplica em quem já o tem.
+    func testLegacyInstructionStillTeachesWait() {
+        var legacy = MarkerConfig()
+        legacy.instruction = "{done} fim. {ask} pergunta."
+        XCTAssertTrue(legacy.resolvedInstruction.contains("[[ED:wait]]"))
+        let current = MarkerConfig().resolvedInstruction
+        XCTAssertEqual(current.components(separatedBy: "[[ED:wait]]").count, 2)
+    }
+
     // O turno anterior terminou em pergunta; o atual em ok. Só o último vale —
     // é exatamente o caso em que a tela ainda mostrava o [[ED:ask]] velho.
     func testOnlyTheLastReplyCounts() {

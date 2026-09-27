@@ -115,6 +115,12 @@ final class Target {
     /// olhe o terminal, e passar os olhos pela bancada não é ler o que ele
     /// perguntou. Cai com byte novo, junto do `acknowledged`.
     private var doneSeen = false
+    /// O turno fechou com `[[ED:wait]]`: há trabalho rodando de fundo, e o card
+    /// fica na ampulheta até entrar coisa nova — prompt, `Stop` com outro
+    /// marcador, você digitando. Latch, e não leitura de tela a cada tick: com
+    /// gancho o tick não olha a tela, e sem o latch o próximo tique devolvia o
+    /// card para "pronto" (ADR-063).
+    private var inBackground = false
 
     private(set) var activity: Activity = .starting
 
@@ -207,7 +213,7 @@ final class Target {
     /// tem resposta: o agente está mesmo obedecendo o protocolo de marcador, ou
     /// está tudo caindo no silêncio? `grep atenção ~/egeon.log` responde.
     private struct Verdict {
-        enum Outcome { case asked, finished, unknown }
+        enum Outcome { case asked, finished, background, unknown }
         var outcome: Outcome
         var via: String
 
@@ -280,6 +286,14 @@ final class Target {
             return
         }
 
+        // Antes do foco e do aviso: a ampulheta não é aviso a dar por visto, é o
+        // estado do agente, e continua valendo com você olhando para ele.
+        if inBackground, !working {
+            guard activity != .asking else { return }
+            transition(to: .background)
+            return
+        }
+
         guard watchesAttention else {
             transition(to: working ? .working : .ready)
             return
@@ -317,6 +331,8 @@ final class Target {
             attend(.asking, via: verdict.via, stop: markerSignature(lines) ?? stopToken())
         case .finished:
             attend(.waiting, via: verdict.via, stop: markerSignature(lines) ?? stopToken())
+        case .background:
+            hold(.background)
         case .unknown:
             // Sem marcador nem padrão, sobra o silêncio — e aí a rajada precisa
             // ter sido longa o bastante para ter sido trabalho de verdade.
@@ -338,6 +354,7 @@ final class Target {
     fileprivate func inputArrived() {
         attentionHeld = false
         handedOff = false
+        inBackground = false
     }
 
     /// Você digitou aqui. Além de resolver o aviso, isto encerra a cadeia: o que
@@ -372,6 +389,7 @@ final class Target {
             sessionUp = true
             turnInFlight = true
             turnStartedAt = Date()
+            inBackground = false
         case .ask:
             // `Notification` são dois avisos num: o pedido de permissão e o
             // "você sumiu há 60s". O segundo não traz notícia nenhuma — o fim do
@@ -387,7 +405,12 @@ final class Target {
             // As duas leituras entram em OU de propósito. Só recusa quando as
             // duas dizem que acabou: o turno em curso cobre o agente calado no
             // meio do trabalho, e o estado cobre o `prompt` que se perdeu.
-            guard turnInFlight || activity == .working || activity == .starting else { return }
+            // A ampulheta entra no OU: o trabalho de fundo que acorda o agente
+            // não passa pelo `UserPromptSubmit`, e a permissão que ele pedir
+            // dali é tão real quanto a de um turno seu.
+            guard turnInFlight || inBackground || activity == .working
+                    || activity == .starting else { return }
+            inBackground = false
             attend(.asking, via: "gancho Notification", stop: hookToken(event.rawValue))
         }
     }
@@ -408,28 +431,45 @@ final class Target {
         let stale = read.map { r in
             turnStartedAt.map { started in (r.at ?? .distantPast) < started } ?? false
         } ?? true
-        if stale, transcript != nil, attempt < Self.stopRetries {
+        // Linha deste turno SEM marcador também é cedo demais: o agente que fala
+        // antes de uma ferramenta grava um texto no meio do turno, e é ele que
+        // está no fim do arquivo quando o `Stop` chega. Visto com `[[ED:wait]]`
+        // gravado 300ms depois do gancho — o card dizia "terminou".
+        let unsettled = stale || read?.marker == nil
+        if unsettled, transcript != nil, attempt < Self.stopRetries {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.stopRetryDelay) { [weak self] in
                 self?.settleStop(transcript: transcript, token: token, attempt: attempt + 1)
             }
             return
         }
 
-        let asked: Bool
+        let outcome: Verdict.Outcome
         let via: String
         if let read, !stale {
-            asked = read.marker == .ask
+            switch read.marker {
+            case .ask?:  outcome = .asked
+            case .wait?: outcome = .background
+            default:     outcome = .finished
+            }
             via = "gancho Stop, \(read.marker?.rawValue ?? "sem marcador") no transcript"
                 + (attempt > 0 ? " (\(attempt) releitura\(attempt > 1 ? "s" : ""))" : "")
         } else {
             let verdict = verdict(from: screen())
-            asked = verdict.outcome == .asked
+            outcome = verdict.outcome
             via = "gancho Stop, \(verdict.via) na tela"
         }
         // Depois de assentar: as releituras acima são o que garante que a
         // resposta inteira já está no transcript quando o histórico a lê.
         AppControl.turnEnded?(address, transcript, turnStartedAt)
-        attend(asked ? .asking : .waiting, via: via, stop: token)
+        inBackground = outcome == .background
+        if inBackground {
+            // Sem som e sem latch de aviso: não há nada para você fazer ainda.
+            attentionHeld = false
+            transition(to: .background)
+            Log.write("atenção[\(address)]: em segundo plano — por \(via)")
+            return
+        }
+        attend(outcome == .asked ? .asking : .waiting, via: via, stop: token)
     }
 
     /// Quanto esperar o `SessionStart` antes de dar o boot por acabado.
@@ -493,6 +533,7 @@ final class Target {
         switch verdict(from: lines).outcome {
         case .asked:    attend(.asking, via: "marcador ao vivo", stop: signature)
         case .finished: attend(.waiting, via: "marcador ao vivo", stop: signature)
+        case .background: hold(.background)
         case .unknown:  hold(.working)
         }
     }
@@ -571,7 +612,7 @@ final class Target {
     private func markerSignature(_ lines: [String]) -> String? {
         guard let marker else { return nil }
         guard let last = lines.lastIndex(where: {
-            $0.contains(marker.done) || $0.contains(marker.ask)
+            line in marker.all.contains { line.contains($0) }
         }) else { return nil }
         return lines[max(0, last - 3)...last].joined(separator: "\n")
     }
@@ -583,15 +624,11 @@ final class Target {
         if let marker {
             // Com os dois marcadores na tela, manda o mais recente — e o mais
             // recente é o de baixo, porque o terminal escreve para baixo.
-            let ask = text.range(of: marker.ask, options: .backwards)
-            let done = text.range(of: marker.done, options: .backwards)
-            let asked = Verdict(outcome: .asked, via: "marcador")
-            let finished = Verdict(outcome: .finished, via: "marcador")
-            switch (ask, done) {
-            case let (a?, d?): return a.lowerBound > d.lowerBound ? asked : finished
-            case (_?, nil):    return asked
-            case (nil, _?):    return finished
-            case (nil, nil):   break
+            switch marker.latest(in: text) {
+            case .ask?:  return Verdict(outcome: .asked, via: "marcador")
+            case .ok?:   return Verdict(outcome: .finished, via: "marcador")
+            case .wait?: return Verdict(outcome: .background, via: "marcador")
+            case nil:    break
             }
         }
 
@@ -993,6 +1030,7 @@ final class Dispatcher {
             switch target.activity {
             case .starting:           entry.starting += 1
             case .working:            entry.working += 1
+            case .background:         entry.background += 1
             case .asking:             entry.attention += 1
             case .waiting:            entry.done += 1
             case .ready, .dead:       break

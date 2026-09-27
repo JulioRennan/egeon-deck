@@ -17,6 +17,11 @@ enum Activity: Equatable {
     /// Parou, e as últimas linhas casaram um padrão declarado no perfil. É um
     /// `waiting` com mais informação, não um estado diferente de fato.
     case asking
+    /// Parou, mas deixou trabalho rodando por baixo — comando em background,
+    /// subagente, vizinho acionado — e volta sozinho quando ele acabar. É o
+    /// `[[ED:wait]]`: sem ele, o card dizia "terminou" (ou nada) com o agente
+    /// ainda de pé, e você não sabia se esperava ou se entrava (ADR-063).
+    case background
     /// Processo encerrado.
     case dead
 
@@ -30,6 +35,7 @@ enum Activity: Equatable {
         switch self {
         case .starting: return "\(Spinner.current) preparando"
         case .working:  return "\(Spinner.current) trabalhando"
+        case .background: return "\(Spinner.hourglass) em segundo plano"
         case .waiting:  return "● terminou"
         case .asking:   return "● precisa de você"
         case .dead:     return "✕ processo encerrado"
@@ -59,9 +65,15 @@ struct ActivitySummary: Equatable {
     /// preparando, e o spinner de trabalho ali era um falso "ocupado".
     var starting = 0
     var working = 0
+    /// Parados com trabalho de fundo (`[[ED:wait]]`). Contagem própria, e não
+    /// somada a `working`: somada, a barra mostrava o spinner comum e a
+    /// ampulheta só existia dentro do card (ADR-063).
+    var background = 0
     var attention = 0
     var done = 0
 
     /// Só terminais subindo, nada mais a dizer: é a bancada se preparando.
-    var isPreparing: Bool { starting > 0 && working == 0 && attention == 0 && done == 0 }
+    var isPreparing: Bool {
+        starting > 0 && working == 0 && background == 0 && attention == 0 && done == 0
+    }
 }
