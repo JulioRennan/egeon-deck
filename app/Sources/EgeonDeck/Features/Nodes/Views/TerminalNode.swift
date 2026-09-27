@@ -16,12 +16,108 @@ final class MBTerminalView: LocalProcessTerminalView {
     /// interruptor próprio, porque no zsh o marcador volta literal (ADR-007).
     var dropAsPaste = false
 
+    private var pointerMonitor: Any?
+    /// Este terminal recebeu de nós o ⌘ que o AppKit só entrega ao foco.
+    private var forwardedCommand = false
+    private var showingHand = false
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         registerForDraggedTypes(TerminalDrop.types)
+        // Monitor, e não override: `flagsChanged` e `mouseMoved` são `public` no
+        // SwiftTerm, não `open` — de fora do módulo não dá para sobrescrever.
+        pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .mouseMoved]) {
+            [weak self] event in
+            self?.trackLinkPointer(event)
+            return event
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }
+    }
+
+    /// ⌘ sobre um caminho ou URL: sublinha e põe a mão. O sublinhado é do
+    /// SwiftTerm, mas ele só o acende no terminal com foco, porque o AppKit só
+    /// entrega `flagsChanged` ao first responder — e no canvas o link que você
+    /// quer clicar costuma estar no card ao lado. O ponteiro ele nunca troca.
+    private func trackLinkPointer(_ event: NSEvent) {
+        guard let window, event.window === window, !isHiddenOrHasHiddenAncestor else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        let inside = visibleRect.contains(point)
+        let command = event.modifierFlags.contains(.command)
+        let focused = window.firstResponder === self
+
+        if !focused {
+            // Kitty com `reportAllKeys` transforma o ⌘ em tecla para o processo:
+            // repassar mandaria um ⌘ fantasma para um terminal que você não está
+            // usando.
+            let kitty = terminal.keyboardEnhancementFlags.contains(.reportAllKeys)
+            if event.type == .flagsChanged, !kitty, inside || forwardedCommand {
+                forwardedCommand = command
+                flagsChanged(with: event)
+            } else if event.type == .mouseMoved, forwardedCommand, inside {
+                mouseMoved(with: event)
+            }
+        }
+
+        let overLink = inside && command && linkUnder(point)
+        if overLink {
+            NSCursor.pointingHand.set()
+            showingHand = true
+        } else if showingHand {
+            (inside ? NSCursor.iBeam : NSCursor.arrow).set()
+            showingHand = false
+        }
+    }
+
+    /// A mesma busca que o SwiftTerm faz no clique. A célula sai da fonte pela
+    /// conta dele (`computeFontDimensions`), que é interna.
+    private func linkUnder(_ point: NSPoint) -> Bool {
+        guard let terminal, terminal.cols > 0, terminal.rows > 0 else { return false }
+        let scale = window?.backingScaleFactor ?? 2
+        let glyph = font.glyph(withName: "W")
+        let width = max(1, (font.advancement(forGlyph: glyph).width * scale).rounded() / scale)
+        let height = max(1, ceil(ceil(font.ascender - font.descender + font.leading) * scale) / scale)
+        let col = min(max(0, Int(point.x / width)), terminal.cols - 1)
+        let row = min(max(0, Int((frame.height - point.y) / height)), terminal.rows - 1)
+        return terminal.link(at: .screen(Position(col: col, row: row)), mode: .explicitAndImplicit) != nil
+    }
+
+    /// A pasta em que o nó abriu — o último recurso para caminho relativo, quando
+    /// não dá para perguntar ao processo onde ele está.
+    var startDirectory = ""
+
+    override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        let directories = [foregroundDirectory(), startDirectory].compactMap { $0 }
+        guard let url = TerminalLink.resolve(link, in: directories) else {
+            Log.write("terminal: ⌘-clique em \"\(link)\" — nada que exista em \(directories)")
+            NSSound.beep()
+            return
+        }
+        Log.write("terminal: ⌘-clique abre \(url.isFileURL ? url.path : url.absoluteString)")
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Onde o processo da frente do pty está agora. É contra ela que o caminho
+    /// relativo foi impresso: no shell você pode ter dado `cd`, e a pasta em que o
+    /// nó abriu já não diz nada.
+    private func foregroundDirectory() -> String? {
+        let fd = process.childfd
+        guard fd >= 0 else { return nil }
+        let group = tcgetpgrp(fd)
+        let pid = group > 0 ? group : process.shellPid
+        guard pid > 0 else { return nil }
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        let path = withUnsafeBytes(of: &info.pvi_cdir.vip_path) { bytes in
+            String(cString: bytes.bindMemory(to: CChar.self).baseAddress!)
+        }
+        return path.isEmpty ? nil : path
+    }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
         super.dataReceived(slice: slice)
@@ -93,6 +189,8 @@ final class TerminalNode: NodeView {
                    accent: profile == nil ? .systemTeal : .systemPurple,
                    nodeID: String(address.split(separator: "/").last ?? ""))
         subtitle = NodeWorktreePlanner.short(cwd)
+        subtitlePath = cwd
+        term.startDirectory = cwd
         titleLabel.toolTip = address + (profile.map { " · \($0.displayName)" } ?? "")
         body.addSubview(term)
         if let profile, profile.offersModels { installModelPicker(profile: profile, current: model) }

@@ -95,7 +95,57 @@ class NodeView: NSView {
         set {
             guard subtitleLabel.stringValue != newValue else { return }
             subtitleLabel.stringValue = newValue
-            subtitleLabel.toolTip = newValue
+            subtitleLabel.toolTip = subtitlePath == nil ? newValue : newValue + "  —  ⌘-clique abre no Finder"
+        }
+    }
+
+    /// O caminho inteiro por trás do subtítulo, quando ele é uma pasta — é o que
+    /// o ⌘-clique abre. Nil onde o subtítulo não é caminho (a página do web).
+    var subtitlePath: String? {
+        didSet {
+            subtitleLabel.toolTip = subtitlePath == nil ? subtitle : subtitle + "  —  ⌘-clique abre no Finder"
+            guard subtitlePath != nil, subtitleMonitor == nil else { return }
+            subtitleMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .mouseMoved]) {
+                [weak self] event in
+                self?.trackSubtitleLink(event)
+                return event
+            }
+        }
+    }
+    private var subtitleMonitor: Any?
+    private var subtitleLinked = false
+
+    deinit {
+        if let subtitleMonitor { NSEvent.removeMonitor(subtitleMonitor) }
+    }
+
+    /// Com ⌘ sobre o caminho, ele se veste de link — sublinhado e mão —, como o
+    /// caminho dentro do terminal. Monitor, porque `flagsChanged` só chega ao
+    /// foco, e o foco é o terminal, não o cabeçalho.
+    private func trackSubtitleLink(_ event: NSEvent) {
+        guard let window, event.window === window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        let linked = event.modifierFlags.contains(.command) && !isHiddenOrHasHiddenAncestor
+            && subtitleHit(point)
+        guard linked != subtitleLinked else {
+            if linked { NSCursor.pointingHand.set() }
+            return
+        }
+        subtitleLinked = linked
+        let text = subtitleLabel.stringValue
+        if linked {
+            let style = NSMutableParagraphStyle()
+            style.lineBreakMode = .byTruncatingMiddle
+            subtitleLabel.attributedStringValue = NSAttributedString(string: text, attributes: [
+                .font: subtitleLabel.font as Any,
+                .foregroundColor: NSColor(calibratedWhite: 0.85, alpha: 1),
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .paragraphStyle: style,
+            ])
+            NSCursor.pointingHand.set()
+        } else {
+            subtitleLabel.stringValue = text
+            NSCursor.arrow.set()
         }
     }
 
@@ -475,12 +525,28 @@ class NodeView: NSView {
         let p = convert(event.locationInWindow, from: nil)
         guard p.y <= Self.headerHeight else { return super.mouseDown(with: event) }
 
+        // Com ⌘ o subtítulo é link, como o caminho dentro do terminal; sem ⌘ ele
+        // continua sendo cabeçalho, que é por onde se arrasta o card.
+        if event.modifierFlags.contains(.command), let path = subtitlePath,
+           subtitleHit(p) {
+            Log.write("nó[\(nodeID)]: ⌘-clique no subtítulo abre \(path)")
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            return
+        }
+
         guard isFreeform else {
             swapping = true
             return
         }
         let inDoc = superview!.convert(event.locationInWindow, from: nil)
         dragOffset = CGPoint(x: inDoc.x - frame.minX, y: inDoc.y - frame.minY)
+    }
+
+    /// Só sobre o texto, não sobre a linha inteira: o resto dela é cabeçalho vazio.
+    private func subtitleHit(_ point: NSPoint) -> Bool {
+        let width = min(subtitleLabel.frame.width, ceil(subtitleLabel.cell?.cellSize.width ?? 0))
+        return NSRect(x: subtitleLabel.frame.minX, y: subtitleLabel.frame.minY - 2,
+                      width: width, height: subtitleLabel.frame.height + 4).contains(point)
     }
 
     override func mouseDragged(with event: NSEvent) {

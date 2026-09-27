@@ -56,6 +56,7 @@ final class EditorNode: NodeView {
                    accent: NSColor.systemOrange,
                    nodeID: String(address.split(separator: "/").last ?? ""))
         subtitle = NodeWorktreePlanner.short(folder)
+        subtitlePath = folder
         titleLabel.toolTip = address
 
         webView.setValue(false, forKey: "drawsBackground")
@@ -109,6 +110,7 @@ final class EditorNode: NodeView {
         let url = CodeServer.shared.url(forFolder: path)
         Log.write("editor[\(address)]: carregando \(url.absoluteString)")
         subtitle = NodeWorktreePlanner.short(path)
+        subtitlePath = path
         status.isHidden = true
         webView.load(URLRequest(url: url))
     }
