@@ -440,12 +440,17 @@ enum ClaudeTranscript {
     /// (`claude-fable-5`). É a única fonte literal: o apelido pedido na flag
     /// (`sonnet`) não diz qual versão o CLI resolveu, e `padrão` não diz nada.
     /// `<synthetic>` é resposta fabricada pela TUI, não modelo — pula.
-    static func lastModel(at url: URL, tailBytes: Int = 256 * 1024) -> String? {
+    ///
+    /// `since` descarta resposta anterior a esse instante: depois de trocar de
+    /// modelo, a última linha da conversa ainda é do modelo antigo até o novo
+    /// responder, e mostrá-la dizia "haiku" num card que já sobe com fable.
+    static func lastModel(at url: URL, since: Date? = nil,
+                          tailBytes: Int = 256 * 1024) -> String? {
         guard let text = tail(of: url, bytes: tailBytes) else { return nil }
-        return lastModel(in: text)
+        return lastModel(in: text, since: since)
     }
 
-    static func lastModel(in jsonl: String) -> String? {
+    static func lastModel(in jsonl: String, since: Date? = nil) -> String? {
         for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
             guard line.contains("\"type\":\"assistant\""),
                   let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)),
@@ -454,6 +459,11 @@ enum ClaudeTranscript {
                   let message = entry["message"] as? [String: Any],
                   let model = message["model"] as? String,
                   !model.isEmpty, !model.hasPrefix("<") else { continue }
+            if let since {
+                // De baixo para cima: a primeira velha encerra a busca.
+                guard let at = (entry["timestamp"] as? String).flatMap(Self.date),
+                      at >= since else { return nil }
+            }
             return model
         }
         return nil

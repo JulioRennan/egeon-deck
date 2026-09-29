@@ -139,8 +139,10 @@ app/Sources/EgeonDeck/
   "⏳ em segundo plano" é o turno que fechou com `[[ED:wait]]` — trabalho de
   fundo rodando, o agente volta sozinho (ADR-063).
 - Worktree por bancada E por terminal (formulário decide pela branch).
-- Modelo por nó de agente: formulário e pull-down no cabeçalho; trocar reinicia
-  o processo e retoma a conversa. Lista vem do `agents.json` (`models`).
+- Modelo e esforço por nó de agente: formulário e uma faixa própria no
+  cabeçalho (`accessoryRow`) — pull-down de modelo e `EffortDial` (slider com
+  debounce, também por rolagem); trocar reinicia o processo e retoma a
+  conversa. Listas vêm do `agents.json` (`models`, `efforts`).
 - **Papel e regras** são campos separados (ADR-056): papel é quem o terminal é;
   regra é como se trabalha, e a da **bancada** (menu de contexto na barra) vale
   para todos os agentes dela, somada à do nó. No system prompt as regras entram

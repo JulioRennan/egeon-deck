@@ -48,6 +48,8 @@ struct NodeTemplate: Codable {
         var config: String?
         /// Modelo pedido ao CLI. Nulo é o padrão dele.
         var model: String?
+        /// Esforço pedido ao CLI. Nulo é o padrão dele.
+        var effort: String?
         /// O papel escrito com este CLI na tela, quando você escreveu um
         /// diferente. Vazio = vale o geral.
         var prompt: String?
@@ -56,7 +58,8 @@ struct NodeTemplate: Codable {
         var rules: String?
 
         var isEmpty: Bool {
-            cmd == nil && config == nil && model == nil && prompt == nil && rules == nil
+            cmd == nil && config == nil && model == nil && effort == nil
+                && prompt == nil && rules == nil
         }
     }
 
@@ -66,6 +69,7 @@ struct NodeTemplate: Codable {
         var cmd: String?
         var config: String?
         var model: String?
+        var effort: String?
         var prompt: String?
         var rules: String?
     }
@@ -76,6 +80,7 @@ struct NodeTemplate: Codable {
     func resolved(for cli: String?) -> Resolved {
         let over = cli.flatMap { byAgent?[$0] }
         return Resolved(cmd: over?.cmd, config: over?.config, model: over?.model,
+                        effort: over?.effort,
                         prompt: over?.prompt ?? prompt, rules: over?.rules ?? rules)
     }
 
@@ -92,13 +97,14 @@ struct NodeTemplate: Codable {
     /// - **texto igual ao geral não vira exceção**, senão um trecho nunca mais
     ///   voltaria a ser de todos depois de editado uma vez.
     func remembering(cli: String?, cmd: String?, config: String?, model: String?,
-                     prompt: String?, rules: String?) -> NodeTemplate {
+                     effort: String? = nil, prompt: String?, rules: String?) -> NodeTemplate {
         guard let cli else { return self }
         var out = self
         var over = out.byAgent?[cli] ?? Overrides()
         over.cmd = cmd
         over.config = config
         over.model = model
+        over.effort = effort
 
         let virgin = out.prompt == nil && out.rules == nil
             && (out.byAgent ?? [:]).allSatisfy { $0.value.prompt == nil && $0.value.rules == nil }
@@ -136,8 +142,8 @@ struct NodeTemplate: Codable {
 
     /// Conveniência: o que é de UM CLI já entra no mapa dele.
     init(name: String, kind: NodeKind, agent: String?, cmd: String?, config: String?,
-         model: String?, cwd: String?, prompt: String?, rules: String?) {
-        let over = Overrides(cmd: cmd, config: config, model: model, rules: nil)
+         model: String?, effort: String? = nil, cwd: String?, prompt: String?, rules: String?) {
+        let over = Overrides(cmd: cmd, config: config, model: model, effort: effort, rules: nil)
         self.init(name: name, kind: kind, agent: agent, cwd: cwd, prompt: prompt, rules: rules,
                   byAgent: (agent.map { !over.isEmpty ? [$0: over] : [:] }).flatMap {
                       $0.isEmpty ? nil : $0
@@ -268,6 +274,7 @@ enum NodeTemplateStore {
             over.cmd = node.cmd
             over.config = node.config
             over.model = node.model
+            over.effort = node.effort
             byAgent[key] = over.isEmpty ? nil : over
         }
         return NodeTemplate(name: name, kind: node.type, agent: node.agent,
@@ -284,6 +291,7 @@ enum NodeTemplateStore {
         node.cmd = resolved.cmd
         node.config = resolved.config
         node.model = resolved.model
+        node.effort = resolved.effort
         node.cwd = component.cwd
         // Os GERAIS: a exceção de cada CLI vai no mapa, e o efetivo sai dos dois
         // na hora de subir.

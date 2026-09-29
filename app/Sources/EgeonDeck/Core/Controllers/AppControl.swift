@@ -57,8 +57,9 @@ enum AppControl {
     /// Existe pelo mesmo motivo que `/geometry`: dirigir e verificar o app de fora
     /// sem depender de gesto na tela. Nulo de volta significa modo desconhecido ou
     /// nenhuma bancada ativa.
-    /// Troca o modelo de um terminal com IA e o reinicia. Nil/vazio = padrão.
-    static var setNodeModel: ((_ target: String, _ model: String?) -> String?)?
+    /// Troca o modelo ou o esforço de um terminal com IA e o reinicia.
+    /// Nil/vazio = padrão.
+    static var setNodeModel: ((_ target: String, _ choice: ModelChoice) -> String?)?
     static var setViewMode: ((String) -> String?)?
 
     /// Recolher a barra de bancadas ao trilho, ou abrir.

@@ -218,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.makeWorktree(target: target, branch: branch, nodeBranches: nodeBranches)
                 ?? ["ok": false, "error": "app encerrando"]
         }
-        AppControl.setNodeModel = { [weak self] target, model in
+        AppControl.setNodeModel = { [weak self] target, choice in
             guard let self else { return "app encerrando" }
             let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2,
@@ -228,9 +228,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { return "nó desconhecido '\(target)'" }
             guard let config = self.configs[index].nodes.first(where: { $0.id == parts[1] }),
                   config.type == .agent,
-                  config.agent.flatMap({ self.agents[$0] })?.offersModels == true
-            else { return "'\(target)' não é um agente que aceite modelo" }
-            self.changeModel(of: node, to: model, index: index)
+                  let profile = config.agent.flatMap({ self.agents[$0] })
+            else { return "'\(target)' não é um agente" }
+            switch choice {
+            case .model where !profile.offersModels:
+                return "'\(target)' não é um agente que aceite modelo"
+            case .effort where !profile.offersEfforts:
+                return "'\(target)' não é um agente que aceite esforço"
+            default:
+                break
+            }
+            self.changeModel(of: node, to: choice, index: index)
             return nil
         }
         AppControl.setViewMode = { [weak self] raw in
@@ -2064,10 +2072,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard node.type == .agent, let profile else { return (base, nil, false) }
 
-        // O modelo é flag do binário do perfil: com `cmd` trocado por outro
-        // programa, anexar `--model` mataria o terminal no arranque.
+        // Modelo e esforço são flags do binário do perfil: com `cmd` trocado por
+        // outro programa, anexar `--model` mataria o terminal no arranque.
         let modelFlags = profile.runsOwnBinary(base)
-            ? (profile.modelArguments(node.model) ?? []) : []
+            ? (profile.modelArguments(node.model) ?? []) + (profile.effortArguments(node.effort) ?? [])
+            : []
         let modelSuffix = modelFlags.isEmpty ? ""
             : " " + modelFlags.map(AppEnvironment.shellQuote).joined(separator: " ")
 
@@ -2239,10 +2248,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         command: launch.command, profile: profile,
                                         config: node.config,
                                         model: node.model,
+                                        effort: node.effort,
                                         prompt: launch.promptToInject,
                                         hooked: launch.hooked)
+            let launched = Date()
             terminal.modelResolver = { [weak self] in
-                self?.literalModel(workbench: config.name, nodeID: node.id)
+                self?.literalModel(workbench: config.name, nodeID: node.id, since: launched)
             }
             if index >= 0, node.conversationId != nil, !node.hasStartedConversation,
                let position = configs[index].nodes.firstIndex(where: { $0.id == node.id }) {
@@ -2330,9 +2341,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let index = self.index(ofID: id) else { return }
             self.nodeWorktree(node, index: index)
         }
-        shell.onRequestNodeModel = { [weak self] node, model in
+        shell.onRequestNodeModel = { [weak self] node, choice in
             guard let self, let index = self.index(ofID: id) else { return }
-            self.changeModel(of: node, to: model, index: index)
+            self.changeModel(of: node, to: choice, index: index)
         }
         shell.onModeChanged = { [weak self] mode in
             guard let self, let index = self.index(ofID: id) else { return }
@@ -2832,6 +2843,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sameProcess = updated.type == current.type
             && updated.agent == current.agent
             && updated.model == current.model
+            && updated.effort == current.effort
             && updated.cmd == current.cmd
             && updated.config == current.config
             && updated.cwd == current.cwd
@@ -2858,49 +2870,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Cache do modelo literal por transcript: (mtime, modelo). O arquivo só é
     /// relido quando muda.
-    private var literalModelCache: [String: (mtime: Date, model: String?)] = [:]
+    private var literalModelCache: [String: (mtime: Date, since: Date?, model: String?)] = [:]
 
     /// O modelo que está de fato respondendo neste nó: última linha de assistant
     /// do transcript; antes do primeiro turno, o `model` do settings.json da
     /// configuração em uso. Nil quando nenhum dos dois sabe.
-    private func literalModel(workbench: String, nodeID: String) -> String? {
+    ///
+    /// `since` é o arranque deste processo: resposta de antes dele foi de outro
+    /// modelo, se você trocou. E o settings.json só responde quando o nó está no
+    /// padrão — com modelo escolhido, ele diz o que o CLI usaria sem a flag.
+    private func literalModel(workbench: String, nodeID: String, since: Date? = nil) -> String? {
         guard let config = configs.first(where: { $0.name == workbench }),
               let node = config.nodes.first(where: { $0.id == nodeID }) else { return nil }
         if let path = node.transcript, !path.isEmpty {
             let url = URL(fileURLWithPath: path)
             let mtime = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]
                          as? Date) ?? .distantPast
-            if let cached = literalModelCache[path], cached.mtime == mtime, let model = cached.model {
+            if let cached = literalModelCache[path], cached.mtime == mtime, cached.since == since,
+               let model = cached.model {
                 return model
             }
-            let model = ClaudeTranscript.lastModel(at: url)
-            literalModelCache[path] = (mtime, model)
+            let model = ClaudeTranscript.lastModel(at: url, since: since)
+            literalModelCache[path] = (mtime, since, model)
             if let model { return model }
         }
+        guard node.model == nil else { return nil }
         return node.agent.flatMap { agents[$0] }?.defaultModelName(config: node.config)
     }
 
-    /// Troca o modelo de um terminal com IA, pelo seletor do cabeçalho.
+    /// Troca o modelo ou o esforço de um terminal com IA, pelo seletor do
+    /// cabeçalho.
     ///
     /// O processo reinicia — não há como trocar o modelo de um pty em curso — mas
     /// a conversa FICA: o id é nosso, e o CLI a retoma com o modelo novo. É o
     /// contrário da worktree, onde a conversa é da pasta antiga e vai embora.
-    private func changeModel(of node: NodeView, to model: String?, index: Int) {
+    private func changeModel(of node: NodeView, to choice: ModelChoice, index: Int) {
         guard index >= 0, index < configs.count, let shell = shell(at: index),
               let position = configs[index].nodes.firstIndex(where: { $0.id == node.nodeID })
         else { return }
         let current = configs[index].nodes[position]
-        guard current.model != model else { return }
+        let updated = choice.applied(to: current)
+        guard updated.model != current.model || updated.effort != current.effort else { return }
 
-        var updated = current
-        updated.model = model
         configs[index].nodes[position] = updated
 
         let frame = shell.canvasFrame(of: current.id) ?? node.frame
         shell.detach(node)
         shell.attach(makeNode(updated, in: configs[index], frame: frame))
-        Log.write("bancada \(configs[index].name): nó \"\(current.id)\" reiniciado com modelo "
-                  + "\(model ?? "padrão") (antes \(current.model ?? "padrão"))")
+        let what: String
+        switch choice {
+        case .model(let model):
+            what = "modelo \(model ?? "padrão") (antes \(current.model ?? "padrão"))"
+        case .effort(let effort):
+            what = "esforço \(effort ?? "padrão") (antes \(current.effort ?? "padrão"))"
+        }
+        Log.write("bancada \(configs[index].name): nó \"\(current.id)\" reiniciado com \(what)")
         schedulePersist()
     }
 

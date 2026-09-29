@@ -25,6 +25,10 @@ extension AgentProfile {
             // (`claude-fable-5`) e sufixo `[1m]`: é só escrever no agents.json.
             model: ["--model", "{model}"],
             models: ["fable", "opus", "sonnet", "haiku", "opusplan"],
+            // Os níveis do `claude --help` (2.1.284). Modelo que não suporta um
+            // nível o CLI rebaixa sozinho; aqui não se cruza modelo com nível.
+            effort: ["--effort", "{effort}"],
+            efforts: ["low", "medium", "high", "xhigh", "max"],
             attention: AttentionConfig(),
             configEnv: "CLAUDE_CONFIG_DIR", configGlob: "~/.claude*")
     }

@@ -73,6 +73,8 @@ final class NodeTemplateDialog {
     private let modelPicker = HandPopUpButton()
     private let modelLabel = NSTextField(labelWithString: "MODELO")
     private static let defaultModelOption = "padrão do CLI"
+    private let effortPicker = HandPopUpButton()
+    private let effortLabel = NSTextField(labelWithString: "ESFORÇO")
     private var promptScroll: NSScrollView?
 
     private let tabs = NSTabView()
@@ -97,6 +99,7 @@ final class NodeTemplateDialog {
         let resolved = component.resolved(for: component.agent)
         reloadConfigPicker(select: resolved.config)
         reloadModelPicker(select: resolved.model)
+        reloadEffortPicker(select: resolved.effort)
         cmdField.stringValue = resolved.cmd ?? ""
         cwdField.stringValue = component.cwd ?? ""
         // O preset traz o que ele tem para cada CLI junto: escolher um componente
@@ -219,20 +222,28 @@ final class NodeTemplateDialog {
         configLabel.frame = NSRect(x: 0, y: 384, width: width, height: 13)
         container.addSubview(configLabel)
 
-        configPicker.frame = NSRect(x: 0, y: 358, width: 260, height: 22)
+        configPicker.frame = NSRect(x: 0, y: 358, width: 190, height: 22)
         configPicker.target = self
         configPicker.action = #selector(configChanged)
         container.addSubview(configPicker)
         reloadConfigPicker(select: initial.resolved(for: initial.agent).config)
 
-        // Na mesma linha da configuração: as duas são "com o quê este CLI sobe".
+        // Na mesma linha da configuração: as três são "com o quê este CLI sobe".
         modelLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         modelLabel.textColor = .secondaryLabelColor
-        modelLabel.frame = NSRect(x: 270, y: 384, width: 150, height: 13)
+        modelLabel.frame = NSRect(x: 200, y: 384, width: 110, height: 13)
         container.addSubview(modelLabel)
-        modelPicker.frame = NSRect(x: 270, y: 358, width: 150, height: 22)
+        modelPicker.frame = NSRect(x: 200, y: 358, width: 110, height: 22)
         container.addSubview(modelPicker)
         reloadModelPicker(select: initial.resolved(for: initial.agent).model)
+
+        effortLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        effortLabel.textColor = .secondaryLabelColor
+        effortLabel.frame = NSRect(x: 320, y: 384, width: 100, height: 13)
+        container.addSubview(effortLabel)
+        effortPicker.frame = NSRect(x: 320, y: 358, width: 100, height: 22)
+        container.addSubview(effortPicker)
+        reloadEffortPicker(select: initial.resolved(for: initial.agent).effort)
 
         container.addSubview(caption("COMANDO — vazio usa o padrão do CLI", y: 338))
         cmdField.frame = NSRect(x: 0, y: 312, width: width, height: 22)
@@ -449,6 +460,31 @@ final class NodeTemplateDialog {
         }
     }
 
+    /// Nil é o padrão do CLI — o primeiro item.
+    private var selectedEffort: String? {
+        let index = effortPicker.indexOfSelectedItem
+        guard index > 0, let title = effortPicker.titleOfSelectedItem else { return nil }
+        return title
+    }
+
+    /// A mesma regra do `reloadModelPicker`: a lista é do perfil, e um nível
+    /// que o CLI novo não declara não é levado junto.
+    private func reloadEffortPicker(select value: String?) {
+        effortPicker.removeAllItems()
+        effortPicker.addItem(withTitle: Self.defaultModelOption)
+        let known = selectedAgentKey.flatMap { agents[$0]?.efforts } ?? []
+        var options = known
+        if let value, !value.isEmpty, !options.contains(value), known.isEmpty {
+            options.append(value)
+        }
+        effortPicker.addItems(withTitles: options)
+        if let value, let index = options.firstIndex(of: value) {
+            effortPicker.selectItem(at: index + 1)
+        } else {
+            effortPicker.selectItem(at: 0)
+        }
+    }
+
     /// A configuração selecionada. Nil é o padrão da CLI.
     private var selectedConfig: String? {
         configValues[safe: configPicker.indexOfSelectedItem] ?? nil
@@ -471,7 +507,7 @@ final class NodeTemplateDialog {
         guard let cli = shownAgent else { return }
         loaded = (loaded ?? initial).remembering(
             cli: cli, cmd: trimmed(cmdField.stringValue), config: selectedConfig,
-            model: selectedModel, prompt: trimmed(promptField.string),
+            model: selectedModel, effort: selectedEffort, prompt: trimmed(promptField.string),
             rules: trimmed(rulesField.string))
     }
 
@@ -488,6 +524,7 @@ final class NodeTemplateDialog {
         let entering = loaded?.overrides(for: selectedAgentKey) ?? NodeTemplate.Overrides()
         reloadConfigPicker(select: entering.config)
         reloadModelPicker(select: entering.model)
+        reloadEffortPicker(select: entering.effort)
         cmdField.stringValue = entering.cmd ?? ""
         showTexts(of: selectedAgentKey)
         updateAgentFields()
@@ -597,6 +634,10 @@ final class NodeTemplateDialog {
         let hasModels = isAgent && (selectedAgentKey.flatMap { agents[$0]?.offersModels } ?? false)
         modelPicker.isEnabled = hasModels
         modelLabel.textColor = hasModels ? .secondaryLabelColor : .tertiaryLabelColor
+
+        let hasEfforts = isAgent && (selectedAgentKey.flatMap { agents[$0]?.offersEfforts } ?? false)
+        effortPicker.isEnabled = hasEfforts
+        effortLabel.textColor = hasEfforts ? .secondaryLabelColor : .tertiaryLabelColor
     }
 
     /// O que o campo de pasta grava.

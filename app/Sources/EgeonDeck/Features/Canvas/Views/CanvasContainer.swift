@@ -93,7 +93,7 @@ final class CanvasContainer: NSView {
     var onRequestEditNode: ((NodeView) -> Void)?
     /// Levar um nó para uma worktree própria (menu do cabeçalho).
     var onRequestNodeWorktree: ((NodeView) -> Void)?
-    var onRequestNodeModel: ((NodeView, String?) -> Void)?
+    var onRequestNodeModel: ((NodeView, ModelChoice) -> Void)?
     /// Formulário para montar um terminal do zero.
     var onConfigureTerminal: (() -> Void)?
     /// Componentes salvos, para o menu da ferramenta de terminal.

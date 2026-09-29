@@ -188,7 +188,7 @@ final class MosaicContainer: NSView {
     var onRequestClose: ((NodeView) -> Void)?
     var onRequestEditNode: ((NodeView) -> Void)?
     var onRequestNodeWorktree: ((NodeView) -> Void)?
-    var onRequestNodeModel: ((NodeView, String?) -> Void)?
+    var onRequestNodeModel: ((NodeView, ModelChoice) -> Void)?
     /// Divisor arrastado — hora de gravar as proporções.
     var onLayoutChanged: ((MosaicLayout) -> Void)?
 

@@ -41,6 +41,29 @@ final class AgentProfileTests: XCTestCase {
         XCTAssertNil(bare.systemPromptArguments(for: "p"))
         XCTAssertNil(bare.modelArguments("opus"))
         XCTAssertFalse(bare.offersModels)
+        XCTAssertNil(bare.effortArguments("high"))
+        XCTAssertFalse(bare.offersEfforts)
         XCTAssertFalse(bare.keepsConversation)
+    }
+
+    func testClaudeCodeEffortTemplating() {
+        let profile = AgentProfile.claudeCode
+        XCTAssertTrue(profile.offersEfforts)
+        XCTAssertEqual(profile.effortArguments("xhigh"), ["--effort", "xhigh"])
+        XCTAssertEqual(profile.efforts, ["low", "medium", "high", "xhigh", "max"])
+        XCTAssertNil(profile.effortArguments(nil), "padrão é não passar flag")
+        XCTAssertNil(profile.effortArguments(""))
+    }
+
+    /// O seletor do cabeçalho troca UM dos dois; o outro fica como estava.
+    func testEffortChoiceAppliesToNodeOnly() {
+        var node = NodeConfig(type: .agent, id: "rev")
+        node.model = "opus"
+        let withEffort = ModelChoice.effort("max").applied(to: node)
+        XCTAssertEqual(withEffort.effort, "max")
+        XCTAssertEqual(withEffort.model, "opus", "trocar esforço não mexe no modelo")
+        let back = ModelChoice.effort(nil).applied(to: withEffort)
+        XCTAssertNil(back.effort)
+        XCTAssertEqual(ModelChoice.model("sonnet").applied(to: withEffort).effort, "max")
     }
 }

@@ -179,4 +179,23 @@ final class NodeTemplateCrossCLITests: XCTestCase {
         XCTAssertEqual(component.resolved(for: "claude").model, "opus")
         XCTAssertNil(component.resolved(for: "opencode").model)
     }
+
+    /// Esforço é do CLI, como o modelo: vai para o mapa dele, sobe no nó e
+    /// volta na captura.
+    func testEffortTravelsWithItsCLI() {
+        let base = NodeTemplate(name: "rev", kind: .agent, agent: "claude")
+            .remembering(cli: "claude", cmd: nil, config: nil, model: "opus", effort: "high",
+                         prompt: "revise", rules: nil)
+        XCTAssertEqual(base.resolved(for: "claude").effort, "high")
+        XCTAssertNil(base.resolved(for: "codex").effort, "esforço não atravessa")
+
+        let node = NodeTemplateStore.instantiate(base, id: "rev")
+        XCTAssertEqual(node.effort, "high")
+
+        var edited = node
+        edited.effort = "max"
+        let captured = NodeTemplateStore.capture(from: edited, name: "rev")
+        XCTAssertEqual(captured.resolved(for: "claude").effort, "max")
+        XCTAssertEqual(captured.resolved(for: "claude").model, "opus")
+    }
 }

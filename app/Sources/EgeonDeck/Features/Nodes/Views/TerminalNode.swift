@@ -158,7 +158,7 @@ final class TerminalNode: NodeView {
     /// Você escolheu outro modelo no cabeçalho. Nil é o padrão do CLI. Quem
     /// atende reinicia o processo — não há como trocar o modelo de um pty em
     /// curso — e mantém a conversa.
-    var onRequestModel: ((NodeView, String?) -> Void)?
+    var onRequestModel: ((NodeView, ModelChoice) -> Void)?
     private var modelPicker: NSPopUpButton?
     private var modelOptions: [String] = []
     private var chosenModel: String?
@@ -176,7 +176,8 @@ final class TerminalNode: NodeView {
     /// `cmd` trocado à mão pode ter trocado de programa, e aí não há gancho.
     init(frame: NSRect, address: String, title: String, cwd: String,
          command: String, profile: AgentProfile?, config: String? = nil,
-         model: String? = nil, prompt: String? = nil, hooked: Bool = false) {
+         model: String? = nil, effort: String? = nil, prompt: String? = nil,
+         hooked: Bool = false) {
         self.address = address
         // Só o nome do terminal no título. O endereço inteiro cabia numa linha de
         // 11pt e não sobrava nada; agora a bancada é a mesma para todos os cards da
@@ -194,6 +195,7 @@ final class TerminalNode: NodeView {
         titleLabel.toolTip = address + (profile.map { " · \($0.displayName)" } ?? "")
         body.addSubview(term)
         if let profile, profile.offersModels { installModelPicker(profile: profile, current: model) }
+        if let profile, profile.offersEfforts { installEffortDial(profile: profile, current: effort) }
         // Terminal com IA recebe o arrasto como paste; shell, como digitação.
         term.dropAsPaste = profile?.injectConfig.mode == "bracketed-paste"
 
@@ -397,8 +399,30 @@ final class TerminalNode: NodeView {
         picker.target = self
         picker.action = #selector(modelChosen(_:))
         modelPicker = picker
-        headerAccessory = picker
+        accessoryRow.insert(contentsOf: [Self.rowCaption("modelo"), picker], at: 0)
         refreshModelTitle(force: true)
+    }
+
+    /// O esforço fica à direita do modelo, na mesma faixa, controle próprio:
+    /// rolar em cima dele ajusta, sem abrir menu.
+    private func installEffortDial(profile: AgentProfile, current: String?) {
+        let dial = EffortDial(levels: profile.efforts ?? [], current: current, tint: accent)
+        dial.onCommit = { [weak self] effort in
+            guard let self else { return }
+            self.onRequestModel?(self, .effort(effort))
+        }
+        accessoryRow.append(contentsOf: [Self.rowCaption("esforço"), dial])
+        accessoryRowWidths[ObjectIdentifier(dial)] = dial.preferredWidth
+    }
+
+    /// Rótulo miúdo antes de cada controle da faixa: sem ele, "high" solto no
+    /// cabeçalho não diz de quê.
+    private static func rowCaption(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 9, weight: .semibold)
+        label.textColor = NSColor(calibratedWhite: 1, alpha: 0.32)
+        label.sizeToFit()
+        return label
     }
 
     /// Título do pull-down: o nome literal quando se sabe, com o apelido pedido
@@ -431,8 +455,7 @@ final class TerminalNode: NodeView {
             picker.toolTip = "Modelo em uso: \(title) — escolher outro reinicia o terminal, a conversa continua"
             // Texto mais a seta do pull-down e o respiro da célula.
             let text = (shown as NSString).size(withAttributes: [.font: picker.font as Any]).width
-            headerAccessoryWidth = ceil(text) + 26
-            needsLayout = true
+            accessoryRowWidths[ObjectIdentifier(picker)] = ceil(text) + 26
         }
         // Marca no menu o apelido em vigor, para o clique dizer onde se está.
         for (index, item) in picker.itemArray.enumerated() where index > 0 {
@@ -446,7 +469,7 @@ final class TerminalNode: NodeView {
         let index = sender.indexOfSelectedItem
         guard index >= 1 else { return }
         let chosen = index >= 2 && index - 2 < modelOptions.count ? modelOptions[index - 2] : nil
-        onRequestModel?(self, chosen)
+        onRequestModel?(self, .model(chosen))
     }
 
     private func shellQuote(_ s: String) -> String {

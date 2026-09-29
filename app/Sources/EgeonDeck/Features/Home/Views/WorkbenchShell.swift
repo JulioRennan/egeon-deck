@@ -41,7 +41,7 @@ final class WorkbenchShell: NSView {
     var onRequestClose: ((NodeView) -> Void)?
     var onRequestEditNode: ((NodeView) -> Void)?
     var onRequestNodeWorktree: ((NodeView) -> Void)?
-    var onRequestNodeModel: ((NodeView, String?) -> Void)?
+    var onRequestNodeModel: ((NodeView, ModelChoice) -> Void)?
 
     /// Onde cada nó estava no canvas, por id.
     ///

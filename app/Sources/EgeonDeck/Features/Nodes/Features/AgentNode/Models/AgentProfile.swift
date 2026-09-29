@@ -257,6 +257,13 @@ struct AgentProfile: Codable {
     /// agents.json. Vazio com `model` declarado ainda permite o "padrão".
     var models: [String]?
 
+    /// Como pedir um nível de esforço (raciocínio) na linha de comando;
+    /// `{effort}` é substituído. Nil quando o CLI não aceita.
+    var effort: [String]?
+    /// Níveis oferecidos no formulário e no cabeçalho do card — dado, como
+    /// `models`: nível novo no CLI é edição do agents.json.
+    var efforts: [String]?
+
     var attention: AttentionConfig?
 
     /// Variáveis de ambiente do processo deste agente, por cima do que o app já
@@ -384,6 +391,16 @@ struct AgentProfile: Codable {
     /// O CLI aceita escolher modelo?
     var offersModels: Bool { !(model ?? []).isEmpty }
 
+    /// Argumentos que escolhem o esforço, ou nil quando o perfil não sabe pedir
+    /// um — ou quando o nó ficou no padrão do CLI.
+    func effortArguments(_ chosen: String?) -> [String]? {
+        guard let chosen, !chosen.isEmpty, let effort, !effort.isEmpty else { return nil }
+        return effort.map { $0.replacingOccurrences(of: "{effort}", with: chosen) }
+    }
+
+    /// O CLI aceita escolher esforço?
+    var offersEfforts: Bool { !(effort ?? []).isEmpty }
+
     /// O que "padrão" significa para este CLI nesta configuração: o `model` do
     /// `settings.json` da pasta de config em uso. Nil quando não há arquivo ou
     /// ele não fixa modelo — aí só o transcript, depois do primeiro turno, sabe.
@@ -508,6 +525,14 @@ enum AgentStore {
             guard let padrão = defaults[key], padrão.command == profile.command else { continue }
             updated[key]?.models = padrão.models
             changed.append("\(key).models")
+        }
+
+        for (key, profile) in map where profile.effort == nil {
+            guard let padrão = defaults[key], padrão.effort != nil,
+                  padrão.command == profile.command else { continue }
+            updated[key]?.effort = padrão.effort
+            if profile.efforts == nil { updated[key]?.efforts = padrão.efforts }
+            changed.append("\(key).effort")
         }
 
         // `clear` é comando de barra DAQUELE CLI: mesma trava de comando.

@@ -175,20 +175,30 @@ class NodeView: NSView {
     /// exigir duplicar a bancada inteira.
     var onRequestWorktree: ((NodeView) -> Void)?
 
-    /// Controle extra na linha dos botões, à esquerda deles — o seletor de
-    /// modelo do terminal com IA. A subclasse põe; o cabeçalho reserva a largura
-    /// que ele pedir, para o estado não escrever por baixo.
-    var headerAccessory: NSView? {
+    /// Uma faixa a mais no cabeçalho, embaixo do nome e dos botões — o modelo e
+    /// o esforço do terminal com IA. Faixa própria, e não ao lado dos ícones: ali
+    /// ela disputava largura com o nome do nó e o estado. Vazia, a faixa não
+    /// existe e o cabeçalho fica como sempre foi.
+    var accessoryRow: [NSView] = [] {
         didSet {
-            oldValue?.removeFromSuperview()
-            if let headerAccessory { addSubview(headerAccessory) }
+            oldValue.forEach { $0.removeFromSuperview() }
+            accessoryRow.forEach { addSubview($0) }
             needsLayout = true
         }
     }
-    /// Largura que o acessório pede. `fittingSize` de um pull-down mede o item
-    /// mais largo do MENU, não o título visível — e o menu tem "padrão do CLI";
-    /// quem monta o acessório sabe medir o que está na tela.
-    var headerAccessoryWidth: CGFloat?
+    /// Largura que cada item da faixa pede, pela identidade dele. `fittingSize`
+    /// de um pull-down mede o item mais largo do MENU, não o título visível — e
+    /// o menu tem "padrão do CLI"; quem monta o item sabe medir o que está na
+    /// tela. Sem entrada, vale o `fittingSize`.
+    var accessoryRowWidths: [ObjectIdentifier: CGFloat] = [:] {
+        didSet { needsLayout = true }
+    }
+    static let accessoryRowHeight: CGFloat = 22
+
+    /// Onde o cabeçalho acaba: a linha do nome mais a faixa, quando há.
+    var headerExtent: CGFloat {
+        Self.headerHeight + (accessoryRow.isEmpty ? 0 : Self.accessoryRowHeight)
+    }
 
     /// Arrasto pelo cabeçalho quando o card NÃO manda na própria posição — isto é,
     /// no mosaico. Em coordenadas de janela; quem resolve sobre qual painel o
@@ -280,7 +290,7 @@ class NodeView: NSView {
     /// do editor.
     override func rightMouseDown(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
-        guard local.y <= Self.headerHeight, supportsEditing || supportsWorktree else {
+        guard local.y <= headerExtent, supportsEditing || supportsWorktree else {
             return super.rightMouseDown(with: event)
         }
 
@@ -408,7 +418,7 @@ class NodeView: NSView {
     /// para todo tipo de nó, que nenhuma subclasse mexe no cabeçalho.
     func isInHeader(windowPoint: NSPoint) -> Bool {
         let local = convert(windowPoint, from: nil)
-        return bounds.contains(local) && local.y >= 0 && local.y <= Self.headerHeight
+        return bounds.contains(local) && local.y >= 0 && local.y <= headerExtent
     }
 
     override func layout() {
@@ -430,17 +440,19 @@ class NodeView: NSView {
             x -= entreBotões
             controles += botão + entreBotões
         }
-        if let headerAccessory, !headerAccessory.isHidden {
-            let size = headerAccessory.fittingSize
-            // Cede ao nome do nó: em card estreito o acessório encolhe até 72pt
-            // e o pull-down trunca o texto dele, não o título.
-            let teto = max(64, min(180, bounds.width * 0.22))
-            let largura = min(max(headerAccessoryWidth ?? size.width, 60), teto)
-            x -= largura
-            headerAccessory.frame = NSRect(x: x, y: (Self.headerHeight - size.height) / 2,
-                                           width: largura, height: size.height)
-            x -= entreBotões
-            controles += largura + entreBotões
+        // Encostada à direita, embaixo dos botões: é controle, como eles.
+        var itemX = bounds.width - margem
+        for item in accessoryRow.reversed() where !item.isHidden {
+            let size = item.fittingSize
+            let pedida = accessoryRowWidths[ObjectIdentifier(item)] ?? size.width
+            let largura = max(0, min(pedida, itemX - margem))
+            itemX -= largura
+            // Colada no subtítulo: a faixa é continuação do cabeçalho, não uma
+            // barra à parte.
+            item.frame = NSRect(x: itemX,
+                                y: Self.headerHeight - 4 + (Self.accessoryRowHeight - size.height) / 2,
+                                width: largura, height: size.height)
+            itemX -= 8
         }
 
         let disponível = max(0, bounds.width - margem * 2 - controles - 8)
@@ -476,9 +488,9 @@ class NodeView: NSView {
         subtitleLabel.frame = NSRect(x: margem, y: 29,
                                      width: max(0, bounds.width - margem * 2), height: 13)
 
-        body.frame = NSRect(x: 1, y: Self.headerHeight,
+        body.frame = NSRect(x: 1, y: headerExtent,
                             width: bounds.width - 2,
-                            height: max(0, bounds.height - Self.headerHeight - 1))
+                            height: max(0, bounds.height - headerExtent - 1))
         grip.frame = NSRect(x: bounds.width - Self.gripSize,
                             y: bounds.height - Self.gripSize,
                             width: Self.gripSize, height: Self.gripSize)
@@ -504,7 +516,7 @@ class NodeView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         NSColor(calibratedWhite: 0.16, alpha: 1).setFill()
-        NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight).fill()
+        NSRect(x: 0, y: 0, width: bounds.width, height: headerExtent).fill()
     }
 
     /// Documento flipped: crescer em altura empurra a borda de baixo, a origem
@@ -523,7 +535,7 @@ class NodeView: NSView {
     // aquele sob o cursor.
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        guard p.y <= Self.headerHeight else { return super.mouseDown(with: event) }
+        guard p.y <= headerExtent else { return super.mouseDown(with: event) }
 
         // Com ⌘ o subtítulo é link, como o caminho dentro do terminal; sem ⌘ ele
         // continua sendo cabeçalho, que é por onde se arrasta o card.

@@ -25,6 +25,9 @@ struct NodeConfig: Codable {
     /// o padrão do CLI. Só usado por `type: agent`; trocar reinicia o processo,
     /// mas a conversa fica — o CLI retoma a mesma sessão com outro modelo.
     var model: String?
+    /// Esforço pedido ao CLI, pela flag que o perfil declara em `effort`. Nulo
+    /// é o padrão do CLI; trocar reinicia e retoma, como o modelo.
+    var effort: String?
     /// Só usado por `type: web`.
     var url: String?
     /// Nome do perfil em web-profiles.json. Só usado por `type: web`.

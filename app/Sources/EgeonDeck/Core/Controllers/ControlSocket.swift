@@ -570,18 +570,33 @@ final class ControlSocket {
         case ("GET", _, _) where route.contains("/model"):
             // /model?target=ws/id[&model=nome] — o mesmo que escolher no seletor do
             // cabeçalho: reinicia o terminal com o modelo, mantendo a conversa.
-            // Sem `model`, volta ao padrão do CLI.
+            // Sem `model`, volta ao padrão do CLI. Com `effort=nível` troca o
+            // esforço em vez do modelo; `effort=default` volta ao padrão — vazio
+            // não serve, `effort=` nem chega ao mapa da query.
             let query = Self.query(in: route)
             let target = query["target"] ?? ""
-            let model = query["model"].flatMap { $0.isEmpty ? nil : $0 }
+            let choice: ModelChoice
+            let field: String
+            if let effort = query["effort"] {
+                choice = .effort(effort == "default" ? nil : effort)
+                field = "effort"
+            } else {
+                choice = .model(query["model"].flatMap { $0.isEmpty ? nil : $0 })
+                field = "model"
+            }
             let error: String? = DispatchQueue.main.sync {
                 guard let handler = AppControl.setNodeModel else { return "app sem canvas" }
-                return handler(target, model)
+                return handler(target, choice)
             }
             if let error {
                 respond(fd, status: "404 Not Found", json: ["ok": false, "error": error])
             } else {
-                respond(fd, status: "200 OK", json: ["ok": true, "target": target, "model": model ?? "padrão"])
+                let value: String?
+                switch choice {
+                case .model(let model): value = model
+                case .effort(let effort): value = effort
+                }
+                respond(fd, status: "200 OK", json: ["ok": true, "target": target, field: value ?? "padrão"])
             }
 
         case ("GET", _, _) where route.contains("/layout"):

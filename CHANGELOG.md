@@ -9,6 +9,14 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- Modelo e esforço (`--effort`: low · medium · high · xhigh · max) numa faixa própria no cabeçalho do card de agente, embaixo do nome: o esforço é um slider com uma marca por nível (a primeira é o padrão do CLI), que também responde à rolagem e só aplica 1s depois de você soltar. Também no formulário e por `/model?target=…&effort=…`; trocar reinicia o terminal e a conversa continua.
+
+### Corrigido
+
+- Depois de trocar de modelo, o seletor do cabeçalho não mostra mais o modelo antigo (ex.: "haiku (fable)") até o novo responder: só conta resposta dada depois do arranque atual.
+
 ## [1.0.0] - 2026-09-28
 
 Primeira versão estável. Consolida tudo o que existe até aqui: um canvas macOS em
