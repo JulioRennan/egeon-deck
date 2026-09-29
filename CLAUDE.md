@@ -191,6 +191,13 @@ app/Sources/EgeonDeck/
 - **Onde se clica, o ponteiro diz** — mão (`HandCursor`) em toda view que
   responde a clique; seta só onde se arrasta ou não há ação (ADR-048).
 - **Português** em comentários, docs, logs e commits.
+- **Toda mudança visível entra no `CHANGELOG.md`** no mesmo commit, em
+  `[Unreleased]`, na seção certa (`Adicionado` · `Alterado` · `Corrigido` ·
+  `Removido`), uma linha do ponto de vista de quem usa, com o ADR entre
+  parênteses. Refactor, teste e docs internos não entram. Formato Keep a
+  Changelog, versões SemVer: no release, `[Unreleased]` vira `[X.Y.Z] - data`,
+  a versão do `app/make.sh` (`CFBundleShortVersionString`) acompanha, a tag é
+  `vX.Y.Z` e os links de comparação no rodapé são atualizados.
 - **Decisões viram ADR** em `docs/01-decisoes.md` — leia antes de propor rota
   para editor, portal de janela, tmux ou detecção de ociosidade: já custaram
   protótipo.

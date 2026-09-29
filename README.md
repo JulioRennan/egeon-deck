@@ -24,6 +24,8 @@ resto funciona igual.
 
 ## Instalar
 
+O que mudou em cada versão está no [`CHANGELOG.md`](CHANGELOG.md).
+
 Duas rotas: baixar o zip pronto, ou clonar e compilar. Compilar é o que anda junto
 com o repositório — o zip é de uma versão marcada.
 
@@ -40,7 +42,7 @@ Universal **não** é mais lento: o binário carrega as duas fatias e o macOS ex
 a nativa. O que dobra é o tamanho do executável, não o tempo de nada.
 
 ```bash
-unzip EgeonDeck-v0.2-universal.zip -d /Applications
+unzip EgeonDeck-v1.0.0-universal.zip -d /Applications
 xattr -dr com.apple.quarantine "/Applications/Egeon Deck.app"
 ```
 
