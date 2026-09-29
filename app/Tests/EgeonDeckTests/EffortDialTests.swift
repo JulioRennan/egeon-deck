@@ -16,12 +16,20 @@ final class EffortDialTests: XCTestCase {
         XCTAssertEqual(EffortDial(levels: levels, current: "ultra", tint: .purple).value, "ultra")
     }
 
-    /// A largura é a do nome mais comprido: rolar não pode fazer o cabeçalho dançar.
-    func testWidthDoesNotDependOnTheCurrentLevel() {
+    /// O nível ocupa só o próprio texto (sem buraco antes do vizinho), e o
+    /// slider fica ancorado à direita: com a faixa alinhada à direita, é ele que
+    /// não pode sair de baixo do cursor quando o texto muda.
+    func testTextTakesOnlyItsWidthAndTheSliderStaysRight() {
         let low = EffortDial(levels: levels, current: "low", tint: .purple)
-        let xhigh = EffortDial(levels: levels, current: "xhigh", tint: .purple)
-        XCTAssertEqual(low.preferredWidth, xhigh.preferredWidth)
+        let auto = EffortDial(levels: levels, current: nil, autoLevel: "medium", tint: .purple)
+        XCTAssertLessThan(low.preferredWidth, auto.preferredWidth, "\"low\" < \"auto (medium)\"")
         XCTAssertEqual(low.fittingSize.width, low.preferredWidth)
+        for dial in [low, auto] {
+            dial.frame = NSRect(origin: .zero, size: dial.fittingSize)
+            dial.layoutSubtreeIfNeeded()
+            let slider = dial.subviews.compactMap { $0 as? NSSlider }.first
+            XCTAssertEqual(slider?.frame.maxX, dial.bounds.maxX)
+        }
     }
 
     /// A faixa só existe quando tem o que mostrar; com ela, o corpo desce.

@@ -263,6 +263,13 @@ struct AgentProfile: Codable {
     /// Níveis oferecidos no formulário e no cabeçalho do card — dado, como
     /// `models`: nível novo no CLI é edição do agents.json.
     var efforts: [String]?
+    /// Como ligar o ultracode na linha de comando. Nil quando o CLI não tem.
+    ///
+    /// No Claude Code ele sai pela MESMA flag do esforço (`--effort ultracode`),
+    /// e aí o nível não cabe mais nela — vai por `effortEnv`.
+    var ultracode: [String]?
+    /// Variável de ambiente que carrega o nível quando a flag está ocupada.
+    var effortEnv: String?
 
     var attention: AttentionConfig?
 
@@ -401,6 +408,27 @@ struct AgentProfile: Codable {
     /// O CLI aceita escolher esforço?
     var offersEfforts: Bool { !(effort ?? []).isEmpty }
 
+    /// Há modelo para escolher no cabeçalho: a flag sozinha não basta — com a
+    /// lista vazia (Codex e Gemini de fábrica) o menu teria só "padrão do CLI".
+    /// Modelo escrito à mão no nó ainda conta: esconder seria esconder o que roda.
+    func offersModelChoice(catalog: ModelCatalog?, current: String? = nil) -> Bool {
+        offersModels && (!(models ?? []).isEmpty || !(catalog?.models.isEmpty ?? true)
+                         || !(current ?? "").isEmpty)
+    }
+
+    /// O que sobe na linha de comando para esforço e ultracode, e o ambiente
+    /// que vai junto. Ultracode sem `effortEnv` perde o nível escolhido — o CLI
+    /// fica no padrão do modelo, que é melhor do que não ligar.
+    func effortLaunch(effort: String?, ultracode: Bool) -> (arguments: [String],
+                                                             environment: [String: String]) {
+        guard ultracode, let flag = self.ultracode, !flag.isEmpty else {
+            return (effortArguments(effort) ?? [], [:])
+        }
+        var environment: [String: String] = [:]
+        if let effort, !effort.isEmpty, let variable = effortEnv { environment[variable] = effort }
+        return (flag, environment)
+    }
+
     /// O que "padrão" significa para este CLI nesta configuração: o `model` do
     /// `settings.json` da pasta de config em uso. Nil quando não há arquivo ou
     /// ele não fixa modelo — aí só o transcript, depois do primeiro turno, sabe.
@@ -533,6 +561,14 @@ enum AgentStore {
             updated[key]?.effort = padrão.effort
             if profile.efforts == nil { updated[key]?.efforts = padrão.efforts }
             changed.append("\(key).effort")
+        }
+
+        for (key, profile) in map where profile.ultracode == nil {
+            guard let padrão = defaults[key], padrão.ultracode != nil,
+                  padrão.command == profile.command else { continue }
+            updated[key]?.ultracode = padrão.ultracode
+            if profile.effortEnv == nil { updated[key]?.effortEnv = padrão.effortEnv }
+            changed.append("\(key).ultracode")
         }
 
         // `clear` é comando de barra DAQUELE CLI: mesma trava de comando.

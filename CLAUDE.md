@@ -139,10 +139,13 @@ app/Sources/EgeonDeck/
   "⏳ em segundo plano" é o turno que fechou com `[[ED:wait]]` — trabalho de
   fundo rodando, o agente volta sozinho (ADR-063).
 - Worktree por bancada E por terminal (formulário decide pela branch).
-- Modelo e esforço por nó de agente: formulário e uma faixa própria no
-  cabeçalho (`accessoryRow`) — pull-down de modelo e `EffortDial` (slider com
-  debounce, também por rolagem); trocar reinicia o processo e retoma a
-  conversa. Listas vêm do `agents.json` (`models`, `efforts`).
+- Modelo, esforço e ultracode por nó de agente: formulário e uma faixa própria
+  no cabeçalho (`accessoryRow` → `ModelRow`), à direita. Os modelos e os níveis
+  que cada um aceita vêm da tabela **dentro do binário do Claude Code**
+  (`ClaudeModelCatalog`, cache em `claude-models.json`); sem ela, os apelidos
+  do `agents.json`. Ultracode ocupa o `--effort`, e o nível vai por
+  `CLAUDE_CODE_EFFORT_LEVEL`. Trocar reinicia o processo e retoma a conversa
+  (ADR-064).
 - **Papel e regras** são campos separados (ADR-056): papel é quem o terminal é;
   regra é como se trabalha, e a da **bancada** (menu de contexto na barra) vale
   para todos os agentes dela, somada à do nó. No system prompt as regras entram

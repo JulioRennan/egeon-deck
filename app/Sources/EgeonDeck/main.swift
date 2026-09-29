@@ -218,6 +218,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.makeWorktree(target: target, branch: branch, nodeBranches: nodeBranches)
                 ?? ["ok": false, "error": "app encerrando"]
         }
+        // O Claude Code se atualiza com o app aberto; o catálogo novo vale para os
+        // cards que já estão na tela, sem reiniciar ninguém.
+        ClaudeModelCatalog.onUpdate = { [weak self] catalog in
+            guard let self else { return }
+            for config in self.configs {
+                guard let shell = self.shells[config.id] else { continue }
+                for node in config.nodes {
+                    guard let profile = node.agent.flatMap({ self.agents[$0] }),
+                          ClaudeModelCatalog.applies(to: profile),
+                          let view = shell.nodes.first(where: { $0.nodeID == node.id }) as? TerminalNode
+                    else { continue }
+                    view.apply(catalog: catalog)
+                }
+            }
+        }
         AppControl.setNodeModel = { [weak self] target, choice in
             guard let self else { return "app encerrando" }
             let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
@@ -235,6 +250,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return "'\(target)' não é um agente que aceite modelo"
             case .effort where !profile.offersEfforts:
                 return "'\(target)' não é um agente que aceite esforço"
+            case .ultracode where profile.ultracode == nil:
+                return "'\(target)' não é um agente com ultracode"
             default:
                 break
             }
@@ -2075,7 +2092,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Modelo e esforço são flags do binário do perfil: com `cmd` trocado por
         // outro programa, anexar `--model` mataria o terminal no arranque.
         let modelFlags = profile.runsOwnBinary(base)
-            ? (profile.modelArguments(node.model) ?? []) + (profile.effortArguments(node.effort) ?? [])
+            ? (profile.modelArguments(node.model) ?? [])
+                + profile.effortLaunch(effort: node.effort, ultracode: node.ultracode == true).arguments
             : []
         let modelSuffix = modelFlags.isEmpty ? ""
             : " " + modelFlags.map(AppEnvironment.shellQuote).joined(separator: " ")
@@ -2249,6 +2267,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         config: node.config,
                                         model: node.model,
                                         effort: node.effort,
+                                        ultracode: node.ultracode == true,
+                                        catalog: profile.flatMap(ClaudeModelCatalog.current(for:)),
+                                        extraEnvironment: profile.map {
+                                            $0.effortLaunch(effort: node.effort,
+                                                            ultracode: node.ultracode == true).environment
+                                        } ?? [:],
                                         prompt: launch.promptToInject,
                                         hooked: launch.hooked)
             let launched = Date()
@@ -2909,8 +2933,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let position = configs[index].nodes.firstIndex(where: { $0.id == node.nodeID })
         else { return }
         let current = configs[index].nodes[position]
-        let updated = choice.applied(to: current)
-        guard updated.model != current.model || updated.effort != current.effort else { return }
+        var updated = choice.applied(to: current)
+        // Modelo novo que não tem o nível em vigor: o CLI rebaixaria calado, e o
+        // slider mostraria um nível que não existe. Volta ao auto, e diz.
+        if case .model = choice, let effort = updated.effort,
+           let profile = updated.agent.flatMap({ agents[$0] }),
+           let model = ClaudeModelCatalog.current(for: profile)?.model(for: updated.model),
+           !model.efforts.contains(effort) {
+            updated.effort = nil
+            Log.write("bancada \(configs[index].name): \(model.label) não tem esforço \(effort) — "
+                      + "nó \"\(current.id)\" volta ao auto")
+        }
+        guard updated.model != current.model || updated.effort != current.effort
+                || updated.ultracode != current.ultracode else { return }
 
         configs[index].nodes[position] = updated
 
@@ -2923,6 +2958,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             what = "modelo \(model ?? "padrão") (antes \(current.model ?? "padrão"))"
         case .effort(let effort):
             what = "esforço \(effort ?? "padrão") (antes \(current.effort ?? "padrão"))"
+        case .ultracode(let on):
+            what = "ultracode \(on ? "ligado" : "desligado")"
         }
         Log.write("bancada \(configs[index].name): nó \"\(current.id)\" reiniciado com \(what)")
         schedulePersist()

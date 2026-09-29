@@ -11,7 +11,11 @@ citados entre parênteses.
 
 ### Adicionado
 
-- Modelo e esforço (`--effort`: low · medium · high · xhigh · max) numa faixa própria no cabeçalho do card de agente, embaixo do nome: o esforço é um slider com uma marca por nível (a primeira é o padrão do CLI), que também responde à rolagem e só aplica 1s depois de você soltar. Também no formulário e por `/model?target=…&effort=…`; trocar reinicia o terminal e a conversa continua.
+- O seletor de modelo mostra os modelos pelo nome ("Opus 5.5", "Fable 5.1"), lidos do Claude Code instalado — atualizar o CLI atualiza a lista; versões anteriores ficam num submenu e os apelidos seguem disponíveis como "sempre o mais recente" (ADR-064).
+- O slider de esforço mostra só os níveis que o modelo aceita, com o "auto" dizendo o padrão dele (ex.: "auto (medium)"); modelo sem esforço deixa o slider desligado (ADR-064).
+- A faixa de modelo e esforço só aparece quando há o que escolher: Codex e Gemini, sem lista de modelos no `agents.json`, ficam com o cabeçalho de antes (ADR-064).
+- Botão de ultracode na faixa do cabeçalho, independente do nível de esforço; também por `/model?target=…&ultracode=on|off` (ADR-064).
+- Modelo e esforço (`--effort`: low · medium · high · xhigh · max) numa faixa própria no cabeçalho do card de agente, embaixo do nome: o esforço é um slider com uma marca por nível (a primeira é o auto, o padrão do modelo), que também responde à rolagem e só aplica 1s depois de você soltar. Também no formulário e por `/model?target=…&effort=…`; trocar reinicia o terminal e a conversa continua (ADR-064).
 
 ### Corrigido
 

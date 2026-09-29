@@ -6,6 +6,7 @@ enum ModelChoice: Equatable {
     case model(String?)
     /// Nil é o padrão do CLI.
     case effort(String?)
+    case ultracode(Bool)
 
     /// O nó com a escolha aplicada.
     func applied(to node: NodeConfig) -> NodeConfig {
@@ -13,6 +14,7 @@ enum ModelChoice: Equatable {
         switch self {
         case .model(let value): copy.model = value
         case .effort(let value): copy.effort = value
+        case .ultracode(let on): copy.ultracode = on ? true : nil
         }
         return copy
     }

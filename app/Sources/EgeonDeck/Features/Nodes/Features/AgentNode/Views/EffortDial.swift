@@ -1,7 +1,7 @@
 import AppKit
 
 /// O esforço do agente no cabeçalho do card: um slider com uma marca por nível
-/// — a primeira é o padrão do CLI — e o nome do nível ao lado. Arrastar, clicar
+/// — a primeira é o auto, o padrão do modelo — e o nome do nível ao lado. Arrastar, clicar
 /// na trilha ou rolar em cima dele ajustam.
 ///
 /// A escolha só vale quando a mão para (debounce de 1s, e nunca com o botão
@@ -11,6 +11,8 @@ import AppKit
 final class EffortDial: NSView {
     /// A escolha assentou. Nil é o padrão do CLI.
     var onCommit: ((String?) -> Void)?
+    /// O texto do nível mudou de largura.
+    var onResize: (() -> Void)?
 
     private let levels: [String]
     private let tint: NSColor
@@ -25,16 +27,26 @@ final class EffortDial: NSView {
 
     private static let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
     private static let sliderWidth: CGFloat = 96
-    private static let sliderToText: CGFloat = 6
+    /// O mesmo respiro de rótulo para controle da faixa inteira (`ModelRow.gap`).
+    static let textToSlider: CGFloat = 5
     private static let height: CGFloat = 18
     /// Quanto de rolagem vale um nível. Trackpad manda deltas em pontos, aos
     /// punhados; roda de mouse manda linhas, uma por clique.
     private static let preciseStep: CGFloat = 14
     private static let settleDelay: TimeInterval = 1.0
 
-    init(levels: [String], current: String?, tint: NSColor) {
+    /// O nível que "auto" dá neste modelo — `medium` no Opus 5.5. Nil quando não
+    /// se sabe qual é o modelo.
+    private let autoLevel: String?
+
+    /// `levels` vazio é modelo sem esforço: o slider fica desligado e diz isso,
+    /// em vez de sumir e deixar a faixa mudando de forma a cada troca de modelo.
+    init(levels: [String], current: String?, autoLevel: String? = nil, tint: NSColor) {
+        self.autoLevel = autoLevel
         var levels = levels
-        if let current, !current.isEmpty, !levels.contains(current) { levels.append(current) }
+        if !levels.isEmpty, let current, !current.isEmpty, !levels.contains(current) {
+            levels.append(current)
+        }
         self.levels = levels
         self.tint = tint
         self.position = current.flatMap { levels.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
@@ -44,7 +56,7 @@ final class EffortDial: NSView {
         slider.controlSize = .mini
         slider.minValue = 0
         slider.maxValue = Double(max(levels.count, 1))
-        slider.numberOfTickMarks = levels.count + 1
+        slider.numberOfTickMarks = max(levels.count + 1, 2)
         slider.allowsTickMarkValuesOnly = true
         slider.tickMarkPosition = .below
         slider.trackFillColor = tint
@@ -52,6 +64,7 @@ final class EffortDial: NSView {
         slider.integerValue = position
         slider.target = self
         slider.action = #selector(sliderMoved)
+        slider.isEnabled = !levels.isEmpty
         addSubview(slider)
 
         label.font = Self.font
@@ -68,14 +81,19 @@ final class EffortDial: NSView {
 
     private var pending: Bool { position != committed }
 
-    /// Largura para o nome mais comprido, e não para o atual: mexer no slider
-    /// não pode fazer o cabeçalho dançar.
-    var preferredWidth: CGFloat {
-        let widest = (levels + ["padrão"]).map {
-            ($0 + "…" as NSString).size(withAttributes: [.font: Self.font]).width
-        }.max() ?? 0
-        return ceil(Self.sliderWidth + Self.sliderToText + widest) + 4
+    var isUsable: Bool { !levels.isEmpty }
+
+    private var autoText: String { autoLevel.map { "auto (\($0))" } ?? "auto" }
+
+    /// O nível fica à ESQUERDA do slider e ocupa só a largura do texto atual.
+    /// Reservar a do nome mais comprido deixava um buraco antes do vizinho; e,
+    /// com a faixa alinhada à direita, o texto crescer empurra só o que está à
+    /// esquerda dele — o slider não sai de baixo do cursor no meio do arrasto.
+    private var textWidth: CGFloat {
+        ceil((label.stringValue as NSString).size(withAttributes: [.font: Self.font]).width) + 2
     }
+
+    var preferredWidth: CGFloat { textWidth + Self.textToSlider + Self.sliderWidth }
 
     override var fittingSize: NSSize { NSSize(width: preferredWidth, height: Self.height) }
     override var intrinsicContentSize: NSSize { fittingSize }
@@ -83,15 +101,16 @@ final class EffortDial: NSView {
 
     override func layout() {
         super.layout()
-        slider.frame = NSRect(x: 0, y: 0, width: Self.sliderWidth, height: bounds.height)
-        let x = Self.sliderWidth + Self.sliderToText
-        label.frame = NSRect(x: x, y: (bounds.height - 13) / 2,
-                             width: max(0, bounds.width - x), height: 13)
+        let text = max(0, bounds.width - Self.sliderWidth - Self.textToSlider)
+        label.frame = NSRect(x: 0, y: (bounds.height - 13) / 2, width: text, height: 13)
+        slider.frame = NSRect(x: bounds.width - Self.sliderWidth, y: 0,
+                              width: Self.sliderWidth, height: bounds.height)
     }
 
-    override func resetCursorRects() { HandCursor.fill(self) }
+    override func resetCursorRects() { HandCursor.fill(self, when: isUsable) }
 
     override func scrollWheel(with event: NSEvent) {
+        guard isUsable else { return super.scrollWheel(with: event) }
         // A inércia do trackpad continuaria subindo nível depois do dedo sair.
         guard event.momentumPhase.isEmpty else { return }
         if event.phase == .began { scrollAccumulator = 0 }
@@ -134,11 +153,25 @@ final class EffortDial: NSView {
     }
 
     private func refresh() {
+        let before = label.stringValue
+        defer {
+            if label.stringValue != before {
+                needsLayout = true
+                onResize?()
+            }
+        }
         if slider.integerValue != position { slider.integerValue = position }
-        label.stringValue = (value ?? "padrão") + (pending ? "…" : "")
+        guard isUsable else {
+            label.stringValue = "sem esforço"
+            label.textColor = NSColor(calibratedWhite: 1, alpha: 0.3)
+            toolTip = "Este modelo não aceita nível de esforço"
+            slider.toolTip = toolTip
+            return
+        }
+        label.stringValue = (value ?? autoText) + (pending ? "…" : "")
         label.textColor = pending ? tint : NSColor(calibratedWhite: 0.62, alpha: 1)
-        toolTip = "Esforço: \(value ?? "padrão do CLI") — arraste ou role para ajustar. "
-            + "Trocar reinicia o terminal; a conversa continua"
+        toolTip = "Esforço: \(value ?? autoText) — arraste ou role para ajustar; a primeira "
+            + "marca é o auto, o padrão do modelo. Trocar reinicia o terminal; a conversa continua"
         slider.toolTip = toolTip
     }
 }

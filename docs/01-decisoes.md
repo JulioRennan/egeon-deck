@@ -3716,3 +3716,46 @@ dos três vence, `wait` sai do chat, instrução antiga aprende `wait`) e
 `ActivityTests`. No DEV: `/dispatch` pedindo `sleep 30` em background — log
 `em segundo plano — por gancho Stop, wait no transcript (1 releitura)`, depois
 `prompt` quando a notificação chegou e `terminou … ok`.
+
+## ADR-064 — Modelo e esforço por nó, com o catálogo lido do binário do Claude Code
+
+**Problema.** O nó escolhia modelo por apelido (`opus`, `fable`) — "opus" não
+diz se é o 5 ou o 5.5 — e o esforço (`--effort`) não existia no app. E nem todo
+modelo aceita todo nível: o Opus 4.6 não tem `xhigh`, o Haiku 4.5 não tem
+esforço nenhum. Sem saber isso, o slider oferecia nível que o CLI rebaixa calado.
+
+**Onde está a verdade.** Procurou-se fonte monitorável: a `GET /v1/models` tem
+as capacidades de esforço por modelo, mas pede API key, e login de assinatura
+não tem. O `model_param.py` do SDK Python e o CHANGELOG do claude-code listam
+modelos, não níveis. O próprio binário do Claude Code, porém, carrega a tabela
+de onde o `/model` e o `/effort` da TUI saem: `{id, family, display_name,
+capabilities: ["effort","xhigh_effort","max_effort",…], default_effort}`.
+
+**Decisão.** Ler a tabela do binário instalado (`ClaudeModelRegistry`) e guardar
+o resultado em `claude-models.json` com caminho, tamanho e data do executável
+(`ClaudeModelCatalog`). Varrer ~200 MB custa ~0,5 s; roda em segundo plano
+quando o binário muda — o Claude Code se atualiza quase todo dia — e os cards
+abertos recebem o catálogo novo sem reiniciar. Atualizar o CLI atualiza o menu.
+
+- **Menu de modelo:** o mais novo de cada família com o nome de gente ("Opus
+  5.5" grava `claude-opus-5-5`), as versões anteriores num submenu, e os
+  apelidos do `agents.json` numa seção "sempre o mais recente".
+- **Slider de esforço:** os níveis do modelo em vigor (o pedido, senão o que
+  respondeu por último); a primeira marca é o **auto**, com o padrão do modelo
+  entre parênteses. Modelo sem esforço deixa o slider desligado, "sem esforço".
+  Trocar para um modelo que não tem o nível em vigor volta o nó ao auto.
+- **Ultracode** é interruptor à parte, não nível. O CLI o liga pela MESMA flag
+  (`--effort ultracode`), então o nível vai por `CLAUDE_CODE_EFFORT_LEVEL` —
+  verificado no `/effort` da TUI: "Ultracode on" com o slider no nível do nó.
+- Tudo numa faixa própria do cabeçalho, embaixo do nome e alinhada à direita
+  (`accessoryRow`/`ModelRow`); trocar reinicia o processo e mantém a conversa.
+
+**O risco aceito.** A tabela é JavaScript minificado e interno — o formato pode
+mudar em qualquer versão. Leitura que não acha nada não é erro: fica o catálogo
+anterior, ou só os apelidos e a lista de níveis do perfil, e o log diz.
+
+**Verificação.** `ModelCatalogTests` (entrada real recortada, isca com o mesmo
+começo, repetição, níveis por capacidade, snapshot/`[1m]`/apelido, ultracode no
+ambiente) e `EffortDialTests`. No DEV: 21 modelos lidos da 2.1.285 em 0,5 s;
+`/model?…&ultracode=on` subiu `--effort ultracode` com
+`CLAUDE_CODE_EFFORT_LEVEL=medium`, e o `/effort` da TUI mostrou os dois.

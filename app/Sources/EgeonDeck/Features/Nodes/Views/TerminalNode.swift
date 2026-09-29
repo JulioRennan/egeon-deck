@@ -159,15 +159,13 @@ final class TerminalNode: NodeView {
     /// atende reinicia o processo — não há como trocar o modelo de um pty em
     /// curso — e mantém a conversa.
     var onRequestModel: ((NodeView, ModelChoice) -> Void)?
-    private var modelPicker: NSPopUpButton?
-    private var modelOptions: [String] = []
-    private var chosenModel: String?
+    private var modelRow: ModelRow?
     /// Quem sabe o modelo literal em uso — lê o transcript. Injetado por quem
     /// tem a configuração do nó; a view não sabe onde a conversa é gravada.
-    var modelResolver: (() -> String?)?
-    private var lastModelProbe = Date.distantPast
-    private var literalModel: String?
-    private static let defaultModelTitle = "padrão do CLI"
+    var modelResolver: (() -> String?)? {
+        get { modelRow?.modelResolver }
+        set { modelRow?.modelResolver = newValue }
+    }
 
     /// `profile == nil` → terminal comum. Com perfil, é um "terminal com IA":
     /// mesma mecânica de pty, o que muda é saber injetar prompt e medir ociosidade.
@@ -176,8 +174,9 @@ final class TerminalNode: NodeView {
     /// `cmd` trocado à mão pode ter trocado de programa, e aí não há gancho.
     init(frame: NSRect, address: String, title: String, cwd: String,
          command: String, profile: AgentProfile?, config: String? = nil,
-         model: String? = nil, effort: String? = nil, prompt: String? = nil,
-         hooked: Bool = false) {
+         model: String? = nil, effort: String? = nil, ultracode: Bool = false,
+         catalog: ModelCatalog? = nil, extraEnvironment: [String: String] = [:],
+         prompt: String? = nil, hooked: Bool = false) {
         self.address = address
         // Só o nome do terminal no título. O endereço inteiro cabia numa linha de
         // 11pt e não sobrava nada; agora a bancada é a mesma para todos os cards da
@@ -194,8 +193,21 @@ final class TerminalNode: NodeView {
         term.startDirectory = cwd
         titleLabel.toolTip = address + (profile.map { " · \($0.displayName)" } ?? "")
         body.addSubview(term)
-        if let profile, profile.offersModels { installModelPicker(profile: profile, current: model) }
-        if let profile, profile.offersEfforts { installEffortDial(profile: profile, current: effort) }
+        if let profile, profile.offersModelChoice(catalog: catalog, current: model) || profile.offersEfforts {
+            let row = ModelRow(profile: profile, catalog: catalog, model: model, effort: effort,
+                               ultracode: ultracode, tint: accent)
+            row.onChoice = { [weak self] choice in
+                guard let self else { return }
+                self.onRequestModel?(self, choice)
+            }
+            row.onResize = { [weak self, weak row] in
+                guard let self, let row else { return }
+                self.accessoryRowWidths[ObjectIdentifier(row)] = row.preferredWidth
+            }
+            modelRow = row
+            accessoryRow = [row]
+            accessoryRowWidths[ObjectIdentifier(row)] = row.preferredWidth
+        }
         // Terminal com IA recebe o arrasto como paste; shell, como digitação.
         term.dropAsPaste = profile?.injectConfig.mode == "bracketed-paste"
 
@@ -219,6 +231,9 @@ final class TerminalNode: NodeView {
         // Finder, ele não herdou o shell de ninguém.
         if let profile {
             environment.merge(profile.resolvedEnvironment) { _, novo in novo }
+            // Depois da limpeza de `CLAUDE_CODE*` herdado: esta é nossa, é o nível
+            // do esforço quando o ultracode ocupa a flag.
+            environment.merge(extraEnvironment) { _, novo in novo }
             if let config, let variable = profile.configEnv {
                 environment[variable] = config
                 Log.write("terminal[\(address)]: \(variable)=\(config)")
@@ -370,106 +385,16 @@ final class TerminalNode: NodeView {
             // precisa poder crescer de volta.
             needsLayout = true
         }
-        refreshModelTitle()
+        modelRow?.refresh()
 
         titleLabel.textColor = activity.color ?? accent
         statusLabel.textColor = activity.color ?? NSColor(calibratedWhite: 0.62, alpha: 1)
         setAlert(activity.needsAttention)
     }
 
-    /// O seletor de modelo do cabeçalho. Pull-down miúdo com o nome do modelo
-    /// em curso: é o que responde "este card está rodando com o quê?" sem abrir
-    /// o formulário, e é onde se troca.
-    private func installModelPicker(profile: AgentProfile, current: String?) {
-        // Pull-down, e não popup: o título é o modelo LITERAL em uso, e o menu
-        // são os apelidos que se pode pedir. Num popup o título seria o item
-        // escolhido — "sonnet", "padrão" — que é justamente o que não informa.
-        let picker = HandPopUpButton(frame: .zero, pullsDown: true)
-        picker.controlSize = .small
-        picker.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
-        picker.isBordered = false
-        picker.toolTip = "Modelo em uso — escolher outro reinicia o terminal, a conversa continua"
-        var options = profile.models ?? []
-        if let current, !current.isEmpty, !options.contains(current) { options.append(current) }
-        modelOptions = options
-        chosenModel = current
-        picker.addItem(withTitle: "")
-        picker.addItem(withTitle: Self.defaultModelTitle)
-        picker.addItems(withTitles: options)
-        picker.target = self
-        picker.action = #selector(modelChosen(_:))
-        modelPicker = picker
-        accessoryRow.insert(contentsOf: [Self.rowCaption("modelo"), picker], at: 0)
-        refreshModelTitle(force: true)
-    }
-
-    /// O esforço fica à direita do modelo, na mesma faixa, controle próprio:
-    /// rolar em cima dele ajusta, sem abrir menu.
-    private func installEffortDial(profile: AgentProfile, current: String?) {
-        let dial = EffortDial(levels: profile.efforts ?? [], current: current, tint: accent)
-        dial.onCommit = { [weak self] effort in
-            guard let self else { return }
-            self.onRequestModel?(self, .effort(effort))
-        }
-        accessoryRow.append(contentsOf: [Self.rowCaption("esforço"), dial])
-        accessoryRowWidths[ObjectIdentifier(dial)] = dial.preferredWidth
-    }
-
-    /// Rótulo miúdo antes de cada controle da faixa: sem ele, "high" solto no
-    /// cabeçalho não diz de quê.
-    private static func rowCaption(_ text: String) -> NSTextField {
-        let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 9, weight: .semibold)
-        label.textColor = NSColor(calibratedWhite: 1, alpha: 0.32)
-        label.sizeToFit()
-        return label
-    }
-
-    /// Título do pull-down: o nome literal quando se sabe, com o apelido pedido
-    /// entre parênteses quando difere; senão o apelido; senão "padrão".
-    /// Consulta o transcript no máximo a cada 2s — é leitura de arquivo, e o
-    /// tick do badge é de 0,25s.
-    private func refreshModelTitle(force: Bool = false) {
-        guard let picker = modelPicker else { return }
-        let now = Date()
-        if force || now.timeIntervalSince(lastModelProbe) >= 2 {
-            lastModelProbe = now
-            literalModel = modelResolver?()
-        }
-        let title: String
-        switch (literalModel, chosenModel) {
-        case let (literal?, chosen?) where literal != chosen && !literal.contains(chosen):
-            title = "\(literal) (\(chosen))"
-        case let (literal?, _):
-            title = literal
-        case let (nil, chosen?):
-            title = chosen
-        case (nil, nil):
-            title = "padrão"
-        }
-        // O prefixo do fornecedor é o mesmo em todo item e só come largura do
-        // nome do nó ao lado; o nome inteiro fica no tooltip.
-        let shown = title.hasPrefix("claude-") ? String(title.dropFirst("claude-".count)) : title
-        if picker.item(at: 0)?.title != shown {
-            picker.item(at: 0)?.title = shown
-            picker.toolTip = "Modelo em uso: \(title) — escolher outro reinicia o terminal, a conversa continua"
-            // Texto mais a seta do pull-down e o respiro da célula.
-            let text = (shown as NSString).size(withAttributes: [.font: picker.font as Any]).width
-            accessoryRowWidths[ObjectIdentifier(picker)] = ceil(text) + 26
-        }
-        // Marca no menu o apelido em vigor, para o clique dizer onde se está.
-        for (index, item) in picker.itemArray.enumerated() where index > 0 {
-            let alias = index == 1 ? nil : modelOptions[index - 2]
-            item.state = alias == chosenModel ? .on : .off
-        }
-    }
-
-    @objc private func modelChosen(_ sender: NSPopUpButton) {
-        // Índice 0 é o título; 1 é "padrão"; daí em diante, os apelidos.
-        let index = sender.indexOfSelectedItem
-        guard index >= 1 else { return }
-        let chosen = index >= 2 && index - 2 < modelOptions.count ? modelOptions[index - 2] : nil
-        onRequestModel?(self, .model(chosen))
+    /// Chegou um catálogo novo — o Claude Code foi atualizado com o app aberto.
+    func apply(catalog: ModelCatalog?) {
+        modelRow?.apply(catalog: catalog)
     }
 
     private func shellQuote(_ s: String) -> String {

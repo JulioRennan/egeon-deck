@@ -28,6 +28,9 @@ struct NodeConfig: Codable {
     /// Esforço pedido ao CLI, pela flag que o perfil declara em `effort`. Nulo
     /// é o padrão do CLI; trocar reinicia e retoma, como o modelo.
     var effort: String?
+    /// Ultracode ligado — o modo do Claude Code que roda workflow dinâmico em
+    /// toda tarefa. Não é nível: vale em qualquer esforço, por isso campo à parte.
+    var ultracode: Bool?
     /// Só usado por `type: web`.
     var url: String?
     /// Nome do perfil em web-profiles.json. Só usado por `type: web`.

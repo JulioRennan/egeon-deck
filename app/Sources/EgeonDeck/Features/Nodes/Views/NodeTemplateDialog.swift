@@ -431,9 +431,7 @@ final class NodeTemplateDialog {
 
     /// Nil é o padrão do CLI — o primeiro item.
     private var selectedModel: String? {
-        let index = modelPicker.indexOfSelectedItem
-        guard index > 0, let title = modelPicker.titleOfSelectedItem else { return nil }
-        return title
+        modelPicker.selectedItem?.representedObject as? String
     }
 
     /// A lista vem do perfil: trocar de CLI troca os modelos. A escolha anterior
@@ -444,20 +442,34 @@ final class NodeTemplateDialog {
     /// e o app anexaria `--model opus` a um binário que não tem esse modelo.
     /// Modelo escrito à mão no `components.json` continua valendo: só é
     /// descartado quando o CLI declara uma lista e o valor não está nela.
+    ///
+    /// Com catálogo (Claude Code), os modelos vêm com nome de gente — "Opus 5.5"
+    /// grava `claude-opus-5-5` — e os apelidos seguem depois, para quem quer
+    /// sempre o mais recente.
     private func reloadModelPicker(select value: String?) {
         modelPicker.removeAllItems()
-        modelPicker.addItem(withTitle: Self.defaultModelOption)
-        let known = selectedAgentKey.flatMap { agents[$0]?.models } ?? []
-        var options = known
-        if let value, !value.isEmpty, !options.contains(value), known.isEmpty {
-            options.append(value)
+        let menu = modelPicker.menu!
+        func add(_ title: String, _ id: String?) {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.representedObject = id
+            menu.addItem(item)
         }
-        modelPicker.addItems(withTitles: options)
-        if let value, let index = options.firstIndex(of: value) {
-            modelPicker.selectItem(at: index + 1)
-        } else {
-            modelPicker.selectItem(at: 0)
+        add(Self.defaultModelOption, nil)
+        let profile = selectedAgentKey.flatMap { agents[$0] }
+        let catalog = profile.flatMap(ClaudeModelCatalog.current(for:))
+        let aliases = profile?.models ?? []
+        var ids = aliases
+        if let catalog {
+            for model in catalog.featured + catalog.older { add(model.label, model.id) }
+            ids += catalog.models.map(\.id)
         }
+        for alias in aliases { add(alias, alias) }
+        if let value, !value.isEmpty, !ids.contains(value), aliases.isEmpty, catalog == nil {
+            add(value, value)
+            ids.append(value)
+        }
+        let index = menu.items.firstIndex { ($0.representedObject as? String) == value }
+        modelPicker.selectItem(at: value == nil ? 0 : index ?? 0)
     }
 
     /// Nil é o padrão do CLI — o primeiro item.

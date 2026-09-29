@@ -572,12 +572,16 @@ final class ControlSocket {
             // cabeçalho: reinicia o terminal com o modelo, mantendo a conversa.
             // Sem `model`, volta ao padrão do CLI. Com `effort=nível` troca o
             // esforço em vez do modelo; `effort=default` volta ao padrão — vazio
-            // não serve, `effort=` nem chega ao mapa da query.
+            // não serve, `effort=` nem chega ao mapa da query. `ultracode=on|off`
+            // liga e desliga o ultracode.
             let query = Self.query(in: route)
             let target = query["target"] ?? ""
             let choice: ModelChoice
             let field: String
-            if let effort = query["effort"] {
+            if let ultracode = query["ultracode"] {
+                choice = .ultracode(ultracode == "on" || ultracode == "1" || ultracode == "true")
+                field = "ultracode"
+            } else if let effort = query["effort"] {
                 choice = .effort(effort == "default" ? nil : effort)
                 field = "effort"
             } else {
@@ -595,6 +599,7 @@ final class ControlSocket {
                 switch choice {
                 case .model(let model): value = model
                 case .effort(let effort): value = effort
+                case .ultracode(let on): value = on ? "on" : "off"
                 }
                 respond(fd, status: "200 OK", json: ["ok": true, "target": target, field: value ?? "padrão"])
             }

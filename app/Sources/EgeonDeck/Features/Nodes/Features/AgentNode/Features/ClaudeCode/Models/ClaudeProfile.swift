@@ -25,10 +25,14 @@ extension AgentProfile {
             // (`claude-fable-5`) e sufixo `[1m]`: é só escrever no agents.json.
             model: ["--model", "{model}"],
             models: ["fable", "opus", "sonnet", "haiku", "opusplan"],
-            // Os níveis do `claude --help` (2.1.284). Modelo que não suporta um
-            // nível o CLI rebaixa sozinho; aqui não se cruza modelo com nível.
+            // Os níveis do `claude --help` (2.1.284) — o teto. Quais valem para
+            // cada modelo vem do catálogo lido do binário (`ClaudeModelCatalog`).
             effort: ["--effort", "{effort}"],
             efforts: ["low", "medium", "high", "xhigh", "max"],
+            // `--effort ultracode` liga o modo e ocupa a flag; o nível segue pela
+            // variável, que o CLI lê no arranque (2.1.285).
+            ultracode: ["--effort", "ultracode"],
+            effortEnv: "CLAUDE_CODE_EFFORT_LEVEL",
             attention: AttentionConfig(),
             configEnv: "CLAUDE_CONFIG_DIR", configGlob: "~/.claude*")
     }
