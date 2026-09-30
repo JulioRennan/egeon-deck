@@ -25,6 +25,9 @@ struct NodeTemplate: Codable {
     /// As regras deste terminal, somadas às da bancada (ADR-056). Um CLI pode
     /// SUBSTITUIR este texto pelo dele em `byAgent` (ADR-057).
     var rules: String?
+    /// O que o shell roda. Só de shell: comando de agente é do CLI e mora em
+    /// `byAgent`. Vazio é o zsh de login.
+    var command: String?
 
     /// Com qual CLI este componente nasce. É escolha, não identidade: o mesmo
     /// componente vale em qualquer um.
@@ -130,7 +133,9 @@ struct NodeTemplate: Codable {
     }
 
     init(name: String, kind: NodeKind, agent: String? = nil, cwd: String? = nil,
-         prompt: String? = nil, rules: String? = nil, byAgent: [String: Overrides]? = nil) {
+         prompt: String? = nil, rules: String? = nil, byAgent: [String: Overrides]? = nil,
+         command: String? = nil) {
+        self.command = command
         self.name = name
         self.kind = kind
         self.agent = agent
@@ -169,6 +174,9 @@ struct NodeTemplate: Codable {
         prompt = try c.decodeIfPresent(String.self, forKey: .prompt)
         rules = try c.decodeIfPresent(String.self, forKey: .rules)
         byAgent = try c.decodeIfPresent([String: Overrides].self, forKey: .byAgent)
+        // `cmd` na raiz: num agente é o formato de antes da ADR-057; num shell é
+        // o comando dele, que nunca teve CLI para onde migrar.
+        command = kind == .shell ? try c.decodeIfPresent(String.self, forKey: .cmd) : nil
 
         let legacy = Overrides(cmd: try c.decodeIfPresent(String.self, forKey: .cmd),
                                config: try c.decodeIfPresent(String.self, forKey: .config),
@@ -190,6 +198,7 @@ struct NodeTemplate: Codable {
         try c.encodeIfPresent(prompt, forKey: .prompt)
         try c.encodeIfPresent(rules, forKey: .rules)
         try c.encodeIfPresent(byAgent?.isEmpty == true ? nil : byAgent, forKey: .byAgent)
+        if kind == .shell { try c.encodeIfPresent(command, forKey: .cmd) }
     }
 
     /// Nome legível do que este terminal roda, para o cabeçalho do nó.
@@ -279,7 +288,8 @@ enum NodeTemplateStore {
         }
         return NodeTemplate(name: name, kind: node.type, agent: node.agent,
                             cwd: node.cwd, prompt: node.prompt, rules: node.rules,
-                            byAgent: byAgent.isEmpty ? nil : byAgent)
+                            byAgent: byAgent.isEmpty ? nil : byAgent,
+                            command: node.type == .shell ? node.cmd : nil)
     }
 
     /// Instancia o componente como nó, com id único dentro da bancada. O que é
@@ -288,7 +298,7 @@ enum NodeTemplateStore {
         let resolved = component.resolved(for: component.agent)
         var node = NodeConfig(type: component.kind, id: id)
         node.agent = component.agent
-        node.cmd = resolved.cmd
+        node.cmd = component.kind == .shell ? component.command : resolved.cmd
         node.config = resolved.config
         node.model = resolved.model
         node.effort = resolved.effort

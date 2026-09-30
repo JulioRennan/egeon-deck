@@ -390,7 +390,9 @@ final class SidebarGroupRow: NSView {
     /// Projeto guardado: o menu oferece o caminho de volta, e vice-versa.
     private var isStoredProject = false
 
-    init(workspaceID: String, project: ProjectConfig, workbenches: Int) {
+    /// `joins` são os nomes dos projetos que um multi-projeto junta: é o que o
+    /// subtítulo dele mostra no lugar da pasta de links, que não diz nada.
+    init(workspaceID: String, project: ProjectConfig, workbenches: Int, joins: [String] = []) {
         item = .project(workspaceID: workspaceID, id: project.id)
         badge = nil
         isCollapsed = project.isCollapsed
@@ -398,7 +400,9 @@ final class SidebarGroupRow: NSView {
         nameLabel.stringValue = project.name
         nameLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         nameLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.8)
-        pathLabel.stringValue = project.exists
+        pathLabel.stringValue = project.isMulti
+            ? (joins.isEmpty ? "nenhuma pasta" : joins.joined(separator: " + "))
+            : project.exists
             ? (project.path as NSString).abbreviatingWithTildeInPath
             : "caminho não existe — \(project.path)"
         pathLabel.textColor = project.exists
@@ -407,7 +411,8 @@ final class SidebarGroupRow: NSView {
         count = workbenches
         isStoredProject = project.isStored
         icon.image = ToolbarButton.symbol(project.isStored
-            ? ["archivebox.fill", "archivebox", "folder"] : ["folder.fill", "folder"])
+            ? ["archivebox.fill", "archivebox", "folder"]
+            : project.isMulti ? ["square.stack.3d.up.fill", "folder.fill"] : ["folder.fill", "folder"])
         icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: project.isStored ? 0.32 : 0.5)
         let add = ToolbarButton(symbols: ["plus"], tooltip: "Nova bancada neste projeto", size: 20)
         add.onClick = { [weak self] in self?.showCreateMenu() }
@@ -843,7 +848,8 @@ final class Sidebar: NSView {
                 list.addSubview(tile)
                 let members = tree.indices(inProject: project.id)
                 let head = SidebarGroupRow(workspaceID: space.id, project: project,
-                                           workbenches: members.count)
+                                           workbenches: members.count,
+                                           joins: space.members(of: project).map(\.name))
                 wire(head)
                 groups.append(head)
                 list.addSubview(head)

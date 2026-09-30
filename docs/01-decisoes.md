@@ -3759,3 +3759,60 @@ começo, repetição, níveis por capacidade, snapshot/`[1m]`/apelido, ultracode
 ambiente) e `EffortDialTests`. No DEV: 21 modelos lidos da 2.1.285 em 0,5 s;
 `/model?…&ultracode=on` subiu `--effort ultracode` com
 `CLAUDE_CODE_EFFORT_LEVEL=medium`, e o `/effort` da TUI mostrou os dois.
+
+## ADR-065 — Multi-projeto: um projeto feito de outros projetos do workspace
+
+**Problema.** Trabalho que atravessa repositórios — o front e o backend da mesma
+feature — não tinha pasta. A bancada abre UMA pasta; com o worktree por
+terminal (ADR-017), cada repo ia para `worktrees/<repo>/<branch>`, em lugares
+diferentes, e nenhum agente via os dois juntos. O editor também não.
+
+**Decisão.** O formulário do workspace ganha, embaixo das pastas, uma seção
+**Multi-projetos**: um nome e algumas das pastas de cima. Vira um
+`ProjectConfig` como os outros, com `members` (ids dos projetos de pasta do
+mesmo workspace). As pastas continuam sendo projetos sozinhas — bancada só do
+backend e bancada do conjunto convivem.
+
+- **A regra do ADR-043 fica:** bancada é de um projeto só. O multi-projeto é
+  mais um tile na barra (ícone de pilha, subtítulo "web + backend"), com
+  bancadas, arrasto e gaveta como qualquer projeto. Nada de `projects: [id]` na
+  bancada nem grupo à parte.
+- **Checkout principal:** `path` é `~/.egeon*/projects/<id>/`, com um link por
+  repositório, refeito a cada arranque e a cada save do formulário. Link aqui é
+  certo: é o repositório de verdade, só que ao lado do outro. Só apaga link — um
+  arquivo seu ali fica.
+- **Worktree:** `<pai comum>/worktrees/<multi-projeto>/<branch>/<repo>`. A
+  branch da bancada dá nome à raiz e vale para todos; cada repo tem uma linha
+  no formulário que a acompanha até você trocá-la — aí só a worktree dele muda
+  de branch, e a subpasta continua com o nome do repo (`cwd` relativo segue
+  valendo). Esvaziar a linha volta a acompanhar. O nível do multi-projeto existe porque
+  `worktrees/<repo>/` já é das worktrees de um repo só (ADR-022). Branch já
+  aberta em outro lugar vira link para lá; repo que recusa não derruba os
+  outros, e o alerta diz o que faltou. Duplicar uma bancada multi-projeto em
+  worktree leva nós, arestas e regras; os `cwd` relativos (`nexus-backend`)
+  valem nas duas porque os nomes das subpastas são os mesmos.
+- **Pasta do terminal:** o campo sugere numa lista só as subpastas da bancada
+  que são repositório, relativas — na worktree, cada uma é a worktree daquele
+  repo. O checkout principal de outro projeto não entra na lista: seria
+  convidar o terminal a trabalhar fora da branch da bancada. Pasta de fora só
+  digitando ou pelo "Escolher…".
+- **Remoção:** as worktrees são as subpastas de verdade da raiz (link não
+  entra — não é desta bancada para apagar), e a pasta-mãe sai quando só
+  sobram links.
+- **Mover entre workspaces:** multi-projeto e projeto que é membro de um não
+  mudam de workspace — o conjunto é por id, e desfazê-lo seria calado.
+
+**Descartado.** Grupo "multi-projeto" na barra com a bancada guardando vários
+projetos: quebrava a regra de um projeto por bancada e escolhia o conjunto a
+cada bancada, em vez de uma vez. Monorepo ou submódulo: mexe no seu repo por
+causa do app. Link para o checkout principal na worktree: a branch deixaria de
+ser isolada.
+
+**Verificação.** `MultiProjectTests` (formato antigo, ida e volta, membros que
+sumiram, pasta nova no mesmo formulário, id mantido, recusa com bancada,
+nomes repetidos, pai comum, mover recusado, links e poda). No DEV com dois repos
+de teste: links criados no arranque; `/worktree` numa bancada do multi-projeto
+abriu `worktrees/AB/feat-x/{repo-a,repo-b}` em `feat/x` (com
+`&nodes=repo-b:fix/api`, o `repo-b` em `fix/api` e a raiz igual) e a bancada nova
+apareceu sob o AB; branch `main` virou dois links para os checkouts;
+`/remove?…&worktrees=1` apagou as duas worktrees e a pasta, sem tocar no link.

@@ -175,10 +175,11 @@ class NodeView: NSView {
     /// exigir duplicar a bancada inteira.
     var onRequestWorktree: ((NodeView) -> Void)?
 
-    /// Uma faixa a mais no cabeçalho, embaixo do nome e dos botões — o modelo e
-    /// o esforço do terminal com IA. Faixa própria, e não ao lado dos ícones: ali
-    /// ela disputava largura com o nome do nó e o estado. Vazia, a faixa não
-    /// existe e o cabeçalho fica como sempre foi.
+    /// Uma barra embaixo do cabeçalho — o modelo e o esforço do terminal com IA.
+    /// Barra à parte, com fundo e fios próprios, e não ao lado dos ícones: ali
+    /// ela disputava largura com o nome do nó e o estado, e colada no subtítulo
+    /// parecia mais uma linha de texto. Vazia, a barra não existe e o cabeçalho
+    /// fica como sempre foi.
     var accessoryRow: [NSView] = [] {
         didSet {
             oldValue.forEach { $0.removeFromSuperview() }
@@ -193,7 +194,7 @@ class NodeView: NSView {
     var accessoryRowWidths: [ObjectIdentifier: CGFloat] = [:] {
         didSet { needsLayout = true }
     }
-    static let accessoryRowHeight: CGFloat = 22
+    static let accessoryRowHeight: CGFloat = 46
 
     /// Onde o cabeçalho acaba: a linha do nome mais a faixa, quando há.
     var headerExtent: CGFloat {
@@ -440,17 +441,15 @@ class NodeView: NSView {
             x -= entreBotões
             controles += botão + entreBotões
         }
-        // Encostada à direita, embaixo dos botões: é controle, como eles.
+        // Encostada à direita, na margem dos botões: é controle, como eles.
         var itemX = bounds.width - margem
         for item in accessoryRow.reversed() where !item.isHidden {
             let size = item.fittingSize
             let pedida = accessoryRowWidths[ObjectIdentifier(item)] ?? size.width
             let largura = max(0, min(pedida, itemX - margem))
             itemX -= largura
-            // Colada no subtítulo: a faixa é continuação do cabeçalho, não uma
-            // barra à parte.
             item.frame = NSRect(x: itemX,
-                                y: Self.headerHeight - 4 + (Self.accessoryRowHeight - size.height) / 2,
+                                y: Self.headerHeight + (Self.accessoryRowHeight - size.height) / 2,
                                 width: largura, height: size.height)
             itemX -= 8
         }
@@ -516,7 +515,14 @@ class NodeView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         NSColor(calibratedWhite: 0.16, alpha: 1).setFill()
-        NSRect(x: 0, y: 0, width: bounds.width, height: headerExtent).fill()
+        NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight).fill()
+        guard !accessoryRow.isEmpty else { return }
+        NSColor(calibratedWhite: 0.125, alpha: 1).setFill()
+        NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: Self.accessoryRowHeight).fill()
+        NSColor(calibratedWhite: 1, alpha: 0.07).setFill()
+        NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: 1).fill()
+        NSColor(calibratedWhite: 0, alpha: 0.35).setFill()
+        NSRect(x: 0, y: headerExtent - 1, width: bounds.width, height: 1).fill()
     }
 
     /// Documento flipped: crescer em altura empurra a borda de baixo, a origem

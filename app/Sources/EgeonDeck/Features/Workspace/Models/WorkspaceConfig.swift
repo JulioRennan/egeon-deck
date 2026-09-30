@@ -19,7 +19,15 @@ struct ProjectConfig: Codable, Equatable {
     /// sem uso: projeto parado há meses pode ser o que você abre amanhã
     /// (ADR-052).
     var stored: Bool?
+    /// Multi-projeto: os ids dos projetos de pasta, deste mesmo workspace, que
+    /// ele junta. `path` passa a ser a pasta de links que os reúne — é ela que
+    /// a bancada abre, e o agente na raiz vê os repositórios lado a lado.
+    ///
+    /// Por id e não por caminho: renomear ou reposicionar o projeto de pasta não
+    /// desfaz o conjunto.
+    var members: [String]?
 
+    var isMulti: Bool { members != nil }
     var url: URL { URL(fileURLWithPath: (path as NSString).expandingTildeInPath) }
     var exists: Bool { FileManager.default.fileExists(atPath: url.path) }
     var isCollapsed: Bool { collapsed ?? false }
@@ -38,7 +46,7 @@ struct ProjectConfig: Codable, Equatable {
         Self.normalize(path) == Self.normalize(other)
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, path, collapsed, stored }
+    enum CodingKeys: String, CodingKey { case id, name, path, collapsed, stored, members }
 
     /// À mão só por causa do `id`: um projeto escrito no arquivo sem ele ganha
     /// um ao carregar, como a bancada.
@@ -50,15 +58,17 @@ struct ProjectConfig: Codable, Equatable {
             ?? URL(fileURLWithPath: path).lastPathComponent
         collapsed = try c.decodeIfPresent(Bool.self, forKey: .collapsed)
         stored = try c.decodeIfPresent(Bool.self, forKey: .stored)
+        members = try c.decodeIfPresent([String].self, forKey: .members)
     }
 
     init(id: String = WorkbenchConfig.newID(), name: String, path: String,
-         collapsed: Bool? = nil, stored: Bool? = nil) {
+         collapsed: Bool? = nil, stored: Bool? = nil, members: [String]? = nil) {
         self.id = id
         self.name = name
         self.path = path
         self.collapsed = collapsed
         self.stored = stored
+        self.members = members
     }
 
     /// Projeto novo para uma pasta: o nome é o da pasta, o caminho vai com `~`.
@@ -85,6 +95,10 @@ struct WorkspaceConfig: Codable, Equatable {
     var collapsed: Bool?
     /// A gaveta dos guardados está aberta.
     var storedOpen: Bool?
+    /// A última configuração escolhida para cada CLI (chave do `agents.json`)
+    /// num terminal deste workspace. É o que um terminal novo sugere: quem
+    /// trabalha com `~/.claude-agro` num assunto escolhe ela toda vez.
+    var lastConfigs: [String: String]?
 
     var isCollapsed: Bool { collapsed ?? false }
     var isStoredOpen: Bool { storedOpen ?? false }
@@ -96,7 +110,15 @@ struct WorkspaceConfig: Codable, Equatable {
     func project(withID id: String) -> ProjectConfig? { projects.first { $0.id == id } }
     func project(owning path: String) -> ProjectConfig? { projects.first { $0.owns(path: path) } }
 
-    enum CodingKeys: String, CodingKey { case id, name, icon, projects, collapsed, storedOpen }
+    /// Os projetos de pasta que um multi-projeto junta, na ordem dele. Membro
+    /// que sumiu do workspace é pulado: o arquivo é editável à mão.
+    func members(of project: ProjectConfig) -> [ProjectConfig] {
+        (project.members ?? []).compactMap { id in
+            self.project(withID: id).flatMap { $0.isMulti ? nil : $0 }
+        }
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, icon, projects, collapsed, storedOpen, lastConfigs }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -106,6 +128,15 @@ struct WorkspaceConfig: Codable, Equatable {
         projects = try c.decodeIfPresent([ProjectConfig].self, forKey: .projects) ?? []
         collapsed = try c.decodeIfPresent(Bool.self, forKey: .collapsed)
         storedOpen = try c.decodeIfPresent(Bool.self, forKey: .storedOpen)
+        lastConfigs = try c.decodeIfPresent([String: String].self, forKey: .lastConfigs)
+    }
+
+    /// Guarda a escolha. Escolher o padrão da CLI também é escolha: apaga a
+    /// lembrança, e o próximo terminal sugere o padrão.
+    mutating func remember(config: String?, for agent: String) {
+        var map = lastConfigs ?? [:]
+        map[agent] = config
+        lastConfigs = map.isEmpty ? nil : map
     }
 
     init(id: String = WorkbenchConfig.newID(), name: String, icon: String? = nil,

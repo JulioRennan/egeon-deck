@@ -63,7 +63,9 @@ app/Sources/EgeonDeck/
   faz o mesmo de fora. Cada workspace tem uma **gaveta**: projeto guardado
   (escolha sua, arrastando ou pelo menu — nunca por tempo sem uso) sai da
   lista de cima; a gaveta aparece mesmo vazia, porque é o alvo do arrasto
-  (ADR-052).
+  (ADR-052). **Multi-projeto** (ADR-065) é projeto feito de outros do mesmo
+  workspace (`members`): a pasta dele é `projects/<id>/` com um link por repo,
+  e em worktree vira `worktrees/<multi>/<branch>/<repo>`.
 - **Bancada** — uma frente de trabalho: pasta + nós abertos sobre ela.
 - **Nó** — um card: `editor` · `shell` · `agent` · `web`. `NodeConfig` é a
   montagem; conversa nunca é copiada junto (`withoutConversation`).

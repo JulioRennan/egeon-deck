@@ -128,6 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.write("Egeon Deck iniciando — \(configs.count) bancadas, "
                   + "\(workspaces.count) workspaces, \(agents.count) perfis de agente")
         reconcileWorkspaces()
+        // Link que alguém apagou à mão, ou repositório que mudou de lugar no
+        // arquivo: a pasta do multi-projeto é derivada, e é refeita a cada arranque.
+        MultiProjectLinks.syncAll(workspaces)
 
         // Escrito no arranque, e não na primeira worktree: é um arquivo feito
         // para ser lido e ajustado, e para isso precisa existir antes.
@@ -700,7 +703,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// mesma branch em duas worktrees, por design.
     private func createWorkbenchFromWorktree(inProject projectID: String? = nil) {
         let repo: URL
-        if let projectID, let project = project(withID: projectID) {
+        if let projectID, let project = project(withID: projectID), project.isMulti {
+            createMultiWorktree(project)
+            return
+        } else if let projectID, let project = project(withID: projectID) {
             repo = project.url
         } else {
             let panel = NSOpenPanel()
@@ -767,6 +773,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         into: configs.count - 1)
     }
 
+    /// Bancada de multi-projeto em worktree: a mesma branch em cada repositório,
+    /// todas dentro de uma pasta só (ADR-065).
+    ///
+    /// Repositório que recusa não derruba os outros: a bancada nasce com o que
+    /// deu, e o alerta diz o que faltou — é o mesmo critério do worktree por
+    /// terminal, em que a vizinha que falha não impede a principal.
+    private func createMultiWorktree(_ project: ProjectConfig, inheriting origin: WorkbenchConfig? = nil) {
+        guard let space = workspaces.first(where: { $0.project(withID: project.id) != nil }) else { return }
+        let members = space.members(of: project)
+        guard !members.isEmpty else {
+            presentError("\"\(project.name)\" não junta pasta nenhuma",
+                         Worktree.Failure.notARepo(project.path))
+            return
+        }
+        guard let form = MultiWorktreeForm.ask(
+            project: project, links: MultiProject.linkNames(for: members).map(\.name),
+            offersTemplate: origin == nil) else { return }
+
+        let opened = openMultiWorktree(project, members: members, branch: form.branch,
+                                       overrides: form.overrides,
+                                       template: form.template, inheriting: origin)
+        guard opened.index != nil else {
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = "Nenhuma worktree foi criada"
+            alert.informativeText = opened.failures.joined(separator: "\n")
+            alert.runModal()
+            return
+        }
+        if !opened.failures.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Algumas worktrees ficaram de fora"
+            alert.informativeText = opened.failures.joined(separator: "\n")
+            alert.runModal()
+        }
+    }
+
+    /// A criação em si, sem diálogo — o socket também chega aqui. `index` nil é
+    /// nenhum repositório aceitou, e aí não há bancada.
+    private func openMultiWorktree(_ project: ProjectConfig, members: [ProjectConfig],
+                                   branch: String, overrides: [String: String] = [:],
+                                   template: String?, inheriting origin: WorkbenchConfig?)
+        -> (index: Int?, root: String, failures: [String]) {
+        let links = MultiProject.linkNames(for: members)
+        let branches = MultiProject.branches(for: links.map(\.name), workbench: branch,
+                                             overrides: overrides)
+        let root = MultiProject.worktreeRoot(project: project, members: members, branch: branch)
+        do {
+            try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        } catch {
+            return (nil, root, ["\(root): \(error)"])
+        }
+
+        var pending: [(repo: String, path: String)] = []
+        var failures: [String] = []
+        for (link, member) in zip(links, members) {
+            let repoRoot = Worktree.mainRepo(of: member.url.path) ?? member.url.path
+            let destination = (root as NSString).appendingPathComponent(link.name)
+            do {
+                let created = try Worktree.create(from: repoRoot, branch: branches[link.name] ?? branch,
+                                                  destination: destination, carryDirty: true)
+                if created.path != destination {
+                    // A branch já está aberta em outro lugar: o git não deixa
+                    // abrir de novo, e o link é o que põe ela aqui mesmo assim.
+                    try FileManager.default.createSymbolicLink(atPath: destination,
+                                                               withDestinationPath: created.path)
+                    Log.write("multi-projeto: \(link.name) já estava aberta em \(created.path) — ligada")
+                }
+                if !created.reused { pending.append((repoRoot, created.path)) }
+            } catch {
+                Log.write("multi-projeto: worktree de \(member.name) falhou — \(error)")
+                failures.append("\(member.name): \(error)")
+            }
+        }
+        guard failures.count < members.count else {
+            MultiProjectLinks.pruneRoot(URL(fileURLWithPath: root))
+            return (nil, root, failures)
+        }
+
+        let nodes = origin.map { Self.repointed($0.nodes, originRoot: $0.url.path, cwds: [:]) }
+            ?? template.flatMap { WorkbenchTemplateStore.template(named: $0)?.instantiate() } ?? []
+        var config = WorkbenchConfig(
+            name: WorkbenchStore.availableName(basedOn: Worktree.sanitize(branch),
+                                             taken: configs.map(\.name)),
+            path: (root as NSString).abbreviatingWithTildeInPath,
+            nodes: nodes,
+            template: origin?.template ?? template,
+            project: project.id)
+        config.edges = origin?.edges
+        config.rules = origin?.rules
+        config.view = origin?.view
+        config.mosaic = origin?.mosaic
+
+        configs.append(config)
+        reconcileWorkspaces()
+        // Ela já nasce com projeto: a conciliação não muda nada e não redesenha.
+        reloadSidebar()
+        schedulePersist()
+        activate(configs.count - 1)
+        Log.write("multi-projeto: bancada \"\(config.name)\" em \(root) — "
+                  + "\(members.count - failures.count)/\(members.count) worktrees")
+        copyUnversioned(pending, into: configs.count - 1)
+        return (configs.count - 1, root, failures)
+    }
+
     /// Duplica a bancada numa worktree nova, com os mesmos nós.
     ///
     /// Partir da bancada em vez do `+` é o que dispensa escolher template: o que
@@ -774,6 +885,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func duplicateWorkbenchAsWorktree(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
         let origin = configs[index]
+        if let project = origin.project.flatMap({ project(withID: $0) }), project.isMulti {
+            createMultiWorktree(project, inheriting: origin)
+            return
+        }
 
         let status: Worktree.Status
         do {
@@ -1395,8 +1510,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.runModal()
             return
         }
+        let roots = multiRoots(config)
         removeWorkbench(index)
-        sweepLeftovers(sobras)
+        sweepLeftovers(sobras, roots: roots)
     }
 
     /// A segunda passada nas pastas que o git deixou para trás.
@@ -1405,7 +1521,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// quem ignorou leva SIGKILL meio segundo depois. Antes disso o dev server
     /// ainda estava recriando `.vite` mais rápido do que qualquer um apaga — é
     /// por isso que a faxina não roda junto com o `worktree remove`.
-    private func sweepLeftovers(_ paths: [String]) {
+    private func sweepLeftovers(_ paths: [String], roots: [URL] = []) {
+        roots.forEach { MultiProjectLinks.pruneRoot($0) }
         guard !paths.isEmpty else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             for path in paths {
@@ -1416,7 +1533,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.write("worktree: \(path) resistiu — \(error)")
                 }
             }
+            roots.forEach { MultiProjectLinks.pruneRoot($0) }
         }
+    }
+
+    private func isMultiProject(_ config: WorkbenchConfig) -> Bool {
+        config.project.flatMap { project(withID: $0) }?.isMulti ?? false
+    }
+
+    /// A pasta-mãe de uma bancada multi-projeto em worktree, para sair junto
+    /// com as worktrees de dentro. A do checkout principal é a pasta de links
+    /// do projeto, e fica.
+    private func multiRoots(_ config: WorkbenchConfig) -> [URL] {
+        guard isMultiProject(config),
+              let project = config.project.flatMap({ project(withID: $0) }),
+              !project.owns(path: config.url.path) else { return [] }
+        return [config.url]
     }
 
     /// PNG do card de um nó, direto do AppKit.
@@ -1493,8 +1625,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        let roots = purge ? multiRoots(configs[index]) : []
         removeWorkbench(index)
-        sweepLeftovers(sobras)
+        sweepLeftovers(sobras, roots: roots)
         return ["ok": true, "workbench": name, "removed": removidas,
                 "sweeping": sobras,
                 "kept": involved.filter { $0.usedBy != nil }
@@ -1527,6 +1660,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let raiz = config.url.path
 
         if config.exists, Worktree.isLinkedWorktree(raiz) { owners[raiz] = ["bancada"] }
+
+        // Bancada de multi-projeto em worktree: a raiz não é repositório, e cada
+        // subpasta é uma worktree. Link não entra — é a pasta de links do
+        // checkout principal, ou uma worktree de outro lugar reaproveitada, e
+        // nenhuma das duas é desta bancada para apagar (ADR-065).
+        if isMultiProject(config), !Worktree.isLinkedWorktree(raiz) {
+            for child in MultiProjectLinks.realSubfolders(of: config.url)
+            where Worktree.isLinkedWorktree(child) {
+                owners[child] = ["bancada"]
+            }
+        }
 
         for node in config.nodes where node.type != .web {
             let path = config.resolvedDirectory(for: node)
@@ -1737,14 +1881,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func createWorkspace() {
         guard let form = WorkspaceForm.ask() else { return }
-        var space = WorkspaceConfig(name: form.name,
-                                    projects: form.folders.map(ProjectConfig.forFolder))
+        var space = WorkspaceConfig(name: form.name)
+        space.projects = WorkspaceEdit.apply(
+            to: [], folders: form.folders, multis: form.multis,
+            linkPath: Self.multiProjectPath, hasWorkbenches: { _ in false }).projects
         if let source = form.iconSource {
             do { try WorkspaceStore.installIcon(from: source, into: &space) }
             catch { presentError("Não consegui copiar a imagem", error) }
         }
         workspaces.append(space)
         WorkspaceStore.save(workspaces)
+        MultiProjectLinks.syncAll([space])
         Log.write("workspace \"\(space.name)\" criado com \(space.projects.count) projeto(s)")
         // Bancada que já apontava para uma dessas pastas continua no projeto
         // antigo: pertencimento é por id, e trocar de teto é decisão sua.
@@ -1757,25 +1904,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var space = workspaces[w]
         space.name = form.name
 
-        // Pasta que já era projeto mantém o id — é ele que as bancadas guardam.
-        // Pasta tirada com bancada dentro fica: senão a bancada viraria órfã
-        // sem você ter pedido isso.
         let tree = WorkspaceTree(workspaces: workspaces, workbenches: configs)
-        var kept: [ProjectConfig] = []
-        var refused: [String] = []
-        for project in space.projects {
-            let stillWanted = form.folders.contains { project.owns(path: $0) }
-            if stillWanted {
-                kept.append(project)
-            } else if !tree.indices(inProject: project.id).isEmpty {
-                kept.append(project)
-                refused.append(project.name)
-            }
-        }
-        for folder in form.folders where !kept.contains(where: { $0.owns(path: folder) }) {
-            kept.append(ProjectConfig.forFolder(folder))
-        }
-        space.projects = kept
+        let outcome = WorkspaceEdit.apply(
+            to: space.projects, folders: form.folders, multis: form.multis,
+            linkPath: Self.multiProjectPath,
+            hasWorkbenches: { !tree.indices(inProject: $0).isEmpty })
+        space.projects = outcome.projects
+        let refused = outcome.refused
 
         if form.clearIcon { WorkspaceStore.removeIcon(of: &space) }
         if let source = form.iconSource {
@@ -1784,6 +1919,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         workspaces[w] = space
         WorkspaceStore.save(workspaces)
+        MultiProjectLinks.syncAll([space])
         Log.write("workspace \"\(space.name)\" editado — \(space.projects.count) projeto(s)")
         reloadSidebar()
 
@@ -1793,6 +1929,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText = "Remova antes as bancadas de: \(refused.joined(separator: ", "))."
             alert.runModal()
         }
+    }
+
+    private static func multiProjectPath(_ id: String) -> String {
+        (Flavor.current.multiProjectDirectory(id).path as NSString).abbreviatingWithTildeInPath
     }
 
     private func confirmRemoveWorkspace(_ id: String) {
@@ -2774,8 +2914,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 confirmLabel: "Criar",
                 agents: agents,
                 initial: NodeTemplate(name: "", kind: .agent, agent: "claude"),
-                root: configs[index].url)
+                root: configs[index].url,
+                folderSuggestions: folderSuggestions(for: index),
+                suggestedConfigs: workspace(of: index)?.lastConfigs ?? [:])
             guard let result = dialog.run() else { return }
+            rememberConfig(result.component, index: index)
             if result.saveAsNodeTemplate { NodeTemplateStore.put(result.component) }
             place(component: result.component, rect: rect, index: index)
             return
@@ -2796,6 +2939,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Componentes
 
+    private func workspace(of index: Int) -> WorkspaceConfig? {
+        guard let pid = configs[index].project else { return nil }
+        return workspaces.first { $0.project(withID: pid) != nil }
+    }
+
+    /// A configuração escolhida no formulário vira a sugestão do workspace para
+    /// aquele CLI — ao criar e ao editar, porque as duas são escolha sua.
+    private func rememberConfig(_ component: NodeTemplate, index: Int) {
+        guard component.kind == .agent, let agent = component.agent,
+              let pid = configs[index].project,
+              let w = workspaces.firstIndex(where: { $0.project(withID: pid) != nil }) else { return }
+        let config = component.resolved(for: agent).config
+        guard workspaces[w].lastConfigs?[agent] != config else { return }
+        workspaces[w].remember(config: config, for: agent)
+        WorkspaceStore.save(workspaces)
+    }
+
+    private func folderSuggestions(for index: Int) -> [String] {
+        FolderSuggestions.list(repoChildren: FolderSuggestions.repoChildren(of: configs[index].url))
+    }
+
     /// Abre o formulário e cria o terminal no primeiro lugar livre do canvas.
     private func configureNewTerminal(index: Int) {
         guard index >= 0, index < configs.count, let canvas = shell(at: index)?.canvas else { return }
@@ -2805,8 +2969,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             confirmLabel: "Criar",
             agents: agents,
             initial: NodeTemplate(name: "", kind: .agent, agent: "claude"),
-            root: configs[index].url)
+            root: configs[index].url,
+            folderSuggestions: folderSuggestions(for: index),
+            suggestedConfigs: workspace(of: index)?.lastConfigs ?? [:])
         guard let result = dialog.run() else { return }
+        rememberConfig(result.component, index: index)
 
         if result.saveAsNodeTemplate { NodeTemplateStore.put(result.component) }
 
@@ -2847,8 +3014,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             confirmLabel: "Aplicar",
             agents: agents,
             initial: NodeTemplateStore.capture(from: current, name: current.component ?? current.id),
-            root: configs[index].url)
+            root: configs[index].url,
+            folderSuggestions: folderSuggestions(for: index))
         guard let result = dialog.run() else { return }
+        // Só se mudou: mexer no nome de um terminal no padrão não é escolher o
+        // padrão para o workspace.
+        if result.component.resolved(for: result.component.agent).config != current.config
+            || result.component.agent != current.agent {
+            rememberConfig(result.component, index: index)
+        }
 
         if result.saveAsNodeTemplate { NodeTemplateStore.put(result.component) }
 
@@ -3096,6 +3270,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "branch": name, "path": created.path,
                         "reused": created.reused]
             }
+        }
+
+        if let project = origin.project.flatMap({ project(withID: $0) }), project.isMulti {
+            guard !branch.isEmpty else { return ["ok": false, "error": "multi-projeto pede branch"] }
+            // Em multi-projeto o `&nodes=` fala de repositório: `nexus-backend:fix/api`
+            // é a linha daquele repo no formulário.
+            let repoBranches = nodeBranches
+            let members = workspaces.first { $0.project(withID: project.id) != nil }?
+                .members(of: project) ?? []
+            let opened = openMultiWorktree(project, members: members, branch: branch,
+                                           overrides: repoBranches, template: nil,
+                                           inheriting: origin)
+            return ["ok": opened.index != nil, "path": opened.root, "failed": opened.failures,
+                    "workbench": opened.index.map { configs[$0].name } ?? ""]
         }
 
         guard let repoRoot = Worktree.mainRepo(of: origin.url.path),

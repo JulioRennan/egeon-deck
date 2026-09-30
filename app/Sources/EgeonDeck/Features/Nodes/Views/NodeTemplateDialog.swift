@@ -4,6 +4,12 @@ import AppKit
 ///
 /// Um formulário só, e não dois parecidos, porque as perguntas são idênticas:
 /// que papel é este, o que roda, em que pasta, com qual instrução.
+///
+/// O tipo é uma aba, e os campos seguem ela: shell é nome, comando e pasta;
+/// agente é CLI, modelo e esforço, configuração, pasta, papel e regras — nessa
+/// ordem, que é a de "com o quê sobe" até "como trabalha". Campo que o CLI não
+/// tem não aparece: desabilitado, ele convidava a preencher o que seria
+/// ignorado.
 final class NodeTemplateDialog {
 
     struct Result {
@@ -19,44 +25,78 @@ final class NodeTemplateDialog {
 
     /// Raiz da bancada, quando o formulário é de um nó dela.
     ///
-    /// Serve ao botão de escolher pasta: é o que permite gravar RELATIVO quando a
-    /// escolha está dentro da bancada. Sem raiz — formulário de componente solto —
-    /// só existe caminho absoluto a gravar.
+    /// Serve ao + da pasta: é o que permite gravar RELATIVO quando a escolha
+    /// está dentro da bancada. Sem raiz — formulário de componente solto — só
+    /// existe caminho absoluto a gravar.
     private let root: URL?
+    /// As subpastas da bancada que a lista de pasta oferece (`FolderSuggestions`).
+    private let folderSuggestions: [String]
+    /// A configuração que cada CLI sugere quando o terminal ainda não tem uma:
+    /// a última escolhida no workspace. Vazio ao editar — ali vale a do nó.
+    private let suggestedConfigs: [String: String]
 
-    /// Ordem estável para o popup de CLI.
+    /// Ordem estável para os radios de CLI.
     private var agentKeys: [String] { agents.keys.sorted() }
 
-    /// Valor de configuração de cada item do popup, na mesma ordem. `nil` é o
-    /// padrão da CLI — não escrever nada no ambiente.
-    private var configValues: [String?] = []
-
-    /// Escolha vigente, para restaurá-la quando você abre o seletor de pasta e
-    /// desiste — nesse instante o item selecionado é o "Escolher pasta…".
-    private var lastConfig: String?
-
     init(title: String, confirmLabel: String,
-         agents: [String: AgentProfile], initial: NodeTemplate, root: URL? = nil) {
+         agents: [String: AgentProfile], initial: NodeTemplate, root: URL? = nil,
+         folderSuggestions: [String] = [], suggestedConfigs: [String: String] = [:]) {
         self.title = title
         self.confirmLabel = confirmLabel
         self.agents = agents
         self.initial = initial
         self.root = root
+        self.folderSuggestions = folderSuggestions
+        self.suggestedConfigs = suggestedConfigs
+    }
+
+    /// A configuração que entra na tela para um CLI: a dele, ou a sugerida.
+    private func config(for cli: String?, own: String?) -> String? {
+        own ?? cli.flatMap { suggestedConfigs[$0] }
     }
 
     // MARK: - Campos
 
+    private let kindTabs = NSSegmentedControl(labels: ["Shell", "Agente"],
+                                              trackingMode: .selectOne, target: nil, action: nil)
     private let nameField = NSTextField()
-    private let kindPicker = HandPopUpButton()
-    private let agentPicker = HandPopUpButton()
     private let cmdField = NSTextField()
-    private let cwdField = NSTextField()
-    private let cwdBrowse = HandButton(title: "Escolher…", target: nil, action: nil)
+    private var agentRadios: [NSButton] = []
+    private var agentGroup: RadioGroup?
+    private let modelPicker = HandPopUpButton()
+    private let effortPicker = HandPopUpButton()
+    /// Popup, sem digitação: as descobertas no disco na lista, e o + do título
+    /// para a que não está — caminho digitado à mão era erro de digitação
+    /// virando configuração que não existe.
+    private let configField = HandPopUpButton()
+    private let configBrowse = NodeTemplateDialog.plusButton("Outra configuração")
+    /// Valor de cada item da lista de configuração, na mesma ordem. `nil` é o
+    /// padrão da CLI — não escrever nada no ambiente.
+    private var configItems: [(title: String, value: String?)] = []
+    private let folderScroll = NSScrollView()
+    private let folderList = FlippedView()
+    private let folderAdd = NodeTemplateDialog.plusButton("Outra pasta")
+    private var folderOptions: [String] = []
+    private var folderRadios: [NSButton] = []
+    private var folderGroup: RadioGroup?
+    private var selectedFolder = ""
     private let promptField = NSTextView()
-    private let saveBox = HandButton(checkboxWithTitle: "Salvar como componente reutilizável",
-                                   target: nil, action: nil)
-    private let promptLabel = NSTextField(labelWithString: "PAPEL — quem este terminal é")
     private let rulesField = NSTextView()
+    private let promptScroll = NSScrollView()
+    private let rulesScroll = NSScrollView()
+    private let saveBox = HandButton(checkboxWithTitle: "Salvar como componente reutilizável",
+                                     target: nil, action: nil)
+
+    private let nameCaption = caption("NOME")
+    private let cmdCaption = caption("COMANDO — vazio abre o zsh")
+    private let agentCaption = caption("CLI")
+    private let modelCaption = caption("MODELO")
+    private let effortCaption = caption("ESFORÇO")
+    private let configCaption = caption("CONFIGURAÇÃO")
+    private let folderCaption = caption("PASTA — relativa à raiz da bancada")
+    private let promptCaption = caption("PAPEL — quem este terminal é")
+    private let rulesCaption = caption("REGRAS — somam às da bancada")
+
     /// O componente em edição, com o que CADA CLI tem. O formulário mostra um
     /// por vez: sem guardar o resto, salvar com o Claude Code na tela apagaria
     /// o que o Codex tinha de próprio (ADR-057).
@@ -64,49 +104,64 @@ final class NodeTemplateDialog {
     /// Qual CLI está na tela agora. Trocar guarda o que você digitou no CLI que
     /// sai, antes de mostrar o que entra.
     private var shownAgent: String?
-    private let rulesLabel = NSTextField(
-        labelWithString: "REGRAS — como se trabalha aqui (somam às da bancada)")
-    private var rulesScroll: NSScrollView?
-    private let agentLabel = NSTextField(labelWithString: "CLI")
-    private let configPicker = HandPopUpButton()
-    private let configLabel = NSTextField(labelWithString: "CONFIGURAÇÃO")
-    private let modelPicker = HandPopUpButton()
-    private let modelLabel = NSTextField(labelWithString: "MODELO")
-    private static let defaultModelOption = "padrão do CLI"
-    private let effortPicker = HandPopUpButton()
-    private let effortLabel = NSTextField(labelWithString: "ESFORÇO")
-    private var promptScroll: NSScrollView?
 
     private let tabs = NSTabView()
+    /// Segura o target dos controles enquanto o modal roda.
+    private var actions: DialogActions?
 
-    private static let shellOption = "Shell"
-    private static let agentOption = "Agente (IA)"
-    private static let browseConfigOption = "Escolher pasta…"
-    /// Altura do formulário. Numa view não-flipped o y cresce para cima, então
-    /// os campos do topo são posicionados a partir daqui.
-    private static let formHeight: CGFloat = 492
+    private static let defaultModelOption = "padrão do CLI"
+    private static let defaultConfigOption = "padrão da CLI"
+    private static let formWidth: CGFloat = 720
+    /// Mais alto que isto, o `NSAlert` troca para o layout com o ícone ao lado
+    /// (é como ele cabe numa tela baixa), e o formulário vai parar encostado na
+    /// borda direita da janela. Espaço a mais vem da largura.
+    private static let formHeight: CGFloat = 510
+    /// Folga entre os campos e a moldura da aba.
+    private static let inset: CGFloat = 12
+    /// Do título ao campo, e de um campo ao título do próximo.
+    private static let labelGap: CGFloat = 19
+    private static let gap: CGFloat = 14
+
+    /// O "escolher outro" do formulário: um + ao lado do título do campo, igual
+    /// em todos.
+    private static func plusButton(_ tip: String) -> HandButton {
+        let button = HandButton(
+            image: NSImage(systemSymbolName: "plus.circle.fill", accessibilityDescription: tip)
+                ?? NSImage(), target: nil, action: nil)
+        button.isBordered = false
+        button.imageScaling = .scaleProportionallyUpOrDown
+        button.contentTintColor = .controlAccentColor
+        button.toolTip = tip
+        return button
+    }
+
+    private static func caption(_ text: String) -> NSTextField {
+        let field = NSTextField(labelWithString: text)
+        field.font = .systemFont(ofSize: 10, weight: .semibold)
+        field.textColor = .secondaryLabelColor
+        return field
+    }
+
+    private var isAgent: Bool { kindTabs.selectedSegment == 1 }
 
     /// Preenche o formulário a partir de um componente salvo e leva para a aba de
     /// detalhes. Os campos seguem editáveis: o preset é ponto de partida, não
     /// camisa de força.
     private func apply(_ component: NodeTemplate) {
         nameField.stringValue = component.name
-        kindPicker.selectItem(withTitle: component.kind == .agent ? Self.agentOption
-                                                                  : Self.shellOption)
-        if let agent = component.agent, let index = agentKeys.firstIndex(of: agent) {
-            agentPicker.selectItem(at: index)
-        }
+        kindTabs.selectedSegment = component.kind == .agent ? 1 : 0
+        selectAgent(component.agent)
         let resolved = component.resolved(for: component.agent)
-        reloadConfigPicker(select: resolved.config)
+        reloadConfig(select: resolved.config)
         reloadModelPicker(select: resolved.model)
         reloadEffortPicker(select: resolved.effort)
-        cmdField.stringValue = resolved.cmd ?? ""
-        cwdField.stringValue = component.cwd ?? ""
+        cmdField.stringValue = component.command ?? ""
+        reloadFolders(select: component.cwd ?? "")
         // O preset traz o que ele tem para cada CLI junto: escolher um componente
         // e trocar de CLI depois devolve o que aquele CLI tinha lá.
         loaded = component
         showTexts(of: component.agent)
-        updateAgentFields()
+        relayout()
 
         // Escolher um preset não é o fim da tarefa: quase sempre você quer
         // ajustar o nome ou a pasta antes de criar.
@@ -125,15 +180,12 @@ final class NodeTemplateDialog {
 
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
 
-        let isAgent = kindPicker.titleOfSelectedItem == Self.agentOption
-
         // Nome em branco vira um padrão em vez de cancelar: confirmar e não ver
         // nada acontecer é o pior desfecho possível para um formulário.
         var name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.isEmpty {
             name = isAgent ? (selectedAgentKey ?? "agente") : "sh"
         }
-        let cwd = cwdField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // O que está na tela é do CLI que está na tela: a mesma regra da troca
         // de CLI, aplicada de novo na saída (ADR-057).
@@ -142,17 +194,18 @@ final class NodeTemplateDialog {
         base.name = name
         base.kind = isAgent ? .agent : .shell
         base.agent = isAgent ? selectedAgentKey : nil
-        base.cwd = cwd.isEmpty ? nil : Self.normalizedFolder(cwd)
-        if !isAgent {
+        base.cwd = selectedFolder.isEmpty ? nil : Self.normalizedFolder(selectedFolder)
+        if isAgent {
+            base.command = nil
+        } else {
             // Shell não tem CLI, papel nem regra — e não pode carregar o mapa
             // de um agente que ele deixou de ser.
+            base.command = trimmed(cmdField.stringValue)
             base.prompt = nil
             base.rules = nil
             base.byAgent = nil
         }
-        let component = base
-
-        return Result(component: component, saveAsNodeTemplate: saveBox.state == .on)
+        return Result(component: base, saveAsNodeTemplate: saveBox.state == .on)
     }
 
     /// Duas abas: montar do zero, ou partir de um componente salvo.
@@ -161,7 +214,7 @@ final class NodeTemplateDialog {
     /// viviam atrás de uma pressão longa no botão da barra, o que fazia salvar
     /// funcionar e ninguém achar o resultado.
     private func buildForm() -> NSView {
-        let size = NSSize(width: 452, height: Self.formHeight + 66)
+        let size = NSSize(width: Self.formWidth + 32, height: Self.formHeight + 66)
         tabs.frame = NSRect(origin: .zero, size: size)
 
         let details = NSTabViewItem(identifier: "detalhes")
@@ -178,147 +231,179 @@ final class NodeTemplateDialog {
     }
 
     private func buildDetailsTab() -> NSView {
-        let width: CGFloat = 420
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: Self.formHeight))
+        let width = Self.formWidth
+        let container = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: Self.formHeight))
+        let actions = DialogActions(self)
+        self.actions = actions
 
-        func caption(_ text: String, y: CGFloat) -> NSTextField {
-            let field = NSTextField(labelWithString: text)
-            field.font = .systemFont(ofSize: 10, weight: .semibold)
-            field.textColor = .secondaryLabelColor
-            field.frame = NSRect(x: 0, y: y, width: width, height: 13)
-            return field
-        }
+        kindTabs.selectedSegment = initial.kind == .agent ? 1 : 0
+        kindTabs.segmentDistribution = .fillEqually
+        kindTabs.target = actions
+        kindTabs.action = #selector(DialogActions.kindChanged)
 
-        container.addSubview(caption("NOME", y: 476))
-        nameField.frame = NSRect(x: 0, y: 450, width: width, height: 22)
         nameField.stringValue = initial.name
         nameField.placeholderString = "revisor, front end, build…"
-        container.addSubview(nameField)
 
-        container.addSubview(caption("TIPO", y: 430))
-        kindPicker.frame = NSRect(x: 0, y: 404, width: 180, height: 22)
-        kindPicker.addItems(withTitles: [Self.shellOption, Self.agentOption])
-        kindPicker.selectItem(withTitle: initial.kind == .agent ? Self.agentOption : Self.shellOption)
-        kindPicker.target = self
-        kindPicker.action = #selector(kindChanged)
-        container.addSubview(kindPicker)
-
-        agentLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        agentLabel.textColor = .secondaryLabelColor
-        agentLabel.frame = NSRect(x: 200, y: 430, width: 220, height: 13)
-        container.addSubview(agentLabel)
-
-        agentPicker.frame = NSRect(x: 200, y: 404, width: 220, height: 22)
-        agentPicker.addItems(withTitles: agentKeys.map { agents[$0]?.displayName ?? $0 })
-        if let agent = initial.agent, let index = agentKeys.firstIndex(of: agent) {
-            agentPicker.selectItem(at: index)
-        }
-        agentPicker.target = self
-        agentPicker.action = #selector(agentChanged)
-        container.addSubview(agentPicker)
-
-        configLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        configLabel.textColor = .secondaryLabelColor
-        configLabel.frame = NSRect(x: 0, y: 384, width: width, height: 13)
-        container.addSubview(configLabel)
-
-        configPicker.frame = NSRect(x: 0, y: 358, width: 190, height: 22)
-        configPicker.target = self
-        configPicker.action = #selector(configChanged)
-        container.addSubview(configPicker)
-        reloadConfigPicker(select: initial.resolved(for: initial.agent).config)
-
-        // Na mesma linha da configuração: as três são "com o quê este CLI sobe".
-        modelLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        modelLabel.textColor = .secondaryLabelColor
-        modelLabel.frame = NSRect(x: 200, y: 384, width: 110, height: 13)
-        container.addSubview(modelLabel)
-        modelPicker.frame = NSRect(x: 200, y: 358, width: 110, height: 22)
-        container.addSubview(modelPicker)
-        reloadModelPicker(select: initial.resolved(for: initial.agent).model)
-
-        effortLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        effortLabel.textColor = .secondaryLabelColor
-        effortLabel.frame = NSRect(x: 320, y: 384, width: 100, height: 13)
-        container.addSubview(effortLabel)
-        effortPicker.frame = NSRect(x: 320, y: 358, width: 100, height: 22)
-        container.addSubview(effortPicker)
-        reloadEffortPicker(select: initial.resolved(for: initial.agent).effort)
-
-        container.addSubview(caption("COMANDO — vazio usa o padrão do CLI", y: 338))
-        cmdField.frame = NSRect(x: 0, y: 312, width: width, height: 22)
-        cmdField.stringValue = initial.resolved(for: initial.agent).cmd ?? ""
         cmdField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        // Duas instalações do mesmo CLI se distinguem aqui.
-        cmdField.placeholderString = "ex: claude --model opus"
-        container.addSubview(cmdField)
+        cmdField.placeholderString = "ex: npm run dev"
+        cmdField.stringValue = initial.command ?? ""
 
-        container.addSubview(caption("PASTA — relativa à raiz da bancada", y: 292))
-        cwdField.frame = NSRect(x: 0, y: 266, width: width - 96, height: 22)
-        cwdField.stringValue = initial.cwd ?? ""
-        cwdField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        cwdField.placeholderString = "ex: deck-backend — vazio usa a raiz"
-        container.addSubview(cwdField)
+        // Radio e não popup: são poucos, e ver os três lado a lado é saber de
+        // cara quais CLIs existem nesta máquina.
+        agentRadios = agentKeys.map { key in
+            HandButton(radioButtonWithTitle: agents[key]?.displayName ?? key, target: nil, action: nil)
+        }
+        let group = RadioGroup(agentRadios)
+        group.onChange = { [weak self] _ in self?.agentChanged() }
+        agentGroup = group
+        selectAgent(initial.agent)
 
-        // O campo continua editável ao lado do botão: digitar é o jeito de escrever
-        // um caminho que ainda não existe em disco, e o painel não escolhe pasta
-        // inexistente.
-        cwdBrowse.frame = NSRect(x: width - 90, y: 264, width: 90, height: 26)
-        cwdBrowse.bezelStyle = .rounded
-        cwdBrowse.controlSize = .small
-        cwdBrowse.font = .systemFont(ofSize: 11)
-        cwdBrowse.target = self
-        cwdBrowse.action = #selector(browseFolder)
-        container.addSubview(cwdBrowse)
+        configBrowse.target = actions
+        configBrowse.action = #selector(DialogActions.browseConfig)
 
-        promptLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        promptLabel.textColor = .secondaryLabelColor
-        promptLabel.frame = NSRect(x: 0, y: 246, width: width, height: 13)
-        container.addSubview(promptLabel)
+        folderAdd.target = actions
+        folderAdd.action = #selector(DialogActions.addFolder)
+        folderScroll.documentView = folderList
+        folderScroll.hasVerticalScroller = true
+        folderScroll.autohidesScrollers = true
+        folderScroll.borderType = .bezelBorder
+        folderScroll.drawsBackground = false
 
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 144, width: width, height: 96))
-        scroll.hasVerticalScroller = true
-        scroll.borderType = .bezelBorder
-        promptField.frame = NSRect(x: 0, y: 0, width: width, height: 96)
-        promptField.font = .systemFont(ofSize: 11)
-        promptField.string = initial.prompt ?? ""
-        promptField.isRichText = false
-        promptField.autoresizingMask = [.width]
-        scroll.documentView = promptField
-        container.addSubview(scroll)
-        promptScroll = scroll
+        for (field, scroll) in [(promptField, promptScroll), (rulesField, rulesScroll)] {
+            scroll.hasVerticalScroller = true
+            scroll.borderType = .bezelBorder
+            field.font = .systemFont(ofSize: 11)
+            field.isRichText = false
+            field.autoresizingMask = [.width]
+            scroll.documentView = field
+        }
+        saveBox.state = .off
 
-        // Abaixo do papel porque é a ordem em que os dois entram no system
-        // prompt — e é ela que faz a regra valer sobre o papel (ADR-056).
-        rulesLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        rulesLabel.textColor = .secondaryLabelColor
-        rulesLabel.frame = NSRect(x: 0, y: 124, width: width, height: 13)
-        container.addSubview(rulesLabel)
+        let views: [NSView] = [kindTabs, nameCaption, nameField, cmdCaption, cmdField,
+                               agentCaption, modelCaption, modelPicker, effortCaption, effortPicker,
+                               configCaption, configField, configBrowse,
+                               folderCaption, folderAdd, folderScroll,
+                               promptCaption, promptScroll, rulesCaption, rulesScroll, saveBox]
+        views.forEach(container.addSubview)
+        agentRadios.forEach(container.addSubview)
 
-        let rulesBox = NSScrollView(frame: NSRect(x: 0, y: 34, width: width, height: 84))
-        rulesBox.hasVerticalScroller = true
-        rulesBox.borderType = .bezelBorder
-        rulesField.frame = NSRect(x: 0, y: 0, width: width, height: 84)
-        rulesField.font = .systemFont(ofSize: 11)
+        let resolved = initial.resolved(for: initial.agent)
+        reloadConfig(select: config(for: initial.agent, own: resolved.config))
+        reloadModelPicker(select: resolved.model)
+        reloadEffortPicker(select: resolved.effort)
+        reloadFolders(select: initial.cwd ?? "")
         loaded = loaded ?? initial
         showTexts(of: initial.agent)
-        rulesField.isRichText = false
-        rulesField.autoresizingMask = [.width]
-        rulesBox.documentView = rulesField
-        container.addSubview(rulesBox)
-        rulesScroll = rulesBox
-
-        saveBox.frame = NSRect(x: 0, y: 4, width: width, height: 18)
-        saveBox.state = .off
-        container.addSubview(saveBox)
-
-        updateAgentFields()
+        relayout()
         return container
+    }
+
+    /// Posiciona de cima para baixo o que o tipo e o CLI pedem, e esconde o
+    /// resto. Uma passada só, chamada a cada troca: calcular y por campo em
+    /// cada mudança é como se erra por um pixel.
+    fileprivate func relayout() {
+        let width = Self.formWidth - 2 * Self.inset
+        let profile = isAgent ? selectedAgentKey.flatMap { agents[$0] } : nil
+        let hasModels = profile?.offersModels ?? false
+        let hasEfforts = profile?.offersEfforts ?? false
+        let hasConfig = profile?.configEnv != nil
+        var y: CGFloat = 0
+
+        func place(_ view: NSView, _ height: CGFloat, x: CGFloat = 0, w: CGFloat? = nil) {
+            view.isHidden = false
+            view.frame = NSRect(x: Self.inset + x, y: y, width: w ?? width - x, height: height)
+        }
+        func hide(_ views: NSView...) { views.forEach { $0.isHidden = true } }
+        func titled(_ label: NSTextField, plus: NSButton) {
+            place(label, 13, w: width - 24)
+            place(plus, 16, x: width - 16, w: 16)
+            plus.frame.origin.y -= 2
+            y += Self.labelGap
+        }
+        func captioned(_ label: NSTextField, then: () -> Void) {
+            place(label, 13)
+            y += Self.labelGap
+            then()
+        }
+
+        y = 8
+        place(kindTabs, 24)
+        y += 24 + Self.gap
+        captioned(nameCaption) { place(nameField, 22); y += 22 + Self.gap }
+
+        if isAgent {
+            hide(cmdCaption, cmdField)
+            captioned(agentCaption) {
+                let each = width / CGFloat(max(agentRadios.count, 1))
+                for (i, radio) in agentRadios.enumerated() {
+                    place(radio, 18, x: CGFloat(i) * each, w: each)
+                }
+                y += 18 + Self.gap
+            }
+            if hasModels || hasEfforts {
+                let half = (width - 10) / 2
+                if hasModels {
+                    place(modelCaption, 13, w: half)
+                    modelPicker.isHidden = false
+                    modelPicker.frame = NSRect(x: Self.inset, y: y + Self.labelGap, width: half, height: 22)
+                } else { hide(modelCaption, modelPicker) }
+                if hasEfforts {
+                    let x = hasModels ? half + 10 : 0
+                    place(effortCaption, 13, x: x, w: half)
+                    effortPicker.isHidden = false
+                    effortPicker.frame = NSRect(x: Self.inset + x, y: y + Self.labelGap,
+                                                width: half, height: 22)
+                } else { hide(effortCaption, effortPicker) }
+                y += Self.labelGap + 22 + Self.gap
+            } else {
+                hide(modelCaption, modelPicker, effortCaption, effortPicker)
+            }
+            if hasConfig {
+                configCaption.stringValue = "CONFIGURAÇÃO — \(profile?.configEnv ?? "")"
+                titled(configCaption, plus: configBrowse)
+                place(configField, 24)
+                configField.frame.origin.y -= 1
+                y += 24 + Self.gap
+            } else {
+                hide(configCaption, configField, configBrowse)
+            }
+        } else {
+            agentRadios.forEach { $0.isHidden = true }
+            hide(agentCaption, modelCaption, modelPicker, effortCaption, effortPicker,
+                 configCaption, configField, configBrowse)
+            captioned(cmdCaption) { place(cmdField, 22); y += 22 + Self.gap }
+        }
+
+        titled(folderCaption, plus: folderAdd)
+        let listHeight = min(CGFloat(max(folderOptions.count, 1)) * 20 + 8, 88)
+        place(folderScroll, listHeight)
+        layoutFolderList()
+        y += listHeight + Self.gap
+
+        let bottom = Self.formHeight - 28
+        if isAgent {
+            // Lado a lado, papel à esquerda: é a ordem em que os dois entram no
+            // system prompt — e é ela que faz a regra valer sobre o papel
+            // (ADR-056). Um embaixo do outro não cabe: acima de ~510 de altura o
+            // `NSAlert` põe o ícone de lado para caber na tela.
+            let half = (width - Self.gap) / 2
+            let textHeight = max(40, bottom - Self.gap / 2 - y - Self.labelGap)
+            place(promptCaption, 13, w: half)
+            place(rulesCaption, 13, x: half + Self.gap, w: half)
+            y += Self.labelGap
+            place(promptScroll, textHeight, w: half)
+            place(rulesScroll, textHeight, x: half + Self.gap, w: half)
+        } else {
+            hide(promptCaption, promptScroll, rulesCaption, rulesScroll)
+        }
+
+        saveBox.isHidden = false
+        saveBox.frame = NSRect(x: Self.inset, y: bottom, width: width, height: 18)
     }
 
     /// Grid de cards, um por componente salvo. Clicar preenche a outra aba.
     private func buildPresetsTab() -> NSView {
-        let width: CGFloat = 420
+        let width = Self.formWidth
         let height = Self.formHeight
         let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
@@ -371,63 +456,93 @@ final class NodeTemplateDialog {
         return container
     }
 
-    @objc private func kindChanged() { updateAgentFields() }
+    // MARK: - CLI
+
+    /// A CLI marcada. Nil só quando não há perfil nenhum.
+    private var selectedAgentKey: String? {
+        agentRadios.firstIndex { $0.state == .on }.flatMap { agentKeys[safe: $0] }
+    }
+
+    private func selectAgent(_ key: String?) {
+        let index = key.flatMap { agentKeys.firstIndex(of: $0) } ?? 0
+        for (i, radio) in agentRadios.enumerated() { radio.state = i == index ? .on : .off }
+    }
+
+    fileprivate func agentChanged() {
+        rememberShown()
+        // Trocar de CLI troca o conjunto de configurações: as do Claude Code não
+        // dizem nada ao Codex. A escolha anterior é oferecida de volta só se a
+        // CLI nova a conhecer.
+        let entering = loaded?.overrides(for: selectedAgentKey) ?? NodeTemplate.Overrides()
+        reloadConfig(select: config(for: selectedAgentKey, own: entering.config))
+        reloadModelPicker(select: entering.model)
+        reloadEffortPicker(select: entering.effort)
+        showTexts(of: selectedAgentKey)
+        relayout()
+    }
+
+    fileprivate func kindChanged() { relayout() }
 
     // MARK: - Configuração da CLI
 
-    /// Remonta o popup de configuração com o que existe no disco agora.
+    /// Remonta a lista de configuração com o que existe no disco agora.
     ///
     /// Descoberto, e não digitado, porque a ferramenta é emprestada: quem abrir
     /// numa máquina que não é a sua vê as configurações DELE na lista, sem saber
     /// que existe uma variável de ambiente por trás.
-    private func reloadConfigPicker(select value: String?) {
-        configPicker.removeAllItems()
-        configValues = []
-
-        guard let profile = selectedAgentKey.flatMap({ agents[$0] }),
-              let variable = profile.configEnv else {
-            configLabel.stringValue = "CONFIGURAÇÃO"
-            configPicker.addItem(withTitle: "padrão da CLI")
-            configValues = [nil]
-            updateAgentFields()
-            return
-        }
-
-        configLabel.stringValue = "CONFIGURAÇÃO — \(variable)"
-
-        configPicker.addItem(withTitle: "padrão da CLI")
-        configValues.append(nil)
-
-        for url in profile.discoveredConfigs {
-            configPicker.addItem(withTitle: Self.short(url.path))
-            configValues.append(url.path)
-        }
-
-        // O valor gravado no nó pode não existir aqui: componente que veio de
-        // outra máquina, ou pasta renomeada. Some da lista descoberta, e sem
-        // este item a escolha viraria "padrão da CLI" em silêncio.
-        if let value, !configValues.contains(where: { $0 == value }) {
-            configPicker.addItem(withTitle: "\(Self.short(value)) (não existe aqui)")
-            configValues.append(value)
-        }
-
-        configPicker.menu?.addItem(.separator())
-        configPicker.addItem(withTitle: Self.browseConfigOption)
-
-        if let value, let index = configValues.firstIndex(where: { $0 == value }) {
-            configPicker.selectItem(at: index)
-            lastConfig = value
-        } else {
-            configPicker.selectItem(at: 0)
-            lastConfig = nil
-        }
-        updateAgentFields()
+    private func reloadConfig(select value: String?) {
+        let profile = selectedAgentKey.flatMap { agents[$0] }
+        configItems = Self.configItems(default: profile?.defaultConfigPath,
+                                       discovered: (profile?.discoveredConfigs ?? []).map(\.path),
+                                       current: value)
+        configField.removeAllItems()
+        configField.addItems(withTitles: configItems.map(\.title))
+        let chosen = value == profile?.defaultConfigPath ? nil : value
+        configField.selectItem(at: configItems.firstIndex { $0.value == chosen } ?? 0)
     }
 
-    /// A CLI selecionada, ou nil quando o formulário está em modo shell.
-    private var selectedAgentKey: String? {
-        agentKeys[safe: agentPicker.indexOfSelectedItem]
+    /// Os itens do popup de configuração.
+    ///
+    /// O primeiro é o padrão, mostrado pelo caminho que o CLI usa sem a
+    /// variável (`~/.claude`), e gravado vazio — é a mesma pasta, e não
+    /// escrever nada no ambiente deixa o CLI decidir. Por isso ela não se
+    /// repete entre as descobertas.
+    ///
+    /// O valor gravado no nó pode não existir aqui: componente que veio de outra
+    /// máquina, ou pasta renomeada. Some da lista descoberta, e sem este item a
+    /// escolha viraria o padrão em silêncio.
+    static func configItems(default path: String?, discovered: [String],
+                            current: String?) -> [(title: String, value: String?)] {
+        var items: [(title: String, value: String?)] =
+            [(path.map(short) ?? defaultConfigOption, nil)]
+        items += discovered.filter { $0 != path }.map { (short($0), $0) }
+        if let current, current != path, !items.contains(where: { $0.value == current }) {
+            items.append((short(current), current))
+        }
+        return items
     }
+
+    /// A configuração no popup. Nil é o padrão da CLI.
+    private var selectedConfig: String? {
+        configItems[safe: configField.indexOfSelectedItem]?.value ?? nil
+    }
+
+    fileprivate func browseConfig() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.message = "Pasta de configuração do CLI"
+        panel.directoryURL = URL(fileURLWithPath: NSHomeDirectory())
+        // Desistir do painel deixa a caixa como estava: sair sem querer não pode
+        // trocar a configuração do terminal em silêncio.
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        reloadConfig(select: url.path)
+    }
+
+    // MARK: - Modelo e esforço
 
     /// Nil é o padrão do CLI — o primeiro item.
     private var selectedModel: String? {
@@ -435,13 +550,10 @@ final class NodeTemplateDialog {
     }
 
     /// A lista vem do perfil: trocar de CLI troca os modelos. A escolha anterior
-    /// volta só se o CLI novo a conhecer; um nome que não está na lista (escrito
-    /// à mão no JSON) entra como item extra para não ser perdido ao editar.
-    /// A escolha anterior só volta se o CLI novo a conhecer — a mesma regra do
-    /// `reloadConfigPicker`, e pelo mesmo motivo: `opus` não diz nada ao Codex,
-    /// e o app anexaria `--model opus` a um binário que não tem esse modelo.
-    /// Modelo escrito à mão no `components.json` continua valendo: só é
-    /// descartado quando o CLI declara uma lista e o valor não está nela.
+    /// só volta se o CLI novo a conhecer — `opus` não diz nada ao Codex, e o app
+    /// anexaria `--model opus` a um binário que não tem esse modelo. Modelo
+    /// escrito à mão no `components.json` continua valendo: só é descartado
+    /// quando o CLI declara uma lista e o valor não está nela.
     ///
     /// Com catálogo (Claude Code), os modelos vêm com nome de gente — "Opus 5.5"
     /// grava `claude-opus-5-5` — e os apelidos seguem depois, para quem quer
@@ -497,10 +609,7 @@ final class NodeTemplateDialog {
         }
     }
 
-    /// A configuração selecionada. Nil é o padrão da CLI.
-    private var selectedConfig: String? {
-        configValues[safe: configPicker.indexOfSelectedItem] ?? nil
-    }
+    // MARK: - Papel e regras
 
     /// Papel e regras do CLI que entra: os dele quando você escreveu algo
     /// diferente ali, os gerais quando não. Papel e regras são gerais — trocar
@@ -514,11 +623,13 @@ final class NodeTemplateDialog {
     }
 
     /// Guarda o que está na tela no CLI que estava selecionado — a regra mora
-    /// no `NodeTemplate`; aqui só se colhem os campos.
+    /// no `NodeTemplate`; aqui só se colhem os campos. O comando do CLI não
+    /// está mais na tela: vai o que ele já tinha, para não ser apagado.
     private func rememberShown() {
         guard let cli = shownAgent else { return }
-        loaded = (loaded ?? initial).remembering(
-            cli: cli, cmd: trimmed(cmdField.stringValue), config: selectedConfig,
+        let base = loaded ?? initial
+        loaded = base.remembering(
+            cli: cli, cmd: base.overrides(for: cli).cmd, config: selectedConfig,
             model: selectedModel, effort: selectedEffort, prompt: trimmed(promptField.string),
             rules: trimmed(rulesField.string))
     }
@@ -528,48 +639,60 @@ final class NodeTemplateDialog {
         return value.isEmpty ? nil : value
     }
 
-    @objc private func agentChanged() {
-        rememberShown()
-        // Trocar de CLI troca o conjunto de configurações: as do Claude Code não
-        // dizem nada ao Codex. A escolha anterior é oferecida de volta só se a
-        // CLI nova a conhecer.
-        let entering = loaded?.overrides(for: selectedAgentKey) ?? NodeTemplate.Overrides()
-        reloadConfigPicker(select: entering.config)
-        reloadModelPicker(select: entering.model)
-        reloadEffortPicker(select: entering.effort)
-        cmdField.stringValue = entering.cmd ?? ""
-        showTexts(of: selectedAgentKey)
-        updateAgentFields()
+    // MARK: - Pasta
+
+    /// A raiz na lista. Grava vazio, que é como o resto do app diz "a raiz".
+    static let rootOption = "root"
+
+    static func shown(cwd: String?) -> String {
+        let value = cwd ?? ""
+        return value.isEmpty ? rootOption : value
     }
 
-    @objc private func configChanged() {
-        guard configValues[safe: configPicker.indexOfSelectedItem] == nil,
-              configPicker.titleOfSelectedItem == Self.browseConfigOption
-        else {
-            lastConfig = selectedConfig
-            return
-        }
-
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.showsHiddenFiles = true
-        panel.message = "Pasta de configuração do CLI"
-        panel.directoryURL = URL(fileURLWithPath: NSHomeDirectory())
-
-        // Desistir do painel volta para o que estava escolhido: sair sem querer
-        // não pode trocar a configuração do terminal em silêncio.
-        guard panel.runModal() == .OK, let url = panel.url else {
-            reloadConfigPicker(select: lastConfig)
-            return
-        }
-        lastConfig = url.path
-        reloadConfigPicker(select: url.path)
+    /// As opções da lista de pasta: a raiz, as subpastas da bancada, e a pasta
+    /// atual do nó quando ela não é nenhuma dessas — sem ela, editar um nó
+    /// customizado mostraria uma escolha que não é a dele.
+    static func folderOptions(current: String, suggestions: [String]) -> [String] {
+        var out = [""] + suggestions.filter { !$0.isEmpty }
+        if !out.contains(current) { out.append(current) }
+        return out
     }
 
-    @objc private func browseFolder() {
+    private func reloadFolders(select value: String) {
+        // O que o + já tinha acrescentado continua na lista.
+        let base = Self.folderOptions(current: value, suggestions: folderSuggestions)
+        folderOptions = base + folderOptions.filter { !base.contains($0) }
+        selectedFolder = value
+        folderRadios.forEach { $0.removeFromSuperview() }
+        folderRadios = folderOptions.map { option in
+            let radio = HandButton(radioButtonWithTitle: Self.shown(cwd: option), target: nil, action: nil)
+            radio.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+            radio.lineBreakMode = .byTruncatingMiddle
+            radio.state = option == value ? .on : .off
+            folderList.addSubview(radio)
+            return radio
+        }
+        let group = RadioGroup(folderRadios)
+        group.onChange = { [weak self] sender in
+            guard let self, let i = self.folderRadios.firstIndex(where: { $0 === sender }) else { return }
+            self.selectedFolder = self.folderOptions[i]
+        }
+        folderGroup = group
+    }
+
+    private func layoutFolderList() {
+        let inner = folderScroll.contentSize.width
+        folderList.frame = NSRect(x: 0, y: 0, width: inner,
+                                  height: max(CGFloat(folderRadios.count) * 20 + 4,
+                                              folderScroll.contentSize.height))
+        for (i, radio) in folderRadios.enumerated() {
+            radio.frame = NSRect(x: 6, y: 2 + CGFloat(i) * 20, width: inner - 12, height: 18)
+        }
+    }
+
+    /// O + da pasta: qualquer lugar, gravado relativo quando cai dentro da
+    /// bancada.
+    fileprivate func addFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -580,11 +703,14 @@ final class NodeTemplateDialog {
         panel.directoryURL = browseStart()
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        cwdField.stringValue = Self.stored(folder: url, root: root)
+        let value = Self.stored(folder: url, root: root)
+        if !folderOptions.contains(value) { folderOptions.append(value) }
+        reloadFolders(select: value)
+        relayout()
+        folderList.scrollToVisible(folderRadios.last?.frame ?? .zero)
     }
 
-    /// Onde o painel abre: a pasta que o campo já aponta, e a raiz da bancada
-    /// quando ele está vazio.
+    /// Onde o painel abre: a pasta escolhida, e a raiz da bancada quando é ela.
     ///
     /// Resolve pela MESMA regra do runtime (`WorkbenchConfig.resolve`), senão o
     /// painel abriria num lugar e o terminal em outro. Caminho que não existe cai
@@ -592,16 +718,14 @@ final class NodeTemplateDialog {
     /// sistema lembra, que não tem relação com esta bancada.
     private func browseStart() -> URL {
         let home = URL(fileURLWithPath: NSHomeDirectory())
-        let typed = cwdField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !typed.isEmpty else { return root ?? home }
-
-        let resolved = root.map { WorkbenchConfig.resolve(cwd: typed, against: $0) }
-            ?? (typed as NSString).expandingTildeInPath
+        guard !selectedFolder.isEmpty else { return root ?? home }
+        let resolved = root.map { WorkbenchConfig.resolve(cwd: selectedFolder, against: $0) }
+            ?? (selectedFolder as NSString).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: resolved) else { return root ?? home }
         return URL(fileURLWithPath: resolved)
     }
 
-    /// O que o botão de escolher pasta grava.
+    /// O que o + da pasta grava.
     ///
     /// Dentro da raiz da bancada, RELATIVO — é o que faz o nó valer em qualquer
     /// checkout, e é dele que a duplicação em worktree depende. A própria raiz
@@ -626,33 +750,7 @@ final class NodeTemplateDialog {
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
 
-    /// Shell não tem CLI nem papel — deixar os campos ativos convidaria a
-    /// preencher algo que seria ignorado em silêncio.
-    private func updateAgentFields() {
-        let isAgent = kindPicker.titleOfSelectedItem == Self.agentOption
-        agentPicker.isEnabled = isAgent
-        promptField.isEditable = isAgent
-        agentLabel.textColor = isAgent ? .secondaryLabelColor : .tertiaryLabelColor
-        promptLabel.textColor = isAgent ? .secondaryLabelColor : .tertiaryLabelColor
-        promptScroll?.alphaValue = isAgent ? 1 : 0.4
-
-        // CLI que não declara `configEnv` não tem configuração para escolher — o
-        // popup fica visível, e desabilitado, para não fazer a linha inteira
-        // aparecer e sumir a cada troca de CLI.
-        let hasConfig = isAgent && selectedAgentKey.flatMap { agents[$0]?.configEnv } != nil
-        configPicker.isEnabled = hasConfig
-        configLabel.textColor = hasConfig ? .secondaryLabelColor : .tertiaryLabelColor
-
-        let hasModels = isAgent && (selectedAgentKey.flatMap { agents[$0]?.offersModels } ?? false)
-        modelPicker.isEnabled = hasModels
-        modelLabel.textColor = hasModels ? .secondaryLabelColor : .tertiaryLabelColor
-
-        let hasEfforts = isAgent && (selectedAgentKey.flatMap { agents[$0]?.offersEfforts } ?? false)
-        effortPicker.isEnabled = hasEfforts
-        effortLabel.textColor = hasEfforts ? .secondaryLabelColor : .tertiaryLabelColor
-    }
-
-    /// O que o campo de pasta grava.
+    /// O que a pasta grava.
     ///
     /// Relativo continua relativo — é o que faz o preset valer em qualquer
     /// checkout, e é dele que a duplicação em worktree depende. Absoluto continua
@@ -669,6 +767,21 @@ final class NodeTemplateDialog {
         let expanded = (path as NSString).expandingTildeInPath
         return expanded.hasPrefix(home) ? "~" + expanded.dropFirst(home.count) : expanded
     }
+}
+
+/// Target dos controles do diálogo. O diálogo é classe Swift pura, sem
+/// `NSObject`; o seletor precisa de alguém que o Objective-C enxergue.
+private final class DialogActions: NSObject {
+    private weak var dialog: NodeTemplateDialog?
+    init(_ dialog: NodeTemplateDialog) { self.dialog = dialog }
+    @objc func kindChanged() { dialog?.kindChanged() }
+    @objc func browseConfig() { dialog?.browseConfig() }
+    @objc func addFolder() { dialog?.addFolder() }
+}
+
+/// De cima para baixo, como se lê.
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
 
 private extension Array {

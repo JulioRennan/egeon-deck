@@ -27,7 +27,7 @@ final class EffortDial: NSView {
 
     private static let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
     private static let sliderWidth: CGFloat = 96
-    /// O mesmo respiro de rótulo para controle da faixa inteira (`ModelRow.gap`).
+    /// Do texto do nível ao slider.
     static let textToSlider: CGFloat = 5
     private static let height: CGFloat = 18
     /// Quanto de rolagem vale um nível. Trackpad manda deltas em pontos, aos

@@ -33,6 +33,13 @@ enum WorkspaceMove {
               let destination = spaces.firstIndex(where: { $0.id == target }),
               let from = spaces[source].projects.firstIndex(where: { $0.id == id })
         else { return nil }
+        // Multi-projeto aponta para projetos DESTE workspace, por id: levar um
+        // dos lados para outro workspace desfaria o conjunto sem aviso.
+        if source != destination {
+            let tied = spaces[source].projects[from].isMulti
+                || spaces[source].projects.contains { $0.members?.contains(id) ?? false }
+            if tied { return nil }
+        }
         var out = spaces
         var moved = out[source].projects.remove(at: from)
         if let stored { moved.stored = stored ? true : nil }

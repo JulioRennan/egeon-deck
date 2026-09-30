@@ -11,14 +11,23 @@ citados entre parênteses.
 
 ### Adicionado
 
+- Multi-projetos no formulário do workspace: dê um nome e escolha algumas das pastas; a bancada dele abre todas juntas numa pasta só, e em worktree cria a mesma branch em cada repositório, lado a lado — ou uma branch própria no repo que você quiser, sem mudar a pasta (ADR-065).
 - O seletor de modelo mostra os modelos pelo nome ("Opus 5.5", "Fable 5.1"), lidos do Claude Code instalado — atualizar o CLI atualiza a lista; versões anteriores ficam num submenu e os apelidos seguem disponíveis como "sempre o mais recente" (ADR-064).
 - O slider de esforço mostra só os níveis que o modelo aceita, com o "auto" dizendo o padrão dele (ex.: "auto (medium)"); modelo sem esforço deixa o slider desligado (ADR-064).
 - A faixa de modelo e esforço só aparece quando há o que escolher: Codex e Gemini, sem lista de modelos no `agents.json`, ficam com o cabeçalho de antes (ADR-064).
 - Botão de ultracode na faixa do cabeçalho, independente do nível de esforço; também por `/model?target=…&ultracode=on|off` (ADR-064).
 - Modelo e esforço (`--effort`: low · medium · high · xhigh · max) numa faixa própria no cabeçalho do card de agente, embaixo do nome: o esforço é um slider com uma marca por nível (a primeira é o auto, o padrão do modelo), que também responde à rolagem e só aplica 1s depois de você soltar. Também no formulário e por `/model?target=…&effort=…`; trocar reinicia o terminal e a conversa continua (ADR-064).
 
+### Alterado
+
+- Modelo, esforço e ultracode ficam numa barra à parte embaixo do cabeçalho do card, com fundo próprio e o rótulo em cima de cada controle (ADR-064).
+- Terminal novo sugere a configuração do CLI (ex.: `~/.claude-agro`) escolhida por último naquele workspace; escolher o padrão apaga a lembrança. O padrão aparece pelo caminho que o CLI usa sem configuração (`~/.claude`, `~/.codex`), não mais como "padrão da CLI".
+- Formulário de terminal refeito: Shell e Agente viram abas, e os campos seguem a aba — shell tem nome, comando e pasta; agente tem CLI em radios, modelo e esforço, configuração (popup com as descobertas, e um + ao lado do título para outra), pasta, e papel e regras lado a lado. Campo que o CLI não tem não aparece.
+- A pasta do terminal é uma lista de radios — root e as subpastas da bancada que são repositório (em multi-projeto, cada repo), sempre relativas —, com um + ao lado do título para outra pasta (ADR-065).
+
 ### Corrigido
 
+- O comando de um terminal shell agora é guardado: antes ele se perdia ao salvar como componente e ao editar o terminal.
 - Depois de trocar de modelo, o seletor do cabeçalho não mostra mais o modelo antigo (ex.: "haiku (fable)") até o novo responder: só conta resposta dada depois do arranque atual.
 - Trocar de bancada pelo teclado (⌘1…⌘9, ⌘]/⌘[, ⌘→/⌘←) não apaga mais a ampulheta de "em segundo plano" do terminal que estava focado: atalho do app deixou de contar como você digitando nele (ADR-063).
 

@@ -310,6 +310,13 @@ struct AgentProfile: Codable {
     ///
     /// Consultado a cada abertura do formulário: criar um `~/.claude-x` no
     /// terminal e vê-lo na lista sem reiniciar o app é o comportamento esperado.
+    /// Onde o CLI guarda a configuração quando a variável não está definida:
+    /// o `configGlob` sem o `*` — `~/.claude*` é a família de `~/.claude`.
+    var defaultConfigPath: String? {
+        guard let configGlob, configGlob.hasSuffix("*") else { return nil }
+        return (String(configGlob.dropLast()) as NSString).expandingTildeInPath
+    }
+
     var discoveredConfigs: [URL] {
         guard let configGlob, configGlob.hasSuffix("*") else { return [] }
 

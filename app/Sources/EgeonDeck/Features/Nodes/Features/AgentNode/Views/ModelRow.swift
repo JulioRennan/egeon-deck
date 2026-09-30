@@ -37,14 +37,16 @@ final class ModelRow: NSView {
     private var literalModel: String?
     private var lastProbe = Date.distantPast
 
-    /// Os dois espaços da faixa — rótulo para o seu controle, e grupo para
-    /// grupo. Medidos no que se VÊ: o pull-down sem borda já traz um respiro
-    /// dele à esquerda do texto, e o botão do ultracode tem folga de pílula.
-    static let gap: CGFloat = EffortDial.textToSlider
-    private static let groupGap: CGFloat = 14
+    /// Rótulo em cima, controle embaixo; grupos lado a lado. Medidos no que se
+    /// VÊ: o pull-down sem borda já traz um respiro dele à esquerda do texto, e
+    /// o botão do ultracode tem folga de pílula — o rótulo se alinha ao texto.
+    private static let groupGap: CGFloat = 20
     private static let pickerInset: CGFloat = 5
     private static let pillPadding: CGFloat = 4
-    private static let height: CGFloat = 18
+    private static let captionHeight: CGFloat = 11
+    private static let controlTop: CGFloat = 13
+    private static let controlHeight: CGFloat = 17
+    private static let height: CGFloat = controlTop + controlHeight
 
     init(profile: AgentProfile, catalog: ModelCatalog?, model: String?, effort: String?,
          ultracode: Bool, tint: NSColor) {
@@ -91,20 +93,30 @@ final class ModelRow: NSView {
     // MARK: medida
 
     var preferredWidth: CGFloat {
-        var width: CGFloat = 0
-        for (index, view) in visibleItems.enumerated() {
-            width += itemWidth(view) + (index == 0 ? 0 : spacing(before: view))
-        }
-        return ceil(width)
+        let widths = groups.map(groupWidth)
+        return ceil(widths.reduce(0, +) + CGFloat(max(0, widths.count - 1)) * Self.groupGap)
     }
 
     override var fittingSize: NSSize { NSSize(width: preferredWidth, height: Self.height) }
     override var isFlipped: Bool { true }
 
-    private var visibleItems: [NSView] {
-        [modelCaption, picker, effortCaption, dial, ultracodeButton]
-            .compactMap { $0 }
-            .filter { $0.superview === self }
+    /// Cada grupo: o rótulo (o ultracode é o próprio rótulo) e o controle.
+    private var groups: [(caption: NSTextField?, control: NSView)] {
+        var out: [(NSTextField?, NSView)] = []
+        if picker.superview === self { out.append((modelCaption, picker)) }
+        if let dial, dial.superview === self { out.append((effortCaption, dial)) }
+        if ultracodeButton.superview === self { out.append((nil, ultracodeButton)) }
+        return out
+    }
+
+    private func groupWidth(_ group: (caption: NSTextField?, control: NSView)) -> CGFloat {
+        let caption = group.caption.map { ceil($0.fittingSize.width) + inset(of: group.control) } ?? 0
+        return max(caption, itemWidth(group.control))
+    }
+
+    /// Onde o texto do controle começa, para o rótulo ficar em cima dele.
+    private func inset(of control: NSView) -> CGFloat {
+        control === picker ? Self.pickerInset : 0
     }
 
     private func itemWidth(_ view: NSView) -> CGFloat {
@@ -118,26 +130,20 @@ final class ModelRow: NSView {
         }
     }
 
-    /// Rótulo cola no controle dele; grupos se afastam. Descontado o respiro
-    /// que o próprio controle já desenha, para o espaço visível ser o mesmo.
-    private func spacing(before view: NSView) -> CGFloat {
-        switch view {
-        case picker: return max(0, Self.gap - Self.pickerInset)
-        case ultracodeButton: return Self.groupGap - Self.pillPadding
-        case modelCaption, effortCaption: return Self.groupGap
-        default: return Self.gap
-        }
-    }
-
     override func layout() {
         super.layout()
         var x: CGFloat = 0
-        for (index, view) in visibleItems.enumerated() {
-            if index > 0 { x += spacing(before: view) }
-            let width = itemWidth(view)
-            let height = min(Self.height, max(view.fittingSize.height, 13))
-            view.frame = NSRect(x: x, y: (bounds.height - height) / 2, width: width, height: height)
-            x += width
+        for group in groups {
+            let width = groupWidth(group)
+            if let caption = group.caption {
+                caption.frame = NSRect(x: x + inset(of: group.control), y: 0,
+                                       width: width - inset(of: group.control), height: Self.captionHeight)
+            }
+            let control = group.control
+            let height = min(Self.controlHeight, max(control.fittingSize.height, 13))
+            control.frame = NSRect(x: x, y: Self.controlTop + (Self.controlHeight - height) / 2,
+                                   width: itemWidth(control), height: height)
+            x += width + Self.groupGap
         }
     }
 

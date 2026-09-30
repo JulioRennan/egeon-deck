@@ -56,6 +56,12 @@ enum Flavor {
         workspacesDirectory.appendingPathComponent(id)
     }
 
+    /// A pasta de links de um multi-projeto: é ela que a bancada no checkout
+    /// principal abre.
+    func multiProjectDirectory(_ id: String) -> URL {
+        config("projects").appendingPathComponent(id)
+    }
+
     var logPath: String {
         NSString(string: isDev ? "~/egeon-dev.log" : "~/egeon.log").expandingTildeInPath
     }
