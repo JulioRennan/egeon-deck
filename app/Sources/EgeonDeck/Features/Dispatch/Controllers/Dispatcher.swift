@@ -1052,9 +1052,22 @@ final class Dispatcher {
     private func installKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            self?.targets.values.first { $0.isFocused }?.userTyped()
+            if Self.reachesPty(event.modifierFlags, event.charactersIgnoringModifiers) {
+                self?.targets.values.first { $0.isFocused }?.userTyped()
+            }
             return event
         }
+    }
+
+    /// A tecla vai para o programa do terminal, ou é atalho do app?
+    ///
+    /// O monitor vê o `keyDown` ANTES do menu: ⌘1…⌘9, ⌘], ⌘→ para trocar de
+    /// aba chegavam aqui com o terminal ainda focado e contavam como você
+    /// digitando nele — e sair da bancada apagava a ampulheta de quem estava na
+    /// frente. Com ⌘ só o colar chega ao pty.
+    static func reachesPty(_ flags: NSEvent.ModifierFlags, _ characters: String?) -> Bool {
+        guard flags.contains(.command) else { return true }
+        return characters?.lowercased() == "v"
     }
 
     func start() {

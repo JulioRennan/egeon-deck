@@ -20,6 +20,7 @@ citados entre parênteses.
 ### Corrigido
 
 - Depois de trocar de modelo, o seletor do cabeçalho não mostra mais o modelo antigo (ex.: "haiku (fable)") até o novo responder: só conta resposta dada depois do arranque atual.
+- Trocar de bancada pelo teclado (⌘1…⌘9, ⌘]/⌘[, ⌘→/⌘←) não apaga mais a ampulheta de "em segundo plano" do terminal que estava focado: atalho do app deixou de contar como você digitando nele (ADR-063).
 
 ## [1.0.0] - 2026-09-28
 
