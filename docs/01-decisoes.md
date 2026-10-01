@@ -3777,8 +3777,14 @@ backend e bancada do conjunto convivem.
   mais um tile na barra (ícone de pilha, subtítulo "web + backend"), com
   bancadas, arrasto e gaveta como qualquer projeto. Nada de `projects: [id]` na
   bancada nem grupo à parte.
-- **Checkout principal:** `path` é `~/.egeon*/projects/<id>/`, com um link por
-  repositório, refeito a cada arranque e a cada save do formulário. Link aqui é
+- **Só em worktree:** bancada nova de multi-projeto nasce sempre em worktree —
+  o `+` do tile vai direto ao formulário dela, e "Nova bancada…" não existe
+  para ele (nem escolhendo a pasta de links à mão). No checkout principal,
+  vários agentes mexeriam nos repositórios de verdade, cada um na branch em
+  que o repo estiver; o conjunto existe para isolar a frente numa branch só.
+- **Pasta de links:** `path` é `~/.egeon*/projects/<id>/`, com um link por
+  repositório, refeito a cada arranque e a cada save do formulário. Bancada
+  criada ali antes da regra acima continua valendo. Link aqui é
   certo: é o repositório de verdade, só que ao lado do outro. Só apaga link — um
   arquivo seu ali fica.
 - **Worktree:** `<pai comum>/worktrees/<multi-projeto>/<branch>/<repo>`. A

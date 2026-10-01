@@ -389,6 +389,8 @@ final class SidebarGroupRow: NSView {
 
     /// Projeto guardado: o menu oferece o caminho de volta, e vice-versa.
     private var isStoredProject = false
+    /// Só cria em worktree: o + vai direto ao formulário, sem menu.
+    private var requiresWorktree = false
 
     /// `joins` são os nomes dos projetos que um multi-projeto junta: é o que o
     /// subtítulo dele mostra no lugar da pasta de links, que não diz nada.
@@ -410,11 +412,15 @@ final class SidebarGroupRow: NSView {
             : NSColor.systemRed.withAlphaComponent(0.85)
         count = workbenches
         isStoredProject = project.isStored
+        requiresWorktree = project.requiresWorktree
         icon.image = ToolbarButton.symbol(project.isStored
             ? ["archivebox.fill", "archivebox", "folder"]
             : project.isMulti ? ["square.stack.3d.up.fill", "folder.fill"] : ["folder.fill", "folder"])
         icon.contentTintColor = NSColor(calibratedWhite: 1, alpha: project.isStored ? 0.32 : 0.5)
-        let add = ToolbarButton(symbols: ["plus"], tooltip: "Nova bancada neste projeto", size: 20)
+        let add = ToolbarButton(symbols: ["plus"],
+                                tooltip: project.requiresWorktree ? "Nova bancada em worktree"
+                                                                  : "Nova bancada neste projeto",
+                                size: 20)
         add.onClick = { [weak self] in self?.showCreateMenu() }
         addButton = add
         setup()
@@ -569,6 +575,7 @@ final class SidebarGroupRow: NSView {
 
     private func showCreateMenu() {
         guard case .project = item, let addButton else { return }
+        guard !requiresWorktree else { return createWorkbenchFromWorktree() }
         let menu = NSMenu()
         menu.addItem(withTitle: "Nova bancada…", action: #selector(createWorkbench), keyEquivalent: "")
         menu.addItem(withTitle: "Nova bancada em worktree…",
@@ -588,8 +595,10 @@ final class SidebarGroupRow: NSView {
             menu.addItem(withTitle: "Remover workspace…", action: #selector(removeWorkspace),
                          keyEquivalent: "")
         case .project:
-            menu.addItem(withTitle: "Nova bancada…", action: #selector(createWorkbench),
-                         keyEquivalent: "")
+            if !requiresWorktree {
+                menu.addItem(withTitle: "Nova bancada…", action: #selector(createWorkbench),
+                             keyEquivalent: "")
+            }
             menu.addItem(withTitle: "Nova bancada em worktree…",
                          action: #selector(createWorkbenchFromWorktree), keyEquivalent: "")
             menu.addItem(.separator())

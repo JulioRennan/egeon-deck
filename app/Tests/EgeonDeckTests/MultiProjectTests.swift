@@ -244,3 +244,11 @@ final class ConfigItemsTests: XCTestCase {
         XCTAssertEqual(profile.defaultConfigPath, NSHomeDirectory() + "/.claude")
     }
 }
+
+/// Multi-projeto só cria bancada em worktree; projeto de pasta, como sempre.
+final class MultiRequiresWorktreeTests: XCTestCase {
+    func testOnlyMultiRequiresWorktree() {
+        XCTAssertTrue(ProjectConfig(name: "N", path: "/l", members: ["a"]).requiresWorktree)
+        XCTAssertFalse(ProjectConfig(name: "web", path: "/src/web").requiresWorktree)
+    }
+}

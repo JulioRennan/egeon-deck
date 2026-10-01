@@ -657,7 +657,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// nasce dele. Sem, você escolhe a pasta e o app acha (ou cria) o projeto.
     private func createWorkbench(inProject projectID: String? = nil) {
         let folder: URL
-        if let projectID, let project = project(withID: projectID) {
+        if let projectID, let project = project(withID: projectID), project.requiresWorktree {
+            createMultiWorktree(project)
+            return
+        } else if let projectID, let project = project(withID: projectID) {
             folder = project.url
         } else {
             let panel = NSOpenPanel()
@@ -668,6 +671,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.allowsMultipleSelection = false
             panel.prompt = "Usar esta pasta"
             guard panel.runModal() == .OK, let url = panel.url else { return }
+            // A pasta de links de um multi-projeto, escolhida à mão, é o mesmo
+            // multi-projeto: bancada dele só em worktree.
+            if let multi = workspaces.lazy.flatMap(\.projects)
+                .first(where: { $0.requiresWorktree && $0.owns(path: url.path) }) {
+                createMultiWorktree(multi)
+                return
+            }
             folder = url
         }
         guard let (name, template) = askWorkbenchNameAndTemplate(

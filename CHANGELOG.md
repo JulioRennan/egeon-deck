@@ -20,6 +20,7 @@ citados entre parênteses.
 
 ### Alterado
 
+- Bancada de multi-projeto só nasce em worktree: o + do multi-projeto abre direto o formulário de worktree, e "Nova bancada…" não aparece para ele (ADR-065).
 - Modelo, esforço e ultracode ficam numa barra à parte embaixo do cabeçalho do card, com fundo próprio e o rótulo em cima de cada controle (ADR-064).
 - Terminal novo sugere a configuração do CLI (ex.: `~/.claude-agro`) escolhida por último naquele workspace; escolher o padrão apaga a lembrança. O padrão aparece pelo caminho que o CLI usa sem configuração (`~/.claude`, `~/.codex`), não mais como "padrão da CLI".
 - Formulário de terminal refeito: Shell e Agente viram abas, e os campos seguem a aba — shell tem nome, comando e pasta; agente tem CLI em radios, modelo e esforço, configuração (popup com as descobertas, e um + ao lado do título para outra), pasta, e papel e regras lado a lado. Campo que o CLI não tem não aparece.

@@ -28,6 +28,11 @@ struct ProjectConfig: Codable, Equatable {
     var members: [String]?
 
     var isMulti: Bool { members != nil }
+    /// Bancada deste projeto só nasce em worktree. Multi-projeto no checkout
+    /// principal seria vários agentes mexendo nos repositórios de verdade, cada
+    /// um na branch em que o repo estiver — o conjunto existe para isolar a
+    /// frente de trabalho numa branch só (ADR-065).
+    var requiresWorktree: Bool { isMulti }
     var url: URL { URL(fileURLWithPath: (path as NSString).expandingTildeInPath) }
     var exists: Bool { FileManager.default.fileExists(atPath: url.path) }
     var isCollapsed: Bool { collapsed ?? false }
