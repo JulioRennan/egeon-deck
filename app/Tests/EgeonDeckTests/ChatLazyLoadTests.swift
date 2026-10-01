@@ -125,4 +125,51 @@ final class ChatLazyLoadTests: XCTestCase {
         XCTAssertEqual(container.loadedMessages, 120)
         XCTAssertGreaterThan(container.snapshotBlockCount, initial, "o topo trouxe mais histórico")
     }
+
+    /// A thread nasce no topo e desce até o fim com movimento. Antes, cada
+    /// quadro da descida perto do topo contava como "você rolou até o começo",
+    /// e abrir uma conversa de 300 turnos trazia 240 a 360 mensagens em vez de
+    /// 60. O teste de cima só olhava logo depois da primeira montagem, e por
+    /// isso só falhava de vez em quando.
+    func testOpeningLoadsOnlyTheLastWindowAfterTheDescentSettles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("lazy-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = ChatHistory(workbenches: root)
+        for i in 0..<300 {
+            var turn = ChatTurn(id: "u\(i)", prompt: "pergunta \(i)", promptAt: t0.addingTimeInterval(Double(i) * 60))
+            turn.replyText = "resposta \(i)"
+            turn.replyAt = turn.promptAt.addingTimeInterval(5)
+            history.append(ChatRecord(node: "front", turn: turn), workbench: "w")
+        }
+        history.flush()
+
+        let container = ChatContainer(frame: .zero)
+        container.participants = { [self.front] }
+        container.historyFile = { history.current(forWorkbench: "w") }
+        let window = host(container, size: NSSize(width: 1000, height: 700))
+        defer { window.contentView = nil }
+        container.refresh()
+        let deadline = Date().addingTimeInterval(4)
+        while container.threadRebuilds < 1, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
+        // A descida dura 0,35 s; esperar bem mais que isso é o que pega os quadros.
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        XCTAssertEqual(container.loadedMessages, 60)
+        XCTAssertEqual(container.threadRebuilds, 1, "abrir monta uma vez só")
+    }
+
+    func testAnimatedDescentPassingTheTopDoesNotLoadMore() {
+        func load(nearTop: Bool = true, descending: Bool = false, loading: Bool = false,
+                  total: Int = 100, loaded: Int = 60, hasRows: Bool = true) -> Bool {
+            ChatContainer.shouldLoadMore(nearTop: nearTop, descending: descending, loading: loading,
+                                         total: total, loaded: loaded, hasRows: hasRows)
+        }
+        XCTAssertTrue(load(), "você no topo, com mais histórico: carrega")
+        XCTAssertFalse(load(descending: true), "a descida animada passando pelo topo não conta")
+        XCTAssertFalse(load(nearTop: false))
+        XCTAssertFalse(load(loading: true))
+        XCTAssertFalse(load(total: 60), "não há mais o que trazer")
+        XCTAssertFalse(load(hasRows: false))
+    }
 }

@@ -27,6 +27,7 @@ citados entre parênteses.
 
 ### Corrigido
 
+- Abrir o chat de uma bancada com histórico longo não carrega mais centenas de mensagens de uma vez: a descida animada até o fim passava pelo topo e disparava o "carregar mais" a cada quadro; agora entram só as 60 do fim (ADR-045).
 - O comando de um terminal shell agora é guardado: antes ele se perdia ao salvar como componente e ao editar o terminal.
 - Depois de trocar de modelo, o seletor do cabeçalho não mostra mais o modelo antigo (ex.: "haiku (fable)") até o novo responder: só conta resposta dada depois do arranque atual.
 - Trocar de bancada pelo teclado (⌘1…⌘9, ⌘]/⌘[, ⌘→/⌘←) não apaga mais a ampulheta de "em segundo plano" do terminal que estava focado: atalho do app deixou de contar como você digitando nele (ADR-063).

@@ -397,8 +397,19 @@ final class ChatContainer: NSView {
     var snapshotBlockCount: Int { thread.blocks.count }
     private var loadingMore = false
 
+    /// Topo é você rolando até o começo do que há — não a descida animada
+    /// passando por ele. Ao abrir o chat a thread nasce no topo e desce até o
+    /// fim com movimento; contar aqueles quadros carregava duas janelas a mais
+    /// sem ninguém ter pedido, e quanto mais lenta a máquina, mais quadros.
+    static func shouldLoadMore(nearTop: Bool, descending: Bool, loading: Bool,
+                               total: Int, loaded: Int, hasRows: Bool) -> Bool {
+        nearTop && !descending && !loading && total > loaded && hasRows
+    }
+
     private func loadMoreIfNearTop() {
-        guard thread.isNearTop, !loadingMore, messages.count > loadedMessages, !thread.blocks.isEmpty else { return }
+        guard Self.shouldLoadMore(nearTop: thread.isNearTop, descending: thread.scrollingToBottom,
+                                  loading: loadingMore, total: messages.count, loaded: loadedMessages,
+                                  hasRows: !thread.blocks.isEmpty) else { return }
         loadingMore = true
         loadedMessages += Self.windowStep
         buildSignature = ""
