@@ -277,6 +277,45 @@ enum Worktree {
     static let copyScriptURL = URL(fileURLWithPath:
         Flavor.current.config("worktree-copy.sh").path)
 
+    /// O script que o app escreve. O corpo dele é o que a cópia rápida faz
+    /// (`UnversionedCopy.isStockScript`).
+    static let stockCopyScript = """
+    #!/usr/bin/env bash
+    # Egeon Deck — leva para a worktree nova tudo que o git não versiona.
+    #
+    # `git ls-files --others --directory` (sem --exclude-standard) lista de uma
+    # vez os arquivos novos E os ignorados, e `--directory` devolve
+    # `node_modules/` como uma entrada em vez de cem mil.
+    #
+    # `cp -c` usa clonefile do APFS: a cópia é instantânea e não ocupa disco
+    # até que um dos lados escreva. É o que torna copiar node_modules viável.
+    # Fora de APFS o clone falha e a cópia comum assume.
+    set -uo pipefail
+
+    SRC="${1:?uso: worktree-copy.sh <origem> <destino>}"
+    DST="${2:?uso: worktree-copy.sh <origem> <destino>}"
+
+    cd "$SRC" || exit 1
+
+    copiados=0
+    while IFS= read -r -d '' item; do
+      case "$item" in
+        .git/|.git) continue ;;
+      esac
+      destino="$DST/$item"
+      mkdir -p "$(dirname "${destino%/}")"
+      if cp -Rc "$SRC/$item" "${destino%/}" 2>/dev/null \\
+         || cp -R "$SRC/$item" "${destino%/}" 2>/dev/null; then
+        copiados=$((copiados + 1))
+        echo "  $item"
+      else
+        echo "  FALHOU: $item" >&2
+      fi
+    done < <(git ls-files --others --directory -z)
+
+    echo "$copiados entrada(s) copiada(s) de $SRC para $DST"
+    """
+
     /// Copia para a worktree tudo que o git não versiona: arquivos novos e
     /// também os ignorados — `.env`, `node_modules`, `.dart_tool`, `Pods`,
     /// `build`. Sem isso a worktree nasce sem configuração e sem dependências, e
@@ -289,42 +328,7 @@ enum Worktree {
         // Reescrever por cima apagaria ajustes do usuário.
         guard !FileManager.default.fileExists(atPath: copyScriptURL.path) else { return }
 
-        let script = """
-        #!/usr/bin/env bash
-        # Egeon Deck — leva para a worktree nova tudo que o git não versiona.
-        #
-        # `git ls-files --others --directory` (sem --exclude-standard) lista de uma
-        # vez os arquivos novos E os ignorados, e `--directory` devolve
-        # `node_modules/` como uma entrada em vez de cem mil.
-        #
-        # `cp -c` usa clonefile do APFS: a cópia é instantânea e não ocupa disco
-        # até que um dos lados escreva. É o que torna copiar node_modules viável.
-        # Fora de APFS o clone falha e a cópia comum assume.
-        set -uo pipefail
-
-        SRC="${1:?uso: worktree-copy.sh <origem> <destino>}"
-        DST="${2:?uso: worktree-copy.sh <origem> <destino>}"
-
-        cd "$SRC" || exit 1
-
-        copiados=0
-        while IFS= read -r -d '' item; do
-          case "$item" in
-            .git/|.git) continue ;;
-          esac
-          destino="$DST/$item"
-          mkdir -p "$(dirname "${destino%/}")"
-          if cp -Rc "$SRC/$item" "${destino%/}" 2>/dev/null \\
-             || cp -R "$SRC/$item" "${destino%/}" 2>/dev/null; then
-            copiados=$((copiados + 1))
-            echo "  $item"
-          else
-            echo "  FALHOU: $item" >&2
-          fi
-        done < <(git ls-files --others --directory -z)
-
-        echo "$copiados entrada(s) copiada(s) de $SRC para $DST"
-        """
+        let script = stockCopyScript
 
         try? FileManager.default.createDirectory(
             at: copyScriptURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -339,6 +343,21 @@ enum Worktree {
     static func copyUnversioned(from source: String, to destination: String,
                                 completion: @escaping (String) -> Void) {
         installCopyScript()
+
+        let script = (try? String(contentsOf: copyScriptURL, encoding: .utf8)) ?? ""
+        if UnversionedCopy.isStockScript(script) {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let started = Date()
+                let entries = UnversionedCopy.entries(in: source)
+                let outcome = UnversionedCopy.copy(entries, from: source, to: destination)
+                let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
+                let summary = "\(outcome.copied) entrada(s) clonada(s) em \(seconds) s"
+                    + (outcome.failed.isEmpty ? "" : " — falharam: \(outcome.failed.joined(separator: ", "))")
+                Log.write("worktree: cópia de \(source) para \(destination) — \(summary)")
+                DispatchQueue.main.async { completion(summary) }
+            }
+            return
+        }
 
         DispatchQueue.global(qos: .userInitiated).async {
             let task = Process()

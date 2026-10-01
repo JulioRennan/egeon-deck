@@ -20,6 +20,7 @@ citados entre parênteses.
 
 ### Alterado
 
+- Copiar para a worktree nova o que o git não versiona ficou uns 6× mais rápido: cada entrada (ex.: `node_modules`) é clonada inteira de uma vez no APFS, em vez de arquivo por arquivo, e sem pausa entre os repositórios — `nexus-web-app` + `nexus-backend` de ~21 s para ~3 s. Quem personalizou o `worktree-copy.sh` continua com o script dele.
 - Bancada de multi-projeto só nasce em worktree: o + do multi-projeto abre direto o formulário de worktree, e "Nova bancada…" não aparece para ele (ADR-065).
 - Modelo, esforço e ultracode ficam numa barra à parte embaixo do cabeçalho do card, com fundo próprio e o rótulo em cima de cada controle (ADR-064).
 - Terminal novo sugere a configuração do CLI (ex.: `~/.claude-agro`) escolhida por último naquele workspace; escolher o padrão apaga a lembrança. O padrão aparece pelo caminho que o CLI usa sem configuração (`~/.claude`, `~/.codex`), não mais como "padrão da CLI".

@@ -1013,10 +1013,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Copia o que o git não versiona para cada worktree criada, uma depois da
-    /// outra.
-    ///
-    /// Em fila e não em paralelo: cada cópia é `node_modules` inteiro, e disparar
-    /// todas juntas faz o disco brigar consigo mesmo — o tempo total piora.
+    /// outra — em fila para a faixa poder dizer qual repo está sendo copiado.
+    /// Com clone do APFS cada uma leva um ou dois segundos, e esperar entre elas
+    /// só deixava a mensagem mais tempo na tela.
     private func copyUnversioned(_ pending: [(repo: String, path: String)], into index: Int) {
         guard let first = pending.first else { shell(at: index)?.showBanner(nil); return }
         let rest = Array(pending.dropFirst())
@@ -1030,14 +1029,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.shell(at: index)?.showBanner("\(repo): \(summary)")
             guard !rest.isEmpty else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
                     self?.shell(at: index)?.showBanner(nil)
                 }
                 return
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.copyUnversioned(rest, into: index)
-            }
+            self.copyUnversioned(rest, into: index)
         }
     }
 
