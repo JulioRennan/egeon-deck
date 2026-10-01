@@ -9,6 +9,10 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Corrigido
+
+- A faixa "Copiando o que o git não versiona…" não fica mais presa na tela quando outra bancada é removida (ou a lista muda) durante a cópia: ela é apagada na bancada que pediu, pelo id, e não pela posição na lista.
+
 ## [1.1.0] - 2026-10-01
 
 ### Adicionado

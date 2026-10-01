@@ -1017,24 +1017,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Com clone do APFS cada uma leva um ou dois segundos, e esperar entre elas
     /// só deixava a mensagem mais tempo na tela.
     private func copyUnversioned(_ pending: [(repo: String, path: String)], into index: Int) {
-        guard let first = pending.first else { shell(at: index)?.showBanner(nil); return }
+        guard let id = workbenchID(at: index) else { return }
+        copyUnversioned(pending, intoWorkbench: id)
+    }
+
+    /// Pelo `id` da bancada, e não pela posição: a cópia leva segundos, e se
+    /// uma bancada de cima sai da lista nesse meio-tempo, a posição guardada
+    /// passa a ser de outra — ou de ninguém —, e a faixa "copiando…" da que
+    /// pediu nunca era apagada.
+    private func copyUnversioned(_ pending: [(repo: String, path: String)], intoWorkbench id: String) {
+        guard let first = pending.first else { shells[id]?.showBanner(nil); return }
         let rest = Array(pending.dropFirst())
         let repo = (first.repo as NSString).lastPathComponent
 
-        shell(at: index)?.showBanner("Copiando o que o git não versiona em \(repo) "
-                                  + "(.env, node_modules, build…)"
-                                  + (rest.isEmpty ? "" : " — e mais \(rest.count)"))
+        shells[id]?.showBanner("Copiando o que o git não versiona em \(repo) "
+                               + "(.env, node_modules, build…)"
+                               + (rest.isEmpty ? "" : " — e mais \(rest.count)"))
 
         Worktree.copyUnversioned(from: first.repo, to: first.path) { [weak self] summary in
             guard let self else { return }
-            self.shell(at: index)?.showBanner("\(repo): \(summary)")
+            self.shells[id]?.showBanner("\(repo): \(summary)")
             guard !rest.isEmpty else {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-                    self?.shell(at: index)?.showBanner(nil)
+                    guard let self else { return }
+                    self.shells[id]?.showBanner(nil)
+                    Log.write("worktree: faixa de cópia apagada em "
+                              + "\(self.configs.first { $0.id == id }?.name ?? id)"
+                              + (self.shells[id] == nil ? " (bancada sem shell)" : ""))
                 }
                 return
             }
-            self.copyUnversioned(rest, into: index)
+            self.copyUnversioned(rest, intoWorkbench: id)
         }
     }
 
