@@ -9,6 +9,8 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-01
+
 ### Adicionado
 
 - Multi-projetos no formulário do workspace: dê um nome e escolha algumas das pastas; a bancada dele abre todas juntas numa pasta só, e em worktree cria a mesma branch em cada repositório, lado a lado — ou uma branch própria no repo que você quiser, sem mudar a pasta (ADR-065).
@@ -165,7 +167,8 @@ Primeira versão para passar adiante (tag `v0`).
 - Aviso de "terminou" e "precisa de você" vindo do gancho do CLI.
 - Socket de controle em `~/.egeon/sock`.
 
-[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/JulioRennan/egeon-deck/compare/v0.4...v1.0.0
 [0.4.0]: https://github.com/JulioRennan/egeon-deck/compare/v0.2...v0.4
 [0.2.0]: https://github.com/JulioRennan/egeon-deck/compare/v0...v0.2
