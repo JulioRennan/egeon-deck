@@ -9,6 +9,8 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-01
+
 ### Corrigido
 
 - A faixa "Copiando o que o git não versiona…" não fica mais presa na tela quando outra bancada é removida (ou a lista muda) durante a cópia: ela é apagada na bancada que pediu, pelo id, e não pela posição na lista.
@@ -171,7 +173,8 @@ Primeira versão para passar adiante (tag `v0`).
 - Aviso de "terminou" e "precisa de você" vindo do gancho do CLI.
 - Socket de controle em `~/.egeon/sock`.
 
-[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/JulioRennan/egeon-deck/compare/v0.4...v1.0.0
 [0.4.0]: https://github.com/JulioRennan/egeon-deck/compare/v0.2...v0.4
