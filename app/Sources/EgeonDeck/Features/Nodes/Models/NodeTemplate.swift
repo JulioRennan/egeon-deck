@@ -33,6 +33,10 @@ struct NodeTemplate: Codable {
     /// componente vale em qualquer um.
     var agent: String?
 
+    /// O terminal nasce maestro: pode montar a bancada pelo `egeon` (ADR-066).
+    /// Papel, e não CLI — vale em qualquer um que rode o `egeon`.
+    var maestro: Bool?
+
     /// O que muda de um CLI para outro, por chave do `agents.json`.
     ///
     /// O componente é o PAPEL — nome, tipo, pasta, prompt e regras atravessam
@@ -156,7 +160,7 @@ struct NodeTemplate: Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, kind, agent, cwd, prompt, rules, byAgent
+        case name, kind, agent, cwd, prompt, rules, byAgent, maestro
         // Onde comando, config e modelo moravam antes da ADR-057.
         case cmd, config, model
     }
@@ -174,6 +178,7 @@ struct NodeTemplate: Codable {
         prompt = try c.decodeIfPresent(String.self, forKey: .prompt)
         rules = try c.decodeIfPresent(String.self, forKey: .rules)
         byAgent = try c.decodeIfPresent([String: Overrides].self, forKey: .byAgent)
+        maestro = try c.decodeIfPresent(Bool.self, forKey: .maestro)
         // `cmd` na raiz: num agente é o formato de antes da ADR-057; num shell é
         // o comando dele, que nunca teve CLI para onde migrar.
         command = kind == .shell ? try c.decodeIfPresent(String.self, forKey: .cmd) : nil
@@ -194,6 +199,7 @@ struct NodeTemplate: Codable {
         try c.encode(name, forKey: .name)
         try c.encode(kind, forKey: .kind)
         try c.encodeIfPresent(agent, forKey: .agent)
+        try c.encodeIfPresent(maestro == true ? true : nil, forKey: .maestro)
         try c.encodeIfPresent(cwd, forKey: .cwd)
         try c.encodeIfPresent(prompt, forKey: .prompt)
         try c.encodeIfPresent(rules, forKey: .rules)
@@ -286,10 +292,12 @@ enum NodeTemplateStore {
             over.effort = node.effort
             byAgent[key] = over.isEmpty ? nil : over
         }
-        return NodeTemplate(name: name, kind: node.type, agent: node.agent,
-                            cwd: node.cwd, prompt: node.prompt, rules: node.rules,
-                            byAgent: byAgent.isEmpty ? nil : byAgent,
-                            command: node.type == .shell ? node.cmd : nil)
+        var template = NodeTemplate(name: name, kind: node.type, agent: node.agent,
+                                    cwd: node.cwd, prompt: node.prompt, rules: node.rules,
+                                    byAgent: byAgent.isEmpty ? nil : byAgent,
+                                    command: node.type == .shell ? node.cmd : nil)
+        template.maestro = node.isMaestro ? true : nil
+        return template
     }
 
     /// Instancia o componente como nó, com id único dentro da bancada. O que é
@@ -311,6 +319,7 @@ enum NodeTemplateStore {
         // Claude Code depois de mexer no Codex devolver o que era.
         node.byAgent = component.byAgent
         node.component = component.name
+        node.maestro = component.kind == .agent && component.maestro == true ? true : nil
         return node
     }
 }

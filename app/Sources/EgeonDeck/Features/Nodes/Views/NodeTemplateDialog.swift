@@ -86,6 +86,10 @@ final class NodeTemplateDialog {
     private let rulesScroll = NSScrollView()
     private let saveBox = HandButton(checkboxWithTitle: "Salvar como componente reutilizável",
                                      target: nil, action: nil)
+    /// Pode montar e reconfigurar a bancada pelo `egeon` (ADR-066). Ao lado do
+    /// "salvar": é decisão sobre o terminal, não sobre um campo dele.
+    private let maestroBox = HandButton(checkboxWithTitle: "Maestro — monta a bancada",
+                                        target: nil, action: nil)
 
     private let nameCaption = caption("NOME")
     private let cmdCaption = caption("COMANDO — vazio abre o zsh")
@@ -150,6 +154,7 @@ final class NodeTemplateDialog {
     private func apply(_ component: NodeTemplate) {
         nameField.stringValue = component.name
         kindTabs.selectedSegment = component.kind == .agent ? 1 : 0
+        maestroBox.state = component.maestro == true ? .on : .off
         selectAgent(component.agent)
         let resolved = component.resolved(for: component.agent)
         reloadConfig(select: resolved.config)
@@ -195,6 +200,7 @@ final class NodeTemplateDialog {
         base.kind = isAgent ? .agent : .shell
         base.agent = isAgent ? selectedAgentKey : nil
         base.cwd = selectedFolder.isEmpty ? nil : Self.normalizedFolder(selectedFolder)
+        base.maestro = isAgent && maestroBox.state == .on ? true : nil
         if isAgent {
             base.command = nil
         } else {
@@ -278,12 +284,17 @@ final class NodeTemplateDialog {
             scroll.documentView = field
         }
         saveBox.state = .off
+        maestroBox.state = initial.maestro == true ? .on : .off
+        maestroBox.toolTip = "Este terminal ganha `egeon bench`, `models`, `plan` e `apply`: "
+            + "cria terminais, escolhe modelo, esforço, papel e regras de cada um, e liga as "
+            + "arestas. Reinicia o agente."
 
         let views: [NSView] = [kindTabs, nameCaption, nameField, cmdCaption, cmdField,
                                agentCaption, modelCaption, modelPicker, effortCaption, effortPicker,
                                configCaption, configField, configBrowse,
                                folderCaption, folderAdd, folderScroll,
-                               promptCaption, promptScroll, rulesCaption, rulesScroll, saveBox]
+                               promptCaption, promptScroll, rulesCaption, rulesScroll, saveBox,
+                               maestroBox]
         views.forEach(container.addSubview)
         agentRadios.forEach(container.addSubview)
 
@@ -398,7 +409,15 @@ final class NodeTemplateDialog {
         }
 
         saveBox.isHidden = false
-        saveBox.frame = NSRect(x: Self.inset, y: bottom, width: width, height: 18)
+        if isAgent {
+            let half = (width - Self.gap) / 2
+            saveBox.frame = NSRect(x: Self.inset, y: bottom, width: half, height: 18)
+            maestroBox.isHidden = false
+            maestroBox.frame = NSRect(x: Self.inset + half + Self.gap, y: bottom, width: half, height: 18)
+        } else {
+            saveBox.frame = NSRect(x: Self.inset, y: bottom, width: width, height: 18)
+            maestroBox.isHidden = true
+        }
     }
 
     /// Grid de cards, um por componente salvo. Clicar preenche a outra aba.

@@ -25,6 +25,10 @@ app/Sources/EgeonDeck/
 │   │                           por extensão, realce por linha (SyntaxLite)
 │   ├── Dispatch/               fila, injeção, Target, guardas de cadeia
 │   ├── Home/                   RootView, ViewToolbar, WorkbenchShell, Sidebar
+│   ├── Maestro/                o nó que monta a bancada (ADR-066): MaestroPlan
+│   │                           (JSON), MaestroPlanner (valida e calcula, puro),
+│   │                           MaestroSnapshot, MaestroGuide (o manual/skill),
+│   │                           MaestroController (aplica por closures)
 │   ├── Mosaic/                 o modo mosaico
 │   ├── Nodes/                  NodeConfig, NodeView e os concretos
 │   │   └── Features/

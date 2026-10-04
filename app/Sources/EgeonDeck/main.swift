@@ -261,6 +261,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.changeModel(of: node, to: choice, index: index)
             return nil
         }
+        AppControl.maestro = makeMaestro()
+        AppControl.setMaestro = { [weak self] target, on in
+            guard let self else { return "app encerrando" }
+            return self.setMaestro(target, on: on)
+        }
         AppControl.setViewMode = { [weak self] raw in
             guard let self, let mode = ViewMode(rawValue: raw),
                   let shell = self.shell(at: self.activeIndex) else { return nil }
@@ -288,6 +293,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard parts.count == 2 else { return nil }
             return self?.configs.first { $0.name == parts[0] }?
                 .nodes.first { $0.id == parts[1] }?.effectivePrompt
+        }
+        AppControl.nodeIsMaestro = { [weak self] address in
+            let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return false }
+            return self?.configs.first { $0.name == parts[0] }?
+                .nodes.first { $0.id == parts[1] }?.isMaestro ?? false
         }
         AppControl.nodeIdentity = { [weak self] address in
             let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
@@ -2234,8 +2245,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             duas linhas — o que foi pedido e o que você entregou (ou onde parou). \
             Quem escreveu, CLI, modelo e conversa são carimbados pelo app; não \
             os repita.
-            """
+            """ + (node.isMaestro ? "\n\n" + maestroSection : "")
     }
+
+    /// O que só o maestro lê (ADR-066). Curto como o resto do catálogo: o
+    /// manual mora na skill `egeon-maestro` e no `egeon guide`.
+    private static let maestroSection = """
+        Você é o MAESTRO desta bancada: o usuário te deu o poder de montá-la e \
+        reconfigurá-la. `egeon bench` mostra a bancada, `egeon models` o que \
+        cada CLI aceita, `egeon plan` valida um plano JSON sem aplicar e \
+        `egeon apply` aplica — terminais novos, modelo, esforço, papel, regras \
+        e arestas. Antes de desenhar, leia o manual: a skill `egeon-maestro`, \
+        ou `egeon guide`. Mostre o desenho ao usuário antes de aplicar, a menos \
+        que ele já tenha dito para aplicar direto.
+        """
 
     private static func launchPlan(for node: NodeConfig,
                                    profile: AgentProfile?,
@@ -2435,6 +2458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         } ?? [:],
                                         prompt: launch.promptToInject,
                                         hooked: launch.hooked)
+            terminal.isMaestro = node.isMaestro
             let launched = Date()
             terminal.modelResolver = { [weak self] in
                 self?.literalModel(workbench: config.name, nodeID: node.id, since: launched)
@@ -2609,6 +2633,99 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         edgeControllers[id] = controller
         return controller
+    }
+
+    // MARK: - Maestro
+
+    /// O controller do maestro, com a bancada resolvida pelo NOME a cada
+    /// chamada — é o nome que vem no endereço de quem pergunta (ADR-066).
+    private func makeMaestro() -> MaestroController {
+        func locate(_ name: String) -> (index: Int, shell: WorkbenchShell)? {
+            guard let index = configs.firstIndex(where: { $0.name == name }),
+                  let shell = shell(at: index) else { return nil }
+            return (index, shell)
+        }
+        return MaestroController(.init(
+            bench: { [weak self] name in self?.configs.first { $0.name == name } },
+            context: { [weak self] bench, caller in
+                var context = MaestroContext(caller: caller, profiles: self?.agents ?? [:])
+                context.catalog = ClaudeModelCatalog.current(for:)
+                func ids(in state: Activity) -> Set<String> {
+                    Set(bench.nodes.map(\.id).filter {
+                        Dispatcher.shared.target("\(bench.name)/\($0)")?.activity == state
+                    })
+                }
+                // Pedido de permissão parado na tela também é turno em curso.
+                context.working = ids(in: .working).union(ids(in: .asking))
+                context.background = ids(in: .background)
+                let suggested = self?.configs.firstIndex { $0.id == bench.id }
+                    .flatMap { self?.workspace(of: $0)?.lastConfigs } ?? [:]
+                context.suggestedConfig = { suggested[$0] }
+                return context
+            },
+            activity: { Dispatcher.shared.target($0)?.activity },
+            profiles: { [weak self] in self?.agents ?? [:] },
+            catalog: ClaudeModelCatalog.current(for:),
+            commit: { [weak self] next in
+                guard let self, let index = self.index(ofID: next.id) else { return }
+                self.configs[index] = next
+            },
+            spawn: { [weak self] name, id in
+                guard let self, let (index, shell) = locate(name),
+                      let position = self.configs[index].nodes.firstIndex(where: { $0.id == id })
+                else { return }
+                let size = CanvasTool.terminal.defaultNodeSize
+                let rect = shell.canvas.spawnRect(size: size)
+                self.configs[index].nodes[position].setFrame(rect)
+                shell.attach(self.makeNode(self.configs[index].nodes[position],
+                                           in: self.configs[index], frame: rect))
+            },
+            restart: { [weak self] name, id in
+                guard let self, let (index, shell) = locate(name),
+                      let config = self.configs[index].nodes.first(where: { $0.id == id }),
+                      let view = shell.nodes.first(where: { $0.nodeID == id }) else { return }
+                let frame = shell.canvasFrame(of: id) ?? view.frame
+                shell.detach(view)
+                shell.attach(self.makeNode(config, in: self.configs[index], frame: frame))
+            },
+            dispose: { name, id in
+                guard let (_, shell) = locate(name),
+                      let view = shell.nodes.first(where: { $0.nodeID == id }) else { return }
+                shell.detach(view)
+            },
+            redrawEdges: { [weak self] name in
+                guard let self, let (index, shell) = locate(name) else { return }
+                shell.canvas.edges = self.configs[index].edgeList
+            },
+            persist: { [weak self] in self?.schedulePersist() },
+            trace: { address, text in
+                guard let identity = AppControl.nodeIdentity?(address) else { return }
+                TraceLog.shared.record(TraceEntry(address: address, workbenchID: identity.workbenchID,
+                                                  at: Date(), cli: identity.cli, model: identity.model,
+                                                  conversation: identity.conversation, text: text))
+            }))
+    }
+
+    /// Liga ou desliga o maestro de um nó. Reinicia o agente: o system prompt
+    /// dele ganha (ou perde) a seção do maestro, e só é lido no arranque.
+    private func setMaestro(_ target: String, on: Bool) -> String? {
+        let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2, let index = configs.firstIndex(where: { $0.name == parts[0] })
+        else { return "bancada desconhecida '\(target)'" }
+        guard let position = configs[index].nodes.firstIndex(where: { $0.id == parts[1] })
+        else { return "nó desconhecido '\(target)'" }
+        guard configs[index].nodes[position].type == .agent else { return "'\(target)' não é um agente" }
+        guard configs[index].nodes[position].isMaestro != on else { return nil }
+        configs[index].nodes[position].maestro = on ? true : nil
+        schedulePersist()
+        if let shell = shell(at: index), let view = shell.nodes.first(where: { $0.nodeID == parts[1] }) {
+            let frame = shell.canvasFrame(of: parts[1]) ?? view.frame
+            shell.detach(view)
+            shell.attach(makeNode(configs[index].nodes[position], in: configs[index], frame: frame))
+        }
+        Log.write("bancada \(configs[index].name): nó \"\(parts[1])\" "
+                  + (on ? "virou maestro" : "deixou de ser maestro"))
+        return nil
     }
 
     // MARK: - Modo chat
@@ -3069,6 +3186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // system prompt, e ele só é lido no arranque.
             && updated.effectivePrompt == current.effectivePrompt
             && updated.effectiveRules == current.effectiveRules
+            // O maestro tem uma seção própria no system prompt (ADR-066).
+            && updated.isMaestro == current.isMaestro
 
         configs[index].nodes[position] = updated
 

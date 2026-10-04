@@ -49,6 +49,14 @@ struct NodeConfig: Codable {
     /// contra a diretriz geral (ADR-056).
     var rules: String?
 
+    /// Este terminal pode montar e reconfigurar a própria bancada pelo `egeon`
+    /// — criar nós, trocar modelo, esforço, papel e regras, desenhar arestas
+    /// (ADR-066). Só você liga isto, no formulário: o plano do maestro não tem
+    /// este campo, senão um maestro faria outros.
+    var maestro: Bool?
+
+    var isMaestro: Bool { type == .agent && maestro == true }
+
     /// O que você configurou para CADA CLI neste terminal.
     ///
     /// `prompt` e `rules` acima são os GERAIS — valem em qualquer CLI. Aqui fica

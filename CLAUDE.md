@@ -29,6 +29,7 @@ app/Sources/EgeonDeck/
 │   │                    Language (por extensão), SyntaxLite (realce por linha)
 │   ├── Dispatch/        fila, injeção, Target, guardas de cadeia
 │   ├── Home/            RootView, ViewToolbar, WorkbenchShell, Sidebar
+│   ├── Maestro/         o nó que monta a bancada — plano, planejador, manual
 │   ├── Mosaic/          o modo mosaico
 │   ├── Nodes/           NodeConfig, NodeView, NodeTemplate + concretos
 │   │   └ Features/AgentNode (contrato genérico → Features/ClaudeCode)
@@ -148,6 +149,13 @@ app/Sources/EgeonDeck/
   do `agents.json`. Ultracode ocupa o `--effort`, e o nível vai por
   `CLAUDE_CODE_EFFORT_LEVEL`. Trocar reinicia o processo e retoma a conversa
   (ADR-064).
+- **Maestro** (ADR-066) — nó de agente marcado no formulário (`NodeConfig.maestro`)
+  ganha `egeon bench`/`models`/`plan`/`apply`: monta a própria bancada por um plano
+  JSON declarativo (`MaestroPlan` → `MaestroPlanner` valida inteiro → 
+  `MaestroController` aplica por closures). Não se reconfigura, não faz maestro,
+  não reinicia nó em turno (segundo plano só com `force`); nó novo nasce ligado a
+  ele; todo `apply` vai para a trilha. O manual é a skill `egeon-maestro`
+  (`MaestroGuide`, publicada pelo `ClaudeSkill`) e o `egeon guide`.
 - **Papel e regras** são campos separados (ADR-056): papel é quem o terminal é;
   regra é como se trabalha, e a da **bancada** (menu de contexto na barra) vale
   para todos os agentes dela, somada à do nó. No system prompt as regras entram
@@ -185,7 +193,8 @@ app/Sources/EgeonDeck/
   A cobertura hoje é pequena (190 testes); a regra existe para ela só crescer.
 - **Verificar é executar, compilar não é verificar**: dispare por `/dispatch`,
   confira por `/peek` e pelo log. Rotas úteis: `/targets` `/dispatch` `/peek`
-  `/chat` `/compose` `/edge` `/layout` `/geometry` `/status` `/workspaces` —
+  `/chat` `/compose` `/edge` `/layout` `/geometry` `/status` `/workspaces`
+  `/maestro?target=&on=1` —
   socket unix, HTTP mínimo:
   `curl --unix-socket ~/.egeon-dev/sock http://eg/targets`
 - Config do usuário em `~/.egeon/` (tudo editável à mão); `bin/egeon`,

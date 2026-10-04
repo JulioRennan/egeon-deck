@@ -113,11 +113,39 @@ quando você diz "pede pro revisor", o que decide o caminho é a descrição de 
 ferramenta. A skill entra nessa disputa e manda olhar os vizinhos primeiro.
 
 É o **único** lugar em que o app escreve na sua configuração do Claude Code:
-`skills/egeon/SKILL.md` no root de cada base path que existir — `~/.claude`,
+`skills/egeon/SKILL.md` (e `skills/egeon-maestro/SKILL.md`, abaixo) no root de cada base path que existir — `~/.claude`,
 `~/.claude-agro`, qualquer `~/.claude*` — porque skill é por configuração e cada
 nó escolhe a sua no formulário. A pasta é reescrita a cada arranque do app (o
 arquivo avisa isso no corpo); para se livrar dela, apague `skills/egeon/` com o
 app fechado.
+
+### O maestro: um terminal que monta a bancada
+
+Marque **Maestro** no formulário de um terminal de agente (⚙ no card) e ele passa a
+poder desenhar a bancada sozinho — de preferência um modelo forte, como o Opus com
+esforço alto. Peça "monta a bancada para migrar o backend" e ele decide quantos
+terminais, o papel, o modelo, o esforço e as regras de cada um, quem fala com quem,
+mostra o desenho e aplica:
+
+```bash
+egeon bench                 # a bancada: regras, nós, arestas, estado de cada um
+egeon models                # CLIs, modelos e esforços que cada um aceita hoje
+egeon plan  <<'JSON'        # valida o plano e mostra o que mudaria
+{"nodes":[{"id":"back","cwd":"api","model":"sonnet","effort":"medium","role":"…"}]}
+JSON
+egeon apply <<'JSON'        # o mesmo plano, aplicado
+…
+JSON
+egeon guide                 # o manual do maestro
+```
+
+O plano é validado inteiro antes de qualquer efeito: CLI, modelo e esforço têm de
+existir no catálogo, a pasta tem de existir, e terminal em turno não é reiniciado.
+Terminal novo nasce ligado ao maestro nos dois sentidos; as guardas de cadeia valem
+como sempre. O maestro não mexe em si mesmo e não faz outros maestros — isso é só
+seu. Cada `apply` deixa uma linha na trilha. O manual de desenho (topologias,
+modelo e esforço por papel, como escrever papel e regras) é a skill
+`egeon-maestro`, publicada junto da `egeon` (ADR-066).
 
 A **trilha** é a memória da bancada: `~/.egeon/workbenches/<id>/trace.md`, um
 Markdown só por bancada, que se lê de cima a baixo para auditar quem fez o quê. A

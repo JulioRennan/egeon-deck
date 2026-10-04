@@ -60,6 +60,15 @@ enum AppControl {
     /// Troca o modelo ou o esforço de um terminal com IA e o reinicia.
     /// Nil/vazio = padrão.
     static var setNodeModel: ((_ target: String, _ choice: ModelChoice) -> String?)?
+
+    /// Quem atende o terminal maestro: lê a bancada, mostra o plano e aplica
+    /// (ADR-066). Montado pelo AppDelegate, que é o dono do `workbenches.json`.
+    static var maestro: MaestroController?
+
+    /// Liga ou desliga o maestro de um nó, de fora. O checkbox do formulário
+    /// passa por `NSAlert`, que não é dirigível sem Acessibilidade (ADR-003).
+    /// Nil de volta é sucesso; senão, o erro.
+    static var setMaestro: ((_ target: String, _ on: Bool) -> String?)?
     static var setViewMode: ((String) -> String?)?
 
     /// Recolher a barra de bancadas ao trilho, ou abrir.
@@ -95,6 +104,9 @@ enum AppControl {
     /// Papel do nó, para a lista de vizinhos dizer o que cada um faz — sem isso
     /// o agente lê endereços e não tem como escolher entre dois irmãos.
     static var nodeRole: ((String) -> String?)?
+    /// O nó pode montar a bancada (ADR-066) — vai no `egeon status`, que é
+    /// por onde o agente descobre se tem esse poder.
+    static var nodeIsMaestro: ((String) -> Bool)?
 
     /// Com o que o nó está rodando, para a trilha da bancada carimbar cada
     /// registro: nome do CLI, modelo literal em uso e id da conversa. O agente

@@ -293,6 +293,46 @@ final class ControlSocket {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             deliver(request, to: fd)
 
+        case (_, _, _) where bare.hasPrefix("/maestro/"):
+            // /maestro/bench · /maestro/models · POST /maestro/apply[?dry=1] —
+            // o terminal maestro lendo e montando a bancada (ADR-066). Quem
+            // pergunta sai do processo do outro lado, como no `egeon send`: o
+            // controller recusa quem não é maestro.
+            let dry = Self.query(in: route)["dry"] == "1"
+            let reply = DispatchQueue.main.sync { () -> (status: Int, json: [String: Any]) in
+                guard let maestro = AppControl.maestro else { return (503, ["ok": false, "error": "app sem bancadas"]) }
+                let caller = Dispatcher.shared.target(callingOn: fd)?.address
+                switch (method, bare.hasSuffix("/bench"), bare.hasSuffix("/models"), bare.hasSuffix("/apply")) {
+                case ("GET", true, _, _): return maestro.bench(caller: caller)
+                case ("GET", _, true, _): return maestro.models(caller: caller)
+                case ("POST", _, _, true): return maestro.apply(body, caller: caller, dry: dry)
+                default:
+                    return (404, ["ok": false, "error": "use GET /maestro/bench, GET /maestro/models "
+                                                        + "ou POST /maestro/apply[?dry=1]"])
+                }
+            }
+            respond(fd, status: Self.statusLine(reply.status), json: reply.json)
+
+        case ("GET", _, _) where bare == "/maestro":
+            // /maestro?target=<bancada/nó>&on=1|0 — liga o maestro de fora, como
+            // o checkbox do formulário. Só de fora: de dentro de um terminal
+            // seria um agente se promovendo (ADR-066).
+            let query = Self.query(in: route)
+            let outcome = DispatchQueue.main.sync { () -> String? in
+                guard Dispatcher.shared.target(callingOn: fd) == nil else {
+                    return "só o usuário liga o maestro — de dentro de um terminal, não"
+                }
+                // Nil de volta é sucesso: `?? erro` aqui o transformaria em falha.
+                guard let setMaestro = AppControl.setMaestro else { return "app sem bancadas" }
+                return setMaestro(query["target"] ?? "", query["on"] != "0")
+            }
+            if let outcome {
+                respond(fd, status: "400 Bad Request", json: ["ok": false, "error": outcome])
+            } else {
+                respond(fd, status: "200 OK", json: ["ok": true, "target": query["target"] ?? "",
+                                                     "maestro": query["on"] != "0"])
+            }
+
         case ("POST", _, _) where route.contains("/trace"):
             // /trace — corpo é o texto puro (`egeon trace`, heredoc). Quem
             // escreveu sai do processo do outro lado do socket, e CLI, modelo e
@@ -424,6 +464,7 @@ final class ControlSocket {
                     "pending": origin.pending,
                     "peers": Dispatcher.shared.peers(of: origin.address).count]
                 if let role = AppControl.nodeRole?(origin.address) { payload["role"] = role }
+                if AppControl.nodeIsMaestro?(origin.address) == true { payload["maestro"] = true }
                 if let identity = AppControl.nodeIdentity?(origin.address) {
                     payload["cli"] = identity.cli
                     payload["model"] = identity.model
@@ -794,6 +835,17 @@ final class ControlSocket {
             printf '%s' "$out"
         }
         """
+
+    private static func statusLine(_ code: Int) -> String {
+        switch code {
+        case 200: return "200 OK"
+        case 400: return "400 Bad Request"
+        case 403: return "403 Forbidden"
+        case 404: return "404 Not Found"
+        case 422: return "422 Unprocessable Entity"
+        default: return "\(code) Service Unavailable"
+        }
+    }
 
     private static func query(in route: String) -> [String: String] {
         guard let raw = route.split(separator: "?").dropFirst().first else { return [:] }

@@ -106,9 +106,15 @@ final class ClaudeSkillTests: XCTestCase {
                        root.appendingPathComponent(".claude-agro")]
 
         let written = ClaudeSkill.install(into: configs)
-        XCTAssertEqual(written, configs.map(ClaudeSkill.skillFile(in:)))
-        for file in written {
+        XCTAssertEqual(written, configs.flatMap { config in
+            [ClaudeSkill.skillFile(in: config),
+             ClaudeSkill.skillFile(in: config, named: MaestroGuide.skillName)]
+        })
+        for file in written where file.path.contains("/skills/egeon/") {
             XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), ClaudeSkill.body)
+        }
+        for file in written where file.path.contains("/skills/egeon-maestro/") {
+            XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), MaestroGuide.skill)
         }
 
         // Reescrita a cada arranque: o texto acompanha a versão que subiu, e o
@@ -133,6 +139,27 @@ final class ClaudeSkillTests: XCTestCase {
         if let named = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"], !named.isEmpty {
             let url = URL(fileURLWithPath: (named as NSString).expandingTildeInPath)
             XCTAssertTrue(found.contains { $0.standardizedFileURL == url.standardizedFileURL })
+        }
+    }
+
+    /// O manual do maestro passa pela mesma régua de YAML da skill dos
+    /// vizinhos, e diz logo de cara que só vale para quem é maestro (ADR-066).
+    func testMaestroSkillFrontmatterIsReadableAndGated() {
+        let front = frontmatter(of: MaestroGuide.skill)
+        XCTAssertTrue(front.contains("name: egeon-maestro"))
+        XCTAssertTrue(front.contains("description: >-"))
+        XCTAssertTrue(front.contains("when_to_use: >-"))
+        XCTAssertTrue(front.contains("monta a bancada"))
+        XCTAssertTrue(front.contains("maestro true"), "a skill vai para toda config — diz quem pode")
+        for line in front.split(separator: "\n") where !line.hasPrefix(" ") {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            guard !value.isEmpty, value != ">-" else { continue }
+            XCTAssertFalse(value.contains(": "), "`\(line)` quebra o YAML")
+        }
+        // O texto ensina o formato que o planejador lê: todo campo de nó citado.
+        for key in MaestroPlan.Node.Keys.allCases {
+            XCTAssertTrue(MaestroGuide.text.contains("`\(key.rawValue)`"), "o manual não cita '\(key.rawValue)'")
         }
     }
 }

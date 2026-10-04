@@ -26,8 +26,15 @@ enum ClaudeSkill {
     static let name = "egeon"
 
     /// Onde o CLI procura dentro de um base path.
-    static func skillFile(in config: URL) -> URL {
-        config.appendingPathComponent("skills/\(name)/SKILL.md")
+    static func skillFile(in config: URL, named skill: String = ClaudeSkill.name) -> URL {
+        config.appendingPathComponent("skills/\(skill)/SKILL.md")
+    }
+
+    /// As skills que o app publica: a dos vizinhos e o manual do maestro
+    /// (ADR-066). Vão as duas para toda configuração — a do maestro diz logo
+    /// no começo que só vale para o terminal que o usuário marcou.
+    static var published: [(name: String, body: String)] {
+        [(name, body), (MaestroGuide.skillName, MaestroGuide.skill)]
     }
 
     /// As configurações do Claude Code que existem agora: as do padrão
@@ -55,16 +62,18 @@ enum ClaudeSkill {
         // e um dia elas divergem.
         try? FileManager.default.removeItem(at: Flavor.current.config("claude"))
 
-        return configs.compactMap { config in
-            let file = skillFile(in: config)
-            do {
-                try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
-                                                        withIntermediateDirectories: true)
-                try body.write(to: file, atomically: true, encoding: .utf8)
-                return file
-            } catch {
-                Log.write("skill: não consegui escrever \(file.path) — \(error)")
-                return nil
+        return configs.flatMap { config in
+            published.compactMap { skill -> URL? in
+                let file = skillFile(in: config, named: skill.name)
+                do {
+                    try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
+                                                            withIntermediateDirectories: true)
+                    try skill.body.write(to: file, atomically: true, encoding: .utf8)
+                    return file
+                } catch {
+                    Log.write("skill: não consegui escrever \(file.path) — \(error)")
+                    return nil
+                }
             }
         }
     }

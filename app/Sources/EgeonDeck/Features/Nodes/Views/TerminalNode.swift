@@ -149,6 +149,10 @@ final class TerminalNode: NodeView {
     let term = MBTerminalView(frame: .zero)
     private(set) var address: String
     private var baseTitle: String
+    /// O maestro se distingue no cabeçalho: é o terminal que pode mexer na
+    /// bancada inteira, e isso tem de ser visível sem abrir o formulário
+    /// (ADR-066).
+    var isMaestro = false { didSet { refreshBadge() } }
     /// `✦` para terminal com IA, `▸` para shell. Guardado em vez de relido do
     /// rótulo: o rótulo agora carrega estado, e ler o símbolo de volta dele
     /// quebraria assim que o sufixo mudasse.
@@ -368,7 +372,7 @@ final class TerminalNode: NodeView {
         if let label = activity.label { parts.append(label) }
         if pending > 0 { parts.append("\(pending) na fila") }
 
-        let text = "\(symbol) \(baseTitle)"
+        let text = "\(symbol) \(baseTitle)" + (isMaestro ? "  · maestro" : "")
         let status = parts.joined(separator: "  ·  ")
         // Os rótulos só são tocados quando o texto muda de fato: o spinner troca a
         // cada quadro, o resto quase nunca, e reatribuir string igual marca

@@ -47,6 +47,13 @@ enum EgeonCLI {
         #   egeon trace [texto]      registra na trilha da bancada (texto ou stdin)
         #   egeon status             quem você é e como está este terminal
         #
+        # Só no terminal maestro (ADR-066) — montar e reconfigurar a bancada:
+        #   egeon bench              a bancada: regras, nós, arestas, estado
+        #   egeon models             CLIs, modelos e esforços que cada um aceita
+        #   egeon plan               valida o plano (JSON no stdin), sem aplicar
+        #   egeon apply              valida e aplica o plano (JSON no stdin)
+        #   egeon guide              o manual do maestro
+        #
         # Você não diz quem você é: o app descobre pelo processo que abriu a
         # conexão. Não adianta passar o endereço de outro terminal.
         set -euo pipefail
@@ -91,8 +98,27 @@ enum EgeonCLI {
           status)
             api GET /status
             ;;
+          bench)
+            api GET /maestro/bench
+            ;;
+          models)
+            api GET /maestro/models
+            ;;
+          plan)
+            api POST "/maestro/apply?dry=1" --data-binary @-
+            ;;
+          apply)
+            api POST /maestro/apply --data-binary @-
+            ;;
+          guide)
+            # Embutido e não pedido ao app: é o mesmo texto da skill, e um CLI
+            # sem skill precisa dele mesmo quando o maestro ainda não foi ligado.
+            cat <<'EGEON_GUIDE'
+        \(MaestroGuide.text)
+        EGEON_GUIDE
+            ;;
           *)
-            sed -n '2,10p' "$0" | cut -c3-
+            sed -n '2,17p' "$0" | cut -c3-
             exit 2
             ;;
         esac

@@ -99,6 +99,29 @@ descobre quem fala pelo pid do outro lado da conexão
 `resolve(_:siblingOf:)`: agente pode escrever só o `id` do vizinho; o app
 completa `bancada/id` — barrar por isso seria pedantismo.
 
+### Os comandos do maestro (ADR-066)
+
+Só respondem a nó com `NodeConfig.maestro == true` (o checkbox do formulário,
+ou `GET /maestro?target=&on=1` **de fora** — de dentro de um terminal a rota
+recusa, senão um agente se promoveria). Quem chama sai do pid, como sempre.
+
+| subcomando | rota | o quê |
+|---|---|---|
+| `egeon bench` | `GET /maestro/bench` | `MaestroSnapshot.bench` — nós no vocabulário do plano (`cli`, `role`), `state` (`working`/`background`/`idle`/`done`/`asking`…), arestas, regras, `you` |
+| `egeon models` | `GET /maestro/models` | `MaestroSnapshot.models` — por CLI do `agents.json`: modelos do catálogo (ADR-064) com `efforts`, `configs` |
+| `egeon plan` | `POST /maestro/apply?dry=1` | `MaestroPlanner.plan` sem efeito; devolve o resumo e a bancada resultante |
+| `egeon apply` | `POST /maestro/apply` | valida e aplica: commit → dispose/restart/spawn → arestas → persist → trilha |
+| `egeon guide` | — (embutido no script) | `MaestroGuide.text`, o mesmo da skill `egeon-maestro` |
+
+Regras do planejador (todas com teste em `MaestroPlanTests`): plano vale inteiro
+ou nada (erros acumulados, 422); chave desconhecida é erro; campo ausente mantém,
+`null` volta ao padrão; o maestro não entra em `nodes`/`remove`; `maestro` não é
+campo do plano; nó em turno (`working`) não reinicia nem sai; em segundo plano só
+com `"force": true`; agente novo nasce com `maestro ↔ novo` (`maxSends` padrão,
+ajustável no mesmo plano); regras da bancada reiniciam os outros agentes, nunca o
+maestro. As guardas de cadeia da seção 4 não mudam: o poder do maestro é
+desenhar a aresta, não passar por cima dela.
+
 ## 4. Guardas de cadeia (`Dispatcher.dispatch(_:from:)`)
 
 `origin == nil` (extensão VSCode, seu `curl`, teste, composer do chat) **é
@@ -211,6 +234,8 @@ caso, **voltar a falar com o usuário**.
 | `POST /dispatch` (JSON `DispatchRequest`) | extensão, chat, testes | entrega de você; `kind: review\|task\|raw` |
 | `POST /message?target=` (texto) | agente via `egeon send` | entrega com guardas |
 | `GET /peers` | agente via `egeon peers` | topologia saindo do chamador |
+| `GET /maestro/bench` · `/maestro/models` · `POST /maestro/apply[?dry=1]` | maestro via `egeon bench/models/plan/apply` | montar a bancada (ADR-066) |
+| `GET /maestro?target=&on=1\|0` | você (só de fora) | liga/desliga o maestro de um nó; reinicia o agente |
 | `POST /activity?target=&event=stop\|ask` | `agent-hook.sh` | estado do terminal |
 | `POST /conversation?target=&…` | `agent-hook.sh` (`UserPromptSubmit`) | `conversationId` aberto |
 | `GET /status` | agente | estado do próprio terminal |
@@ -267,6 +292,7 @@ teste — é a regra do CLAUDE.md.
 - **ADR-038** — envelope sem rodapé de aviso; restrição é da ferramenta do usuário, guardas estruturais ficam.
 - **ADR-040** — gancho identificado pelo pid da conexão, como o `egeon`; `EGEON_TARGET` não é identidade.
 - **ADR-063** — `[[ED:wait]]`: parou com trabalho de fundo; ampulheta, sem som.
+- **ADR-066** — maestro: um nó que monta a bancada por plano JSON validado inteiro.
 - **ADR-039** — turno em curso lido ao vivo da cauda do transcript (só enquanto `working`); a bolha do chat desenha a cadeia na ordem.
 
 `docs/03-spec-chat.md` — o chat como vista dessa mesma conversa.

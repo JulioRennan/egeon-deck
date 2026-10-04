@@ -3822,3 +3822,114 @@ abriu `worktrees/AB/feat-x/{repo-a,repo-b}` em `feat/x` (com
 `&nodes=repo-b:fix/api`, o `repo-b` em `fix/api` e a raiz igual) e a bancada nova
 apareceu sob o AB; branch `main` virou dois links para os checkouts;
 `/remove?…&worktrees=1` apagou as duas worktrees e a pasta, sem tocar no link.
+
+## ADR-066 — Maestro: o terminal que monta a bancada
+
+**Problema.** Montar uma bancada de vários agentes é trabalho de desenho:
+quantos terminais, que papel cada um, que modelo e esforço, que regras, quem
+fala com quem e quantas vezes. Hoje isso é feito à mão, card por card, no
+formulário — e é exatamente o tipo de decisão que um modelo forte (Opus, alto
+esforço) toma bem a partir do pedido: "monta uma bancada para migrar o
+backend". Faltava ao agente o PODER de executar o desenho.
+
+**Decisão.** Um nó de agente pode ser marcado **maestro** (`NodeConfig.maestro`,
+um checkbox no formulário do terminal; `NodeTemplate.maestro` leva junto no
+componente). O maestro ganha quatro subcomandos do `egeon`, que os outros nós
+não têm:
+
+| comando | rota | o quê |
+|---|---|---|
+| `egeon bench` | `GET /maestro/bench` | a bancada como dados: regras, `maxVisits`, nós (cli, modelo, esforço, ultracode, papel, regras, pasta, estado) e arestas |
+| `egeon models` | `GET /maestro/models` | os CLIs do `agents.json`, com os modelos e os níveis de esforço que cada um aceita — o catálogo lido do binário (ADR-064) |
+| `egeon plan` | `POST /maestro/apply?dry=1` | valida um plano e devolve o que mudaria, sem mudar |
+| `egeon apply` | `POST /maestro/apply` | valida e aplica |
+| `egeon guide` | `GET /maestro/guide` | o manual (o mesmo texto da skill), para CLI que não tem skill |
+
+- **Plano declarativo, um JSON.** `nodes` faz upsert por `id` (campo ausente
+  fica, `null` volta ao padrão), `remove` tira nós, `edges` cria ou ajusta
+  arestas (`both` para ida e volta, `maxSends`), `unlink` tira, `rules` e
+  `maxVisits` são da bancada. Um JSON e não vinte comandos porque o desenho é
+  um só: validado inteiro antes de qualquer efeito, ou recusado inteiro com a
+  lista de erros. Meia bancada montada é pior que nenhuma.
+- **Validação estrutural, não de prosa.** CLI tem de existir; modelo e esforço
+  têm de estar no catálogo do CLI (o nível tem de ser do modelo escolhido);
+  pasta tem de existir; aresta tem de ligar nós que existirão; id é slug.
+- **O maestro não se reconfigura.** O próprio nó não entra em `nodes` nem em
+  `remove`: reiniciar quem está aplicando mataria o turno no meio. Regras da
+  bancada novas reiniciam os OUTROS agentes; as dele valem no próximo arranque,
+  e a resposta diz isso.
+- **Não interrompe trabalho.** Plano que reinicia ou remove um nó em turno
+  (`working`, ou `asking` — parado num pedido de permissão) é recusado nomeando quem — espere e mande de novo. Em segundo
+  plano (`background`) também, mas com saída: `"force": true`. Segundo plano é
+  ambíguo — "esperando um vizinho" (interromper não custa nada) ou "processo
+  rodando" (custa) —, o app não distingue, e o estado só cai com mensagem
+  nova: sem `force` o maestro ficaria esperando para sempre (aconteceu no
+  primeiro teste). Quem decide é ele, olhando com `egeon peek`.
+- **Nó novo nasce ligado ao maestro**, ida e volta, com o `maxSends` padrão:
+  é o que faz "invocar" funcionar sem o usuário desenhar nada. As guardas de
+  cadeia (ADR-012) continuam valendo — o poder do maestro é DESENHAR a aresta,
+  não passar por cima dela. Ele pode dar `maxSends` maior às próprias setas.
+- **Conversa fica — quando pode.** Trocar modelo, esforço, papel ou regras de
+  um nó existente reinicia o processo e retoma a mesma conversa, como no
+  seletor (ADR-064). Trocar de CLI, de pasta ou de configuração zera a conversa
+  e a resposta diz quem: o CLI guarda a conversa por pasta e por configuração,
+  e o `--resume` ali cairia calado numa conversa nova (como na worktree por nó).
+- **O maestro não ganha mais poder que o próprio CLI.** Sem `cmd` no plano:
+  shell nasce zsh limpo, porque comando escolhido por ele rodaria sem passar
+  pela permissão do CLI (com `egeon` liberado no allowlist, seria execução
+  arbitrária). `config` só entre as que o CLI tem no padrão dele (`configs` do
+  `egeon models`) — pasta qualquer seria um settings preparado com permissões
+  abertas. Outro maestro, editor e navegador ficam fora do alcance.
+- **Afrouxa com teto.** `maxSends` até 10, `maxVisits` até 12; `null` (sem
+  limite) só o usuário põe. As guardas existem para quando ninguém olha.
+- **Valida o que mudou.** Nó do usuário com modelo antigo escrito à mão não
+  trava um plano que só mexe no papel dele.
+- **O vocabulário é o mesmo nos dois sentidos.** `state`, `you` e `maestro`
+  do `egeon bench` são aceitos e ignorados no plano (copiar um nó funciona);
+  `maestro: true` é recusado dizendo por quê.
+- **Não há escalada.** `maestro` não é campo do plano: só o usuário, no
+  formulário, faz um maestro. O maestro só alcança a própria bancada.
+- **Trilha automática.** Todo `apply` aplicado deixa uma linha na trilha da
+  bancada com o resumo (`+front +back ~revisor −velho, 3 arestas`), carimbada
+  como o maestro. Quem mudou a bancada fica auditável sem depender de o
+  agente lembrar de escrever.
+- **A skill.** `skills/egeon-maestro/SKILL.md` (publicada como a `egeon`,
+  ADR-054) é o manual de desenho: como ler o pedido, quando vale um time,
+  escolher modelo e esforço por papel, escrever papel e regras que aderem,
+  topologias (estrela, pipeline, par revisor), limites de cadeia, e o formato
+  exato do plano com exemplos. `egeon guide` imprime o mesmo texto.
+
+**Limite conhecido.** A identidade vem do pid do outro lado do socket, subindo
+pelos pais até o pty. Um processo que se desliga da árvore (double-fork,
+adotado pelo launchd) chega como "de fora" — e de fora é o usuário. Vale para
+`/maestro?on=1` como já valia para `/dispatch` e `/edge`: não é brecha nova, e
+fechá-la é decisão do socket inteiro (token por processo, por exemplo), não
+desta feature.
+
+**Descartado.** Subcomandos granulares (`egeon node add`, `egeon edge add`…)
+como interface principal: o agente erraria a ordem e deixaria a bancada no
+meio do caminho; o plano inteiro é a unidade. Maestro passando por cima das
+arestas (acionar qualquer nó sem aresta): a topologia deixaria de estar
+desenhada no canvas, que é onde o usuário a vê. Deixar o maestro se
+reconfigurar com reinício adiado: estado pendente difícil de explicar, por um
+caso que o usuário resolve no seletor.
+
+**Verificação.** `MaestroPlanTests` (três estados de campo, chave desconhecida,
+catálogo de modelo e esforço, pasta, slug, auto-ligação, `null` de `maxSends`,
+CLI trocado zera conversa, papel do plano vence a exceção do CLI, maestro
+intocável, turno e segundo plano com `force`, regras reiniciam os outros),
+`MaestroControllerTests` (só maestro, prévia não muda nada, plano inválido não
+muda nada, ordem commit → tela → trilha), `ClaudeSkillTests` (as duas skills em
+toda config, frontmatter da do maestro, todo campo do plano citado no manual),
+`EgeonCLIBodyTests` (subcomandos e `egeon guide` imprimindo o manual literal).
+No DEV: `/maestro?target=testes-bancada/cleber&on=1`, e uma tarefa ao agente
+pedindo um time de teste — ele leu `egeon bench`/`models`, fez a prévia e
+aplicou (`+explorador +revisor-teste ~claude ~claude-2 · 8 aresta(s) · regras
+da bancada`), subiu o `maxSends` das próprias setas para 4, mandou a tarefa e
+o explorador respondeu pela aresta criada; o `workbenches.json` e a trilha
+ficaram com o que o log disse. No desfazer, o explorador estava em
+`background` esperando o revisor (o maestro tinha mandado um recibo) e a
+recusa sem saída o deixou travado — daí o `force` e a orientação contra
+recibo no manual. Com eles, o mesmo agente desfez tudo
+(`~claude ~claude-2 −explorador −revisor-teste · 2 aresta(s)`).
+

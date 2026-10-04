@@ -40,8 +40,35 @@ final class EgeonCLIBodyTests: XCTestCase {
         let bounds = range.split(separator: ",").compactMap { Int($0) }
         XCTAssertEqual(bounds.count, 2)
         let shown = lines[(bounds[0] - 1)..<bounds[1]].joined(separator: "\n")
-        for command in ["egeon peers", "egeon send", "egeon peek", "egeon trace", "egeon status"] {
+        for command in ["egeon peers", "egeon send", "egeon peek", "egeon trace", "egeon status",
+                        "egeon bench", "egeon models", "egeon plan", "egeon apply", "egeon guide"] {
             XCTAssertTrue(shown.contains(command), "a ajuda impressa não mostra `\(command)`")
         }
+    }
+
+    /// Os comandos do maestro existem e vão às rotas certas; o `guide` imprime
+    /// o manual inteiro, sem expandir nada dele no shell (ADR-066).
+    func testMaestroCommandsAndGuide() throws {
+        let body = EgeonCLI.body
+        for (command, route) in [("bench", "GET /maestro/bench"), ("models", "GET /maestro/models"),
+                                 ("plan", "POST \"/maestro/apply?dry=1\""),
+                                 ("apply", "POST /maestro/apply")] {
+            XCTAssertTrue(body.contains("\n  \(command))"), "falta o subcomando \(command)")
+            XCTAssertTrue(body.contains(route), "\(command) não vai a \(route)")
+        }
+
+        let script = FileManager.default.temporaryDirectory.appendingPathComponent("egeon-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: script) }
+        try body.write(to: script, atomically: true, encoding: .utf8)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [script.path, "guide"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(output, MaestroGuide.text + "\n", "o heredoc tem de devolver o texto literal")
     }
 }
