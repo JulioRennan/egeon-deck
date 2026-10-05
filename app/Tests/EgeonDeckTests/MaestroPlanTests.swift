@@ -116,22 +116,34 @@ final class MaestroPlanTests: XCTestCase {
         XCTAssertEqual(edges.map(\.maxSends), [6, 6])
     }
 
-    func testShellNodeIsNotLinkedAndRejectsAgentFields() {
+    func testShellNodeRejectsAgentFields() {
         let ok = plan(#"{"nodes":[{"id":"dev","kind":"shell"}]}"#)
         XCTAssertEqual(ok.errors, [])
-        XCTAssertNil(ok.next.nodes.last?.cmd)
-        XCTAssertFalse(ok.next.edgeList.contains { $0.to == "dev" })
+        XCTAssertNil(ok.next.nodes.last?.cmd, "sem cmd, zsh de login")
+        XCTAssertFalse(ok.next.edgeList.contains { $0.from == "dev" })
 
         let bad = plan(#"{"nodes":[{"id":"dev","kind":"shell","model":"opus"}]}"#)
         XCTAssertTrue(bad.errors.contains { $0.contains("'model' é de agente") }, "\(bad.errors)")
     }
 
-    /// Comando de shell escolhido pelo maestro rodaria sem passar pela
-    /// permissão do CLI dele: o campo não existe no plano.
-    func testShellCommandIsNotAPlanField() {
-        guard case .failure(let error) = parse(#"{"nodes":[{"id":"dev","kind":"shell","cmd":"rm -rf ~"}]}"#)
-        else { return XCTFail("cmd passou") }
-        XCTAssertTrue(error.message.contains("'cmd'"), error.message)
+    /// Terminal normal é parte da bancada: o maestro escolhe o comando dele,
+    /// e a ligação é só de ida — shell não responde (ADR-066).
+    func testShellGetsCommandAndOneWayLink() {
+        let out = plan(#"{"nodes":[{"id":"dev","kind":"shell","cmd":"npm run dev","cwd":"web"}]}"#)
+        XCTAssertEqual(out.errors, [])
+        let dev = out.next.nodes.first { $0.id == "dev" }
+        XCTAssertEqual(dev?.cmd, "npm run dev")
+        XCTAssertTrue(out.next.edgeList.contains(EdgeConfig(from: "maestro", to: "dev")))
+        XCTAssertFalse(out.next.edgeList.contains(EdgeConfig(from: "dev", to: "maestro")))
+
+        let agentCmd = plan(#"{"nodes":[{"id":"x","cmd":"ls"}]}"#)
+        XCTAssertTrue(agentCmd.errors.contains { $0.contains("'cmd' é de shell") }, "\(agentCmd.errors)")
+    }
+
+    func testChangingAShellCommandRestartsIt() {
+        let out = plan(#"{"nodes":[{"id":"sh","cmd":"npm test -- --watch"}]}"#)
+        XCTAssertEqual(out.errors, [])
+        XCTAssertEqual(out.restarted, ["sh"])
     }
 
     func testConfigMustBeOneTheCLIKnows() {

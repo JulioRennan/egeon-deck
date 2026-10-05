@@ -165,11 +165,12 @@ enum MaestroPlanner {
         // — assim o plano pode ajustar o limite da ligação automática.
         let ids = Set(next.nodes.map(\.id))
         var edges = bench.edgeList.filter { ids.contains($0.from) && ids.contains($0.to) }
-        for id in out.created where next.nodes.first(where: { $0.id == id })?.type == .agent {
-            for edge in [EdgeConfig(from: context.caller, to: id), EdgeConfig(from: id, to: context.caller)]
-            where !edges.contains(edge) {
-                edges.append(edge)
-            }
+        for id in out.created {
+            // Shell só de ida: ele não responde, e a volta seria uma seta morta.
+            let isAgent = next.nodes.first(where: { $0.id == id })?.type == .agent
+            let auto = [EdgeConfig(from: context.caller, to: id)]
+                + (isAgent ? [EdgeConfig(from: id, to: context.caller)] : [])
+            for edge in auto where !edges.contains(edge) { edges.append(edge) }
         }
         for edge in plan.edges {
             var ok = true
@@ -312,6 +313,11 @@ enum MaestroPlanner {
         node.ultracode = patch.ultracode.applied(to: node.ultracode) == true ? true : nil
         node.cwd = clean(patch.cwd.applied(to: node.cwd))
         node.config = clean(patch.config.applied(to: node.config))
+        if node.type == .shell {
+            node.cmd = clean(patch.cmd.applied(to: node.cmd))
+        } else if !patch.cmd.isKeep {
+            problems.append("\(label): 'cmd' é de shell — o comando do agente é o do CLI")
+        }
         // A conversa do CLI é da pasta e da configuração em que nasceu: com
         // outra, o `--resume` falha e o terminal abre uma nova calado.
         if !isNew, node.cwd != current.cwd || node.config != current.config {

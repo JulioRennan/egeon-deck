@@ -2743,8 +2743,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     })
                 }
                 // Pedido de permissão parado na tela também é turno em curso.
-                context.working = ids(in: .working).union(ids(in: .asking))
-                context.background = ids(in: .background)
+                // Shell "trabalhando" é só saída correndo (um servidor de dev
+                // imprimindo log): vai com o segundo plano, que `force` passa.
+                let shells = Set(bench.nodes.filter { $0.type == .shell }.map(\.id))
+                let active = ids(in: .working).union(ids(in: .asking))
+                context.working = active.subtracting(shells)
+                context.background = ids(in: .background).union(active.intersection(shells))
                 let suggested = self?.configs.firstIndex { $0.id == bench.id }
                     .flatMap { self?.workspace(of: $0)?.lastConfigs } ?? [:]
                 context.suggestedConfig = { suggested[$0] }

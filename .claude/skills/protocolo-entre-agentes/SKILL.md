@@ -120,7 +120,10 @@ campo do plano; nó em turno (`working`) não reinicia nem sai; em segundo plano
 com `"force": true`; agente novo nasce com `maestro ↔ novo` (`maxSends` padrão,
 ajustável no mesmo plano); regras da bancada reiniciam os outros agentes, nunca o
 maestro. As guardas de cadeia da seção 4 não mudam: o poder do maestro é
-desenhar a aresta, não passar por cima dela.
+desenhar a aresta, não passar por cima dela. Shell entra como alvo de
+verdade: `cmd` no plano, aresta só maestro → shell, e `egeon send` para shell
+chega cru (`DispatchRequest.message(from:toShell:)`, sem envelope e sem
+`handedOff`).
 
 ## 4. Guardas de cadeia (`Dispatcher.dispatch(_:from:)`)
 

@@ -67,4 +67,16 @@ final class DispatchRequestTests: XCTestCase {
         let req = try request(#"{"target":"ws/t1","text":"corpo puro"}"#)
         XCTAssertEqual(req.buildPrompt(), "corpo puro")
     }
+
+    /// Mensagem de agente para shell vai crua: o zsh executaria o cabeçalho
+    /// `[ED] mensagem de …` como comando (ADR-066). Para agente, o envelope.
+    func testMessageToShellIsRawAndToAgentIsEnveloped() {
+        var request = DispatchRequest(target: "deck/dev")
+        request.text = "npm test"
+        XCTAssertEqual(request.message(from: "deck/maestro", toShell: true), "npm test")
+        let enveloped = request.message(from: "deck/maestro", toShell: false) ?? ""
+        XCTAssertTrue(enveloped.hasPrefix("[ED] mensagem de deck/maestro"), enveloped)
+        XCTAssertTrue(enveloped.hasSuffix("npm test"))
+    }
 }
+

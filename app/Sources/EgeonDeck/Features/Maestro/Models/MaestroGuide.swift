@@ -153,6 +153,35 @@ enum MaestroGuide {
         - Sem `model`/`effort` o terminal fica no padrão do CLI — escolha
           legítima quando você não tem motivo para outra.
 
+        ## Terminais normais (`shell`)
+
+        Nem tudo na bancada é agente. Um terminal comum é o lugar de um processo
+        que fica rodando e que todos precisam ver: o servidor de dev, um watcher
+        de testes, o `docker compose`, um `tail -f` de log. Também é onde você
+        roda um comando sem gastar o turno de ninguém.
+
+        - **Crie** com `"kind": "shell"`, a pasta em `cwd` e, se for um processo
+          longo, o comando em `cmd` (`"npm run dev"`). Sem `cmd`, é um zsh de
+          login esperando comando. Processo que deve durar vai em `cmd`, não
+          por `egeon send`: o `cmd` volta sozinho quando o terminal reinicia (o
+          app reabre, você muda a pasta); o que foi mandado, não.
+        - Ele nasce ligado a VOCÊ, só de ida: shell não responde mensagem.
+        - **Rode comando** com `egeon send <id>`: o texto chega CRU, como se
+          você digitasse, e cada linha é executada. Um comando por vez, nada
+          interativo (editor, prompt de senha, `git` com pager — use
+          `--no-pager`).
+        - **Leia a saída** com `egeon peek <id> 40`. Sem laço de peek: rode,
+          espere o razoável, olhe uma vez.
+        - Para dar a um AGENTE acesso ao shell (o testador lendo o log do
+          servidor), ligue os dois: `{ "from": "testador", "to": "dev" }` — ele
+          passa a poder `egeon peek dev` e mandar comando.
+        - Shell com saída correndo aparece como `working` em `egeon bench`;
+          reiniciar ou remover pede `"force": true`.
+        - Comando em shell roda com as permissões de sistema do usuário, sem o
+          pedido de permissão do CLI. Ele te deu esse poder ao te fazer maestro:
+          nada destrutivo (apagar, `push`, `reset --hard`, banco de produção)
+          sem ele pedir.
+
         ## Escrever o papel (`role`)
 
         O papel entra no system prompt do terminal e vale a conversa inteira.
@@ -225,7 +254,7 @@ enum MaestroGuide {
               "role": "Você é ...",
               "rules": "Só dentro de api/."
             },
-            { "id": "dev", "kind": "shell", "cwd": "web" }
+            { "id": "dev", "kind": "shell", "cwd": "web", "cmd": "npm run dev" }
           ],
           "remove": ["velho"],
           "edges": [
@@ -251,13 +280,14 @@ enum MaestroGuide {
         | `config` | uma das `configs` daquele CLI em `egeon models`; padrão: a que o workspace usa |
         | `role` | o papel (system prompt) |
         | `rules` | as regras só deste terminal |
+        | `cmd` | só `shell`: o comando que ele roda ao subir; sem ele, um zsh de login |
 
         Num nó que já existe: **campo ausente fica como está; `null` volta ao
         padrão.** Mudar `model`, `effort`, `ultracode`, `role` ou `rules`
         reinicia o terminal com a MESMA conversa. Mudar `cwd`, `config` ou
         `cli` reinicia com conversa NOVA — o CLI guarda a conversa por pasta e
-        por configuração. Terminal `shell` nasce como um zsh limpo: o maestro
-        não escolhe comando para ele (rodaria sem passar pela sua permissão).
+        por configuração. Mudar o `cmd` de um shell o reinicia (o processo
+        antigo morre).
         Copiar um nó do `egeon bench` funciona: `state`, `you` e `maestro`
         são ignorados.
 
@@ -283,7 +313,7 @@ enum MaestroGuide {
         - reiniciar ou remover terminal em turno ou pedindo permissão
           (`state` `working` ou `asking` em `egeon bench`) — espere;
         - reiniciar ou remover terminal em segundo plano (`state:
-          background`) sem `"force": true`. Segundo plano tanto pode ser
+          background`, ou shell com saída correndo) sem `"force": true`. Segundo plano tanto pode ser
           "esperando um vizinho" (interromper não custa nada) quanto um
           processo rodando (custa): olhe com `egeon peek <id>` e decida. Não
           fique esperando ele sair desse estado — ele só sai quando recebe

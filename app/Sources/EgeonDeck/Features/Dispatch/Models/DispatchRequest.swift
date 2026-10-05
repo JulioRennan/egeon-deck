@@ -65,6 +65,16 @@ struct DispatchRequest: Codable {
         """
     }
 
+    /// O que chega de uma mensagem entre terminais: com envelope para agente,
+    /// cru para shell — que não lê cabeçalho, e o executaria como comando
+    /// inválido antes do comando de verdade (ADR-066).
+    func message(from sender: String, toShell: Bool) -> String? {
+        var copy = self
+        copy.from = toShell ? nil : sender
+        if toShell { copy.kind = "raw" }
+        return copy.buildPrompt()
+    }
+
     /// Monta o prompt final. Cabeçalho explícito com arquivo, trecho citado e
     /// instrução de fechar o ciclo — sem isso o agente confunde o pedido com
     /// conteúdo a escrever.

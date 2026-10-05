@@ -37,6 +37,9 @@ struct MaestroPlan: Equatable {
         var rules: PlanField<String> = .keep
         var cwd: PlanField<String> = .keep
         var config: PlanField<String> = .keep
+        /// O comando que um terminal `shell` roda ao subir (servidor de dev,
+        /// watcher, teste em laço). Agente não tem: o comando dele é o do CLI.
+        var cmd: PlanField<String> = .keep
     }
 
     struct Edge: Equatable {
@@ -137,10 +140,11 @@ extension MaestroPlan: Decodable {
 }
 
 extension MaestroPlan.Node: Decodable {
-    /// Sem `cmd`: comando de shell escolhido pelo maestro rodaria sem passar
-    /// pela permissão do CLI dele — o terminal novo é um zsh limpo (ADR-066).
+    /// `cmd` é poder de rodar comando sem o prompt de permissão do CLI do
+    /// maestro: dado de propósito, porque terminal normal é parte da bancada
+    /// (ADR-066). O portão é o `egeon apply` passar pela permissão do Bash.
     enum Keys: String, CodingKey, CaseIterable {
-        case id, kind, cli, model, effort, ultracode, role, rules, cwd, config
+        case id, kind, cli, model, effort, ultracode, role, rules, cwd, config, cmd
     }
 
     /// O que o `egeon bench` mostra e não se escreve: copiar um nó de lá para
@@ -166,6 +170,7 @@ extension MaestroPlan.Node: Decodable {
         rules = try c.field(String.self, .rules)
         cwd = try c.field(String.self, .cwd)
         config = try c.field(String.self, .config)
+        cmd = try c.field(String.self, .cmd)
     }
 }
 

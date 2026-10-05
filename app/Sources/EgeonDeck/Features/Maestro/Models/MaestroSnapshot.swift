@@ -34,6 +34,7 @@ enum MaestroSnapshot {
             if let rules = node.effectiveRules { out["rules"] = rules }
             if let config = node.config { out["config"] = config }
         }
+        if node.type == .shell, let cmd = node.cmd { out["cmd"] = cmd }
         if let cwd = node.cwd { out["cwd"] = cwd }
         if node.isMaestro { out["maestro"] = true }
         if node.id == caller { out["you"] = true }

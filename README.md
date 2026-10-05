@@ -139,6 +139,12 @@ JSON
 egeon guide                 # o manual do maestro
 ```
 
+Ele também abre **terminais normais** (`"kind": "shell"`, com `cmd` como
+`npm run dev`), manda comando para eles com `egeon send` — o texto chega cru, como
+se você digitasse — e lê a saída com `egeon peek`. Esses comandos rodam sem o
+pedido de permissão do CLI: se quiser aprovar cada plano e cada envio, não libere
+`Bash(egeon:*)` inteiro no allowlist, só os subcomandos de leitura.
+
 O plano é validado inteiro antes de qualquer efeito: CLI, modelo e esforço têm de
 existir no catálogo, a pasta tem de existir, e terminal em turno não é reiniciado.
 Terminal novo nasce ligado ao maestro nos dois sentidos; as guardas de cadeia valem

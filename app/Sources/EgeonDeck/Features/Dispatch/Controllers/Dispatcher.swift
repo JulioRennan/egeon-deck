@@ -897,9 +897,13 @@ final class Dispatcher {
         let sender = origin.address
         // O remetente entra no pedido só agora, depois de o kernel dizer quem é —
         // é ele que faz `buildPrompt` montar o envelope com a procedência.
-        var request = request
-        request.from = sender
-        guard let prompt = request.buildPrompt() else { throw DispatchError.emptyPrompt }
+        //
+        // Shell recebe o texto cru: ele não lê envelope — o cabeçalho viraria um
+        // comando inválido no zsh antes do comando de verdade (ADR-066).
+        let toShell = destination.profile == nil
+        guard let prompt = request.message(from: sender, toShell: toShell) else {
+            throw DispatchError.emptyPrompt
+        }
         guard let edge = link(from: sender, to: destination.address) else {
             throw DispatchError.notLinked(from: sender, to: destination.address)
         }
@@ -949,8 +953,10 @@ final class Dispatcher {
         }
 
         destination.enqueue(prompt, mode: request.inject, chain: chain)
-        // Passou o bastão: o fim de turno DELE não te chama mais.
-        origin.handedOff = true
+        // Passou o bastão: o fim de turno DELE não te chama mais. Para shell
+        // não há bastão — ninguém vai responder, e quem mandou ainda te deve o
+        // aviso de que terminou.
+        if !toShell { origin.handedOff = true }
         let budget = edge.maxSends.map { "envio \(sends)/\($0)" } ?? "visita \(visits)/\(ceiling)"
         Log.write("cadeia[\(sender) → \(destination.address)]: \(budget) "
                   + "— \(chain.joined(separator: " → "))")

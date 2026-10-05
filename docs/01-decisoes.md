@@ -3874,12 +3874,22 @@ não têm:
   seletor (ADR-064). Trocar de CLI, de pasta ou de configuração zera a conversa
   e a resposta diz quem: o CLI guarda a conversa por pasta e por configuração,
   e o `--resume` ali cairia calado numa conversa nova (como na worktree por nó).
-- **O maestro não ganha mais poder que o próprio CLI.** Sem `cmd` no plano:
-  shell nasce zsh limpo, porque comando escolhido por ele rodaria sem passar
-  pela permissão do CLI (com `egeon` liberado no allowlist, seria execução
-  arbitrária). `config` só entre as que o CLI tem no padrão dele (`configs` do
-  `egeon models`) — pasta qualquer seria um settings preparado com permissões
-  abertas. Outro maestro, editor e navegador ficam fora do alcance.
+- **Terminais normais são da bancada, e do maestro.** `kind: shell` com `cmd`
+  (servidor de dev, watcher, log) e cwd; nasce ligado ao maestro só de ida —
+  shell não responde. `egeon send` para shell entrega o texto CRU, sem o
+  envelope `[ED] mensagem de…` (o zsh o executaria como comando inválido), e
+  não marca `handedOff`: ninguém vai responder, e quem mandou ainda deve o seu
+  aviso de fim de turno. A saída se lê com `egeon peek`. Shell "trabalhando" é
+  só saída correndo: conta como segundo plano (`force` passa), não como turno.
+  Isto é poder de rodar comando sem o prompt de permissão do CLI do maestro —
+  a revisão tinha tirado o `cmd` por isso, e voltou a pedido do usuário: o
+  portão é ele fazer um maestro, e o `egeon apply`/`egeon send` passarem pela
+  permissão de Bash do CLI (não libere `egeon:*` no allowlist se quiser ver
+  cada um).
+- **Configuração e alcance com cerca.** `config` só entre as que o CLI tem no
+  padrão dele (`configs` do `egeon models`) — pasta qualquer seria um settings
+  preparado com permissões abertas. Outro maestro, editor e navegador ficam
+  fora do alcance.
 - **Afrouxa com teto.** `maxSends` até 10, `maxVisits` até 12; `null` (sem
   limite) só o usuário põe. As guardas existem para quando ninguém olha.
 - **Valida o que mudou.** Nó do usuário com modelo antigo escrito à mão não
