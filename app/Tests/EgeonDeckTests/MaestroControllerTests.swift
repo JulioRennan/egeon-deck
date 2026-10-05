@@ -35,6 +35,7 @@ final class MaestroControllerTests: XCTestCase {
             restart: { [unowned self] _, id in events.append("restart \(id)") },
             dispose: { [unowned self] _, id in events.append("dispose \(id)") },
             redrawEdges: { [unowned self] _ in events.append("edges") },
+            arrange: { [unowned self] _ in events.append("arrange") },
             persist: { [unowned self] in events.append("persist") },
             trace: { [unowned self] address, text in traced.append("\(address): \(text)") }))
     }
@@ -81,9 +82,9 @@ final class MaestroControllerTests: XCTestCase {
             Data(#"{"nodes":[{"id":"front"},{"id":"revisor","effort":"low"}]}"#.utf8),
             caller: "deck/maestro", dry: false)
         XCTAssertEqual(reply.status, 200, "\(reply.json)")
-        XCTAssertEqual(events, ["commit", "restart revisor", "spawn front", "edges", "persist"])
+        XCTAssertEqual(events, ["commit", "restart revisor", "spawn front", "edges", "arrange", "persist"])
         XCTAssertTrue(bench.nodes.contains { $0.id == "front" })
-        XCTAssertEqual(traced, ["deck/maestro: maestro aplicou: +front ~revisor · 2 aresta(s)"])
+        XCTAssertEqual(traced, ["deck/maestro: maestro aplicou: +front ~revisor · canvas rearrumado"])
     }
 
     func testPlanThatChangesNothingDoesNotTouchAnything() {

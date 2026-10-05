@@ -695,6 +695,19 @@ final class CanvasContainer: NSView {
         edgeLayer.needsDisplay = true
     }
 
+    /// Move os cards para os frames dados e enquadra o resultado. Avisa como
+    /// um arrasto avisaria, para a posição nova ir para o disco.
+    func arrange(_ frames: [String: NSRect]) {
+        for node in nodes {
+            guard let frame = frames[node.nodeID], node.frame != frame else { continue }
+            node.frame = frame
+        }
+        growDocumentIfNeeded()
+        edgeLayer.needsDisplay = true
+        onLayoutChanged?()
+        DispatchQueue.main.async { [weak self] in self?.fitAll() }
+    }
+
     func add(_ node: NodeView) {
         doc.addSubview(node)
         // O nó pode estar voltando do mosaico, onde perdeu a alça e a porta.

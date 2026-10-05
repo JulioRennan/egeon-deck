@@ -147,8 +147,10 @@ pedido de permissão do CLI: se quiser aprovar cada plano e cada envio, não lib
 
 O plano é validado inteiro antes de qualquer efeito: CLI, modelo e esforço têm de
 existir no catálogo, a pasta tem de existir, e terminal em turno não é reiniciado.
-Terminal novo nasce ligado ao maestro nos dois sentidos; as guardas de cadeia valem
-como sempre. O maestro não mexe em si mesmo e não faz outros maestros — isso é só
+O maestro é o mestre da bancada: alcança todo terminal sem aresta desenhada, e
+todo agente responde a ele do mesmo jeito — as setas do canvas ficam para quem
+conversa entre si. Quando o time muda, os cards se arrumam sozinhos (ele à
+esquerda, agentes em grade, shells embaixo). O maestro não mexe em si mesmo e não faz outros maestros — isso é só
 seu. Cada `apply` deixa uma linha na trilha. O manual de desenho (topologias,
 modelo e esforço por papel, como escrever papel e regras) é a skill
 `egeon-maestro`, publicada junto da `egeon` (ADR-066).

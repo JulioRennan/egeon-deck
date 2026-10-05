@@ -69,10 +69,14 @@ struct MaestroPlan: Equatable {
     /// processo rodando" (não é) — o app não distingue, quem olha é o maestro,
     /// com `egeon peek`. Turno em curso não se força.
     var force = false
+    /// Rearrumar o canvas (`MaestroLayout`). Ausente = só quando o plano cria
+    /// ou remove terminal; `false` deixa como está; `true` rearruma mesmo sem
+    /// mudança de time.
+    var layout: Bool?
 
     var isEmpty: Bool {
         rules.isKeep && maxVisits.isKeep && nodes.isEmpty && remove.isEmpty
-            && edges.isEmpty && unlink.isEmpty
+            && edges.isEmpty && unlink.isEmpty && layout != true
     }
 }
 
@@ -94,7 +98,7 @@ extension MaestroPlan: Decodable {
     struct ParseError: Error, Equatable { let message: String }
 
     enum Keys: String, CodingKey, CaseIterable {
-        case rules, maxVisits, nodes, remove, edges, unlink, force
+        case rules, maxVisits, nodes, remove, edges, unlink, force, layout
     }
 
     init(from decoder: Decoder) throws {
@@ -107,6 +111,7 @@ extension MaestroPlan: Decodable {
         edges = try c.decodeIfPresent([Edge].self, forKey: .edges) ?? []
         unlink = try c.decodeIfPresent([Unlink].self, forKey: .unlink) ?? []
         force = try c.decodeIfPresent(Bool.self, forKey: .force) ?? false
+        layout = try c.decodeIfPresent(Bool.self, forKey: .layout)
     }
 
     /// Lê o corpo do `egeon plan`/`egeon apply`. O erro já vem em português e

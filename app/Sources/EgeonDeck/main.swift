@@ -282,8 +282,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.root.setCollapsed(state)
             return self.root.isCollapsed
         }
+        // As guardas e o `egeon peers` leem as arestas desenhadas MAIS as
+        // implícitas do maestro; o canvas desenha só as primeiras (ADR-066).
         AppControl.workbenchEdges = { [weak self] name in
-            self?.configs.first { $0.name == name }?.edgeList ?? []
+            self?.configs.first { $0.name == name }.map(MaestroLinks.effective) ?? []
         }
         AppControl.workbenchVisitLimit = { [weak self] name in
             self?.configs.first { $0.name == name }?.visitLimit ?? 3
@@ -2338,8 +2340,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// O que só o maestro lê (ADR-066). Curto como o resto do catálogo: o
     /// manual mora na skill `egeon-maestro` e no `egeon guide`.
     private static let maestroSection = """
-        Você é o MAESTRO desta bancada: o usuário te deu o poder de montá-la e \
-        reconfigurá-la. `egeon bench` mostra a bancada, `egeon models` o que \
+        Você é o MAESTRO desta bancada — o mestre dela: alcança todo terminal \
+        daqui sem aresta, e todo agente te alcança de volta. O usuário te deu o \
+        poder de montá-la e reconfigurá-la. `egeon bench` mostra a bancada, `egeon models` o que \
         cada CLI aceita, `egeon plan` valida um plano JSON sem aplicar e \
         `egeon apply` aplica — terminais novos, modelo, esforço, papel, regras \
         e arestas. Antes de desenhar, leia o manual: a skill `egeon-maestro`, \
@@ -2765,8 +2768,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self, let (index, shell) = locate(name),
                       let position = self.configs[index].nodes.firstIndex(where: { $0.id == id })
                 else { return }
-                let size = CanvasTool.terminal.defaultNodeSize
-                let rect = shell.canvas.spawnRect(size: size)
+                // O plano já traz o lugar quando rearruma; senão, a primeira vaga.
+                let rect = self.configs[index].nodes[position].frame
+                    ?? shell.canvas.spawnRect(size: CanvasTool.terminal.defaultNodeSize)
                 self.configs[index].nodes[position].setFrame(rect)
                 shell.attach(self.makeNode(self.configs[index].nodes[position],
                                            in: self.configs[index], frame: rect))
@@ -2787,6 +2791,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             redrawEdges: { [weak self] name in
                 guard let self, let (index, shell) = locate(name) else { return }
                 shell.canvas.edges = self.configs[index].edgeList
+            },
+            arrange: { [weak self] name in
+                guard let self, let (index, shell) = locate(name) else { return }
+                var frames: [String: NSRect] = [:]
+                for node in self.configs[index].nodes {
+                    if let frame = node.frame { frames[node.id] = frame }
+                }
+                shell.arrange(frames)
             },
             persist: { [weak self] in self?.schedulePersist() },
             trace: { address, text in

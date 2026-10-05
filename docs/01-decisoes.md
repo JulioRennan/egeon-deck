@@ -3865,10 +3865,26 @@ não têm:
   rodando" (custa) —, o app não distingue, e o estado só cai com mensagem
   nova: sem `force` o maestro ficaria esperando para sempre (aconteceu no
   primeiro teste). Quem decide é ele, olhando com `egeon peek`.
-- **Nó novo nasce ligado ao maestro**, ida e volta, com o `maxSends` padrão:
-  é o que faz "invocar" funcionar sem o usuário desenhar nada. As guardas de
-  cadeia (ADR-012) continuam valendo — o poder do maestro é DESENHAR a aresta,
-  não passar por cima dela. Ele pode dar `maxSends` maior às próprias setas.
+- **O maestro é o mestre da bancada: alcança todos sem aresta.** Primeiro
+  ele nascia ligado a cada nó novo por setas desenhadas; com cinco
+  terminais eram dez setas saindo de um card, cobrindo as ligações que
+  importa ler — as de trabalho entre os outros. Agora a ligação é
+  implícita (`MaestroLinks.effective`): maestro → todo agente e shell da
+  bancada, e todo agente → maestro (é por onde chega a resposta, ADR-058);
+  shell não volta. O Dispatcher e o `egeon peers` leem as arestas efetivas
+  (`AppControl.workbenchEdges`); o canvas desenha só as reais. A implícita
+  não tem `maxSends` — o `maxVisits` da bancada é a rede contra o laço —, e
+  uma aresta desenhada entre o maestro e alguém vence a implícita (é como se
+  dá a ela um limite próprio). Isto revê o ADR-012 só para o maestro: o
+  usuário o marca no formulário, e o "· maestro" no cabeçalho é o que mostra
+  que ele alcança a bancada inteira.
+- **O canvas se arruma quando o time muda** (`MaestroLayout`): plano que cria
+  ou remove terminal grava frames novos — maestro numa coluna à esquerda da
+  altura do time, agentes em grade (2 colunas até 4, depois 3), shells numa
+  faixa embaixo, editor e navegador por último com o tamanho que têm — e o
+  app move os cards na tela e enquadra. `"layout": false` deixa como está;
+  `true` rearruma sem mudar o time. O arranjo vai para o disco como um
+  arrasto.
 - **Conversa fica — quando pode.** Trocar modelo, esforço, papel ou regras de
   um nó existente reinicia o processo e retoma a mesma conversa, como no
   seletor (ADR-064). Trocar de CLI, de pasta ou de configuração zera a conversa
@@ -3918,9 +3934,9 @@ desta feature.
 
 **Descartado.** Subcomandos granulares (`egeon node add`, `egeon edge add`…)
 como interface principal: o agente erraria a ordem e deixaria a bancada no
-meio do caminho; o plano inteiro é a unidade. Maestro passando por cima das
-arestas (acionar qualquer nó sem aresta): a topologia deixaria de estar
-desenhada no canvas, que é onde o usuário a vê. Deixar o maestro se
+meio do caminho; o plano inteiro é a unidade. Setas desenhadas do maestro a
+cada nó (a primeira versão): poluíam o canvas exatamente onde o usuário lê a
+topologia de trabalho. Deixar o maestro se
 reconfigurar com reinício adiado: estado pendente difícil de explicar, por um
 caso que o usuário resolve no seletor.
 

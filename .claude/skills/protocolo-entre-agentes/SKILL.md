@@ -119,8 +119,12 @@ ou nada (erros acumulados, 422); chave desconhecida é erro; campo ausente mant�
 campo do plano; nó em turno (`working`) não reinicia nem sai; em segundo plano só
 com `"force": true`; agente novo nasce com `maestro ↔ novo` (`maxSends` padrão,
 ajustável no mesmo plano); regras da bancada reiniciam os outros agentes, nunca o
-maestro. As guardas de cadeia da seção 4 não mudam: o poder do maestro é
-desenhar a aresta, não passar por cima dela. Shell entra como alvo de
+maestro. **A guarda 1 (aresta) tem uma exceção: o maestro.** `MaestroLinks.effective`
+soma às arestas desenhadas as implícitas maestro → todo agente/shell e agente →
+maestro, sem `maxSends` (só o `maxVisits` vale); `AppControl.workbenchEdges`
+devolve essas, então `link(from:to:)`, `peers(of:)` e `mayPeek` as enxergam, e o
+canvas não as desenha. Plano que cria/remove nó rearruma o canvas
+(`MaestroLayout`, `"layout"` no plano). Shell entra como alvo de
 verdade: `cmd` no plano, aresta só maestro → shell, e `egeon send` para shell
 chega cru (`DispatchRequest.message(from:toShell:)`, sem envelope e sem
 `handedOff`).

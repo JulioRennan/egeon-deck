@@ -20,6 +20,8 @@ enum MaestroSnapshot {
             },
         ]
         if let rules = bench.rules { payload["rules"] = rules }
+        payload["note"] = "edges são as desenhadas; o maestro alcança todo terminal sem aresta, "
+            + "e todo agente alcança o maestro"
         return payload
     }
 

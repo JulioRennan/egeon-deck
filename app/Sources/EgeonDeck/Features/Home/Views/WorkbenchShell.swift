@@ -165,6 +165,17 @@ final class WorkbenchShell: NSView {
         if mode == .chat { chat.refresh() }
     }
 
+    /// Leva os cards a novos lugares no canvas, de uma vez, e enquadra — o
+    /// arranjo que o maestro dá à bancada (ADR-066). Em mosaico só a memória
+    /// do canvas muda: os cards estão nos painéis, e voltam já no lugar novo.
+    func arrange(_ frames: [String: NSRect]) {
+        for (id, frame) in frames where canvasFrames[id] != nil || nodes.contains(where: { $0.nodeID == id }) {
+            canvasFrames[id] = frame
+        }
+        guard mode != .mosaic else { return }
+        canvas.arrange(frames)
+    }
+
     /// Onde este nó fica no canvas, mesmo que agora esteja num painel do mosaico.
     /// Quem grava geometria no `workbenches.json` pergunta aqui.
     func canvasFrame(of nodeID: String) -> NSRect? {

@@ -114,9 +114,10 @@ enum MaestroGuide {
 
         ## Topologias
 
-        - **Estrela (padrão).** Você no centro, cada terminal ligado só a você,
-          ida e volta. Você distribui, recebe e integra. É o que o `apply` faz
-          sozinho: todo agente novo nasce ligado a você nos dois sentidos.
+        - **Estrela (padrão).** Você no centro: distribui, recebe e integra.
+          Não precisa de aresta nenhuma — você é o mestre da bancada e alcança
+          todo terminal dela, e todo agente te alcança de volta (é por onde
+          chega a resposta). Essas ligações não se desenham no canvas.
         - **Autor → revisor.** O implementador manda direto ao revisor, que
           devolve a ele; você só recebe o resultado final. Ligue os dois entre
           si (`both: true`).
@@ -126,8 +127,8 @@ enum MaestroGuide {
         - **Por repositório.** Um terminal por pasta (`cwd`), cada um dono do
           seu repo, e você costurando o contrato entre eles.
 
-        Ligue terminais entre si só quando eles precisam conversar sem você no
-        meio. Aresta a mais é conversa a mais.
+        Aresta no plano é só entre os OUTROS — quando eles precisam conversar
+        sem você no meio. Aresta a mais é conversa a mais.
 
         ## Modelo e esforço por papel
 
@@ -165,7 +166,7 @@ enum MaestroGuide {
           login esperando comando. Processo que deve durar vai em `cmd`, não
           por `egeon send`: o `cmd` volta sozinho quando o terminal reinicia (o
           app reabre, você muda a pasta); o que foi mandado, não.
-        - Ele nasce ligado a VOCÊ, só de ida: shell não responde mensagem.
+        - Você o alcança sem aresta; ele não responde mensagem.
         - **Rode comando** com `egeon send <id>`: o texto chega CRU, como se
           você digitasse, e cada linha é executada. Um comando por vez, nada
           interativo (editor, prompt de senha, `git` com pager — use
@@ -217,18 +218,18 @@ enum MaestroGuide {
 
         ## Arestas e limites de conversa
 
-        O app só deixa um terminal acionar outro por **aresta**, e corta
+        Entre os outros terminais, o app só deixa um acionar outro por
+        **aresta**; entre você e qualquer um, a ligação já existe. E ele corta
         cadeias longas:
 
-        - `maxSends` (por aresta, padrão 2): quantas vezes aquela seta dispara
-          numa mesma cadeia. Com 2, você manda, ele responde, você manda,
-          ele responde — e a próxima é recusada. Se você vai iterar com um
-          terminal (pedir, revisar, pedir ajuste), suba a SUA aresta com ele
-          para 4–6.
+        - `maxSends` (por aresta desenhada, padrão 2): quantas vezes aquela
+          seta dispara numa mesma cadeia. As suas ligações implícitas não têm
+          esse limite.
         - `maxVisits` (da bancada, padrão 4): quantas vezes um mesmo terminal
-          pode reaparecer numa cadeia. Em fases sequenciais (A, depois B,
-          depois revisão, cada um voltando a você) você reaparece a cada
-          volta: para uma orquestração de várias fases, 8 é um bom número.
+          pode reaparecer numa cadeia — é o SEU limite de fato. Em fases
+          sequenciais (A, depois B, depois revisão, cada um voltando a você)
+          você reaparece a cada volta: para orquestração de várias fases,
+          suba para 8–12.
         - A cadeia zera quando o usuário digita. Recusa por limite não é erro
           seu para contornar: volte a falar com o usuário.
 
@@ -259,7 +260,7 @@ enum MaestroGuide {
           "remove": ["velho"],
           "edges": [
             { "from": "back", "to": "revisor", "both": true },
-            { "from": "maestro", "to": "back", "both": true, "maxSends": 6 }
+            { "from": "back", "to": "web", "both": true, "maxSends": 4 }
           ],
           "unlink": [ { "from": "web", "to": "back", "both": true } ],
           "force": false
@@ -292,6 +293,11 @@ enum MaestroGuide {
         são ignorados.
 
         **`remove`** — ids que saem, com as arestas deles.
+
+        **`layout`** — o canvas se rearruma sozinho quando o plano cria ou
+        remove terminal: você numa coluna à esquerda, os agentes em grade ao
+        lado, os shells numa faixa embaixo, e a tela enquadra. `false` deixa
+        os cards onde estão; `true` rearruma mesmo sem mudar o time.
 
         **`edges`** — `from`, `to`, `both` (as duas setas) e `maxSends`
         (de 1 a 10; tirar o limite é só do usuário). Aresta que já existe só
@@ -363,8 +369,6 @@ enum MaestroGuide {
               "rules": "Não edite arquivos." }
           ],
           "edges": [
-            { "from": "maestro", "to": "back", "both": true, "maxSends": 4 },
-            { "from": "maestro", "to": "web", "both": true, "maxSends": 4 },
             { "from": "back", "to": "revisor", "both": true },
             { "from": "web", "to": "revisor", "both": true }
           ]

@@ -25,6 +25,9 @@ final class MaestroController {
         /// Tira da tela um nó que já saiu da bancada gravada.
         var dispose: (_ bench: String, _ node: String) -> Void
         var redrawEdges: (_ bench: String) -> Void
+        /// Leva os cards na tela aos frames que a bancada gravada diz, e
+        /// enquadra (ADR-066).
+        var arrange: (_ bench: String) -> Void = { _ in }
         var persist: () -> Void
         /// Linha na trilha da bancada, carimbada como quem chamou.
         var trace: (_ address: String, _ text: String) -> Void
@@ -128,17 +131,15 @@ final class MaestroController {
         for id in outcome.restarted { wiring.restart(bench.name, id) }
         for id in outcome.created { wiring.spawn(bench.name, id) }
         wiring.redrawEdges(bench.name)
+        if outcome.relaid { wiring.arrange(bench.name) }
         wiring.persist()
         wiring.trace("\(bench.name)/\(me.id)", "maestro aplicou: \(outcome.summary)")
         Log.write("maestro[\(bench.name)/\(me.id)]: \(outcome.summary)")
 
         var notes: [String] = []
-        let linked = outcome.created.filter { id in
-            outcome.next.nodes.first { $0.id == id }?.type == .agent
-        }
-        if !linked.isEmpty {
-            notes.append("\(linked.joined(separator: ", ")) nasceram ligados a você, ida e volta — "
-                         + "sobem em alguns segundos, e `egeon send` já enfileira até ficarem prontos")
+        if !outcome.created.isEmpty {
+            notes.append("\(outcome.created.joined(separator: ", ")) sobem em alguns segundos; você já os "
+                         + "alcança sem aresta, e `egeon send` enfileira até ficarem prontos")
         }
         let kept = outcome.restarted.filter { !outcome.freshConversation.contains($0) }
         if !kept.isEmpty {

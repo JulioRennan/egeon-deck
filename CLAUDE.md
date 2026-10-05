@@ -153,8 +153,9 @@ app/Sources/EgeonDeck/
   ganha `egeon bench`/`models`/`plan`/`apply`: monta a própria bancada por um plano
   JSON declarativo (`MaestroPlan` → `MaestroPlanner` valida inteiro → 
   `MaestroController` aplica por closures). Não se reconfigura, não faz maestro,
-  não reinicia nó em turno (segundo plano só com `force`); nó novo nasce ligado a
-  ele; todo `apply` vai para a trilha. O manual é a skill `egeon-maestro`
+  não reinicia nó em turno (segundo plano só com `force`); é o mestre da bancada —
+  alcança todos e todos o alcançam sem aresta desenhada (`MaestroLinks`); time que
+  muda rearruma o canvas (`MaestroLayout`); todo `apply` vai para a trilha. O manual é a skill `egeon-maestro`
   (`MaestroGuide`, publicada pelo `ClaudeSkill`) e o `egeon guide`.
 - **Papel e regras** são campos separados (ADR-056): papel é quem o terminal é;
   regra é como se trabalha, e a da **bancada** (menu de contexto na barra) vale

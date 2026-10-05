@@ -45,10 +45,12 @@ struct MaestroOutcome {
     var edgesChanged = false
     var rulesChanged = false
     var visitsChanged = false
+    /// Os cards foram rearrumados: os frames de `next` são os novos.
+    var relaid = false
 
     var changed: Bool {
         !created.isEmpty || !restarted.isEmpty || !removed.isEmpty
-            || edgesChanged || rulesChanged || visitsChanged
+            || edgesChanged || rulesChanged || visitsChanged || relaid
     }
 
     /// Uma linha para a trilha e para a resposta: `+front ~revisor −velho ·
@@ -60,6 +62,7 @@ struct MaestroOutcome {
         if edgesChanged { parts.append("\(next.edgeList.count) aresta(s)") }
         if rulesChanged { parts.append("regras da bancada") }
         if visitsChanged { parts.append("maxVisits \(next.visitLimit)") }
+        if relaid { parts.append("canvas rearrumado") }
         return parts.isEmpty ? "nada muda" : parts.joined(separator: " · ")
     }
 }
@@ -160,18 +163,11 @@ enum MaestroPlanner {
         }
         out.visitsChanged = next.visitLimit != bench.visitLimit
 
-        // Arestas. Primeiro some o que aponta para nó removido, depois o nó
-        // novo ganha a ida e volta com o maestro, e só então o que o plano diz
-        // — assim o plano pode ajustar o limite da ligação automática.
+        // Arestas. Primeiro some o que aponta para nó removido, depois o que
+        // o plano diz. Nó novo não ganha seta para o maestro: a ligação dele
+        // com cada terminal é implícita (`MaestroLinks`).
         let ids = Set(next.nodes.map(\.id))
         var edges = bench.edgeList.filter { ids.contains($0.from) && ids.contains($0.to) }
-        for id in out.created {
-            // Shell só de ida: ele não responde, e a volta seria uma seta morta.
-            let isAgent = next.nodes.first(where: { $0.id == id })?.type == .agent
-            let auto = [EdgeConfig(from: context.caller, to: id)]
-                + (isAgent ? [EdgeConfig(from: id, to: context.caller)] : [])
-            for edge in auto where !edges.contains(edge) { edges.append(edge) }
-        }
         for edge in plan.edges {
             var ok = true
             for end in [edge.from, edge.to] where !ids.contains(end) {
@@ -219,6 +215,17 @@ enum MaestroPlanner {
         }
         next.edges = edges.isEmpty ? (bench.edges == nil ? nil : []) : edges
         out.edgesChanged = !sameEdges(next.edgeList, bench.edgeList)
+
+        // O time mudou: o canvas é rearrumado, a menos que o plano diga não.
+        if plan.layout ?? (!out.created.isEmpty || !out.removed.isEmpty) {
+            let frames = MaestroLayout.frames(for: next.nodes)
+            for i in next.nodes.indices {
+                if let frame = frames[next.nodes[i].id] { next.nodes[i].setFrame(frame) }
+            }
+            out.relaid = next.nodes.contains { node in
+                bench.nodes.first { $0.id == node.id }?.frame != node.frame
+            }
+        }
 
         // Regra da bancada nova só sobe com processo novo: os outros agentes
         // reiniciam. O maestro não — as dele valem no próximo arranque.

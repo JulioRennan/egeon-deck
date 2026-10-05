@@ -93,7 +93,7 @@ final class MaestroPlanTests: XCTestCase {
 
     // MARK: - Criar
 
-    func testNewAgentGetsDefaultsAndIsLinkedBothWaysToTheMaestro() {
+    func testNewAgentGetsDefaultsAndNoDrawnEdge() {
         let out = plan(#"{"nodes":[{"id":"front","model":"opus","effort":"xhigh","role":"Front."}]}"#)
         XCTAssertEqual(out.errors, [])
         XCTAssertEqual(out.created, ["front"])
@@ -103,12 +103,14 @@ final class MaestroPlanTests: XCTestCase {
         XCTAssertEqual(front?.config, "~/.claude-agro", "a configuração que o workspace sugere")
         XCTAssertEqual(front?.prompt, "Front.")
         XCTAssertNil(front?.maestro, "o plano não faz maestro")
-        XCTAssertTrue(out.next.edgeList.contains(EdgeConfig(from: "maestro", to: "front")))
-        XCTAssertTrue(out.next.edgeList.contains(EdgeConfig(from: "front", to: "maestro")))
-        XCTAssertTrue(out.edgesChanged)
+        XCTAssertFalse(out.next.edgeList.contains { $0.from == "front" || $0.to == "front" },
+                       "a ligação com o maestro é implícita, não se desenha")
+        XCTAssertFalse(out.edgesChanged)
+        XCTAssertTrue(out.relaid, "time novo rearruma o canvas")
+        XCTAssertNotNil(out.next.nodes.first { $0.id == "front" }?.frame)
     }
 
-    func testPlanCanRaiseTheLimitOfTheAutomaticLink() {
+    func testPlanCanStillDrawAMaestroEdgeWithItsOwnLimit() {
         let out = plan(#"{"nodes":[{"id":"front"}],"edges":[{"from":"maestro","to":"front","both":true,"maxSends":6}]}"#)
         XCTAssertEqual(out.errors, [])
         let edges = out.next.edgeList.filter { $0.from == "front" || $0.to == "front" }
@@ -133,8 +135,9 @@ final class MaestroPlanTests: XCTestCase {
         XCTAssertEqual(out.errors, [])
         let dev = out.next.nodes.first { $0.id == "dev" }
         XCTAssertEqual(dev?.cmd, "npm run dev")
-        XCTAssertTrue(out.next.edgeList.contains(EdgeConfig(from: "maestro", to: "dev")))
-        XCTAssertFalse(out.next.edgeList.contains(EdgeConfig(from: "dev", to: "maestro")))
+        XCTAssertTrue(MaestroLinks.effective(out.next).contains(EdgeConfig(from: "maestro", to: "dev")))
+        XCTAssertFalse(MaestroLinks.effective(out.next).contains(EdgeConfig(from: "dev", to: "maestro")),
+                       "shell não responde: sem volta")
 
         let agentCmd = plan(#"{"nodes":[{"id":"x","cmd":"ls"}]}"#)
         XCTAssertTrue(agentCmd.errors.contains { $0.contains("'cmd' é de shell") }, "\(agentCmd.errors)")
@@ -346,6 +349,13 @@ final class MaestroPlanTests: XCTestCase {
     func testErrorsAccumulateInsteadOfStoppingAtTheFirst() {
         let out = plan(#"{"nodes":[{"id":"a","model":"gpt-9"},{"id":"b","cli":"cursor"}],"maxVisits":0}"#)
         XCTAssertGreaterThanOrEqual(out.errors.count, 3, "\(out.errors)")
+    }
+
+    func testLayoutOnlyWhenTheTeamChangesUnlessAsked() {
+        XCTAssertFalse(plan(#"{"nodes":[{"id":"revisor","effort":"low"}]}"#).relaid)
+        XCTAssertFalse(plan(#"{"nodes":[{"id":"front"}],"layout":false}"#).relaid)
+        XCTAssertTrue(plan(#"{"layout":true}"#).relaid, "layout sozinho é um plano")
+        XCTAssertTrue(plan(#"{"remove":["sh"]}"#).relaid)
     }
 
     func testSummaryReadsLikeTheTrace() {
