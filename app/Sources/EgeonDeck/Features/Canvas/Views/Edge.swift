@@ -9,6 +9,11 @@ enum EdgeRoute {
     /// Destino à esquerda: desce por baixo dos dois cards, volta e sobe. Cantos
     /// em ângulo reto, arredondados.
     case loop(corners: [NSPoint])
+    /// Um card embaixo do outro: da base do de cima ao topo do de baixo,
+    /// tangentes verticais. Pelas portas laterais, quem está na mesma coluna
+    /// parece "atrás" e a linha dava a volta inteira por baixo do de baixo
+    /// para entrar pela esquerda dele.
+    case stacked(from: NSPoint, to: NSPoint)
 }
 
 /// Traçado no estilo n8n.
@@ -40,6 +45,7 @@ enum EdgeCurve {
     /// (`EdgeLink`), então duas curvas nunca disputam a mesma faixa. A faixa
     /// afastada e o corredor deslocado que resolviam isso saíram junto — ADR-028.
     static func route(from sourceFrame: NSRect, to targetFrame: NSRect) -> EdgeRoute {
+        if let stacked = stackedRoute(sourceFrame, targetFrame) { return stacked }
         let source = sourcePort(sourceFrame)
         let target = targetPort(targetFrame)
         guard source.x - backwardThreshold > target.x else {
@@ -57,11 +63,32 @@ enum EdgeCurve {
         ])
     }
 
+    /// Quanto da largura do card mais estreito tem de estar sob o outro para
+    /// os dois contarem como coluna. Metade: deslocados menos que isso, a
+    /// linha vertical ainda é a curta; mais, já se lê como "ao lado".
+    static let stackOverlap: CGFloat = 0.5
+
+    /// Os dois cards estão um sobre o outro, sem se tocar na vertical. A rota
+    /// vai sempre do de cima para o de baixo, seja qual for a origem — a ponta
+    /// é que diz o sentido. Coordenadas do documento, flipped: y cresce para
+    /// baixo.
+    static func stackedRoute(_ a: NSRect, _ b: NSRect) -> EdgeRoute? {
+        let overlap = min(a.maxX, b.maxX) - max(a.minX, b.minX)
+        guard overlap >= stackOverlap * min(a.width, b.width) else { return nil }
+        let (upper, lower) = a.minY <= b.minY ? (a, b) : (b, a)
+        guard lower.minY - upper.maxY > backwardThreshold else { return nil }
+        // No meio da faixa que os dois dividem: com cards de larguras ou
+        // posições diferentes, a linha sai e entra reta.
+        let x = (max(a.minX, b.minX) + min(a.maxX, b.maxX)) / 2
+        return .stacked(from: NSPoint(x: x, y: upper.maxY), to: NSPoint(x: x, y: lower.minY))
+    }
+
     /// Se a rota entre estes dois cards sai reta, sem dar a volta por baixo. É como
     /// o desenho escolhe qual dos dois pontas do par é a origem do traçado: a linha
     /// fica reta quando pode, e a volta sobra para quem de fato está atrás.
     static func prefersDirect(from sourceFrame: NSRect, to targetFrame: NSRect) -> Bool {
-        sourcePort(sourceFrame).x - backwardThreshold <= targetPort(targetFrame).x
+        if stackedRoute(sourceFrame, targetFrame) != nil { return sourceFrame.minY <= targetFrame.minY }
+        return sourcePort(sourceFrame).x - backwardThreshold <= targetPort(targetFrame).x
     }
 
     /// Portas no meio vertical do card, como no n8n. No cabeçalho elas ficariam
@@ -77,8 +104,8 @@ enum EdgeCurve {
     static func path(_ route: EdgeRoute) -> NSBezierPath {
         let path = NSBezierPath()
         switch route {
-        case let .direct(source, target):
-            let (c1, c2) = controls(from: source, to: target)
+        case let .direct(source, target), let .stacked(source, target):
+            let (c1, c2) = controls(route)
             path.move(to: source)
             path.curve(to: target, controlPoint1: c1, controlPoint2: c2)
         case let .loop(corners):
@@ -101,12 +128,22 @@ enum EdgeCurve {
         max(0.0001, sqrt(pow(b.x - a.x, 2) + pow(b.y - a.y, 2)))
     }
 
-    private static func controls(from source: NSPoint,
-                                 to target: NSPoint) -> (NSPoint, NSPoint) {
-        let dx = target.x - source.x
-        let reach = min(300, max(70, dx * 0.5))
-        return (NSPoint(x: source.x + reach, y: source.y),
-                NSPoint(x: target.x - reach, y: target.y))
+    /// Pontos de controle da cúbica: na horizontal para a rota direta, na
+    /// vertical para a empilhada — é o que faz a linha sair e entrar reta na
+    /// borda de onde parte. Loop não tem curva.
+    private static func controls(_ route: EdgeRoute) -> (NSPoint, NSPoint) {
+        switch route {
+        case let .direct(source, target):
+            let reach = min(300, max(70, (target.x - source.x) * 0.5))
+            return (NSPoint(x: source.x + reach, y: source.y),
+                    NSPoint(x: target.x - reach, y: target.y))
+        case let .stacked(source, target):
+            let reach = min(300, max(40, (target.y - source.y) * 0.5))
+            return (NSPoint(x: source.x, y: source.y + reach),
+                    NSPoint(x: target.x, y: target.y - reach))
+        case let .loop(corners):
+            return (corners[0], corners[corners.count - 1])
+        }
     }
 
     /// Polilinha densa do traçado. Serve para o teste de proximidade e para
@@ -115,8 +152,8 @@ enum EdgeCurve {
     /// no meio da lista de cantos.
     static func polyline(_ route: EdgeRoute) -> [NSPoint] {
         switch route {
-        case let .direct(source, target):
-            let (c1, c2) = controls(from: source, to: target)
+        case let .direct(source, target), let .stacked(source, target):
+            let (c1, c2) = controls(route)
             return (0...48).map { step in
                 let t = CGFloat(step) / 48, u = 1 - t
                 return NSPoint(
@@ -157,8 +194,8 @@ enum EdgeCurve {
     static func endpoints(_ route: EdgeRoute)
         -> (start: NSPoint, startTangent: CGVector, end: NSPoint, endTangent: CGVector) {
         switch route {
-        case let .direct(source, target):
-            let (c1, c2) = controls(from: source, to: target)
+        case let .direct(source, target), let .stacked(source, target):
+            let (c1, c2) = controls(route)
             // Derivada da cúbica em t=0 e t=1: com os controles na horizontal ela é
             // horizontal também, e é o que faz a ponta encostar reta na borda do
             // card em vez de entrar torta.

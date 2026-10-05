@@ -16,6 +16,7 @@ citados entre parênteses.
 
 ### Corrigido
 
+- A ligação entre dois cards um embaixo do outro não dá mais a volta inteira por baixo para entrar pela esquerda: ela desce reta da base do de cima ao topo do de baixo.
 - Remover uma bancada apagando as worktrees não congela mais o app: o git e o disco trabalham em segundo plano, a bancada mostra "removendo…" na barra lateral e uma cortina por cima até sair da lista, e as outras bancadas seguem usáveis enquanto isso.
 
 ## [1.1.1] - 2026-10-01
