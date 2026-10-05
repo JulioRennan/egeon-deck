@@ -26,6 +26,15 @@ final class SidebarRow: NSView {
     var isSelected = false { didSet { needsDisplay = true; restyle() } }
     /// Bancada já materializada (terminais rodando, editor carregado).
     var isLive = false { didSet { restyle() } }
+    /// Apagando as worktrees da bancada em segundo plano: o badge vira
+    /// "removendo…" e o nome apaga, até ela sair da lista (ou a remoção falhar).
+    var isRemoving = false {
+        didSet {
+            guard isRemoving != oldValue else { return }
+            lastBadge = ""
+            restyle()
+        }
+    }
 
     /// Alguma coisa nesta bancada está te esperando. Guardado porque no trilho
     /// quem grita isso é o ARO da pastilha, e `restyle` não vê o resumo.
@@ -147,9 +156,10 @@ final class SidebarRow: NSView {
         // assinatura carrega as três contagens e não o texto: com a MESMA
         // bolinha em dois estados, `●` sozinho é ambíguo — laranja e verde
         // escreveriam igual, e a linha ficaria presa na cor anterior.
-        let signature = "\(summary.starting)/\(summary.working)/\(summary.background)/"
+        let signature = (isRemoving ? "removendo/" : "")
+            + "\(summary.starting)/\(summary.working)/\(summary.background)/"
             + "\(summary.attention)/\(summary.done)/"
-            + (summary.working > 0 || summary.starting > 0 ? String(Spinner.current) : "")
+            + (summary.working > 0 || summary.starting > 0 || isRemoving ? String(Spinner.current) : "")
             + (summary.background > 0 ? String(Spinner.hourglass) : "")
         guard signature != lastBadge else { return }
         lastBadge = signature
@@ -185,7 +195,16 @@ final class SidebarRow: NSView {
         // vez de se reconhecer.
         // Mais claro no trilho: ali o spinner tem 10pt e concorre com o card que
         // passa por trás do vidro.
-        if summary.isPreparing, !isCompact {
+        if isRemoving {
+            // Ganha de tudo: o que os terminais estão fazendo deixa de importar
+            // para uma bancada que está de saída.
+            badge.append(NSAttributedString(
+                string: isCompact ? String(Spinner.current) : "\(Spinner.current) removendo…",
+                attributes: [.foregroundColor: NSColor.systemRed.withAlphaComponent(0.8),
+                             .font: isCompact ? font
+                                 : NSFont.monospacedSystemFont(ofSize: 10, weight: .medium),
+                             .paragraphStyle: paragraph]))
+        } else if summary.isPreparing, !isCompact {
             // Bancada recém-aberta, terminais ainda subindo: dizer por extenso
             // vale mais que um spinner, que aqui leria como "trabalhando".
             badge.append(NSAttributedString(
@@ -251,7 +270,9 @@ final class SidebarRow: NSView {
             ? NSColor(calibratedWhite: 1, alpha: 0.14).cgColor
             : NSColor.clear.cgColor
         layer?.cornerRadius = 7
-        nameLabel.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.72)
+        nameLabel.textColor = isRemoving
+            ? NSColor(calibratedWhite: 1, alpha: 0.35)
+            : isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.72)
 
         tile.layer?.backgroundColor = isSelected
             ? NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor
@@ -1112,6 +1133,10 @@ final class Sidebar: NSView {
 
     func markLive(indices: Set<Int>) {
         for row in rows { row.isLive = indices.contains(row.index) }
+    }
+
+    func markRemoving(indices: Set<Int>) {
+        for row in rows { row.isRemoving = indices.contains(row.index) }
     }
 }
 

@@ -14,6 +14,10 @@ citados entre parênteses.
 - Terminal **maestro**: marque "Maestro" no formulário de um agente e ele monta a bancada sozinho — cria terminais, escolhe CLI, modelo, esforço, papel e regras de cada um, liga as arestas e define as regras da bancada, tudo num plano validado inteiro antes de aplicar (`egeon bench`, `egeon models`, `egeon plan`, `egeon apply`). O cabeçalho do card mostra "· maestro" (ADR-066).
 - Skill `egeon-maestro` para o Claude Code (e `egeon guide` para os outros CLIs): o manual de como desenhar uma bancada — quando vale um time, topologias, modelo e esforço por papel, como escrever papel e regras, limites de conversa e o formato do plano (ADR-066).
 
+### Corrigido
+
+- Remover uma bancada apagando as worktrees não congela mais o app: o git e o disco trabalham em segundo plano, a bancada mostra "removendo…" na barra lateral e uma cortina por cima até sair da lista, e as outras bancadas seguem usáveis enquanto isso.
+
 ## [1.1.1] - 2026-10-01
 
 ### Corrigido

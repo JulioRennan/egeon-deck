@@ -600,10 +600,20 @@ final class ControlSocket {
             // /remove?target=ws[&worktrees=1] — remove a bancada, e só com
             // `worktrees=1` apaga as worktrees dela do disco. O padrão é não
             // apagar: é `worktree remove --force` do outro lado.
+            // A resposta sai no fim, mas a main não espera junto: o `worktree
+            // remove` roda na fila de fundo do app, e só esta conexão fica parada.
             let query = Self.query(in: route)
-            let payload = DispatchQueue.main.sync {
-                AppControl.removeWorkbench?(query["target"] ?? "", query["worktrees"] == "1")
-                    ?? ["ok": false, "error": "app sem remoção disponível"]
+            let done = DispatchSemaphore(value: 0)
+            var payload: [String: Any] = ["ok": false, "error": "app sem remoção disponível"]
+            DispatchQueue.main.async {
+                guard let remove = AppControl.removeWorkbench else { done.signal(); return }
+                remove(query["target"] ?? "", query["worktrees"] == "1") { result in
+                    payload = result
+                    done.signal()
+                }
+            }
+            if done.wait(timeout: .now() + 600) == .timedOut {
+                payload = ["ok": false, "error": "remoção não respondeu em 10min"]
             }
             respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
                     json: payload)

@@ -38,8 +38,10 @@ enum AppControl {
     ///
     /// Existe pelo mesmo motivo que `makeWorktree`: o fluxo passa por `NSAlert`, que
     /// não é dirigível de fora, e "apaguei todas as worktrees" é exatamente o tipo
-    /// de afirmação que precisa ser conferida em repositório de verdade.
-    static var removeWorkbench: ((_ name: String, _ purge: Bool) -> [String: Any])?
+    /// de afirmação que precisa ser conferida em repositório de verdade. Responde
+    /// pelo `completion`, no fim: apagar worktree roda na fila de fundo.
+    static var removeWorkbench: ((_ name: String, _ purge: Bool,
+                                  _ completion: @escaping ([String: Any]) -> Void) -> Void)?
 
     /// Qual bancada é dona de uma pasta.
     ///

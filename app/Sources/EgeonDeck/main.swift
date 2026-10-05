@@ -467,9 +467,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppControl.cardSnapshot = { [weak self] target, file in
             self?.cardSnapshot(target: target, file: file) ?? "erro: app encerrando"
         }
-        AppControl.removeWorkbench = { [weak self] name, purge in
-            self?.removeWorkbench(named: name, purge: purge)
-                ?? ["ok": false, "error": "app encerrando"]
+        AppControl.removeWorkbench = { [weak self] name, purge, completion in
+            guard let self else { completion(["ok": false, "error": "app encerrando"]); return }
+            self.removeWorkbench(named: name, purge: purge, completion: completion)
         }
         AppControl.activateWorkbench = { [weak self] name in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
@@ -542,6 +542,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func activate(_ index: Int) {
         guard index >= 0, index < configs.count, index != activeIndex else { return }
+        // Bancada que ainda não estava de pé e está sendo apagada: montá-la agora
+        // subiria terminais dentro da pasta que o `rm` está levando.
+        if removing.contains(configs[index].id), shell(at: index) == nil { return }
         let shell = shell(at: index) ?? build(index)
         let previous = activeIndex
         activeID = configs[index].id
@@ -1435,15 +1438,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         schedulePersist()
     }
 
+    /// Bancadas apagando worktrees agora, por id. A barra mostra "removendo…",
+    /// a cortina cobre o shell, e a bancada não reabre por baixo do `rm`.
+    private var removing: Set<String> = []
+    /// Remoções em qualquer passo — levantando worktrees, no diálogo, apagando.
+    /// É o que faz o segundo clique em "Remover" não abrir um segundo diálogo.
+    private var removalInFlight: Set<String> = []
+
     private func confirmRemoveWorkbench(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
+        let config = configs[index]
+        guard !removalInFlight.contains(config.id) else { return }
+        removalInFlight.insert(config.id)
+
+        // Levantar as worktrees é git em cada nó (rev-parse, worktree list,
+        // branch): fora da main, e o alerta só sobe com a resposta.
+        let context = worktreeContext(for: config)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let involved = Self.worktrees(of: config, context: context)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard let index = self.configs.firstIndex(where: { $0.id == config.id }) else {
+                    self.removalInFlight.remove(config.id)
+                    return
+                }
+                self.askRemoveWorkbench(index, involved: involved)
+            }
+        }
+    }
+
+    private func askRemoveWorkbench(_ index: Int, involved: [WorkbenchWorktree]) {
         let config = configs[index]
         let live = shell(at: index) != nil
         // TODAS as worktrees da bancada, e não só a pasta dela: desde o worktree por
         // terminal (ADR-017), uma bancada pode ter aberto worktree em três
         // repositórios diferentes. Apagar só a da bancada deixava as outras no disco
         // e registradas no git, sem nada na tela que lembrasse delas.
-        let involved = worktrees(of: config)
         let deletable = involved.filter { $0.usedBy == nil }
 
         let alert = NSAlert()
@@ -1495,55 +1525,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText += " As worktrees dela são de outras bancadas e ficam."
         }
 
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            removalInFlight.remove(config.id)
+            return
+        }
         guard checkbox?.state == .on else {
+            removalInFlight.remove(config.id)
             removeWorkbench(index)
             return
         }
-        guard confirmWorktreeLosses(deletable) else { return }
 
-        // Apagar antes de tirar a bancada da lista: se o git recusar, você fica com
-        // a bancada e com a pasta, em vez de perder a bancada e ficar com a pasta.
-        var falhas: [String] = []
-        var removidas: [String] = []
-        var sobras: [String] = []
-        for wt in deletable {
-            do {
-                try Worktree.remove(wt.path)
-                removidas.append("\(wt.repo)/\(wt.branch ?? "?")")
-            } catch Worktree.Failure.leftovers(let path, let reason) {
-                // O git já desfez o registro: a worktree acabou, e o que sobrou é
-                // pasta. Segurar a bancada por causa dela seria segurar por um
-                // problema que a própria remoção resolve — quem está escrevendo lá
-                // dentro é o dev server e o agente DESTA bancada (as órfãs no disco
-                // eram só `.vite` e `.omc`), e eles morrem junto com ela. A faxina
-                // fica para depois disso (ADR-060).
-                Log.write("worktree: \(path) — \(reason); a pasta fica para a faxina "
-                          + "depois que os processos da bancada morrerem")
-                removidas.append("\(wt.repo)/\(wt.branch ?? "?")")
-                sobras.append(path)
-            } catch {
-                // No log também: o alerta some com um OK, e é justamente a
-                // mensagem do git que diz por que a pasta resistiu.
-                Log.write("worktree: falha ao apagar \(wt.path) — \(error)")
-                falhas.append("\(wt.repo) · \(wt.branch ?? "?") — \(error)")
+        // `git status` e `ls-files` em cada worktree — também fora da main. A
+        // cortina já sobe aqui: com `node_modules` no meio, isto leva o seu tempo.
+        setRemoving(config.id, true, label: "Conferindo o que se perde…")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let losses = Self.lossLines(deletable)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard self.confirmWorktreeLosses(losses) else {
+                    self.setRemoving(config.id, false)
+                    self.removalInFlight.remove(config.id)
+                    return
+                }
+                self.purgeAndRemove(config.id, deletable) { outcome in
+                    guard !outcome.succeeded else { return }
+                    let alert = NSAlert()
+                    alert.alertStyle = .critical
+                    alert.messageText = "A bancada não foi removida"
+                    alert.informativeText = (outcome.removed.isEmpty
+                        ? "" : "Já apagadas: \(outcome.removed.map(\.label).joined(separator: ", ")).\n\n")
+                        + "Não consegui apagar:\n"
+                        + outcome.failures.map { "\($0.target.label) — \($0.error)" }
+                            .joined(separator: "\n")
+                    alert.runModal()
+                }
             }
         }
+    }
 
-        guard falhas.isEmpty else {
-            let alert = NSAlert()
-            alert.alertStyle = .critical
-            alert.messageText = "A bancada não foi removida"
-            alert.informativeText = (removidas.isEmpty
-                ? "" : "Já apagadas: \(removidas.joined(separator: ", ")).\n\n")
-                + "Não consegui apagar:\n" + falhas.joined(separator: "\n")
-            alert.runModal()
+    /// Apaga as worktrees na fila de fundo e, se todas saírem, tira a bancada da
+    /// lista. Enquanto isso a bancada fica com "removendo…" na barra e a cortina
+    /// por cima — o app segue respondendo, as outras bancadas também.
+    ///
+    /// Apagar antes de tirar a bancada da lista: se o git recusar, você fica com
+    /// a bancada e com a pasta, em vez de perder a bancada e ficar com a pasta.
+    private func purgeAndRemove(_ id: String, _ worktrees: [WorkbenchWorktree],
+                                completion: @escaping (WorkbenchRemoval.Outcome) -> Void) {
+        guard let config = configs.first(where: { $0.id == id }) else {
+            setRemoving(id, false)
+            removalInFlight.remove(id)
+            completion(WorkbenchRemoval.Outcome())
             return
         }
         let roots = multiRoots(config)
-        removeWorkbench(index)
-        sweepLeftovers(sobras, roots: roots)
+        let targets = worktrees.map {
+            WorkbenchRemoval.Target(path: $0.path, label: "\($0.repo) · \($0.branch ?? "?")")
+        }
+        setRemoving(id, true)
+        Log.write("bancada \"\(config.name)\": apagando \(targets.count) worktree(s) em segundo plano")
+
+        WorkbenchRemoval.queue.async {
+            let outcome = WorkbenchRemoval.purge(targets)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.setRemoving(id, false)
+                self.removalInFlight.remove(id)
+                if outcome.succeeded, let index = self.configs.firstIndex(where: { $0.id == id }) {
+                    self.removeWorkbench(index)
+                    self.sweepLeftovers(outcome.leftovers, roots: roots)
+                }
+                completion(outcome)
+            }
+        }
+    }
+
+    /// Liga e desliga o "removendo…" de uma bancada: a linha da barra e a
+    /// cortina do shell, se ela estiver de pé.
+    private func setRemoving(_ id: String, _ on: Bool, label: String = "Removendo a bancada…") {
+        if on { removing.insert(id) } else { removing.remove(id) }
+        shells[id]?.showBusy(on ? label : nil)
+        markRemovingWorkbenches()
+    }
+
+    private func markRemovingWorkbenches() {
+        root.sidebar.markRemoving(indices: Set(configs.indices.filter { removing.contains(configs[$0].id) }))
     }
 
     /// A segunda passada nas pastas que o git deixou para trás.
@@ -1553,17 +1618,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ainda estava recriando `.vite` mais rápido do que qualquer um apaga — é
     /// por isso que a faxina não roda junto com o `worktree remove`.
     private func sweepLeftovers(_ paths: [String], roots: [URL] = []) {
-        roots.forEach { MultiProjectLinks.pruneRoot($0) }
+        WorkbenchRemoval.queue.async { roots.forEach { MultiProjectLinks.pruneRoot($0) } }
         guard !paths.isEmpty else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            for path in paths {
-                do {
-                    try Worktree.finishRemoval(of: path, registered: false)
-                    Log.write("worktree: \(path) apagada na segunda passada")
-                } catch {
-                    Log.write("worktree: \(path) resistiu — \(error)")
-                }
-            }
+        WorkbenchRemoval.queue.asyncAfter(deadline: .now() + 1.5) {
+            WorkbenchRemoval.sweep(paths)
             roots.forEach { MultiProjectLinks.pruneRoot($0) }
         }
     }
@@ -1626,46 +1684,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Remoção sem diálogo, para o socket. Mesmas regras do formulário: só apaga
-    /// worktree ligada, e nunca a que é pasta de outra bancada.
-    private func removeWorkbench(named name: String, purge: Bool) -> [String: Any] {
-        guard let index = configs.firstIndex(where: { $0.name == name })
-        else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
+    /// worktree ligada, e nunca a que é pasta de outra bancada. Responde no fim,
+    /// pelo `completion` — o git roda na fila de fundo, como no diálogo.
+    private func removeWorkbench(named name: String, purge: Bool,
+                                 completion: @escaping ([String: Any]) -> Void) {
+        guard let config = configs.first(where: { $0.name == name })
+        else { completion(["ok": false, "error": "bancada desconhecida '\(name)'"]); return }
+        guard !removalInFlight.contains(config.id)
+        else { completion(["ok": false, "error": "remoção já em curso nesta bancada"]); return }
+        removalInFlight.insert(config.id)
 
-        let involved = worktrees(of: configs[index])
-        var removidas: [String] = []
-        var falhas: [String] = []
-        var sobras: [String] = []
+        let context = worktreeContext(for: config)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let involved = Self.worktrees(of: config, context: context)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                func payload(_ outcome: WorkbenchRemoval.Outcome?) -> [String: Any] {
+                    var base: [String: Any] = [
+                        "workbench": name,
+                        "removed": outcome?.removed.map(\.path) ?? [],
+                        "sweeping": outcome?.leftovers ?? [],
+                        "kept": involved.filter { $0.usedBy != nil }
+                            .map { ["path": $0.path, "usedBy": $0.usedBy ?? ""] },
+                        "worktrees": involved.map { ["path": $0.path, "repo": $0.repo,
+                                                     "branch": $0.branch ?? "",
+                                                     "owners": $0.owners] }]
+                    if let outcome, !outcome.succeeded {
+                        base["ok"] = false
+                        base["error"] = "worktree não removida"
+                        base["failed"] = outcome.failures.map { "\($0.target.path): \($0.error)" }
+                    } else {
+                        base["ok"] = true
+                    }
+                    return base
+                }
 
-        if purge {
-            for wt in involved where wt.usedBy == nil {
-                do {
-                    try Worktree.remove(wt.path)
-                    removidas.append(wt.path)
-                } catch Worktree.Failure.leftovers(let path, let reason) {
-                    Log.write("worktree: \(path) — \(reason); faxina depois dos processos")
-                    removidas.append(wt.path)
-                    sobras.append(path)
-                } catch {
-                    Log.write("worktree: falha ao apagar \(wt.path) — \(error)")
-                    falhas.append("\(wt.path): \(error)")
+                guard purge else {
+                    self.removalInFlight.remove(config.id)
+                    if let index = self.configs.firstIndex(where: { $0.id == config.id }) {
+                        self.removeWorkbench(index)
+                    }
+                    completion(payload(nil))
+                    return
+                }
+                self.purgeAndRemove(config.id, involved.filter { $0.usedBy == nil }) {
+                    completion(payload($0))
                 }
             }
-            guard falhas.isEmpty else {
-                return ["ok": false, "error": "worktree não removida",
-                        "removed": removidas, "failed": falhas]
-            }
         }
-
-        let roots = purge ? multiRoots(configs[index]) : []
-        removeWorkbench(index)
-        sweepLeftovers(sobras, roots: roots)
-        return ["ok": true, "workbench": name, "removed": removidas,
-                "sweeping": sobras,
-                "kept": involved.filter { $0.usedBy != nil }
-                    .map { ["path": $0.path, "usedBy": $0.usedBy ?? ""] },
-                "worktrees": involved.map { ["path": $0.path, "repo": $0.repo,
-                                             "branch": $0.branch ?? "",
-                                             "owners": $0.owners] }]
     }
 
     /// Uma worktree que esta bancada usa.
@@ -1680,13 +1746,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let usedBy: String?
     }
 
+    /// O que `worktrees(of:)` precisa saber do resto do app, tirado na main:
+    /// o levantamento roda na fila de fundo e não pode ler `configs` de lá.
+    private struct WorktreeContext {
+        let isMulti: Bool
+        /// Nome e pasta das OUTRAS bancadas.
+        let others: [(name: String, path: String)]
+    }
+
+    private func worktreeContext(for config: WorkbenchConfig) -> WorktreeContext {
+        WorktreeContext(isMulti: isMultiProject(config),
+                        others: configs.filter { $0.id != config.id }
+                            .map { ($0.name, $0.url.path) })
+    }
+
     /// Toda worktree ligada que a bancada usa: a pasta dela e a de cada nó que abre
     /// fora dela.
     ///
     /// Nó dentro da pasta da bancada não entra: é a mesma worktree, e apagá-la duas
     /// vezes daria erro na segunda. Só worktree LIGADA — oferecer apagar o checkout
     /// principal seria oferecer apagar o repositório.
-    private func worktrees(of config: WorkbenchConfig) -> [WorkbenchWorktree] {
+    private static func worktrees(of config: WorkbenchConfig,
+                                  context: WorktreeContext) -> [WorkbenchWorktree] {
         var owners: [String: [String]] = [:]
         let raiz = config.url.path
 
@@ -1696,7 +1777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // subpasta é uma worktree. Link não entra — é a pasta de links do
         // checkout principal, ou uma worktree de outro lugar reaproveitada, e
         // nenhuma das duas é desta bancada para apagar (ADR-065).
-        if isMultiProject(config), !Worktree.isLinkedWorktree(raiz) {
+        if context.isMulti, !Worktree.isLinkedWorktree(raiz) {
             for child in MultiProjectLinks.realSubfolders(of: config.url)
             where Worktree.isLinkedWorktree(child) {
                 owners[child] = ["bancada"]
@@ -1718,18 +1799,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 repo: ((Worktree.mainRepo(of: path) ?? path) as NSString).lastPathComponent,
                 branch: Worktree.branchOf(path),
                 owners: owners[path] ?? [],
-                usedBy: configs.first { $0.name != config.name && $0.url.path == path }?.name)
+                usedBy: context.others.first { $0.path == path }?.name)
         }
     }
 
-    /// Segundo passo, só quando há trabalho a perder. `worktree remove` precisa de
-    /// `--force` aqui — a worktree nasce suja de propósito — e forçar sem mostrar
-    /// o que morre seria apagar às escuras.
+    /// O que cada worktree perde, em linhas para o alerta. É git em cada uma, e
+    /// por isso separado do alerta: roda na fila de fundo.
     ///
     /// Uma seção por worktree: com três repositórios envolvidos, somar os números
     /// num total só não diria em qual deles está o trabalho que você não quer
     /// perder.
-    private func confirmWorktreeLosses(_ worktrees: [WorkbenchWorktree]) -> Bool {
+    private static func lossLines(_ worktrees: [WorkbenchWorktree]) -> [String] {
         var linhas: [String] = []
 
         for wt in worktrees {
@@ -1752,7 +1832,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               + "sobrevivem na branch \(wt.branch ?? "?"), que não é apagada.")
             }
         }
+        return linhas
+    }
 
+    /// Segundo passo, só quando há trabalho a perder. `worktree remove` precisa de
+    /// `--force` aqui — a worktree nasce suja de propósito — e forçar sem mostrar
+    /// o que morre seria apagar às escuras.
+    private func confirmWorktreeLosses(_ linhas: [String]) -> Bool {
         guard !linhas.isEmpty else { return true }
 
         let alert = NSAlert()
@@ -1854,6 +1940,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         root.sidebar.reload(workspaces: workspaces, configs: configs)
         root.sidebar.select(activeIndex)
         markLiveWorkbenches()
+        markRemovingWorkbenches()
     }
 
     private func project(withID id: String) -> ProjectConfig? {
