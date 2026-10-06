@@ -149,10 +149,11 @@ final class TerminalNode: NodeView {
     let term = MBTerminalView(frame: .zero)
     private(set) var address: String
     private var baseTitle: String
-    /// O maestro se distingue no cabeçalho: é o terminal que pode mexer na
-    /// bancada inteira, e isso tem de ser visível sem abrir o formulário
-    /// (ADR-066).
-    var isMaestro = false { didSet { refreshBadge() } }
+    /// O maestro se distingue no card inteiro: é o terminal que pode mexer na
+    /// bancada, e isso tem de ser visível sem abrir o formulário (ADR-066).
+    let isMaestro: Bool
+    /// O dourado do maestro: borda, título, ✦ e o slider de modelo e esforço.
+    static let maestroGold = NSColor(srgbRed: 0.95, green: 0.76, blue: 0.29, alpha: 1)
     /// `✦` para terminal com IA, `▸` para shell. Guardado em vez de relido do
     /// rótulo: o rótulo agora carrega estado, e ler o símbolo de volta dele
     /// quebraria assim que o sufixo mudasse.
@@ -180,8 +181,9 @@ final class TerminalNode: NodeView {
          command: String, profile: AgentProfile?, config: String? = nil,
          model: String? = nil, effort: String? = nil, ultracode: Bool = false,
          catalog: ModelCatalog? = nil, extraEnvironment: [String: String] = [:],
-         prompt: String? = nil, hooked: Bool = false) {
+         prompt: String? = nil, hooked: Bool = false, maestro: Bool = false) {
         self.address = address
+        self.isMaestro = maestro && profile != nil
         // Só o nome do terminal no título. O endereço inteiro cabia numa linha de
         // 11pt e não sobrava nada; agora a bancada é a mesma para todos os cards da
         // tela, então repeti-la em cada um custa espaço e não informa. O endereço
@@ -190,8 +192,10 @@ final class TerminalNode: NodeView {
         self.symbol = profile == nil ? "▸" : "✦"
         super.init(frame: frame,
                    title: "\(self.symbol) \(self.baseTitle)",
-                   accent: profile == nil ? .systemTeal : .systemPurple,
-                   nodeID: String(address.split(separator: "/").last ?? ""))
+                   accent: profile == nil ? .systemTeal
+                       : maestro ? TerminalNode.maestroGold : .systemPurple,
+                   nodeID: String(address.split(separator: "/").last ?? ""),
+                   restingBorder: maestro && profile != nil ? (2, 0.95) : (1, 0.55))
         subtitle = NodeWorktreePlanner.short(cwd)
         subtitlePath = cwd
         term.startDirectory = cwd
@@ -391,7 +395,9 @@ final class TerminalNode: NodeView {
         }
         modelRow?.refresh()
 
-        titleLabel.textColor = activity.color ?? accent
+        // O título do maestro é dourado sempre: o estado já tem cor na linha
+        // de status ao lado, e o dourado é o que o acha na tela.
+        titleLabel.textColor = isMaestro ? accent : activity.color ?? accent
         statusLabel.textColor = activity.color ?? NSColor(calibratedWhite: 0.62, alpha: 1)
         setAlert(activity.needsAttention)
     }

@@ -2547,8 +2547,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                             ultracode: node.ultracode == true).environment
                                         } ?? [:],
                                         prompt: launch.promptToInject,
-                                        hooked: launch.hooked)
-            terminal.isMaestro = node.isMaestro
+                                        hooked: launch.hooked,
+                                        maestro: node.isMaestro)
             let launched = Date()
             terminal.modelResolver = { [weak self] in
                 self?.literalModel(workbench: config.name, nodeID: node.id, since: launched)

@@ -216,15 +216,21 @@ class NodeView: NSView {
     /// Arrasto de troca em curso (mosaico).
     private var swapping = false
 
-    init(frame: NSRect, title: String, accent: NSColor, nodeID: String = "") {
+    /// A borda em repouso — sem alerta. O maestro a carrega mais forte e mais
+    /// grossa: é o card que manda na bancada (ADR-066).
+    let restingBorder: (width: CGFloat, alpha: CGFloat)
+
+    init(frame: NSRect, title: String, accent: NSColor, nodeID: String = "",
+         restingBorder: (width: CGFloat, alpha: CGFloat) = (1, 0.55)) {
         self.nodeID = nodeID
         self.accent = accent
+        self.restingBorder = restingBorder
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor(calibratedWhite: 0.11, alpha: 1).cgColor
         layer?.cornerRadius = 10
-        layer?.borderWidth = 1
-        layer?.borderColor = accent.withAlphaComponent(0.55).cgColor
+        layer?.borderWidth = restingBorder.width
+        layer?.borderColor = accent.withAlphaComponent(restingBorder.alpha).cgColor
         layer?.masksToBounds = true
 
         titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
@@ -342,10 +348,10 @@ class NodeView: NSView {
     func setAlert(_ on: Bool) {
         guard on != isAlerting else { return }
         isAlerting = on
-        layer?.borderWidth = on ? 2 : 1
+        layer?.borderWidth = on ? max(2, restingBorder.width) : restingBorder.width
         layer?.borderColor = on
             ? NSColor.systemOrange.withAlphaComponent(0.95).cgColor
-            : accent.withAlphaComponent(0.55).cgColor
+            : accent.withAlphaComponent(restingBorder.alpha).cgColor
     }
 
     required init?(coder: NSCoder) { fatalError() }

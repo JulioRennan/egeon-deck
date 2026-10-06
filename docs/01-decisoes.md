@@ -3876,8 +3876,9 @@ não têm:
   não tem `maxSends` — o `maxVisits` da bancada é a rede contra o laço —, e
   uma aresta desenhada entre o maestro e alguém vence a implícita (é como se
   dá a ela um limite próprio). Isto revê o ADR-012 só para o maestro: o
-  usuário o marca no formulário, e o "· maestro" no cabeçalho é o que mostra
-  que ele alcança a bancada inteira.
+  usuário o marca no formulário, e o card dourado (borda de 2pt, título fixo
+  em dourado — o estado fica só na linha de status) com "· maestro" no
+  cabeçalho é o que mostra que ele alcança a bancada inteira.
 - **O canvas se arruma quando o time muda** (`MaestroLayout`): plano que cria
   ou remove terminal grava frames novos — agentes em grade à direita do
   maestro, alinhados pelo topo dele (2 colunas até 4, depois 3), shells numa
