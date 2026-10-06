@@ -71,7 +71,8 @@ final class MaestroLinksLayoutTests: XCTestCase {
         let loose = MaestroLayout.frames(for: nodes)
         let linked = MaestroLayout.frames(for: nodes, edges: [EdgeConfig(from: "a", to: "b")])
         XCTAssertEqual(loose["b"]!.minX - loose["a"]!.maxX, MaestroLayout.gap)
-        XCTAssertEqual(linked["b"]!.minX - linked["a"]!.maxX, MaestroLayout.linkedGap)
+        XCTAssertEqual(linked["b"]!.minX - linked["a"]!.maxX, MaestroLayout.linkedGapX,
+                       "na horizontal o vão é o maior")
         // Aresta do maestro é implícita e não se desenha: não abre vão.
         let implicit = MaestroLayout.frames(for: nodes, edges: [EdgeConfig(from: "m", to: "a")])
         XCTAssertEqual(implicit["b"]!.minX - implicit["a"]!.maxX, MaestroLayout.gap)

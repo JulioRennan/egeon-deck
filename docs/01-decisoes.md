@@ -3894,7 +3894,8 @@ não têm:
   **O maestro não se move:** posição e
   tamanho dele são escolha do usuário, e ele é a âncora do arranjo (só uma
   bancada nunca desenhada lhe dá uma coluna). **Agentes com seta desenhada
-  entre si ganham vão largo** (160 contra 40): com o vão de cards soltos a
+  entre si ganham vão largo** (320 na horizontal, onde a ligação é curva e
+  os controles dela se penduram no meio; 160 na vertical; 40 sem seta): com o vão de cards soltos a
   seta virava um traço espremido entre duas bordas, sem lugar para as
   pontas. `"layout": false` deixa como está;
   `true` rearruma sem mudar o time. O arranjo vai para o disco como um

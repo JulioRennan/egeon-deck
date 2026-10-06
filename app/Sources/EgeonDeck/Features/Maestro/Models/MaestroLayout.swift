@@ -12,8 +12,11 @@ enum MaestroLayout {
     static let gap: CGFloat = 40
     /// Vão entre agentes quando há seta desenhada entre eles: a linha, a
     /// curva e as duas pontas precisam de onde aparecer. Com o vão de cards
-    /// soltos a seta vira um traço escondido entre duas bordas.
+    /// soltos a seta vira um traço escondido entre duas bordas. Maior na
+    /// horizontal: ali a ligação é curva, sai e entra deitada, e os controles
+    /// dela (direção, limite, remover) se penduram no meio.
     static let linkedGap: CGFloat = 160
+    static let linkedGapX: CGFloat = 320
     static let agent = CGSize(width: 720, height: 460)
     static let shell = CGSize(width: 640, height: 320)
 
@@ -36,6 +39,7 @@ enum MaestroLayout {
         let ids = Set(workers.map(\.id))
         let linked = edges.contains { ids.contains($0.from) && ids.contains($0.to) }
         let teamGap = linked ? linkedGap : gap
+        let teamGapX = linked ? linkedGapX : gap
 
         var frames: [String: CGRect] = [:]
         let columns = columns(for: workers.count)
@@ -60,7 +64,7 @@ enum MaestroLayout {
             }
         } else {
             for (i, node) in workers.enumerated() {
-                frames[node.id] = CGRect(x: x + CGFloat(i % columns) * (agent.width + teamGap),
+                frames[node.id] = CGRect(x: x + CGFloat(i % columns) * (agent.width + teamGapX),
                                          y: origin.y + CGFloat(i / columns) * (agent.height + teamGap),
                                          width: agent.width, height: agent.height)
             }
@@ -149,7 +153,7 @@ enum MaestroLayout {
                 let desired = wanted[id]! == .greatestFiniteMagnitude
                     ? origin.y + CGFloat(rank) * step : wanted[id]!
                 let y = max(desired, next)
-                frames[id] = CGRect(x: origin.x + CGFloat(c) * (agent.width + linkedGap), y: y,
+                frames[id] = CGRect(x: origin.x + CGFloat(c) * (agent.width + linkedGapX), y: y,
                                     width: agent.width, height: agent.height)
                 next = y + step
             }

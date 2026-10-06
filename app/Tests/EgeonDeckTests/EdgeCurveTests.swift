@@ -58,4 +58,20 @@ final class EdgeCurveTests: XCTestCase {
         XCTAssertEqual(ends.endTangent.dy, 1, accuracy: 0.001, "a ponta entra de cima para baixo")
         XCTAssertEqual(ends.startTangent.dy, -1, accuracy: 0.001, "a ponta de volta aponta para cima")
     }
+
+    /// Os controles da seta (direção, limite, remover) ficam NO MEIO da linha
+    /// de pé, e acima do meio na deitada — onde não a cobrem.
+    func testControlsCenterOnAVerticalEdge() {
+        let stacked = EdgeCurve.route(from: card(784, 40), to: card(784, 664))
+        let (mid, _) = EdgeCurve.midpoint(stacked)
+        let top = EdgeCurve.controlsTop(route: stacked, midpoint: mid, height: 24, lift: 10)
+        XCTAssertEqual(top + 12, mid.y, accuracy: 0.001, "centrados no ponto médio")
+        XCTAssertEqual(mid.y, (40 + 460 + 664) / 2, accuracy: 1, "e o ponto médio é o meio do vão")
+
+        let side = EdgeCurve.route(from: card(40, 40), to: card(1100, 40))
+        let (sideMid, _) = EdgeCurve.midpoint(side)
+        XCTAssertEqual(EdgeCurve.controlsTop(route: side, midpoint: sideMid, height: 24, lift: 10),
+                       sideMid.y - 34, accuracy: 0.001, "deitada: acima da linha")
+    }
 }
+

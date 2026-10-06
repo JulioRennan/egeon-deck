@@ -14,6 +14,11 @@ enum EdgeRoute {
     /// parece "atrás" e a linha dava a volta inteira por baixo do de baixo
     /// para entrar pela esquerda dele.
     case stacked(from: NSPoint, to: NSPoint)
+
+    var isStacked: Bool {
+        if case .stacked = self { return true }
+        return false
+    }
 }
 
 /// Traçado no estilo n8n.
@@ -99,6 +104,15 @@ enum EdgeCurve {
 
     static func targetPort(_ frame: NSRect) -> NSPoint {
         NSPoint(x: frame.minX, y: frame.midY)
+    }
+
+    /// Onde a fileira de controles da aresta (direção, limite, remover)
+    /// começa, em y. Na linha deitada ela sobe acima do meio para não cobrir
+    /// a linha; na de pé, subir é deslizar ao longo dela — os controles iam
+    /// parar longe do meio. Ali se centram no ponto médio, sobre a linha.
+    static func controlsTop(route: EdgeRoute, midpoint: NSPoint,
+                            height: CGFloat, lift: CGFloat) -> CGFloat {
+        route.isStacked ? midpoint.y - height / 2 : midpoint.y - height - lift
     }
 
     static func path(_ route: EdgeRoute) -> NSBezierPath {
@@ -491,7 +505,8 @@ final class EdgeLayerView: NSView {
         let pill = NSSize(width: Self.pillSize.width * z, height: Self.pillSize.height * z)
         let button = Self.buttonSize * z, gap = Self.controlGap * z
         let total = button + gap + pill.width + gap + button
-        let y = point.y - max(pill.height, button) - Self.controlLift * z
+        let y = EdgeCurve.controlsTop(route: laid.route, midpoint: point,
+                                      height: max(pill.height, button), lift: Self.controlLift * z)
         let left = point.x - total / 2
         return (NSRect(x: left, y: y, width: button, height: button),
                 NSRect(x: left + button + gap, y: y, width: pill.width, height: pill.height),
@@ -509,6 +524,7 @@ final class EdgeLayerView: NSView {
         let (point, _) = EdgeCurve.midpoint(laid.route)
         let controls = rects.direction.union(rects.pill).union(rects.remove)
         let z = screenPoint
+        if laid.route.isStacked { return controls.insetBy(dx: -10 * z, dy: -8 * z) }
         return NSRect(x: controls.minX, y: controls.minY,
                       width: controls.width, height: point.y - controls.minY + 6 * z)
             .insetBy(dx: -10 * z, dy: -8 * z)
