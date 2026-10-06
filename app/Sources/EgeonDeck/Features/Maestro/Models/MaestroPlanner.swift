@@ -218,7 +218,7 @@ enum MaestroPlanner {
 
         // O time mudou: o canvas é rearrumado, a menos que o plano diga não.
         if plan.layout ?? (!out.created.isEmpty || !out.removed.isEmpty) {
-            let frames = MaestroLayout.frames(for: next.nodes)
+            let frames = MaestroLayout.frames(for: next.nodes, edges: next.edgeList)
             for i in next.nodes.indices {
                 if let frame = frames[next.nodes[i].id] { next.nodes[i].setFrame(frame) }
             }

@@ -54,6 +54,42 @@ final class MaestroLinksLayoutTests: XCTestCase {
         } }
     }
 
+    /// O maestro é a âncora: a posição e o tamanho que o usuário deu a ele
+    /// ficam, e o time se arruma à direita, alinhado pelo topo.
+    func testMaestroKeepsItsPlaceAndTheTeamFollowsIt() {
+        var maestro = node("m", .agent, maestro: true)
+        maestro.setFrame(CGRect(x: 300, y: 900, width: 500, height: 600))
+        let frames = MaestroLayout.frames(for: [maestro, node("a", .agent), node("b", .agent)])
+        XCTAssertEqual(frames["m"], CGRect(x: 300, y: 900, width: 500, height: 600))
+        XCTAssertGreaterThan(frames["a"]!.minX, 800, "time à direita do maestro")
+        XCTAssertEqual(frames["a"]!.minY, 900, "alinhado pelo topo dele")
+    }
+
+    /// Seta desenhada entre agentes precisa de onde aparecer: o vão abre.
+    func testLinkedAgentsGetRoomForTheArrows() {
+        let nodes = [node("m", .agent, maestro: true), node("a", .agent), node("b", .agent)]
+        let loose = MaestroLayout.frames(for: nodes)
+        let linked = MaestroLayout.frames(for: nodes, edges: [EdgeConfig(from: "a", to: "b")])
+        XCTAssertEqual(loose["b"]!.minX - loose["a"]!.maxX, MaestroLayout.gap)
+        XCTAssertEqual(linked["b"]!.minX - linked["a"]!.maxX, MaestroLayout.linkedGap)
+        // Aresta do maestro é implícita e não se desenha: não abre vão.
+        let implicit = MaestroLayout.frames(for: nodes, edges: [EdgeConfig(from: "m", to: "a")])
+        XCTAssertEqual(implicit["b"]!.minX - implicit["a"]!.maxX, MaestroLayout.gap)
+    }
+
+    func testPlanDoesNotMoveTheMaestro() {
+        var maestro = node("m", .agent, maestro: true)
+        maestro.setFrame(CGRect(x: 1200, y: 80, width: 720, height: 460))
+        let bench = WorkbenchConfig(name: "deck", path: "/tmp", nodes: [maestro])
+        guard case .success(let plan) = MaestroPlan.parse(Data(#"{"nodes":[{"id":"a"}],"layout":true}"#.utf8))
+        else { return XCTFail() }
+        var context = MaestroContext(caller: "m", profiles: ["claude": .claudeCode])
+        context.directoryExists = { _ in true }
+        let out = MaestroPlanner.plan(plan, on: bench, context: context)
+        XCTAssertEqual(out.errors, [])
+        XCTAssertEqual(out.next.nodes.first { $0.id == "m" }?.frame, maestro.frame)
+    }
+
     func testPlanWithLayoutIsNotEmpty() {
         guard case .success(let plan) = MaestroPlan.parse(Data(#"{"layout":true}"#.utf8)) else { return XCTFail() }
         XCTAssertFalse(plan.isEmpty)

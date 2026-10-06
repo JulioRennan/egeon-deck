@@ -3879,10 +3879,15 @@ não têm:
   usuário o marca no formulário, e o "· maestro" no cabeçalho é o que mostra
   que ele alcança a bancada inteira.
 - **O canvas se arruma quando o time muda** (`MaestroLayout`): plano que cria
-  ou remove terminal grava frames novos — maestro numa coluna à esquerda da
-  altura do time, agentes em grade (2 colunas até 4, depois 3), shells numa
+  ou remove terminal grava frames novos — agentes em grade à direita do
+  maestro, alinhados pelo topo dele (2 colunas até 4, depois 3), shells numa
   faixa embaixo, editor e navegador por último com o tamanho que têm — e o
-  app move os cards na tela e enquadra. `"layout": false` deixa como está;
+  app move os cards na tela e enquadra. **O maestro não se move:** posição e
+  tamanho dele são escolha do usuário, e ele é a âncora do arranjo (só uma
+  bancada nunca desenhada lhe dá uma coluna). **Agentes com seta desenhada
+  entre si ganham vão largo** (160 contra 40): com o vão de cards soltos a
+  seta virava um traço espremido entre duas bordas, sem lugar para as
+  pontas. `"layout": false` deixa como está;
   `true` rearruma sem mudar o time. O arranjo vai para o disco como um
   arrasto.
 - **Conversa fica — quando pode.** Trocar modelo, esforço, papel ou regras de

@@ -295,8 +295,9 @@ enum MaestroGuide {
         **`remove`** — ids que saem, com as arestas deles.
 
         **`layout`** — o canvas se rearruma sozinho quando o plano cria ou
-        remove terminal: você numa coluna à esquerda, os agentes em grade ao
-        lado, os shells numa faixa embaixo, e a tela enquadra. `false` deixa
+        remove terminal: você fica onde está (o usuário escolheu o seu
+        lugar), os agentes em grade à sua direita — com vão largo quando há
+        seta entre eles —, os shells numa faixa embaixo, e a tela enquadra. `false` deixa
         os cards onde estão; `true` rearruma mesmo sem mudar o time.
 
         **`edges`** — `from`, `to`, `both` (as duas setas) e `maxSends`
