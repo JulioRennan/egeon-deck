@@ -9,9 +9,15 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-06
+
 ### Adicionado
 
-- Terminal **maestro**: marque "Maestro" no formulário de um agente e ele monta a bancada sozinho — cria terminais, escolhe CLI, modelo, esforço, papel e regras de cada um, liga as arestas e define as regras da bancada, tudo num plano validado inteiro antes de aplicar (`egeon bench`, `egeon models`, `egeon plan`, `egeon apply`). Ele também abre terminais normais — servidor de dev, watcher, log — com o comando de cada um, roda comandos neles com `egeon send` e lê a saída com `egeon peek`. O maestro é o mestre da bancada: alcança todo terminal e recebe a resposta de todos sem setas no canvas, e quando monta ou desmonta o time os cards se arrumam sozinhos — ele fica onde você o pôs, os agentes à direita dele seguindo as setas (quem recebe vai para a direita, no meio de quem manda; quem conversa nos dois sentidos fica empilhado), os shells embaixo. Ele também pode mover e redimensionar qualquer terminal. O card do maestro é dourado — borda mais grossa, título e controles — e o cabeçalho mostra "· maestro" (ADR-066).
+- Terminal **maestro**: marque "Maestro" no formulário de um agente e ele monta a bancada sozinho — cria terminais, escolhe CLI, modelo, esforço, papel e regras de cada um, liga as arestas e define as regras da bancada, tudo num plano validado inteiro antes de aplicar (`egeon bench`, `egeon models`, `egeon plan`, `egeon apply`) (ADR-066).
+- O maestro é o mestre da bancada: alcança todo terminal e recebe a resposta de todos sem setas no canvas — as setas ficam para quem conversa entre si (ADR-066).
+- O maestro abre terminais normais — servidor de dev, watcher, log — com o comando de cada um, roda comandos neles com `egeon send` e lê a saída com `egeon peek` (ADR-066).
+- Quando o maestro monta ou desmonta o time, os cards se arrumam sozinhos: ele fica onde você o pôs, os agentes à direita seguindo as setas (quem recebe vai para a direita, no meio de quem manda; quem conversa nos dois sentidos fica empilhado), com espaço para as setas, e os shells embaixo. Ele também move e redimensiona qualquer terminal (ADR-066).
+- O card do maestro é dourado — borda mais grossa, título e controles — e o cabeçalho mostra "· maestro" (ADR-066).
 - Skill `egeon-maestro` para o Claude Code (e `egeon guide` para os outros CLIs): o manual de como desenhar uma bancada — quando vale um time, topologias, modelo e esforço por papel, como escrever papel e regras, limites de conversa e o formato do plano (ADR-066).
 
 ### Corrigido
@@ -183,7 +189,8 @@ Primeira versão para passar adiante (tag `v0`).
 - Aviso de "terminou" e "precisa de você" vindo do gancho do CLI.
 - Socket de controle em `~/.egeon/sock`.
 
-[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/JulioRennan/egeon-deck/compare/v0.4...v1.0.0
