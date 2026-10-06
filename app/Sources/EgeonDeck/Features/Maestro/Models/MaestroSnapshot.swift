@@ -38,6 +38,10 @@ enum MaestroSnapshot {
         }
         if node.type == .shell, let cmd = node.cmd { out["cmd"] = cmd }
         if let cwd = node.cwd { out["cwd"] = cwd }
+        if let frame = node.frame {
+            out["frame"] = ["x": Int(frame.minX), "y": Int(frame.minY),
+                            "w": Int(frame.width), "h": Int(frame.height)]
+        }
         if node.isMaestro { out["maestro"] = true }
         if node.id == caller { out["you"] = true }
         if let activity { out["state"] = state(activity) }

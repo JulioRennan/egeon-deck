@@ -3882,7 +3882,16 @@ não têm:
   ou remove terminal grava frames novos — agentes em grade à direita do
   maestro, alinhados pelo topo dele (2 colunas até 4, depois 3), shells numa
   faixa embaixo, editor e navegador por último com o tamanho que têm — e o
-  app move os cards na tela e enquadra. **O maestro não se move:** posição e
+  app move os cards na tela e enquadra. **Com setas entre os agentes, o
+  arranjo segue o fluxo** (`MaestroLayout.layered`), ancorado à direita no
+  destino — quem mais recebe do que manda —, com cada card a tantas colunas
+  dele quanto o caminho MAIS CURTO de setas; na coluna, centrado na altura
+  média de quem aponta para ele (as curvas chegam simétricas). Contar da
+  esquerda pelo caminho mais longo foi a primeira versão e transformava
+  qualquer ciclo numa fila de cards. **O maestro também
+  posiciona à mão:** `frame` (`x`/`y`/`w`/`h`, cada um opcional) num nó do
+  plano vence o arranjo; o `egeon bench` devolve o frame de cada card.
+  **O maestro não se move:** posição e
   tamanho dele são escolha do usuário, e ele é a âncora do arranjo (só uma
   bancada nunca desenhada lhe dá uma coluna). **Agentes com seta desenhada
   entre si ganham vão largo** (160 contra 40): com o vão de cards soltos a

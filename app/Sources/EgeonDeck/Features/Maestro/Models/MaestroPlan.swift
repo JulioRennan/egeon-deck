@@ -40,6 +40,32 @@ struct MaestroPlan: Equatable {
         /// O comando que um terminal `shell` roda ao subir (servidor de dev,
         /// watcher, teste em laço). Agente não tem: o comando dele é o do CLI.
         var cmd: PlanField<String> = .keep
+        /// Onde o card fica no canvas. Vence o arranjo automático.
+        var frame: Frame?
+    }
+
+    /// Posição e tamanho de um card, no documento do canvas (y cresce para
+    /// baixo). Cada campo é opcional: só `x`/`y` move, só `w`/`h` redimensiona.
+    struct Frame: Equatable, Decodable {
+        var x: Double?
+        var y: Double?
+        var w: Double?
+        var h: Double?
+
+        enum Keys: String, CodingKey, CaseIterable { case x, y, w, h }
+
+        init(x: Double? = nil, y: Double? = nil, w: Double? = nil, h: Double? = nil) {
+            self.x = x; self.y = y; self.w = w; self.h = h
+        }
+
+        init(from decoder: Decoder) throws {
+            try PlanKeys.check(decoder, Keys.self, path: "frame")
+            let c = try decoder.container(keyedBy: Keys.self)
+            x = try c.decodeIfPresent(Double.self, forKey: .x)
+            y = try c.decodeIfPresent(Double.self, forKey: .y)
+            w = try c.decodeIfPresent(Double.self, forKey: .w)
+            h = try c.decodeIfPresent(Double.self, forKey: .h)
+        }
     }
 
     struct Edge: Equatable {
@@ -149,7 +175,7 @@ extension MaestroPlan.Node: Decodable {
     /// maestro: dado de propósito, porque terminal normal é parte da bancada
     /// (ADR-066). O portão é o `egeon apply` passar pela permissão do Bash.
     enum Keys: String, CodingKey, CaseIterable {
-        case id, kind, cli, model, effort, ultracode, role, rules, cwd, config, cmd
+        case id, kind, cli, model, effort, ultracode, role, rules, cwd, config, cmd, frame
     }
 
     /// O que o `egeon bench` mostra e não se escreve: copiar um nó de lá para
@@ -176,6 +202,7 @@ extension MaestroPlan.Node: Decodable {
         cwd = try c.field(String.self, .cwd)
         config = try c.field(String.self, .config)
         cmd = try c.field(String.self, .cmd)
+        frame = try c.decodeIfPresent(MaestroPlan.Frame.self, forKey: .frame)
     }
 }
 
@@ -204,7 +231,7 @@ extension MaestroPlan.Unlink: Decodable {
     }
 }
 
-private enum PlanKeys {
+enum PlanKeys {
     struct AnyKey: CodingKey {
         var stringValue: String
         var intValue: Int? { nil }

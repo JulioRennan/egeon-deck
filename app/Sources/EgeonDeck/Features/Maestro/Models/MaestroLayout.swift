@@ -53,10 +53,17 @@ enum MaestroLayout {
             frames[maestro.id] = frame
             x = max(x, frame.maxX + gap)
         }
-        for (i, node) in workers.enumerated() {
-            frames[node.id] = CGRect(x: x + CGFloat(i % columns) * (agent.width + teamGap),
-                                     y: origin.y + CGFloat(i / columns) * (agent.height + teamGap),
-                                     width: agent.width, height: agent.height)
+        if linked {
+            for (id, frame) in layered(workers.map(\.id), edges: edges,
+                                       origin: CGPoint(x: x, y: origin.y)) {
+                frames[id] = frame
+            }
+        } else {
+            for (i, node) in workers.enumerated() {
+                frames[node.id] = CGRect(x: x + CGFloat(i % columns) * (agent.width + teamGap),
+                                         y: origin.y + CGFloat(i / columns) * (agent.height + teamGap),
+                                         width: agent.width, height: agent.height)
+            }
         }
 
         // A faixa de baixo quebra na largura do que está em cima, para a
@@ -75,6 +82,77 @@ enum MaestroLayout {
             frames[node.id] = CGRect(origin: cursor, size: size)
             cursor.x += size.width + gap
             rowHeight = max(rowHeight, size.height)
+        }
+        return frames
+    }
+
+    /// Os agentes pelo fluxo das setas desenhadas, da esquerda para a direita.
+    ///
+    /// Ancorado à DIREITA, no destino: quem mais recebe do que manda (entradas
+    /// menos saídas, contando toda seta desenhada) é para onde o trabalho
+    /// converge, e fica na última coluna. Cada outro card fica a tantas
+    /// colunas dele quanto o caminho MAIS CURTO de setas até lá. Contar da
+    /// esquerda pelo caminho mais longo transformava qualquer ciclo numa fila
+    /// (`testador → planejador → dev ↔ testador` virava uma linha de três);
+    /// pela distância ao destino, os dois que apontam para o `dev` ficam na
+    /// mesma coluna, empilhados, e ele no meio deles.
+    ///
+    /// Na coluna, cada card se centra na altura média dos vizinhos da coluna
+    /// à esquerda que apontam para ele — as curvas chegam simétricas.
+    /// Sobreposição empurra para baixo. Sem destino claro (só pares de ida e
+    /// volta, ou um ciclo redondo), tudo numa coluna, empilhado.
+    static func layered(_ ids: [String], edges: [EdgeConfig],
+                        origin: CGPoint) -> [String: CGRect] {
+        let members = Set(ids)
+        let links = edges.filter { members.contains($0.from) && members.contains($0.to) && $0.from != $0.to }
+        var score = Dictionary(uniqueKeysWithValues: ids.map { ($0, 0) })
+        for edge in links { score[edge.to]! += 1; score[edge.from]! -= 1 }
+        let top = score.values.max() ?? 0
+        let sinks = top > 0 ? ids.filter { score[$0] == top } : []
+
+        // Distância de cada um ao destino, andando as setas para trás.
+        var distance: [String: Int] = [:]
+        var frontier = sinks
+        for sink in sinks { distance[sink] = 0 }
+        while !frontier.isEmpty {
+            var next: [String] = []
+            for id in frontier {
+                for edge in links where edge.to == id && distance[edge.from] == nil {
+                    distance[edge.from] = distance[id]! + 1
+                    next.append(edge.from)
+                }
+            }
+            frontier = next
+        }
+        // Quem não chega ao destino (solto, ou sem destino nenhum) vai para a
+        // coluna mais à esquerda.
+        let deepest = distance.values.max() ?? 0
+        let column = Dictionary(uniqueKeysWithValues: ids.map { ($0, deepest - (distance[$0] ?? deepest)) })
+
+        var frames: [String: CGRect] = [:]
+        let step = agent.height + linkedGap
+        for c in 0...(column.values.max() ?? 0) {
+            let here = ids.filter { column[$0] == c }
+            let wanted = Dictionary(uniqueKeysWithValues: here.map { id -> (String, CGFloat) in
+                let centers = links.filter { $0.to == id }.compactMap { edge -> CGFloat? in
+                    guard let from = frames[edge.from], column[edge.from]! < c else { return nil }
+                    return from.midY
+                }
+                let y = centers.isEmpty ? .greatestFiniteMagnitude
+                    : centers.reduce(0, +) / CGFloat(centers.count) - agent.height / 2
+                return (id, y)
+            })
+            var next = origin.y
+            for (rank, id) in here.enumerated().sorted(by: {
+                (wanted[$0.element]!, $0.offset) < (wanted[$1.element]!, $1.offset)
+            }).map(\.element).enumerated() {
+                let desired = wanted[id]! == .greatestFiniteMagnitude
+                    ? origin.y + CGFloat(rank) * step : wanted[id]!
+                let y = max(desired, next)
+                frames[id] = CGRect(x: origin.x + CGFloat(c) * (agent.width + linkedGap), y: y,
+                                    width: agent.width, height: agent.height)
+                next = y + step
+            }
         }
         return frames
     }

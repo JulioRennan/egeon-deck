@@ -90,6 +90,89 @@ final class MaestroLinksLayoutTests: XCTestCase {
         XCTAssertEqual(out.next.nodes.first { $0.id == "m" }?.frame, maestro.frame)
     }
 
+    /// O caso da captura: planejador ↔ testador (ida e volta), os dois →
+    /// dev. Os dois ficam na mesma coluna, empilhados; o dev vai para a
+    /// direita, no meio da altura deles.
+    func testLinkedTeamFlowsLeftToRightAndCentersTheTarget() {
+        let nodes = [node("m", .agent, maestro: true), node("planejador", .agent),
+                     node("testador", .agent), node("dev", .agent)]
+        let edges = [EdgeConfig(from: "planejador", to: "testador"),
+                     EdgeConfig(from: "testador", to: "planejador"),
+                     EdgeConfig(from: "planejador", to: "dev"),
+                     EdgeConfig(from: "testador", to: "dev")]
+        let f = MaestroLayout.frames(for: nodes, edges: edges)
+        let p = f["planejador"]!, t = f["testador"]!, d = f["dev"]!
+        XCTAssertEqual(p.minX, t.minX, "ida e volta: mesma coluna")
+        XCTAssertGreaterThan(t.minY, p.maxY, "um embaixo do outro")
+        XCTAssertGreaterThan(d.minX, p.maxX, "quem recebe vai para a direita")
+        XCTAssertEqual(d.midY, (p.midY + t.midY) / 2, accuracy: 0.5, "no meio dos dois")
+    }
+
+    /// As setas reais da bancada de teste: um ciclo. Pela distância ao
+    /// destino (o dev, que mais recebe), planejador e testador ficam juntos à
+    /// esquerda e o dev no meio deles — não uma fila de três.
+    func testCycleIsAnchoredOnTheTarget() {
+        let nodes = [node("planejador", .agent), node("dev", .agent), node("testador", .agent)]
+        let edges = [EdgeConfig(from: "planejador", to: "dev"), EdgeConfig(from: "dev", to: "testador"),
+                     EdgeConfig(from: "testador", to: "dev"), EdgeConfig(from: "testador", to: "planejador")]
+        let f = MaestroLayout.frames(for: nodes, edges: edges)
+        let p = f["planejador"]!, t = f["testador"]!, d = f["dev"]!
+        XCTAssertEqual(p.minX, t.minX, "os dois que apontam para o dev: mesma coluna")
+        XCTAssertGreaterThan(d.minX, p.maxX)
+        XCTAssertEqual(d.midY, (p.midY + t.midY) / 2, accuracy: 0.5)
+    }
+
+    func testOnlyTwoWayPairsStackInOneColumn() {
+        let nodes = [node("a", .agent), node("b", .agent)]
+        let f = MaestroLayout.frames(for: nodes, edges: [EdgeConfig(from: "a", to: "b"),
+                                                         EdgeConfig(from: "b", to: "a")])
+        XCTAssertEqual(f["a"]!.minX, f["b"]!.minX)
+        XCTAssertGreaterThan(f["b"]!.minY, f["a"]!.maxY)
+    }
+
+    func testChainOfOneWayArrowsMakesColumns() {
+        let nodes = [node("a", .agent), node("b", .agent), node("c", .agent)]
+        let f = MaestroLayout.frames(for: nodes, edges: [EdgeConfig(from: "a", to: "b"),
+                                                         EdgeConfig(from: "b", to: "c")])
+        XCTAssertLessThan(f["a"]!.maxX, f["b"]!.minX)
+        XCTAssertLessThan(f["b"]!.maxX, f["c"]!.minX)
+        XCTAssertEqual(f["a"]!.midY, f["c"]!.midY, accuracy: 0.5, "pipeline em linha reta")
+    }
+
+    func testOneWayCycleDoesNotHang() {
+        let nodes = [node("a", .agent), node("b", .agent), node("c", .agent)]
+        let f = MaestroLayout.frames(for: nodes, edges: [EdgeConfig(from: "a", to: "b"),
+                                                         EdgeConfig(from: "b", to: "c"),
+                                                         EdgeConfig(from: "c", to: "a")])
+        XCTAssertEqual(f.count, 3)
+    }
+
+    /// O maestro posiciona à mão: o frame do plano vence o arranjo, e o que
+    /// ficar faltando sai do lugar atual.
+    func testPlanFrameMovesAndResizesACard() {
+        var a = node("a", .agent)
+        a.setFrame(CGRect(x: 800, y: 40, width: 720, height: 460))
+        let bench = WorkbenchConfig(name: "deck", path: "/tmp", nodes: [node("m", .agent, maestro: true), a])
+        var context = MaestroContext(caller: "m", profiles: ["claude": .claudeCode])
+        context.directoryExists = { _ in true }
+        func run(_ json: String) -> MaestroOutcome {
+            guard case .success(let plan) = MaestroPlan.parse(Data(json.utf8)) else {
+                XCTFail(json); return MaestroOutcome(next: bench)
+            }
+            return MaestroPlanner.plan(plan, on: bench, context: context)
+        }
+        let moved = run(#"{"nodes":[{"id":"a","frame":{"y":900}}]}"#)
+        XCTAssertEqual(moved.errors, [])
+        XCTAssertEqual(moved.next.nodes[1].frame, CGRect(x: 800, y: 900, width: 720, height: 460))
+        XCTAssertTrue(moved.relaid)
+        XCTAssertEqual(moved.restarted, [], "mover não reinicia")
+        XCTAssertFalse(run(#"{"nodes":[{"id":"a","frame":{"x":-5}}]}"#).errors.isEmpty)
+        XCTAssertFalse(run(#"{"nodes":[{"id":"a","frame":{"w":100}}]}"#).errors.isEmpty)
+        XCTAssertFalse(run(#"{"nodes":[{"id":"m","frame":{"x":0}}]}"#).errors.isEmpty, "o maestro não se move")
+        guard case .failure = MaestroPlan.parse(Data(#"{"nodes":[{"id":"a","frame":{"left":3}}]}"#.utf8))
+        else { return XCTFail("campo errado no frame passou") }
+    }
+
     func testPlanWithLayoutIsNotEmpty() {
         guard case .success(let plan) = MaestroPlan.parse(Data(#"{"layout":true}"#.utf8)) else { return XCTFail() }
         XCTAssertFalse(plan.isEmpty)

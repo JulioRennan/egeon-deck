@@ -282,6 +282,7 @@ enum MaestroGuide {
         | `role` | o papel (system prompt) |
         | `rules` | as regras só deste terminal |
         | `cmd` | só `shell`: o comando que ele roda ao subir; sem ele, um zsh de login |
+        | `frame` | onde o card fica: `{"x":…, "y":…, "w":…, "h":…}`, cada um opcional; vence o arranjo automático |
 
         Num nó que já existe: **campo ausente fica como está; `null` volta ao
         padrão.** Mudar `model`, `effort`, `ultracode`, `role` ou `rules`
@@ -296,9 +297,21 @@ enum MaestroGuide {
 
         **`layout`** — o canvas se rearruma sozinho quando o plano cria ou
         remove terminal: você fica onde está (o usuário escolheu o seu
-        lugar), os agentes em grade à sua direita — com vão largo quando há
-        seta entre eles —, os shells numa faixa embaixo, e a tela enquadra. `false` deixa
+        lugar) e o time se arruma à sua direita, alinhado pelo seu topo.
+        Sem setas desenhadas entre os agentes, é uma grade. Com setas, segue
+        o fluxo: quem mais recebe do que manda vai para a direita, e cada um
+        fica a tantas colunas dele quanto o caminho mais curto de setas até
+        lá — quem aponta direto para ele fica na coluna ao lado, empilhado, e
+        ele no meio da altura deles. Os shells ficam
+        numa faixa embaixo, e a tela enquadra. `false` deixa
         os cards onde estão; `true` rearruma mesmo sem mudar o time.
+
+        **Posicionar à mão** — `frame` num nó move e redimensiona o card, e
+        vale mesmo sem mudar mais nada (`{"nodes":[{"id":"dev","frame":{"y":
+        900}}]}`). O `egeon bench` mostra o `frame` de cada um: leia antes,
+        para não jogar um card em cima de outro. Coordenadas do canvas, `y`
+        crescendo para baixo; tamanho mínimo 320×200. Você não se move — seu
+        lugar é do usuário.
 
         **`edges`** — `from`, `to`, `both` (as duas setas) e `maxSends`
         (de 1 a 10; tirar o limite é só do usuário). Aresta que já existe só

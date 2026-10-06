@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// O que o planejador precisa saber do mundo, entregue por quem chama: assim
@@ -75,6 +76,8 @@ enum MaestroPlanner {
     /// Tetos do que o maestro pode afrouxar. As guardas de cadeia existem para
     /// quando ninguém está olhando, e quem as tira de vez é o usuário (ADR-066).
     static let maxSendsCeiling = 10
+    /// Menor que isto o terminal não mostra uma linha de prompt inteira.
+    static let minimumSize = CGSize(width: 320, height: 200)
     static let visitCeiling = 12
 
     static func plan(_ plan: MaestroPlan, on bench: WorkbenchConfig,
@@ -222,9 +225,25 @@ enum MaestroPlanner {
             for i in next.nodes.indices {
                 if let frame = frames[next.nodes[i].id] { next.nodes[i].setFrame(frame) }
             }
-            out.relaid = next.nodes.contains { node in
-                bench.nodes.first { $0.id == node.id }?.frame != node.frame
+        }
+        // O lugar que o maestro deu à mão vence o arranjo — vem depois dele.
+        for patch in plan.nodes where patch.id != context.caller {
+            guard let wanted = patch.frame,
+                  let i = next.nodes.firstIndex(where: { $0.id == patch.id }) else { continue }
+            let base = next.nodes[i].frame ?? CGRect(origin: .zero, size: MaestroLayout.agent)
+            let rect = CGRect(x: wanted.x ?? base.minX, y: wanted.y ?? base.minY,
+                              width: wanted.w ?? base.width, height: wanted.h ?? base.height)
+            if rect.minX < 0 || rect.minY < 0 {
+                errors.append("nó '\(patch.id)': frame fora do canvas — x e y começam em 0")
+            } else if rect.width < minimumSize.width || rect.height < minimumSize.height {
+                errors.append("nó '\(patch.id)': frame pequeno demais — mínimo "
+                              + "\(Int(minimumSize.width))×\(Int(minimumSize.height))")
+            } else {
+                next.nodes[i].setFrame(rect)
             }
+        }
+        out.relaid = next.nodes.contains { node in
+            node.frame != nil && bench.nodes.first { $0.id == node.id }?.frame != node.frame
         }
 
         // Regra da bancada nova só sobe com processo novo: os outros agentes
