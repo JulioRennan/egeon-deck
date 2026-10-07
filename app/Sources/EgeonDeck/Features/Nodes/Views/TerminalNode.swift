@@ -222,6 +222,9 @@ final class TerminalNode: NodeView {
         // Depois do corpo, para ficar na frente do SwiftTerm — ele consome o
         // mouse inteiro, e uma subview atrás dele nunca receberia o arrasto.
         addSubview(port)
+        // O maestro já alcança a bancada inteira sem seta (ADR-066): a porta
+        // dele só desenharia uma ligação que já existe.
+        port.isHidden = isMaestro
         port.onDrag = { [weak self] point in
             guard let self else { return }
             self.onPortDrag?(self, point)
@@ -302,7 +305,7 @@ final class TerminalNode: NodeView {
 
     /// A porta de aresta só existe no canvas: a ligação é desenhada arrastando de
     /// um card até outro, e no mosaico não há espaço livre onde soltar.
-    override func freeformDidChange() { port.isHidden = !isFreeform }
+    override func freeformDidChange() { port.isHidden = !isFreeform || isMaestro }
 
     override func workbenchRenamed(to workbench: String) {
         let updated = "\(workbench)/\(nodeID)"

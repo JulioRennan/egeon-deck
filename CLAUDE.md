@@ -139,8 +139,16 @@ app/Sources/EgeonDeck/
   terminar — e avisa antes de parar para perguntar ao usuário (ADR-058).
 - Estado do terminal por gancho do CLI (`stop`/`ask`/`prompt` → `/activity`);
   laranja interrompe (permissão), verde só informa (terminou), e a ampulheta
-  "⏳ em segundo plano" é o turno que fechou com `[[ED:wait]]` — trabalho de
-  fundo rodando, o agente volta sozinho (ADR-063).
+  "⏳ em segundo plano" é o turno que fechou com trabalho de fundo rodando —
+  no Claude Code, lido do `background_tasks` do `Stop`; nos outros, do
+  `[[ED:wait]]` (ADR-063/067). "⏳ aguardando <vizinho>" é quem acionou agente
+  e espera a volta: não apita, nem com `[[ED:ask]]` (ADR-067).
+- **Permissão pelo chat** (ADR-068): o gancho `PermissionRequest` abre o
+  pedido no `PermissionDesk` e espera; a faixa acima do composer responde
+  (`/permission/answer`), e tecla no terminal ou turno que segue fecham o
+  pedido sem resposta — o diálogo da TUI continua valendo. `GET /permissions`
+  lista os abertos. A pergunta do `AskUserQuestion` chega pelo mesmo gancho e
+  vira botões de opção (`choice=` ou corpo `answers`).
 - Worktree por bancada E por terminal (formulário decide pela branch).
 - Modelo, esforço e ultracode por nó de agente: formulário e uma faixa própria
   no cabeçalho (`accessoryRow` → `ModelRow`), à direita. Os modelos e os níveis

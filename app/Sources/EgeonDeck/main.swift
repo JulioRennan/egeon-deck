@@ -311,6 +311,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (cli, self.literalModel(workbench: parts[0], nodeID: parts[1]), node.conversationId,
                     config.id)
         }
+        AppControl.answerPermission = { id, answer in
+            let address = PermissionDesk.shared.open.first { $0.id == id }?.address
+            guard PermissionDesk.shared.answer(id, with: answer) else { return false }
+            if let address { Dispatcher.shared.target(address)?.permissionAnswered() }
+            return true
+        }
+        AppControl.answerQuestion = { id, choices in
+            let address = PermissionDesk.shared.open.first { $0.id == id }?.address
+            guard PermissionDesk.shared.answer(id, choices: choices) else { return false }
+            if let address { Dispatcher.shared.target(address)?.permissionAnswered() }
+            return true
+        }
         AppControl.turnEnded = { [weak self] address, transcript, notBefore in
             let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2, let self, let transcript,
@@ -2751,7 +2763,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let shells = Set(bench.nodes.filter { $0.type == .shell }.map(\.id))
                 let active = ids(in: .working).union(ids(in: .asking))
                 context.working = active.subtracting(shells)
-                context.background = ids(in: .background).union(active.intersection(shells))
+                let awaiting = Set(bench.nodes.map(\.id).filter {
+                    if case .awaiting = Dispatcher.shared.target("\(bench.name)/\($0)")?.activity { return true }
+                    return false
+                })
+                context.background = ids(in: .background).union(awaiting)
+                    .union(active.intersection(shells))
                 let suggested = self?.configs.firstIndex { $0.id == bench.id }
                     .flatMap { self?.workspace(of: $0)?.lastConfigs } ?? [:]
                 context.suggestedConfig = { suggested[$0] }
@@ -2842,6 +2859,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return ChatParticipant.from(nodes: config.nodes, workbench: config.name) {
                 Dispatcher.shared.target($0)?.activity
             }
+        }
+        chat.permissions = { [weak self] in
+            guard let self, let config = self.config(ofID: id) else { return [] }
+            return PermissionDesk.shared.pending(inWorkbench: config.name)
+        }
+        chat.answerPermission = { id, answer in
+            AppControl.answerPermission?(id, answer) ?? false
+        }
+        chat.answerQuestion = { id, choices in
+            AppControl.answerQuestion?(id, choices) ?? false
         }
         chat.historyFile = { [weak self] in
             guard let self, self.config(ofID: id) != nil else { return nil }

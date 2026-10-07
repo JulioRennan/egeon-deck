@@ -9,7 +9,8 @@ import Foundation
 ///   da TUI é invisível, e o arranque seguinte retoma a conversa antiga,
 ///   desfazendo sua escolha (ADR-014).
 /// - `Stop` — o turno acabou. É o instante exato, sem depender de o pty se calar
-///   nem de o modelo lembrar de escrever o marcador.
+///   nem de o modelo lembrar de escrever o marcador; e diz se ficou trabalho de
+///   fundo rodando, que é fato do CLI e não palavra do modelo (ADR-067).
 /// - `Notification` — o CLI está pedindo permissão. Este é o caso que marcador
 ///   nenhum alcança: o diálogo é desenhado pelo programa, não é mensagem do
 ///   modelo (ADR-024).
@@ -106,17 +107,61 @@ enum ClaudeHooks {
             post "/conversation?$q"
             ;;
           stop)
-            # O transcript vai junto: é dele que o app lê com que marcador o
-            # turno fechou. A tela, neste instante, ainda pode mostrar o do
-            # turno passado.
-            t=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
+            # O transcript vai junto: o histórico do chat lê o turno dele.
+            # `bg` é o trabalho de fundo que vai acordar o agente (tarefas mais
+            # crons) e `last` o fim da última mensagem, de onde sai o marcador
+            # sem esperar o transcript ser gravado (ADR-067). Os dois só vão
+            # quando o CLI manda: sem eles o app decide pelo transcript.
+            q=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
               'import sys,json,urllib.parse as u
         d=json.load(sys.stdin)
-        print(u.quote(d.get("transcript_path") or ""))' 2>/dev/null)
-            post "/activity?event=stop&transcript=$t"
+        q="transcript="+u.quote(d.get("transcript_path") or "")
+        if "background_tasks" in d or "session_crons" in d:
+            q+="&bg="+str(len(d.get("background_tasks") or [])+len(d.get("session_crons") or []))
+        m=d.get("last_assistant_message")
+        if isinstance(m,str) and m:
+            q+="&last="+u.quote(m[-400:],safe="")
+        print(q)' 2>/dev/null)
+            post "/activity?event=stop&$q"
             ;;
           ask|start)
             post "/activity?event=$event"
+            ;;
+          permission)
+            # Abre o pedido no app e espera a resposta do chat. O diálogo do CLI
+            # continua na tela enquanto isto roda, e responder lá também vale:
+            # aí o app diz `gone` e o gancho sai sem imprimir nada (ADR-068).
+            # Só o que sai no stdout é a decisão, e só quando ela veio daqui.
+            printf '%s' "$payload" | /usr/bin/python3 -c \\
+              'import sys,json,socket,time
+        def call(method,path,body=b""):
+            s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])
+            s.sendall((method+" "+path+" HTTP/1.1\\r\\nHost: eg\\r\\nContent-Length: "+str(len(body))+"\\r\\nConnection: close\\r\\n\\r\\n").encode()+body)
+            data=b""
+            while True:
+                chunk=s.recv(65536)
+                if not chunk: break
+                data+=chunk
+            s.close()
+            return json.loads(data.split(b"\\r\\n\\r\\n",1)[1] or b"{}")
+        try:
+            opened=call("POST","/permission",sys.stdin.buffer.read())
+        except Exception:
+            sys.exit(0)
+        ask=opened.get("id")
+        if not ask: sys.exit(0)
+        end=time.time()+\(permissionWait)
+        while time.time()<end:
+            time.sleep(0.4)
+            try:
+                reply=call("GET","/permission?id="+ask)
+            except Exception:
+                sys.exit(0)
+            state=reply.get("state")
+            if state=="answered":
+                print(json.dumps(reply.get("output") or {}))
+                sys.exit(0)
+            if state!="pending": sys.exit(0)' "\(ControlSocket.path)" 2>/dev/null
             ;;
         esac
 
@@ -146,6 +191,9 @@ enum ClaudeHooks {
             "Stop": [
               { "hooks": [{ "type": "command", "command": "\(command("stop"))", "timeout": 5 }] }
             ],
+            "PermissionRequest": [
+              { "hooks": [{ "type": "command", "command": "\(command("permission"))", "timeout": \(permissionWait + 20) }] }
+            ],
             "Notification": [
               { "matcher": "permission_prompt",
                 "hooks": [{ "type": "command", "command": "\(command("ask"))", "timeout": 5 }] }
@@ -154,6 +202,11 @@ enum ClaudeHooks {
         }
         """
     }
+
+    /// Quanto o gancho de permissão espera a resposta do chat. Esgotado, sai
+    /// calado e o diálogo do terminal segue sozinho — não é prazo para você,
+    /// é o teto de um processo parado.
+    static let permissionWait = 580
 
     /// A linha de comando é interpretada por um shell e o caminho carrega o nome
     /// da pasta do usuário: as aspas não são zelo, são o que faz o gancho

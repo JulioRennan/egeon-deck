@@ -9,6 +9,17 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- Perguntas do agente com opções (a ferramenta de pergunta do Claude Code) aparecem no chat com as opções como botões, e a resposta vai direto para ele; o Claude passa a ser orientado a perguntar assim (ADR-068).
+- Pedidos de permissão aparecem no chat, acima da caixa de mensagem, com o comando que o agente quer rodar e os botões **Permitir**, **Sempre** e **Negar**; responder no terminal continua valendo, e o pedido some do chat (ADR-068).
+
+### Alterado
+
+- O agente que acionou outro e parou esperando a resposta não apita mais nem fica "terminou": o card mostra **⏳ aguardando <vizinho>** até a resposta chegar, ou "terminou" quando o vizinho encerra sem responder (ADR-067).
+- O card do maestro não tem mais o `+` de puxar ligação: ele já alcança todos os terminais da bancada (ADR-066).
+- A ampulheta de "em segundo plano" passa a vir do próprio Claude Code — o que ainda está rodando de fundo —, e não mais do marcador que o agente lembra de escrever (ADR-067).
+
 ## [1.2.0] - 2026-10-06
 
 ### Adicionado

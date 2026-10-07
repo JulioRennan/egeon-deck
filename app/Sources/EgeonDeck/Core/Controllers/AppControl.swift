@@ -116,6 +116,13 @@ enum AppControl {
     static var nodeIdentity: ((String) -> (cli: String?, model: String?, conversation: String?,
                                            workbenchID: String)?)?
 
+    /// Responde um pedido de permissão aberto (ADR-068). `false` se ele já
+    /// tinha acabado.
+    static var answerPermission: ((_ id: String, _ answer: PermissionAnswer) -> Bool)?
+    /// Responde as perguntas de um `AskUserQuestion` aberto: escolhas pela
+    /// pergunta (ADR-068).
+    static var answerQuestion: ((_ id: String, _ choices: [String: [String]]) -> Bool)?
+
     /// Um turno acabou neste terminal (gancho `Stop`), e o transcript já foi
     /// conferido. É o instante em que o turno está inteiro e ainda se sabe
     /// qual é: `notBefore` é quando o prompt dele chegou (ADR-037).

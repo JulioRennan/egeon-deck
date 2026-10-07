@@ -371,12 +371,25 @@ struct AgentProfile: Codable {
     func systemPromptText(role: String?, catalog: String? = nil,
                           rules: String? = nil) -> String? {
         var parts: [String] = []
-        if let marker = attentionConfig.activeMarker { parts.append(marker.resolvedInstruction) }
+        if let marker = attentionConfig.activeMarker {
+            // Só quem fala por gancho: é pelo `PermissionRequest` que a pergunta
+            // chega ao chat. Outro CLI não tem a ferramenta (ADR-068).
+            let asksByTool = reportSession?.isEmpty == false
+            parts.append(marker.resolvedInstruction + (asksByTool ? "\n" + Self.questionToolLine : ""))
+        }
         if let catalog, !catalog.isEmpty { parts.append(catalog) }
         if let role, !role.isEmpty { parts.append(role) }
         if let rules, !rules.isEmpty { parts.append(rules) }
         return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
+
+    /// A pergunta por ferramenta, e não por texto solto: assim ela chega ao
+    /// chat com as opções como botões, e você responde de lá (ADR-068).
+    static let questionToolLine = """
+        Para perguntar algo ao usuário — escolha entre opções, confirmação —, \
+        prefira a ferramenta AskUserQuestion: no Egeon ela aparece no chat com as \
+        opções como botões, e ele responde dali.
+        """
 
     /// Argumentos de system prompt, prontos para a linha de comando. Nil quando
     /// o CLI não sabe recebê-lo no arranque — aí o texto vira mensagem.

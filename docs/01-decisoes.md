@@ -3975,3 +3975,142 @@ recusa sem saída o deixou travado — daí o `force` e a orientação contra
 recibo no manual. Com eles, o mesmo agente desfez tudo
 (`~claude ~claude-2 −explorador −revisor-teste · 2 aresta(s)`).
 
+
+## ADR-067 — O fim de turno vem do payload do `Stop`, e quem acionou vizinho fica "aguardando"
+
+**Problema.** Duas coisas que o marcador não resolvia. A primeira: o
+`[[ED:wait]]` é palavra do modelo — ele esquece com um comando de fundo de pé,
+e escreve sem nada rodando. A segunda, medida no log da AGROS-3507: o agente
+que manda `egeon send` e para fecha o turno com `[[ED:ask]]` ("dependo de uma
+resposta" — a do vizinho, não a sua), e o card apitava laranja no meio de uma
+conversa entre agentes. O `handedOff` só calava o "terminou"; a pergunta
+passava.
+
+**O Claude Code já sabe.** A partir do 2.1.29x, o payload do gancho `Stop`
+traz `background_tasks` (shells, subagentes, monitors, workflows em voo),
+`session_crons` (wakeups, `/loop`) e `last_assistant_message`. Conferido
+capturando o payload real: `background_tasks: [{type: "shell", status:
+"running", command: "sleep 40"}]` no turno que deixou o `sleep`, vazio no turno
+que ele acordou.
+
+**Decisão.**
+
+- O `agent-hook.sh` manda `bg` (tarefas + crons) e `last` (os últimos 400
+  caracteres da mensagem) no `/activity`. Só manda o que o CLI mandou: sem os
+  campos, o app decide pelo transcript, como antes.
+- `StopOutcome.decide` (testado em `StopReportTests`): **vizinho pendente vence
+  tudo, inclusive `ask`**; depois, **`ask` vence a ampulheta** — um servidor de
+  dev em background ou um `/loop` ficam de pé a sessão inteira, e perder para
+  eles calaria toda pergunta daquele agente; com `bg` relatado, ele vence o
+  marcador no resto (`wait` com nada rodando é "terminou"; `ok` com um comando
+  de pé é ampulheta); sem `bg`, o marcador decide.
+- Estado novo `Activity.awaiting([nomes])`: **⏳ aguardando back, front**, sem
+  som e sem cor, contado com a ampulheta na barra. `Target.awaitingPeers`
+  (`PeerWait`) ganha o destino a cada `egeon send` para agente; sai quem manda
+  de volta (na hora do envio, mesmo com quem espera ainda no turno) e quem
+  fecha turno "terminou" sem fila por drenar — por gancho ou pela tela, de
+  CLI sem gancho —, morre ou some. **Resposta não abre espera**: quem manda
+  para alguém que o aguardava está respondendo, e não passa a aguardar. Esvaziada a lista com o
+  card aguardando, ele vira "terminou" — sem som, como todo fim de turno. O
+  vizinho que parou pedindo VOCÊ não libera quem espera: a volta ainda pode vir.
+- A lista sobrevive a entrada nova de agente — a resposta de um não resolve a
+  espera pelos outros, que é o caso do maestro. Cai com entrada SUA: tecla no
+  terminal ou prompt do chat (fila sem cadeia).
+- Com o marcador no payload, o `settleStop` não relê o transcript para achar o
+  marcador; a releitura fica só para o histórico do chat, que lê o turno de lá.
+
+**O que fica de fora.** O `[[ED:ask]]` continua: pergunta em texto livre não
+tem sinal nativo (só a ferramenta `AskUserQuestion`, que vem num passo
+seguinte). E a espera por vizinho é do app, não do CLI — vale para qualquer
+CLI que fale `egeon send`.
+
+**Verificação.** `StopReportTests` e `ActivityTests`. No DEV, bancada de
+testes: planejador → dev com `sleep 20` — `aguardando testes-bancada/dev — por
+gancho Stop, wait no payload, 0 de fundo`; o dev sem aresta de volta parou em
+`ask` e o planejador seguiu aguardando; planejador → cleber, que respondeu "ok"
+em 4 s e saiu da lista antes do `Stop` do planejador; cleber com `sleep 25` em
+background e `[[ED:ok]]` de propósito — `em segundo plano … ok no payload, 1 de
+fundo`, depois `terminou … 0 de fundo` quando o comando acordou o agente.
+
+## ADR-068 — Permissão respondida pelo chat, pelo gancho `PermissionRequest`
+
+**Revê o ADR-029** ("pedido de permissão não entra no chat"). O motivo de lá
+continua certo — injetar seta e Enter às cegas no diálogo da TUI aprova o que
+você quis negar —, mas a premissa mudou: o Claude Code tem um gancho que
+**decide** a permissão por dado estruturado, sem tecla nenhuma.
+
+**O que foi medido**, num Claude Code 2.1.292 interativo dentro de um pty:
+
+- o `PermissionRequest` dispara quando o diálogo vai ser mostrado — depois das
+  regras e do classificador do modo auto —, com `tool_name`, `tool_input` e
+  `permission_suggestions` (sem `tool_use_id`);
+- **o diálogo continua na tela enquanto o gancho espera** (a pesquisa na
+  documentação dizia o contrário; o pty mostrou "Do you want to proceed?" com o
+  gancho bloqueado);
+- a saída `{"hookSpecificOutput": {"hookEventName": "PermissionRequest",
+  "decision": {"behavior": "allow"}}}` resolve o diálogo ("Allowed by
+  PermissionRequest hook"), e `updatedPermissions` com as sugestões é aceito;
+- respondido na TUI, o processo do gancho **continua vivo** até o timeout — o
+  CLI não o mata.
+
+**Decisão.**
+
+- `agent-hook.sh permission` abre o pedido (`POST /permission`, o payload
+  inteiro; quem pede sai do pid, ADR-040) e pergunta a cada 0,4 s
+  (`GET /permission?id=`): `answered` traz a saída pronta para imprimir;
+  `gone` é "acabou em outro lugar" e o gancho sai sem imprimir — o diálogo
+  segue sozinho. Teto de 580 s, timeout do gancho 600 s.
+- `PermissionDesk` guarda os abertos, vários por terminal (ferramentas em
+  paralelo disparam um gancho cada), e cada um **vale o tempo do gancho**
+  (`lifetime` = 580 s): mais velho que isso não tem quem leve a resposta, e
+  clicar nele seria aprovar nada. Três fins: resposta daqui
+  (`/permission/answer?id=&answer=allow|always|deny`); **tecla no terminal**
+  (`userTyped` — é o único jeito de responder o diálogo lá, e é por isso que o
+  gancho vivo não fica pendurado); `prompt`/`stop` daquele terminal (o turno
+  seguiu).
+- "Sempre" manda as `permission_suggestions` como `updatedPermissions`, **menos
+  `setMode`**: ele troca o modo da sessão inteira, e "não pergunte mais isto"
+  não pode virar "não pergunte mais nada".
+- No chat, uma faixa acima do composer (`PermissionTray`): quem pede, a
+  ferramenta, a descrição que o agente deu, o comando em fonte fixa, e
+  Permitir · Sempre · Negar. Fora da thread: pedido não é turno, e some quando
+  é respondido em qualquer lugar.
+- Respondido daqui, o card sai do laranja e volta a "trabalhando"
+  (`permissionAnswered`). O aviso continua nascendo do `Notification`: som e
+  borda laranja não mudam.
+
+**A pergunta do agente pelo mesmo caminho.** Medido: o `AskUserQuestion`
+dispara `PreToolUse`, `PermissionRequest` (com `questions` inteiras no
+`tool_input`) e `Notification` `permission_prompt` — o app já ficava laranja
+com ele. E responder de fora funciona: `allow` com `updatedInput` = o
+`tool_input` original mais `answers` (`{"pergunta": "opção"}`, várias opções
+separadas por vírgula) faz o CLI gravar "User answered Claude's questions:
+… → Blue" e o modelo seguir com a resposta. Então a faixa mostra as perguntas
+com as opções como botões: uma pergunta de escolha única responde no clique;
+mais de uma, ou multiSelect, junta e manda no "Responder". "Recusar" é `deny`.
+Escolha fora das opções ou pergunta sem resposta é recusada pelo
+`PermissionDesk` e o pedido segue aberto. No Claude, o protocolo ganha uma
+linha pedindo para perguntar por essa ferramenta (`questionToolLine`) — só no
+perfil que fala por gancho, porque é por ele que a pergunta chega.
+
+**O `[[ED:ask]]` fica.** Pergunta em texto solto não tem sinal nativo, e os
+outros CLIs não têm a ferramenta: o marcador continua sendo a rede. O que muda
+é que a pergunta feita do jeito pedido agora se responde do chat.
+
+**Descartado.** O mod (`tool.check` da API de function hooks): dispara antes
+do classificador do modo auto, então interceptar ali faria você aprovar à mão
+o que o modo auto aprovaria sozinho; e a API é early access, muda entre
+versões. O gancho de settings dispara exatamente quando o diálogo vai abrir.
+
+**Verificação.** `PermissionDeskTests` (payload → resumo e detalhe, `setMode`
+fora, formato da saída nos três casos, respondido uma vez, `drop`, um diálogo
+por terminal, renomear). No DEV, um `claude --permission-mode default` dentro
+do shell da bancada de testes pedindo `touch`: a faixa apareceu no chat (foto
+da janela), `allow` pela rota criou o arquivo e fechou o pedido; um segundo
+pedido respondido com "1" no terminal fechou com "o turno seguiu" e o processo
+do gancho saiu; "Sempre" foi aceito pelo CLI. `PermissionQuestionTests`
+(perguntas lidas, escolhas cobrindo toda pergunta dentro das opções, saída com
+o `tool_input` original e multiSelect juntado, linha do protocolo só no perfil
+com gancho). No DEV, duas perguntas (cor, escolha única; frutas, multiSelect)
+apareceram na faixa (foto), e a resposta pela rota chegou ao CLI como "Blue" e
+"Apple, Pear".

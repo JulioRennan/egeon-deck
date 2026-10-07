@@ -121,6 +121,13 @@ final class Target {
     /// gancho o tick não olha a tela, e sem o latch o próximo tique devolvia o
     /// card para "pronto" (ADR-063).
     private var inBackground = false
+    /// Vizinhos acionados que ainda não responderam (ADR-067). Sobrevive à
+    /// entrada nova: a resposta de um não resolve a espera pelos outros.
+    fileprivate var awaitingPeers = PeerWait()
+    /// O turno fechou esperando vizinho: o card fica em "aguardando" até a
+    /// lista esvaziar ou entrar coisa nova. Latch pelo mesmo motivo do
+    /// `inBackground`.
+    private var awaitingLatched = false
 
     private(set) var activity: Activity = .starting
 
@@ -288,6 +295,11 @@ final class Target {
 
         // Antes do foco e do aviso: a ampulheta não é aviso a dar por visto, é o
         // estado do agente, e continua valendo com você olhando para ele.
+        if awaitingLatched, !awaitingPeers.isEmpty, !working {
+            guard activity != .asking else { return }
+            transition(to: .awaiting(awaitingPeers.names))
+            return
+        }
         if inBackground, !working {
             guard activity != .asking else { return }
             transition(to: .background)
@@ -355,13 +367,45 @@ final class Target {
         attentionHeld = false
         handedOff = false
         inBackground = false
+        awaitingLatched = false
     }
 
     /// Você digitou aqui. Além de resolver o aviso, isto encerra a cadeia: o que
     /// o terminal fizer a partir de agora nasce de você, não do agente anterior.
     fileprivate func userTyped() {
+        // Tecla aqui com o diálogo de permissão aberto é a resposta dada no
+        // terminal: o gancho que espera pelo chat sai calado (ADR-068).
+        PermissionDesk.shared.drop(address: address, why: "respondido no terminal")
         inputArrived()
         chain = []
+        // Você assumiu: o que o agente esperava do vizinho deixou de ser a
+        // pergunta em aberto.
+        awaitingPeers.clear()
+    }
+
+    /// O pedido de permissão foi respondido pelo chat: o agente voltou ao
+    /// trabalho, e o laranja não vale mais (ADR-068).
+    func permissionAnswered() {
+        attentionHeld = false
+        acknowledged = true
+        if turnInFlight { transition(to: .working) }
+    }
+
+    /// Um vizinho que este terminal acionou mandou de volta. A resposta chega
+    /// como prompt e abre turno novo; aqui só sai da lista.
+    fileprivate func peerAnswered(_ address: String) {
+        guard awaitingPeers.resolved(address) else { return }
+        if awaitingPeers.isEmpty { awaitingLatched = false }
+    }
+
+    /// Um vizinho que este terminal acionou encerrou o turno sem mandar de
+    /// volta. Sem mais ninguém a esperar, a parada vira "terminou" — sem som,
+    /// como todo fim de turno.
+    fileprivate func peerSettled(_ address: String) {
+        guard awaitingPeers.resolved(address), awaitingPeers.isEmpty, awaitingLatched else { return }
+        awaitingLatched = false
+        handedOff = false
+        attend(.waiting, via: "\(address) encerrou sem responder", stop: hookToken("vizinho"))
     }
 
     /// O CLI relatou por gancho o que acabou de acontecer aqui.
@@ -371,15 +415,18 @@ final class Target {
     /// pedindo permissão). O segundo é o caso que marcador nenhum alcança: o
     /// diálogo de permissão é desenhado pelo programa, não é mensagem do modelo
     /// (ADR-024).
-    func hookReported(_ event: HookEvent, transcript: URL? = nil) {
+    func hookReported(_ event: HookEvent, transcript: URL? = nil, report: StopReport = StopReport()) {
         // Dois por turno, e é o que responde "o CLI está mesmo relatando?" e em
         // que ordem — a pergunta que o recap obrigou a fazer.
         Log.write("gancho[\(address)]: \(event.rawValue)")
         speaksHooks = true
+        if event == .stop || event == .prompt {
+            PermissionDesk.shared.drop(address: address, why: "o turno seguiu")
+        }
         switch event {
         case .stop:
             turnInFlight = false
-            settleStop(transcript: transcript, token: hookToken(event.rawValue), attempt: 0)
+            settleStop(transcript: transcript, report: report, token: hookToken(event.rawValue), attempt: 0)
         case .start:
             sessionUp = true
         case .prompt:
@@ -408,9 +455,10 @@ final class Target {
             // A ampulheta entra no OU: o trabalho de fundo que acorda o agente
             // não passa pelo `UserPromptSubmit`, e a permissão que ele pedir
             // dali é tão real quanto a de um turno seu.
-            guard turnInFlight || inBackground || activity == .working
+            guard turnInFlight || inBackground || awaitingLatched || activity == .working
                     || activity == .starting else { return }
             inBackground = false
+            awaitingLatched = false
             attend(.asking, via: "gancho Notification", stop: hookToken(event.rawValue))
         }
     }
@@ -424,7 +472,7 @@ final class Target {
     /// socket e a linha do assistant foi gravada 100ms depois. Linha mais velha
     /// que o `prompt` deste turno é do turno passado, e aí espera-se um pouco e
     /// relê. Esgotadas as tentativas, a tela é a reserva.
-    private func settleStop(transcript: URL?, token: String, attempt: Int) {
+    private func settleStop(transcript: URL?, report: StopReport, token: String, attempt: Int) {
         let read = transcript.flatMap { url in
             marker.flatMap { ClaudeTranscript.lastMarker(at: url, marker: $0) }
         }
@@ -435,41 +483,61 @@ final class Target {
         // antes de uma ferramenta grava um texto no meio do turno, e é ele que
         // está no fim do arquivo quando o `Stop` chega. Visto com `[[ED:wait]]`
         // gravado 300ms depois do gancho — o card dizia "terminou".
-        let unsettled = stale || read?.marker == nil
+        //
+        // Com a mensagem no payload o marcador já está decidido, e a releitura
+        // só espera o transcript ficar em dia para o histórico do chat.
+        let unsettled = stale || (report.lastMessage == nil && read?.marker == nil)
         if unsettled, transcript != nil, attempt < Self.stopRetries {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.stopRetryDelay) { [weak self] in
-                self?.settleStop(transcript: transcript, token: token, attempt: attempt + 1)
+                self?.settleStop(transcript: transcript, report: report, token: token, attempt: attempt + 1)
             }
             return
         }
 
-        let outcome: Verdict.Outcome
-        let via: String
-        if let read, !stale {
-            switch read.marker {
-            case .ask?:  outcome = .asked
-            case .wait?: outcome = .background
-            default:     outcome = .finished
-            }
+        let closing: HookEvent.Marker?
+        var via: String
+        if let last = report.lastMessage {
+            closing = marker.flatMap { $0.latest(in: last) }
+            via = "gancho Stop, \(closing?.rawValue ?? "sem marcador") no payload"
+        } else if let read, !stale {
+            closing = read.marker
             via = "gancho Stop, \(read.marker?.rawValue ?? "sem marcador") no transcript"
                 + (attempt > 0 ? " (\(attempt) releitura\(attempt > 1 ? "s" : ""))" : "")
         } else {
+            // Sem payload nem transcript em dia: a tela é a reserva.
             let verdict = verdict(from: screen())
-            outcome = verdict.outcome
+            switch verdict.outcome {
+            case .asked:      closing = .ask
+            case .background: closing = .wait
+            case .finished:   closing = .ok
+            case .unknown:    closing = nil
+            }
             via = "gancho Stop, \(verdict.via) na tela"
         }
+        if let background = report.background { via += ", \(background) de fundo" }
+        let outcome = StopOutcome.decide(marker: closing, background: report.background,
+                                         awaitingPeers: !awaitingPeers.isEmpty)
         // Depois de assentar: as releituras acima são o que garante que a
         // resposta inteira já está no transcript quando o histórico a lê.
         AppControl.turnEnded?(address, transcript, turnStartedAt)
         inBackground = outcome == .background
-        if inBackground {
+        awaitingLatched = outcome == .awaiting
+        switch outcome {
+        case .awaiting:
+            attentionHeld = false
+            transition(to: .awaiting(awaitingPeers.names))
+            Log.write("atenção[\(address)]: aguardando \(awaitingPeers.peers.joined(separator: ", "))"
+                      + " — por \(via)")
+        case .background:
             // Sem som e sem latch de aviso: não há nada para você fazer ainda.
             attentionHeld = false
             transition(to: .background)
             Log.write("atenção[\(address)]: em segundo plano — por \(via)")
-            return
+        case .asked:
+            attend(.asking, via: via, stop: token)
+        case .finished:
+            attend(.waiting, via: via, stop: token)
         }
-        attend(outcome == .asked ? .asking : .waiting, via: via, stop: token)
     }
 
     /// Quanto esperar o `SessionStart` antes de dar o boot por acabado.
@@ -557,6 +625,12 @@ final class Target {
     /// pareceria uma parada diferente. O latch só cai com saída sustentada, que
     /// é o que separa "assentando" de "novo turno".
     private func attend(_ next: Activity, via: String, stop: String) {
+        // Terminou sem fila por drenar: quem esperava por este terminal não
+        // espera mais — seja o fim dito por gancho, seja o da tela, de um CLI
+        // sem gancho (ADR-067). Antes do `handedOff`, que só cala o aviso.
+        if next == .waiting, queue.isEmpty, unconfirmed == nil {
+            Dispatcher.shared.settled(address)
+        }
         // Fim de turno de quem acabou de acionar um vizinho não te chama: o
         // trabalho seguiu para o card do outro, e avisar aqui é te puxar para o
         // meio de uma conversa entre agentes. Pergunta é o contrário — permissão
@@ -591,6 +665,7 @@ final class Target {
     }
 
     private func transition(to next: Activity) {
+        if next == .dead, activity != .dead { Dispatcher.shared.settled(address) }
         activity = next
     }
 
@@ -673,6 +748,9 @@ final class Target {
         let item = queue.removeFirst()
         // O agente ganhou o que fazer: o aviso anterior está resolvido.
         inputArrived()
+        // Pedido seu (chat, extensão), não de agente: a conversa recomeça de
+        // você, e a espera por vizinho de antes não cala mais o fim deste turno.
+        if item.chain.isEmpty { awaitingPeers.clear() }
         // A cadeia da mensagem entregue passa a ser a deste terminal: é dela que
         // sai a contagem se ele acionar alguém em seguida.
         chain = item.chain
@@ -783,7 +861,19 @@ final class Dispatcher {
         Log.write("dispatcher: alvo registrado \(target.address) (\(target.displayName))")
     }
 
-    func unregister(address: String) { targets.removeValue(forKey: address) }
+    func unregister(address: String) {
+        targets.removeValue(forKey: address)
+        PermissionDesk.shared.drop(address: address, why: "terminal saiu")
+        settled(address)
+    }
+
+    /// Este terminal encerrou sem mandar de volta: quem esperava por ele não
+    /// espera mais (ADR-067).
+    func settled(_ address: String) {
+        for target in targets.values where target.address != address {
+            target.peerSettled(address)
+        }
+    }
 
     /// Troca o endereço de um alvo vivo, sem derrubar o pty.
     ///
@@ -794,6 +884,8 @@ final class Dispatcher {
         guard old != new, let target = targets.removeValue(forKey: old) else { return }
         target.address = new
         targets[new] = target
+        for other in targets.values { other.awaitingPeers.renamed(old, to: new) }
+        PermissionDesk.shared.renamed(old, to: new)
         Log.write("dispatcher: alvo \(old) → \(new)")
     }
 
@@ -956,7 +1048,14 @@ final class Dispatcher {
         // Passou o bastão: o fim de turno DELE não te chama mais. Para shell
         // não há bastão — ninguém vai responder, e quem mandou ainda te deve o
         // aviso de que terminou.
-        if !toShell { origin.handedOff = true }
+        // Resposta não abre espera: se o destino estava esperando por quem
+        // manda, isto é a volta (ADR-058), e quem responde não aguarda nada.
+        let isReply = destination.awaitingPeers.peers.contains(sender)
+        if !toShell {
+            origin.handedOff = true
+            if !isReply { origin.awaitingPeers.sent(to: destination.address) }
+        }
+        destination.peerAnswered(sender)
         let budget = edge.maxSends.map { "envio \(sends)/\($0)" } ?? "visita \(visits)/\(ceiling)"
         Log.write("cadeia[\(sender) → \(destination.address)]: \(budget) "
                   + "— \(chain.joined(separator: " → "))")
@@ -1036,7 +1135,7 @@ final class Dispatcher {
             switch target.activity {
             case .starting:           entry.starting += 1
             case .working:            entry.working += 1
-            case .background:         entry.background += 1
+            case .background, .awaiting: entry.background += 1
             case .asking:             entry.attention += 1
             case .waiting:            entry.done += 1
             case .ready, .dead:       break

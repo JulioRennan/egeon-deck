@@ -55,6 +55,7 @@ enum MaestroSnapshot {
         case .ready: return "idle"
         case .working: return "working"
         case .background: return "background"
+        case .awaiting: return "awaiting"
         case .waiting: return "done"
         case .asking: return "asking"
         case .dead: return "dead"

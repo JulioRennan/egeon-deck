@@ -185,6 +185,8 @@ private final class ParticipantRow: NSView {
         case .starting: return "preparando…"
         case .asking:   return "precisa de você"
         case .background: return "em segundo plano"
+        case .awaiting(let peers):
+            return "aguardando " + (peers.isEmpty ? "vizinho" : peers.joined(separator: ", "))
         default:        return participant.role ?? ""
         }
     }
@@ -200,7 +202,7 @@ private final class ParticipantRow: NSView {
     private func statusGlyph(_ activity: Activity) -> String {
         switch activity {
         case .working, .starting: return String(Spinner.current)
-        case .background:         return String(Spinner.hourglass)
+        case .background, .awaiting: return String(Spinner.hourglass)
         case .dead:               return "✕"
         default:                  return "●"
         }
@@ -210,7 +212,7 @@ private final class ParticipantRow: NSView {
         switch participant.activity {
         case .waiting:            return .systemGreen
         case .asking:             return .systemOrange
-        case .working, .starting, .background: return participant.color
+        case .working, .starting, .background, .awaiting: return participant.color
         case .dead:               return NSColor(calibratedWhite: 0.4, alpha: 1)
         case .ready:              return NSColor(calibratedWhite: 1, alpha: 0.18)
         }

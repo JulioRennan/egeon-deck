@@ -22,6 +22,10 @@ enum Activity: Equatable {
     /// `[[ED:wait]]`: sem ele, o card dizia "terminou" (ou nada) com o agente
     /// ainda de pé, e você não sabia se esperava ou se entrava (ADR-063).
     case background
+    /// Parou depois de acionar agentes vizinhos que ainda não responderam —
+    /// os nomes vão junto, para o card dizer quem. A resposta chega como prompt
+    /// novo; sem som, porque não há nada para você fazer (ADR-067).
+    case awaiting([String])
     /// Processo encerrado.
     case dead
 
@@ -36,6 +40,8 @@ enum Activity: Equatable {
         case .starting: return "\(Spinner.current) preparando"
         case .working:  return "\(Spinner.current) trabalhando"
         case .background: return "\(Spinner.hourglass) em segundo plano"
+        case .awaiting(let peers):
+            return "\(Spinner.hourglass) aguardando " + (peers.isEmpty ? "vizinho" : peers.joined(separator: ", "))
         case .waiting:  return "● terminou"
         case .asking:   return "● precisa de você"
         case .dead:     return "✕ processo encerrado"
@@ -68,6 +74,8 @@ struct ActivitySummary: Equatable {
     /// Parados com trabalho de fundo (`[[ED:wait]]`). Contagem própria, e não
     /// somada a `working`: somada, a barra mostrava o spinner comum e a
     /// ampulheta só existia dentro do card (ADR-063).
+    /// Inclui quem aguarda vizinho: para a barra é o mesmo "parado, mas volta
+    /// sozinho" da ampulheta (ADR-067).
     var background = 0
     var attention = 0
     var done = 0

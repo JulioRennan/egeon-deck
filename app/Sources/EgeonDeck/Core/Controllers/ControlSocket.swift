@@ -252,8 +252,90 @@ final class ControlSocket {
                 respond(fd, status: "403 Forbidden", json: ["ok": false, "error": Self.notFromTerminal])
             }
 
+        case ("POST", _, _) where route.contains("/permission/answer"):
+            // /permission/answer?id=<pedido>&answer=allow|always|deny — a sua
+            // resposta, dada no chat (ou por `curl`, para verificar). Pergunta
+            // do `AskUserQuestion` vai com `choice=<opção>` (uma pergunta só) ou
+            // corpo `{"answers": {"pergunta": ["opção"]}}`. O gancho que está
+            // esperando leva ao CLI (ADR-068).
+            let query = Self.query(in: route)
+            let parsed = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+            let bodyChoices = (parsed?["answers"] as? [String: Any])?.mapValues { value -> [String] in
+                (value as? [String]) ?? [(value as? String) ?? ""]
+            }
+            guard let id = query["id"],
+                  query["answer"].flatMap(PermissionAnswer.init) != nil
+                    || query["choice"] != nil || bodyChoices != nil else {
+                respond(fd, status: "400 Bad Request",
+                        json: ["ok": false, "error": "use ?id=<pedido>&answer=allow|always|deny, "
+                               + "?id=<pedido>&choice=<opção> ou corpo {\"answers\": {…}}"])
+                return
+            }
+            let ok: Bool = DispatchQueue.main.sync {
+                if let answer = query["answer"].flatMap(PermissionAnswer.init) {
+                    return AppControl.answerPermission?(id, answer) ?? false
+                }
+                var choices = bodyChoices ?? [:]
+                if let choice = query["choice"],
+                   let question = PermissionDesk.shared.open.first(where: { $0.id == id })?.questions.first {
+                    choices = [question.question: [choice]]
+                }
+                return AppControl.answerQuestion?(id, choices) ?? false
+            }
+            if ok {
+                respond(fd, status: "200 OK", json: ["ok": true])
+            } else {
+                respond(fd, status: "404 Not Found",
+                        json: ["ok": false, "error": "pedido \(id) já acabou, ou escolha fora das opções"])
+            }
+
+        case ("GET", _, _) where bare.hasSuffix("/permissions"):
+            let list = DispatchQueue.main.sync {
+                PermissionDesk.shared.open.map { ask -> [String: Any] in
+                    ["id": ask.id, "address": ask.address, "tool": ask.tool,
+                     "summary": ask.summary, "detail": ask.detail ?? "",
+                     "always": ask.canAlwaysAllow,
+                     "questions": ask.questions.map { ["question": $0.question, "options": $0.options,
+                                                       "multiSelect": $0.multiSelect] }]
+                }
+            }
+            respond(fd, status: "200 OK", json: ["open": list])
+
+        case ("POST", _, _) where bare.hasSuffix("/permission"):
+            // Corpo: o payload do gancho `PermissionRequest`, inteiro. Quem pede
+            // sai do pid da conexão, como nos outros ganchos (ADR-040).
+            let payload = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
+            let query = Self.query(in: route)
+            let opened: PermissionAsk?? = DispatchQueue.main.sync {
+                guard let target = hookCaller(fd, query: query) else { return .none }
+                return .some(PermissionDesk.shared.open(address: target.address, payload: payload))
+            }
+            switch opened {
+            case .none:
+                respond(fd, status: "403 Forbidden", json: ["ok": false, "error": Self.notFromTerminal])
+            case .some(.none):
+                respond(fd, status: "400 Bad Request", json: ["ok": false, "error": "payload sem tool_name"])
+            case .some(.some(let ask)):
+                respond(fd, status: "200 OK", json: ["ok": true, "id": ask.id])
+            }
+
+        case ("GET", _, _) where bare.hasSuffix("/permission"):
+            // O gancho perguntando se já tem resposta. `answered` leva a saída
+            // pronta para ele imprimir; `gone` é "acabou em outro lugar, saia
+            // calado".
+            let id = Self.query(in: route)["id"] ?? ""
+            let reply = DispatchQueue.main.sync { () -> [String: Any] in
+                switch PermissionDesk.shared.state(of: id) {
+                case .pending: return ["state": "pending"]
+                case .gone: return ["state": "gone"]
+                case .answered:
+                    return ["state": "answered", "output": PermissionDesk.shared.takeOutput(of: id) ?? [:]]
+                }
+            }
+            respond(fd, status: "200 OK", json: reply)
+
         case ("POST", _, _) where route.contains("/activity"):
-            // /activity?target=bancada/id&event=stop|ask[&transcript=path] — o CLI relatando que o
+            // /activity?target=bancada/id&event=stop|ask[&transcript=path][&bg=n][&last=texto] — o CLI relatando que o
             // turno acabou (gancho `Stop`) ou que está pedindo permissão (gancho
             // `Notification`). São os dois únicos avisos que chamam você, e vêm
             // do programa em vez de saírem de heurística sobre o pty (ADR-024).
@@ -271,7 +353,7 @@ final class ControlSocket {
             let transcript = query["transcript"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
             let resolved: Bool = DispatchQueue.main.sync {
                 guard let target = hookCaller(fd, query: query) else { return false }
-                target.hookReported(event, transcript: transcript)
+                target.hookReported(event, transcript: transcript, report: StopReport(query: query))
                 return true
             }
             if resolved {

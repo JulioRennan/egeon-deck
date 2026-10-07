@@ -23,6 +23,11 @@ final class ChatContainer: NSView {
     /// Devolve o card ao canvas coberto quando o chat para de mostrá-lo.
     var releaseTerminal: ((NSView) -> Void)?
     private var shownTerminal: NSView?
+    /// Os pedidos de permissão abertos desta bancada, e quem responde (ADR-068).
+    var permissions: (() -> [PermissionAsk])?
+    var answerPermission: ((String, PermissionAnswer) -> Bool)?
+    var answerQuestion: ((String, [String: [String]]) -> Bool)?
+    private let permissionTray = PermissionTray()
 
     private let column = ParticipantsColumn()
     /// A thread é uma tabela: uma linha por bloco, só o visível existe (ADR-042).
@@ -190,6 +195,18 @@ final class ChatContainer: NSView {
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
         addSubview(composer)
 
+        permissionTray.onAnswer = { [weak self] id, answer in
+            let ok = self?.answerPermission?(id, answer) ?? false
+            self?.refresh()
+            return ok
+        }
+        permissionTray.onChoose = { [weak self] id, choices in
+            let ok = self?.answerQuestion?(id, choices) ?? false
+            self?.refresh()
+            return ok
+        }
+        addSubview(permissionTray)
+
         popup.isHidden = true
         addSubview(popup)
 
@@ -215,6 +232,14 @@ final class ChatContainer: NSView {
             focusedId = (alive.first { $0.isAgent } ?? alive.first)?.id
         }
         column.update(all, focused: focusedId)
+        let byAddress = Dictionary(all.map { ($0.address, $0) }, uniquingKeysWith: { a, _ in a })
+        let asks = (permissions?() ?? []).map { ask in
+            (ask: ask, name: byAddress[ask.address]?.id ?? ask.address,
+             color: byAddress[ask.address]?.color ?? NSColor.systemOrange)
+        }
+        let trayHeight = permissionTray.desiredHeight
+        permissionTray.update(asks)
+        if permissionTray.desiredHeight != trayHeight { needsLayout = true }
         composer.setTarget(alive.first { $0.id == focusedId })
         // Foco caiu num agente sem ser por clique (o shell morreu): thread de volta.
         if shownTerminal != nil, alive.first(where: { $0.id == focusedId })?.isAgent != false {
@@ -836,9 +861,15 @@ final class ChatContainer: NSView {
                                 y: bounds.height - pad - composerHeight,
                                 width: contentWidth, height: composerHeight)
 
+        let trayHeight = permissionTray.desiredHeight
+        permissionTray.frame = NSRect(x: contentX, y: composer.frame.minY - 10 - trayHeight,
+                                      width: contentWidth, height: trayHeight)
         let scrollView = thread.scrollView
+        // A faixa já traz o vão dela embaixo de cada linha; acima, o mesmo vão
+        // que a thread deixa para o composer.
+        let threadBottom = trayHeight > 0 ? permissionTray.frame.minY - 10 : composer.frame.minY - 10
         scrollView.frame = NSRect(x: contentX, y: 10, width: contentWidth,
-                                  height: max(0, composer.frame.minY - 20))
+                                  height: max(0, threadBottom - 10))
         shownTerminal?.frame = scrollView.frame
         toBottom.frame = NSRect(x: scrollView.frame.maxX - 54,
                                 y: scrollView.frame.maxY - 48, width: 36, height: 36)
