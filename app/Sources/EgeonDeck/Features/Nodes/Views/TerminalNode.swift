@@ -73,17 +73,48 @@ final class MBTerminalView: LocalProcessTerminalView {
         }
     }
 
-    /// A mesma busca que o SwiftTerm faz no clique. A célula sai da fonte pela
-    /// conta dele (`computeFontDimensions`), que é interna.
+    /// A mesma busca que o SwiftTerm faz no clique, mais o nome solto que só a
+    /// gente abre.
     private func linkUnder(_ point: NSPoint) -> Bool {
-        guard let terminal, terminal.cols > 0, terminal.rows > 0 else { return false }
+        guard let cell = cell(at: point) else { return false }
+        return terminal.link(at: .screen(cell), mode: .explicitAndImplicit) != nil
+            || bareFile(at: cell) != nil
+    }
+
+    /// A célula sob o ponto. Sai da fonte pela conta do SwiftTerm
+    /// (`computeFontDimensions`), que é interna.
+    private func cell(at point: NSPoint) -> Position? {
+        guard let terminal, terminal.cols > 0, terminal.rows > 0 else { return nil }
         let scale = window?.backingScaleFactor ?? 2
         let glyph = font.glyph(withName: "W")
         let width = max(1, (font.advancement(forGlyph: glyph).width * scale).rounded() / scale)
         let height = max(1, ceil(ceil(font.ascender - font.descender + font.leading) * scale) / scale)
         let col = min(max(0, Int(point.x / width)), terminal.cols - 1)
         let row = min(max(0, Int((frame.height - point.y) / height)), terminal.rows - 1)
-        return terminal.link(at: .screen(Position(col: col, row: row)), mode: .explicitAndImplicit) != nil
+        return Position(col: col, row: row)
+    }
+
+    /// Nome de arquivo sem barra sob a célula (`README.md`, `main.swift:42`)
+    /// que existe numa das pastas do terminal. A regex do SwiftTerm exige
+    /// barra, e é o que o agente mais escreve.
+    private func bareFile(at cell: Position) -> URL? {
+        guard let line = terminal.getLine(row: cell.row)?.translateToString(trimRight: true),
+              let word = TerminalLink.word(in: line, at: cell.col) else { return nil }
+        return TerminalLink.resolve(word, in: linkDirectories())
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        guard event.modifierFlags.contains(.command),
+              let cell = cell(at: convert(event.locationInWindow, from: nil)),
+              terminal.link(at: .screen(cell), mode: .explicitAndImplicit) == nil,
+              let url = bareFile(at: cell) else { return }
+        Log.write("terminal: ⌘-clique abre \(url.path) (nome solto)")
+        NSWorkspace.shared.open(url)
+    }
+
+    private func linkDirectories() -> [String] {
+        [foregroundDirectory(), startDirectory].compactMap { $0 }
     }
 
     /// A pasta em que o nó abriu — o último recurso para caminho relativo, quando
@@ -91,7 +122,7 @@ final class MBTerminalView: LocalProcessTerminalView {
     var startDirectory = ""
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        let directories = [foregroundDirectory(), startDirectory].compactMap { $0 }
+        let directories = linkDirectories()
         guard let url = TerminalLink.resolve(link, in: directories) else {
             Log.write("terminal: ⌘-clique em \"\(link)\" — nada que exista em \(directories)")
             NSSound.beep()

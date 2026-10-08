@@ -20,6 +20,10 @@ citados entre parênteses.
 - O card do maestro não tem mais o `+` de puxar ligação: ele já alcança todos os terminais da bancada (ADR-066).
 - A ampulheta de "em segundo plano" passa a vir do próprio Claude Code — o que ainda está rodando de fundo —, e não mais do marcador que o agente lembra de escrever (ADR-067).
 
+### Corrigido
+
+- ⌘-clique em caminho relativo no terminal abre o arquivo mesmo com a pontuação da frase grudada (`docs/a.md.`, `(README.md)`), e passa a funcionar também em nome solto, sem barra (`README.md`, `main.swift:42`), quando o arquivo existe na pasta do terminal.
+
 ## [1.2.0] - 2026-10-06
 
 ### Adicionado

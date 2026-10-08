@@ -48,4 +48,29 @@ final class TerminalLinkTests: XCTestCase {
         XCTAssertEqual(TerminalLink.resolve("mailto:x@y.z", in: [], exists: { _ in false })?
             .absoluteString, "mailto:x@y.z")
     }
+
+    // A frase gruda pontuação no caminho, e a regex do SwiftTerm só corta de URL.
+    func testProsePunctuationIsDropped() {
+        XCTAssertEqual(resolve("Sources/a.swift."), "/repo/app/Sources/a.swift")
+        XCTAssertEqual(resolve("Sources/a.swift:42,"), "/repo/app/Sources/a.swift")
+        XCTAssertEqual(resolve("(README.md)"), "/repo/README.md")
+        XCTAssertEqual(resolve("`Sources/a.swift`"), "/repo/app/Sources/a.swift")
+    }
+
+    func testWordUnderTheColumn() {
+        let line = "veja README.md, e main.swift:42 (resposta)"
+        XCTAssertEqual(TerminalLink.word(in: line, at: 7), "README.md")
+        XCTAssertEqual(TerminalLink.word(in: line, at: 22), "main.swift:42")
+        // Palavra comum, espaço e fora da linha não são arquivo.
+        XCTAssertNil(TerminalLink.word(in: line, at: 1))
+        XCTAssertNil(TerminalLink.word(in: line, at: 4))
+        XCTAssertNil(TerminalLink.word(in: line, at: 35))
+        XCTAssertNil(TerminalLink.word(in: line, at: 200))
+    }
+
+    func testBareNameResolvesThroughTheWord() {
+        let word = TerminalLink.word(in: "abra README.md.", at: 8)
+        XCTAssertEqual(word, "README.md")
+        XCTAssertEqual(word.flatMap { resolve($0) }, "/repo/README.md")
+    }
 }
