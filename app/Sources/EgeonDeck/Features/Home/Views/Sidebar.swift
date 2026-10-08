@@ -36,11 +36,10 @@ final class SidebarRow: NSView {
         }
     }
 
-    /// Alguma coisa nesta bancada está te esperando. Guardado porque no trilho
-    /// quem grita isso é o ARO da pastilha, e `restyle` não vê o resumo.
-    private var wantsAttention = false
-    /// A borda que gira quando a bancada precisa de você: na linha inteira com a
-    /// barra aberta, na pastilha no trilho.
+    /// A borda da bancada que parou — laranja te espera, verde terminou.
+    /// Guardado porque `restyle` não vê o resumo.
+    private var ringTone: AttentionRing.Tone?
+    /// A borda: na linha inteira com a barra aberta, na pastilha no trilho.
     private lazy var rowRing = AttentionRing(host: self, cornerRadius: 7)
     private lazy var tileRing = AttentionRing(host: tile, cornerRadius: 7, lineWidth: 2)
 
@@ -233,10 +232,9 @@ final class SidebarRow: NSView {
 
         statusLabel.attributedStringValue = badge
 
-        // No trilho, 10pt de glifo é pouco para o aviso que INTERROMPE: o aro da
-        // pastilha vira laranja, que se reconhece sem ler.
-        if wantsAttention != (summary.attention > 0) {
-            wantsAttention = summary.attention > 0
+        // 10pt de glifo é pouco para quem parou: a borda diz de longe, sem ler.
+        if ringTone != AttentionRing.tone(for: summary) {
+            ringTone = AttentionRing.tone(for: summary)
             restyle()
         }
 
@@ -283,13 +281,12 @@ final class SidebarRow: NSView {
         tile.layer?.backgroundColor = isSelected
             ? NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor
             : NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
-        // Aro por prioridade: o laranja de "te espera" vence o verde de "está de
-        // pé", porque um pede coisa e o outro só informa — e o laranja é a borda
-        // que gira, por cima do aro parado.
-        tile.layer?.borderWidth = (isLive && !wantsAttention) ? 2 : 0
+        // O aro parado de "está de pé" sai quando a borda de parada assume: as
+        // duas na mesma pastilha viravam um contorno grosso e borrado.
+        tile.layer?.borderWidth = (isLive && ringTone == nil) ? 2 : 0
         tile.layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.75).cgColor
-        rowRing.isOn = wantsAttention && !isCompact
-        tileRing.isOn = wantsAttention && isCompact
+        rowRing.tone = isCompact ? nil : ringTone
+        tileRing.tone = isCompact ? ringTone : nil
         initial.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.7)
 
         dot.layer?.backgroundColor = (isLive ? NSColor.systemGreen : NSColor(calibratedWhite: 1, alpha: 0.22)).cgColor

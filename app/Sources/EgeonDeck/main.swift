@@ -491,6 +491,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.activate(index)
             return true
         }
+        SystemNotifier.shared.onOpen = { name, node in
+            guard AppControl.activateWorkbench?(name) == true else { return }
+            AppControl.chatFocus?(name, node)
+        }
+        SystemNotifier.shared.start()
 
         // Sem bancadas, a barra da esquerda explica o + e o canvas fica de fora.
         if configs.isEmpty {

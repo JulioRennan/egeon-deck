@@ -654,10 +654,15 @@ final class Target {
         lastBurst = burst
         burstStart = nil
 
-        // Só a pergunta toca. "Terminou" fica no cabeçalho, e você lê quando
-        // olhar: som para os dois é o que transformava o aviso em ruído.
-        if next.needsAttention {
+        // Com o app na frente só a pergunta toca: "terminou" está na borda, à
+        // vista. Fora da frente as duas paradas tocam, pelo som da notificação.
+        if next.needsAttention, !SystemNotifier.shared.willSound {
             AttentionSound.play(attention.sound, volume: attention.volume)
+        }
+        let detail = next == .asking
+            ? PermissionDesk.shared.open.last(where: { $0.address == address })?.summary : nil
+        if let notice = SystemNotice(address: address, activity: next, detail: detail) {
+            SystemNotifier.shared.post(notice)
         }
         Log.write(String(format: "atenção[%@]: %@ — por %@, rajada de %.1fs", address,
                          next == .asking ? "precisa de você" : "terminou",
@@ -666,6 +671,7 @@ final class Target {
 
     private func transition(to next: Activity) {
         if next == .dead, activity != .dead { Dispatcher.shared.settled(address) }
+        if next == .working, activity != .working { SystemNotifier.shared.withdraw(address: address) }
         activity = next
     }
 

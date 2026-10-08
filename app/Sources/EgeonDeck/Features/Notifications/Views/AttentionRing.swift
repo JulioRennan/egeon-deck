@@ -1,11 +1,14 @@
 import AppKit
 
-/// A borda que gira na bancada que precisa de você.
+/// A borda da bancada que parou: girando quando precisa de você, verde e
+/// parada quando terminou.
 ///
 /// Movimento em vez de piscar: um traço laranja percorre a borda sem parar,
 /// sobre um aro apagado. Piscar liga e desliga a cor inteira, e é o que cansa
 /// quando a pergunta fica esperando; o giro chama o olho da mesma forma sem o
 /// clarão. Com "reduzir movimento" ligado no sistema, fica só o aro, parado.
+/// O verde não gira: terminou só informa, e não pode disputar o olho com o
+/// laranja.
 ///
 /// É camada por cima da view, não desenho dela: o host só liga, desliga e
 /// chama `layout()` do seu `layout()`.
@@ -22,12 +25,33 @@ final class AttentionRing {
     static let period: CFTimeInterval = 2.4
     private static let spin = "egeon.attention.spin"
 
-    var isOn = false {
+    enum Tone {
+        /// Precisa de você: laranja, girando.
+        case asking
+        /// Terminou: verde, parado.
+        case done
+    }
+
+    /// `nil` apaga. Quem chama decide a prioridade — laranja vence verde.
+    var tone: Tone? {
         didSet {
-            guard isOn != oldValue else { return }
-            container.isHidden = !isOn
-            if isOn { start() } else { sweep.removeAnimation(forKey: Self.spin) }
+            guard tone != oldValue else { return }
+            container.isHidden = tone == nil
+            base.strokeColor = tone == .done
+                ? NSColor.systemGreen.withAlphaComponent(0.75).cgColor
+                : NSColor.systemOrange.withAlphaComponent(0.28).cgColor
+            sweep.isHidden = tone != .asking
+            if tone == .asking { start() } else { sweep.removeAnimation(forKey: Self.spin) }
         }
+    }
+
+    var isOn: Bool { tone != nil }
+
+    /// O tom de uma bancada: laranja vence verde, porque um pede coisa e o
+    /// outro só informa.
+    static func tone(for summary: ActivitySummary) -> Tone? {
+        if summary.attention > 0 { return .asking }
+        return summary.done > 0 ? .done : nil
     }
 
     init(host: NSView, cornerRadius: CGFloat, lineWidth: CGFloat = 1.5) {
@@ -88,7 +112,7 @@ final class AttentionRing {
         sweep.bounds = CGRect(x: 0, y: 0, width: side, height: side)
         sweep.position = CGPoint(x: bounds.midX, y: bounds.midY)
         CATransaction.commit()
-        if isOn, sweep.animation(forKey: Self.spin) == nil { start() }
+        if tone == .asking, sweep.animation(forKey: Self.spin) == nil { start() }
     }
 
     private func start() {

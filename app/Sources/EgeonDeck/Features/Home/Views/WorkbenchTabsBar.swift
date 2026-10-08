@@ -21,7 +21,7 @@ final class WorkbenchTabView: NSView {
     private var trackingArea: NSTrackingArea?
 
     private var isActive = false
-    private var wantsAttention = false
+    private var ringTone: AttentionRing.Tone?
     private lazy var ring = AttentionRing(host: self, cornerRadius: 7)
     /// Última combinação desenhada. O spinner troca oito vezes por segundo e o
     /// resto quase nunca: sem isto seria uma `NSAttributedString` nova por
@@ -82,9 +82,9 @@ final class WorkbenchTabView: NSView {
             if width != badgeWidth { badgeWidth = width; needsLayout = true }
         }
 
-        if isActive != tab.isActive || wantsAttention != tab.wantsAttention {
+        if isActive != tab.isActive || ringTone != AttentionRing.tone(for: tab.summary) {
             isActive = tab.isActive
-            wantsAttention = tab.wantsAttention
+            ringTone = AttentionRing.tone(for: tab.summary)
             restyle()
             needsLayout = true
         }
@@ -115,9 +115,9 @@ final class WorkbenchTabView: NSView {
         let background: CGFloat = isActive ? 0.16 : (hovering ? 0.10 : 0)
         layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: background * 0.6).cgColor
         label.textColor = NSColor(calibratedWhite: 1, alpha: isActive ? 0.95 : 0.55)
-        // A borda que gira é a mesma da lateral: a bancada que pede alguma
-        // coisa se reconhece sem ler o nome.
-        ring.isOn = wantsAttention
+        // A mesma borda da lateral: a bancada que parou se reconhece sem ler o
+        // nome.
+        ring.tone = ringTone
         close.isHidden = !(isActive || hovering)
     }
 
