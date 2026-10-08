@@ -113,6 +113,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key> <true/>
   <key>CFBundleIconFile</key>        <string>AppIcon</string>
 
+  <!-- Notificação nasce como alerta (fica até você fechar), não faixa que some
+       sozinha. Só vale no primeiro registro do app; depois manda o Ajustes. -->
+  <key>NSUserNotificationAlertStyle</key> <string>alert</string>
+
   <!-- Texto mostrado no diálogo de permissão do macOS. Sem isso o sistema
        mostra um pedido genérico (ou nega direto, em alguns casos). -->
   <key>NSDocumentsFolderUsageDescription</key>

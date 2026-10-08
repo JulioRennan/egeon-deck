@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import EgeonDeck
 
-/// A borda da bancada que parou: só existe enquanto ligada, gira só no laranja
+/// A borda da bancada que parou: só existe enquanto ligada, gira nos dois tons
 /// e acompanha o tamanho de quem a carrega.
 final class AttentionRingTests: XCTestCase {
     private func ringLayer(in host: NSView) -> CALayer? {
@@ -26,18 +26,17 @@ final class AttentionRingTests: XCTestCase {
         return (layer.sublayers ?? []).contains { spins($0) }
     }
 
-    func testOnlyTheAskingToneSpins() {
+    func testBothTonesSpinAndOffStops() {
         let host = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
         let ring = AttentionRing(host: host, cornerRadius: 7)
         ring.layout()
+        let moves = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         ring.tone = .done
         XCTAssertEqual(ringLayer(in: host)?.isHidden, false)
-        XCTAssertFalse(spins(ringLayer(in: host)))
+        XCTAssertEqual(spins(ringLayer(in: host)), moves)
         ring.tone = .asking
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            XCTAssertTrue(spins(ringLayer(in: host)))
-        }
-        ring.tone = .done
+        XCTAssertEqual(spins(ringLayer(in: host)), moves)
+        ring.tone = nil
         XCTAssertFalse(spins(ringLayer(in: host)))
     }
 

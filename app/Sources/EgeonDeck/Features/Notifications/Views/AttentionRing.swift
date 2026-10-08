@@ -1,15 +1,12 @@
 import AppKit
 
-/// A borda da bancada que parou: girando quando precisa de você, verde e
-/// parada quando terminou.
+/// A borda da bancada que parou, girando: laranja quando precisa de você,
+/// verde quando terminou.
 ///
 /// Movimento em vez de piscar: um traço laranja percorre a borda sem parar,
 /// sobre um aro apagado. Piscar liga e desliga a cor inteira, e é o que cansa
 /// quando a pergunta fica esperando; o giro chama o olho da mesma forma sem o
 /// clarão. Com "reduzir movimento" ligado no sistema, fica só o aro, parado.
-/// O verde não gira: terminou só informa, e não pode disputar o olho com o
-/// laranja.
-///
 /// É camada por cima da view, não desenho dela: o host só liga, desliga e
 /// chama `layout()` do seu `layout()`.
 final class AttentionRing {
@@ -26,10 +23,12 @@ final class AttentionRing {
     private static let spin = "egeon.attention.spin"
 
     enum Tone {
-        /// Precisa de você: laranja, girando.
+        /// Precisa de você.
         case asking
-        /// Terminou: verde, parado.
+        /// Terminou.
         case done
+
+        var color: NSColor { self == .asking ? .systemOrange : .systemGreen }
     }
 
     /// `nil` apaga. Quem chama decide a prioridade — laranja vence verde.
@@ -37,11 +36,9 @@ final class AttentionRing {
         didSet {
             guard tone != oldValue else { return }
             container.isHidden = tone == nil
-            base.strokeColor = tone == .done
-                ? NSColor.systemGreen.withAlphaComponent(0.75).cgColor
-                : NSColor.systemOrange.withAlphaComponent(0.28).cgColor
-            sweep.isHidden = tone != .asking
-            if tone == .asking { start() } else { sweep.removeAnimation(forKey: Self.spin) }
+            guard let tone else { sweep.removeAnimation(forKey: Self.spin); return }
+            paint(tone.color)
+            start()
         }
     }
 
@@ -65,21 +62,14 @@ final class AttentionRing {
         container.zPosition = 50
 
         base.fillColor = nil
-        base.strokeColor = NSColor.systemOrange.withAlphaComponent(0.28).cgColor
         base.lineWidth = lineWidth
         container.addSublayer(base)
 
-        // O cometa: transparente, cresce até o laranja cheio e corta. Cônico,
+        // O cometa: transparente, cresce até a cor cheia e corta. Cônico,
         // girando no centro — a máscara deixa ver só o que cai na borda.
-        let orange = NSColor.systemOrange
         sweep.type = .conic
         sweep.startPoint = CGPoint(x: 0.5, y: 0.5)
         sweep.endPoint = CGPoint(x: 0.5, y: 0)
-        sweep.colors = [orange.withAlphaComponent(0).cgColor,
-                        orange.withAlphaComponent(0).cgColor,
-                        orange.withAlphaComponent(0.35).cgColor,
-                        orange.cgColor,
-                        orange.withAlphaComponent(0).cgColor]
         sweep.locations = [0, 0.55, 0.8, 0.97, 1]
         mask.fillColor = nil
         mask.strokeColor = NSColor.black.cgColor
@@ -112,10 +102,24 @@ final class AttentionRing {
         sweep.bounds = CGRect(x: 0, y: 0, width: side, height: side)
         sweep.position = CGPoint(x: bounds.midX, y: bounds.midY)
         CATransaction.commit()
-        if tone == .asking, sweep.animation(forKey: Self.spin) == nil { start() }
+        if tone != nil, sweep.animation(forKey: Self.spin) == nil { start() }
+    }
+
+    private func paint(_ color: NSColor) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        base.strokeColor = color.withAlphaComponent(0.28).cgColor
+        sweep.colors = [color.withAlphaComponent(0).cgColor,
+                        color.withAlphaComponent(0).cgColor,
+                        color.withAlphaComponent(0.35).cgColor,
+                        color.cgColor,
+                        color.withAlphaComponent(0).cgColor]
+        CATransaction.commit()
     }
 
     private func start() {
+        // Trocar de tom não reinicia a volta: o traço segue de onde estava.
+        guard sweep.animation(forKey: Self.spin) == nil else { return }
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
         let spin = CABasicAnimation(keyPath: "transform.rotation.z")
         spin.fromValue = 0

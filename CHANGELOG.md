@@ -11,8 +11,8 @@ citados entre parênteses.
 
 ### Adicionado
 
-- Notificação do macOS, com som, quando um agente precisa de você ou termina, com o Egeon Deck fora da frente: mostra a bancada, o terminal e o que está esperando; clicar abre a bancada. Segundo plano e "aguardando vizinho" não notificam.
-- A bancada que terminou ganha borda verde parada na barra lateral, na pastilha do trilho e na aba; o laranja de "precisa de você" tem prioridade sobre ela.
+- Notificação do macOS, com som, quando um agente precisa de você ou termina, com o Egeon Deck fora da frente: mostra a bancada, o terminal e o que está esperando; clicar abre a bancada; nasce no estilo alerta, que fica na tela até você fechar (troca-se em Ajustes › Notificações). Segundo plano e "aguardando vizinho" não notificam.
+- A bancada que terminou ganha a mesma borda girando, em verde, na barra lateral, na pastilha do trilho e na aba; o laranja de "precisa de você" tem prioridade sobre ela.
 - Perguntas do agente com opções (a ferramenta de pergunta do Claude Code) aparecem no chat com as opções como botões, e a resposta vai direto para ele; o Claude passa a ser orientado a perguntar assim (ADR-068).
 - Pedidos de permissão aparecem no chat, acima da caixa de mensagem, com o comando que o agente quer rodar e os botões **Permitir**, **Sempre** e **Negar**; responder no terminal continua valendo, e o pedido some do chat (ADR-068).
 
