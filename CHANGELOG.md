@@ -18,6 +18,7 @@ citados entre parênteses.
 
 - O agente que acionou outro e parou esperando a resposta não apita mais nem fica "terminou": o card mostra **⏳ aguardando <vizinho>** até a resposta chegar, ou "terminou" quando o vizinho encerra sem responder (ADR-067).
 - O card do maestro não tem mais o `+` de puxar ligação: ele já alcança todos os terminais da bancada (ADR-066).
+- A bancada que precisa de você ganha uma borda laranja que gira devagar — na barra lateral, na pastilha do trilho e na aba —, no lugar do aro parado: chama o olho sem piscar. Com "reduzir movimento" do sistema, fica só a borda.
 - A ampulheta de "em segundo plano" passa a vir do próprio Claude Code — o que ainda está rodando de fundo —, e não mais do marcador que o agente lembra de escrever (ADR-067).
 
 ### Corrigido

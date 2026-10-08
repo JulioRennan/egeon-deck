@@ -39,6 +39,10 @@ final class SidebarRow: NSView {
     /// Alguma coisa nesta bancada está te esperando. Guardado porque no trilho
     /// quem grita isso é o ARO da pastilha, e `restyle` não vê o resumo.
     private var wantsAttention = false
+    /// A borda que gira quando a bancada precisa de você: na linha inteira com a
+    /// barra aberta, na pastilha no trilho.
+    private lazy var rowRing = AttentionRing(host: self, cornerRadius: 7)
+    private lazy var tileRing = AttentionRing(host: tile, cornerRadius: 7, lineWidth: 2)
 
     /// Trilho recolhido: só a pastilha da inicial e o badge, sem nome nem caminho.
     var isCompact = false {
@@ -116,10 +120,12 @@ final class SidebarRow: NSView {
 
     override func layout() {
         super.layout()
+        rowRing.layout()
         if isCompact {
             let side: CGFloat = 26
             tile.frame = NSRect(x: ((bounds.width - side) / 2).rounded(), y: 2,
                                 width: side, height: side)
+            tileRing.layout()
             initial.frame = NSRect(x: tile.frame.minX, y: tile.frame.minY + 5,
                                    width: side, height: 16)
             // Badge embaixo da pastilha, em fonte miúda: no trilho os três avisos
@@ -277,12 +283,13 @@ final class SidebarRow: NSView {
         tile.layer?.backgroundColor = isSelected
             ? NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor
             : NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
-        // Aro por prioridade: laranja de "te espera" vence o verde de "está de
-        // pé", porque um pede coisa e o outro só informa.
-        tile.layer?.borderWidth = (wantsAttention || isLive) ? 2 : 0
-        tile.layer?.borderColor = wantsAttention
-            ? NSColor.systemOrange.cgColor
-            : NSColor.systemGreen.withAlphaComponent(0.75).cgColor
+        // Aro por prioridade: o laranja de "te espera" vence o verde de "está de
+        // pé", porque um pede coisa e o outro só informa — e o laranja é a borda
+        // que gira, por cima do aro parado.
+        tile.layer?.borderWidth = (isLive && !wantsAttention) ? 2 : 0
+        tile.layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.75).cgColor
+        rowRing.isOn = wantsAttention && !isCompact
+        tileRing.isOn = wantsAttention && isCompact
         initial.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.7)
 
         dot.layer?.backgroundColor = (isLive ? NSColor.systemGreen : NSColor(calibratedWhite: 1, alpha: 0.22)).cgColor
