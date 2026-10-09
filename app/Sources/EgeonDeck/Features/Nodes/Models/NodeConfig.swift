@@ -138,6 +138,25 @@ struct NodeConfig: Codable {
         return copy
     }
 
+    /// O nó saído do formulário, com o que o formulário não mostra de volta.
+    ///
+    /// O formulário remonta o nó do zero pelo componente, e componente não tem
+    /// conversa, ultracode nem URL: sem isto, renomear ou marcar maestro subia o
+    /// agente numa conversa nova. A conversa só fica com o mesmo CLI na mesma
+    /// pasta — o Claude Code guarda a conversa por diretório, e outro CLI não a lê.
+    func keepingState(of previous: NodeConfig) -> NodeConfig {
+        var copy = self
+        if copy.url == nil { copy.url = previous.url }
+        if copy.profile == nil { copy.profile = previous.profile }
+        guard copy.type == previous.type, copy.agent == previous.agent else { return copy }
+        if copy.ultracode == nil { copy.ultracode = previous.ultracode }
+        guard copy.cwd == previous.cwd else { return copy }
+        copy.conversationId = previous.conversationId
+        copy.conversationStarted = previous.conversationStarted
+        copy.transcript = previous.transcript
+        return copy
+    }
+
     /// O mesmo nó, sem a conversa — pronto para nascer em outro lugar.
     ///
     /// Copiar um nó é copiar a montagem, nunca o que foi dito dentro dele. Com o

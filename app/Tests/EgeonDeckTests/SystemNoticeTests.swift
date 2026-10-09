@@ -9,15 +9,17 @@ final class SystemNoticeTests: XCTestCase {
                                   detail: "rm -rf build\nls")
         XCTAssertEqual(notice?.workbench, "testes-bancada")
         XCTAssertEqual(notice?.node, "dev")
-        XCTAssertEqual(notice?.title, "testes-bancada · dev")
-        XCTAssertEqual(notice?.body, "precisa de você — rm -rf build ls")
+        XCTAssertEqual(notice?.title, "A bancada testes-bancada precisa de você")
+        XCTAssertEqual(notice?.body, "dev: rm -rf build ls")
         XCTAssertEqual(notice?.identifier, "egeon.testes-bancada/dev")
     }
 
     func testFinishedWithoutDetail() {
-        XCTAssertEqual(SystemNotice(address: "deck/revisor", activity: .waiting)?.body, "terminou")
+        let done = SystemNotice(address: "deck/revisor", activity: .waiting)
+        XCTAssertEqual(done?.title, "A bancada deck já terminou o serviço")
+        XCTAssertEqual(done?.body, "revisor")
         XCTAssertEqual(SystemNotice(address: "deck/revisor", activity: .waiting, detail: "  ")?.body,
-                       "terminou")
+                       "revisor")
     }
 
     func testStatesThatComeBackAloneDoNotNotify() {

@@ -3307,7 +3307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Em modo mosaico o frame da view é o do painel, e gravá-lo destruiria a
         // posição que o nó tem no canvas. Quem sabe qual é ela é o shell.
         let canvasFrame = shell.canvasFrame(of: current.id) ?? node.frame
-        var updated = NodeTemplateStore.instantiate(component, id: newID)
+        var updated = NodeTemplateStore.instantiate(component, id: newID).keepingState(of: current)
         updated.setFrame(canvasFrame)
 
         let sameProcess = updated.type == current.type

@@ -61,4 +61,49 @@ final class NodeConfigTests: XCTestCase {
         XCTAssertEqual(node.cwd, "src")
         XCTAssertEqual(node.prompt, "revise")
     }
+
+    // Renomear ou marcar maestro pelo formulário remonta o nó pelo componente,
+    // que não tem conversa: sem devolvê-la, o agente subia numa conversa nova.
+    func testFormEditKeepsConversationWithSameCLIAndFolder() throws {
+        let previous = try decode(#"""
+            {"type":"agent","id":"dev","agent":"claude","cwd":"src","ultracode":true,
+             "conversationId":"C1","conversationStarted":true,"transcript":"/tmp/t.jsonl"}
+            """#)
+        var edited = NodeConfig(type: .agent, id: "dev-novo")
+        edited.agent = "claude"
+        edited.cwd = "src"
+        edited.maestro = true
+
+        let kept = edited.keepingState(of: previous)
+        XCTAssertEqual(kept.id, "dev-novo")
+        XCTAssertEqual(kept.maestro, true)
+        XCTAssertEqual(kept.conversationId, "C1")
+        XCTAssertEqual(kept.conversationStarted, true)
+        XCTAssertEqual(kept.transcript, "/tmp/t.jsonl")
+        XCTAssertEqual(kept.ultracode, true)
+    }
+
+    // A conversa é do CLI e da pasta: em outra pasta ou outro CLI ela não abre.
+    func testFormEditDropsConversationWhenFolderOrCLIChanges() throws {
+        let previous = try decode(#"""
+            {"type":"agent","id":"dev","agent":"claude","cwd":"src","conversationId":"C1",
+             "conversationStarted":true}
+            """#)
+        var moved = NodeConfig(type: .agent, id: "dev")
+        moved.agent = "claude"
+        moved.cwd = "outra"
+        XCTAssertNil(moved.keepingState(of: previous).conversationId)
+
+        var other = NodeConfig(type: .agent, id: "dev")
+        other.agent = "codex"
+        other.cwd = "src"
+        XCTAssertNil(other.keepingState(of: previous).conversationId)
+    }
+
+    func testFormEditKeepsWebAddress() throws {
+        let previous = try decode(#"{"type":"web","id":"docs","url":"https://x.dev","profile":"p"}"#)
+        let kept = NodeConfig(type: .web, id: "docs").keepingState(of: previous)
+        XCTAssertEqual(kept.url, "https://x.dev")
+        XCTAssertEqual(kept.profile, "p")
+    }
 }

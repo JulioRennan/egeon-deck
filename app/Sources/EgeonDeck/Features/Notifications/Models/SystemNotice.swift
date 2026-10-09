@@ -21,14 +21,16 @@ struct SystemNotice: Equatable {
         let headline: String
         switch activity {
         case .asking:  headline = "precisa de você"
-        case .waiting: headline = "terminou"
+        case .waiting: headline = "já terminou o serviço"
         default:       return nil
         }
         workbench = String(address[..<slash])
         node = String(address[address.index(after: slash)...])
-        title = "\(workbench) · \(node)"
+        title = "A bancada \(workbench) \(headline)"
+        // O terminal vai no corpo: no título ele competia com a bancada, que é
+        // o que você reconhece de relance.
         let extra = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        body = extra.isEmpty ? headline : "\(headline) — \(Self.clip(extra))"
+        body = extra.isEmpty ? node : "\(node): \(Self.clip(extra))"
     }
 
     private static func clip(_ text: String, limit: Int = 180) -> String {
