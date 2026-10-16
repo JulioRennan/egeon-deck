@@ -176,6 +176,12 @@ Toda mensagem agente→agente chega assim (`Features/Dispatch/Models/DispatchReq
 <texto>
 ```
 
+**Comando do CLI vai cru** (ADR-069): texto que começa com `/nome` (sem outra
+barra — `/Users/…` é caminho) sai sem envelope, porque o CLI só reconhece o
+comando no começo do prompt e qualquer envelope vira argumento dele. Antes
+dele entra um aviso com envelope (`commandNotice`) dizendo quem manda qual
+comando; os dois passam pelas mesmas guardas, e comando não abre "aguardando".
+
 Só cabeçalho e texto. A tag é `DispatchRequest.tag` (`[ED]`), a mesma dos
 marcadores de fim de turno, e vale para os três prompts que o app monta —
 mensagem, `[ED] review de <arquivo>`, `[ED] <arquivo>` da task (ADR-055). O
@@ -300,6 +306,7 @@ teste — é a regra do CLAUDE.md.
 - **ADR-040** — gancho identificado pelo pid da conexão, como o `egeon`; `EGEON_TARGET` não é identidade.
 - **ADR-063** — `[[ED:wait]]`: parou com trabalho de fundo; ampulheta, sem som.
 - **ADR-066** — maestro: um nó que monta a bancada por plano JSON validado inteiro.
+- **ADR-069** — `/comando` entre agentes vai cru, depois de um aviso com envelope; qualquer agente.
 - **ADR-039** — turno em curso lido ao vivo da cauda do transcript (só enquanto `working`); a bolha do chat desenha a cadeia na ordem.
 
 `docs/03-spec-chat.md` — o chat como vista dessa mesma conversa.

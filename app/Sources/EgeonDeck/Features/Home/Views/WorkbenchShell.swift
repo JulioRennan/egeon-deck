@@ -23,6 +23,8 @@ final class WorkbenchShell: NSView {
     private lazy var bannerPanel = GlassPanel(content: banner, radius: 8, tint: .systemOrange)
     /// A cortina de "um instante" — limpeza da bancada em curso (ADR-059).
     private let busy = BusyOverlay(frame: .zero)
+    /// A trava de quando o macOS não deixa ler a pasta da bancada.
+    let accessLock = AccessOverlay(frame: .zero)
     private var mosaic: MosaicContainer?
     /// O modo chat. Criado junto com a bancada e não sob demanda como o mosaico:
     /// não guarda geometria de card, então nasce barato, e main.swift precisa
@@ -102,6 +104,8 @@ final class WorkbenchShell: NSView {
 
         busy.isHidden = true
         addSubview(busy)
+        accessLock.isHidden = true
+        addSubview(accessLock)
 
         // O canvas conhece avisos que só ele sabe dar (componente armado, ciclo
         // de arestas), mas em modo mosaico ele está fora da hierarquia e o aviso
@@ -344,7 +348,19 @@ final class WorkbenchShell: NSView {
         bannerPanel.frame = NSRect(x: bounds.midX - 380, y: topInset + 12,
                                    width: 760, height: 30)
         busy.frame = content
+        accessLock.frame = content
     }
+
+    /// Trava a bancada com o aviso de acesso; `nil` destrava. Acima de tudo,
+    /// cortina de limpeza inclusive.
+    func lockAccess(_ text: String?, asking: Bool = false) {
+        guard let text else { accessLock.isHidden = true; return }
+        addSubview(accessLock, positioned: .above, relativeTo: nil)
+        accessLock.show(text, asking: asking)
+        needsLayout = true
+    }
+
+    var isAccessLocked: Bool { !accessLock.isHidden }
 
     /// A cortina, com o que está acontecendo; `nil` a recolhe. Fica ACIMA de
     /// tudo, banner incluído: enquanto ela está de pé nada da bancada aceita

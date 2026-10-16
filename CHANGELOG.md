@@ -11,6 +11,8 @@ citados entre parênteses.
 
 ### Adicionado
 
+- Bancada cuja pasta o macOS não deixa ler (Documentos, Mesa, Transferências) pede o acesso de novo sozinha ao abrir; se continuar sem, fica travada com o aviso e os botões **Abrir Ajustes** e **Pedir de novo**, e destrava sozinha — subindo os agentes — assim que você libera. Antes o agente caía com "low max file descriptors" (ADR-070).
+- Um agente pode mandar comando do CLI para outro (`/clear`, `/compact`, `/model sonnet`) pelo `egeon send`: o vizinho recebe antes um aviso dizendo quem vai mandar o quê, e o comando roda no terminal dele (ADR-069).
 - Notificação do macOS, com som, quando um agente precisa de você ou termina, com o Egeon Deck fora da frente — "A bancada X precisa de você" ou "A bancada X já terminou o serviço", com o terminal e o que está esperando embaixo; clicar abre a bancada; nasce no estilo alerta, que fica na tela até você fechar (troca-se em Ajustes › Notificações). Segundo plano e "aguardando vizinho" não notificam.
 - A bancada que terminou ganha a mesma borda girando, em verde, na barra lateral, na pastilha do trilho e na aba; o laranja de "precisa de você" tem prioridade sobre ela.
 - Perguntas do agente com opções (a ferramenta de pergunta do Claude Code) aparecem no chat com as opções como botões, e a resposta vai direto para ele; o Claude passa a ser orientado a perguntar assim (ADR-068).
@@ -25,6 +27,7 @@ citados entre parênteses.
 
 ### Corrigido
 
+- `egeon send` e `egeon peek` voltam a aceitar só o id do vizinho da mesma bancada (`testador` em vez de `testes-bancada/testador`), como o manual diz.
 - Renomear um terminal ou marcá-lo como maestro pelo formulário não abre mais uma conversa nova: o agente reinicia e retoma a mesma conversa (desde que o CLI e a pasta sejam os mesmos). O ultracode e o endereço de nó web também não se perdem mais ao aplicar o formulário.
 - ⌘-clique em caminho relativo no terminal abre o arquivo mesmo com a pontuação da frase grudada (`docs/a.md.`, `(README.md)`), e passa a funcionar também em nome solto, sem barra (`README.md`, `main.swift:42`), quando o arquivo existe na pasta do terminal.
 

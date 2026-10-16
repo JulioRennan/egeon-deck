@@ -4114,3 +4114,62 @@ o `tool_input` original e multiSelect juntado, linha do protocolo só no perfil
 com gancho). No DEV, duas perguntas (cor, escolha única; frutas, multiSelect)
 apareceram na faixa (foto), e a resposta pela rota chegou ao CLI como "Blue" e
 "Apple, Pear".
+
+## ADR-069 — Comando com `/` entre agentes vai cru, depois de um aviso
+
+**Contexto.** Toda mensagem agente→agente chegava com `[ED] mensagem de
+<remetente>` na primeira linha. O Claude Code só reconhece comando (`/clear`,
+`/compact`, `/model sonnet`) no começo do prompt, então o maestro — ou
+qualquer agente — não conseguia mandar comando ao vizinho: chegava como texto.
+
+**Descartado: a tag no fim.** O comando toma como argumento tudo o que vem
+depois dele: `/model sonnet` + rodapé é um modelo que não existe, e o
+`/compact` leria o rodapé como instrução de resumo. E a mensagem comum
+perderia o remetente no topo, que é o que o agente lê primeiro.
+
+**Decisão.** Texto cuja primeira palavra é `/nome` (letra depois da barra,
+sem outra barra — `/Users/x/a.md` é caminho) sai cru
+(`DispatchRequest.isSlashCommand`). Antes dele, na mesma fila, entra um aviso
+com envelope (`commandNotice`) dizendo quem manda qual comando e que não
+precisa responder — sem ele, o agente via o modelo ou o contexto mudar sem
+saber quem mexeu. Vale para qualquer agente, não só o maestro: as guardas de
+cadeia continuam (quem manda vem do pid), e a mensagem comum não muda.
+Comando não abre "⏳ aguardando" em quem mandou: não há resposta a esperar.
+
+**Verificação.** `DispatchRequestTests` (comando cru com aviso antes; caminho,
+texto e `/` solto não são comando). No DEV, o maestro mandou `/cost` ao
+testador por `egeon send`: chegou o aviso com remetente, o testador encerrou o
+turno, e o `/cost` rodou como comando (abriu o painel de uso — daí a nota no
+manual de evitar comando que abre painel).
+
+## ADR-070 — Pasta sem acesso trava a bancada, e o app pede de novo
+
+**Contexto.** O macOS bloqueou o Egeon Deck na pasta Documentos (privacidade,
+TCC) e nada no app percebeu: `fileExists` responde sim para pasta bloqueada —
+o bloqueio só aparece ao listar —, a bancada abria normal e o Claude Code
+morria no arranque com "possibly due to low max file descriptors", a mensagem
+genérica dele para o EPERM inesperado. E recusa é permanente: o macOS não
+pergunta de novo sozinho.
+
+**Decisão.** `FolderAccess.check` lê a pasta (`opendir`) e separa ok, ausente
+e negado, com o nome da pasta protegida como o Ajustes mostra. Ao abrir uma
+bancada negada, o app pede de novo em segundo plano (`FolderAccess.request`):
+`tccutil reset` do serviço daquela pasta, só do próprio bundle — sem senha,
+medido — e uma nova leitura, que faz o macOS perguntar. Continuando negado, a
+bancada fica atrás de uma cortina (`AccessOverlay`) que engole o clique, com
+**Abrir Ajustes** (Privacidade › Arquivos e Pastas) e **Pedir de novo**; a cada
+2s o app confere, e liberado destrava e reergue os agentes, que morreram no
+arranque. Criar bancada passa pelo mesmo caminho: nasce e abre travada, em vez
+de um alerta que a impedia de nascer.
+
+**Detalhes.** A leitura espera a resposta do pedido do macOS, então o pedido de
+novo roda fora da main. Se a primeira leitura demorou (o macOS acabou de
+perguntar e você recusou), o app não pede de novo na mesma hora — trava direto.
+Pasta sem permissão por outra razão (chmod) trava igual, sem o `tccutil`.
+
+**Verificação.** `FolderAccessTests` (ok/ausente/negado com chmod 000, nome da
+pasta protegida, serviço de cada pasta, fora de .app só confere). No DEV, uma
+bancada com a pasta em chmod 000 abriu travada (foto), e o `chmod 755` destravou
+em ~2s com "acesso à pasta liberado — subindo os agentes". O pedido de novo do
+macOS (o `tccutil` de dentro do app) não foi exercitado com uma recusa real.
+

@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// dicionário e a religar as closures que haviam capturado o número. Ver
     /// `WorkbenchLookup`.
     var shells: [String: WorkbenchShell] = [:]
+    /// A conferência de acesso de cada bancada travada, pelo id dela.
+    private var accessTimers: [String: Timer] = [:]
     /// A árvore por cima das bancadas: workspace → projeto (ADR-043). A lista de
     /// bancadas continua plana; isto só diz de quem cada uma é.
     var workspaces: [WorkspaceConfig] = []
@@ -738,6 +740,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   + (template.map { " a partir do template \"\($0)\"" } ?? " vazia"))
         schedulePersist()
         activate(configs.count - 1)
+    }
+
+    /// Trava a bancada sem acesso à pasta e cuida de destravar.
+    ///
+    /// `askFirst` pede de novo ao macOS antes de travar (ADR-070): recusa é
+    /// permanente para ele, e quem abre a bancada quer trabalhar nela. Travada,
+    /// a bancada confere a cada 2s — liberar nos Ajustes destrava sozinho, e os
+    /// agentes, que morreram no arranque sem a pasta, sobem de novo.
+    private func guardAccess(of id: String, shell: WorkbenchShell, askFirst: Bool) {
+        guard let config = config(ofID: id) else { return }
+        let url = config.url
+        let fallback = FolderAccess.denied(folder: FolderAccess.protectedFolder(of: url.path)).message ?? ""
+        Log.write("bancada \(config.name): sem acesso a \(config.path)")
+
+        shell.accessLock.onOpenSettings = { NSWorkspace.shared.open(FolderAccess.settingsURL) }
+        shell.accessLock.onAskAgain = { [weak self, weak shell] in
+            guard let self, let shell else { return }
+            self.askAccess(of: id, shell: shell, fallback: fallback)
+        }
+        if askFirst {
+            askAccess(of: id, shell: shell, fallback: fallback)
+        } else {
+            shell.lockAccess(fallback)
+        }
+
+        accessTimers[id]?.invalidate()
+        accessTimers[id] = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self, weak shell] timer in
+            guard let self, let shell, let config = self.config(ofID: id) else { timer.invalidate(); return }
+            guard shell.isAccessLocked, FolderAccess.check(config.url) == .ok else { return }
+            timer.invalidate()
+            self.accessTimers[id] = nil
+            shell.lockAccess(nil)
+            Log.write("bancada \(config.name): acesso à pasta liberado — subindo os agentes")
+            if let index = self.configs.firstIndex(where: { $0.id == id }) { self.restartAgents(in: index) }
+        }
+    }
+
+    /// Pede ao macOS em segundo plano: o pedido segura quem lê até você
+    /// responder, e na main isso congelaria todas as bancadas.
+    private func askAccess(of id: String, shell: WorkbenchShell, fallback: String) {
+        guard let url = config(ofID: id)?.url else { return }
+        shell.lockAccess(fallback, asking: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = FolderAccess.request(url)
+            DispatchQueue.main.async {
+                // Liberado: a conferência de 2s destrava e sobe os agentes.
+                if result != .ok { shell.lockAccess(result.message ?? fallback) }
+            }
+        }
     }
 
     /// Cria uma worktree do repositório escolhido e abre uma bancada nela.
@@ -2594,7 +2645,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // por um `pwd` três horas depois: o terminal abre na raiz da bancada, fica
         // com a cara do terminal certo, e o agente trabalha no lugar errado.
         let unresolved = configs[index].unresolvedDirectories
-        if !unresolved.isEmpty {
+        // Ler a pasta é o que faz o macOS perguntar, quando ainda não perguntou —
+        // e a leitura espera a resposta. Demorou, então ele acabou de perguntar
+        // e você recusou: pedir de novo na mesma hora seria insistir.
+        let started = Date()
+        if case .denied = FolderAccess.check(configs[index].url) {
+            guardAccess(of: configs[index].id, shell: shell,
+                        askFirst: Date().timeIntervalSince(started) < 0.5)
+        } else if !unresolved.isEmpty {
             let lista = unresolved.map { "\($0.id) → \($0.tried)" }.joined(separator: ", ")
             shell.showBanner("Pasta inexistente, abrindo na raiz da bancada: \(lista)")
             Log.write("bancada \(configs[index].name): \(unresolved.count) nó(s) com cwd que não "

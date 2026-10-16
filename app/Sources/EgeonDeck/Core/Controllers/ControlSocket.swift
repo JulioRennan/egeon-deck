@@ -600,6 +600,7 @@ final class ControlSocket {
             let result = DispatchQueue.main.sync { () -> Peek in
                 let origin = Dispatcher.shared.target(callingOn: fd)?.address
                 let peers = origin.map { Dispatcher.shared.peers(of: $0).map(\.address) } ?? []
+                let target = origin.flatMap { Dispatcher.shared.resolve(target, siblingOf: $0) } ?? target
                 guard Dispatcher.mayPeek(target, from: origin, peers: peers) else { return .forbidden }
                 guard let node = Dispatcher.shared.target(target) else { return .unknown }
                 return .lines(node.peek(lines: max(1, min(count, 200))))

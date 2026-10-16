@@ -152,6 +152,13 @@ enum ClaudeSkill {
         Use `egeon peek` quando quiser mesmo conferir o estado de alguém sem
         mandar nada: ele lê a tela do vizinho e não interrompe o trabalho dele.
 
+        **Comando do CLI vai direto:** mensagem que começa com `/` (`/clear`,
+        `/compact`, `/model sonnet`) chega crua no terminal do vizinho e roda
+        como comando dele, depois de um aviso dizendo que foi você. Mande só o
+        comando, sem texto em volta. Comando não tem resposta: não espere uma.
+        Evite os que abrem painel (`/cost`, `/model` sem argumento): o vizinho
+        fica parado nele até alguém fechar.
+
         ## Quem te acionou continua esperando
 
         Mensagem que chega marcada com `[ED] mensagem de <alguém>` é o pedido de

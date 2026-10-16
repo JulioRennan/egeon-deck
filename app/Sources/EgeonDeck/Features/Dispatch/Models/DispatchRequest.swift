@@ -65,14 +65,41 @@ struct DispatchRequest: Codable {
         """
     }
 
+    /// Comando do CLI (`/clear`, `/model sonnet`, `/compact …`): a primeira
+    /// palavra é `/nome`, sem outra barra — `/Users/x/a.md` é caminho, não
+    /// comando.
+    var isSlashCommand: Bool {
+        guard let text, text.hasPrefix("/") else { return false }
+        let name = text.dropFirst().prefix { !$0.isWhitespace }
+        return !name.isEmpty && !name.contains("/")
+            && name.first.map { $0.isLetter } == true
+    }
+
     /// O que chega de uma mensagem entre terminais: com envelope para agente,
     /// cru para shell — que não lê cabeçalho, e o executaria como comando
     /// inválido antes do comando de verdade (ADR-066).
+    ///
+    /// Comando com `/` também vai cru: o CLI só o reconhece no começo do
+    /// prompt, e qualquer envelope — em cima ou embaixo — vira argumento dele
+    /// (`/model sonnet` + rodapé é um modelo que não existe).
     func message(from sender: String, toShell: Bool) -> String? {
         var copy = self
-        copy.from = toShell ? nil : sender
-        if toShell { copy.kind = "raw" }
+        let raw = toShell || isSlashCommand
+        copy.from = raw ? nil : sender
+        if raw { copy.kind = "raw" }
         return copy.buildPrompt()
+    }
+
+    /// O aviso que vai antes do comando cru, com o envelope de sempre: sem ele
+    /// o comando chega sem remetente, e o agente vê a conversa mudar (modelo,
+    /// contexto) sem saber quem mexeu.
+    func commandNotice(from sender: String) -> String? {
+        guard isSlashCommand, let text else { return nil }
+        let command = text.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? text
+        return agentEnvelope(from: sender, text: """
+            Aviso: logo depois desta mensagem chega o comando `\(command)` no seu terminal, \
+            mandado por \(sender). Não precisa responder — só encerre o turno.
+            """)
     }
 
     /// Monta o prompt final. Cabeçalho explícito com arquivo, trecho citado e

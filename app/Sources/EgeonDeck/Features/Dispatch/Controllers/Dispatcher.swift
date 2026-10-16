@@ -966,7 +966,7 @@ final class Dispatcher {
     ///
     /// O agente conhece o vizinho pelo endereço que está no catálogo dele, mas
     /// escrever só o id é o erro natural — e barrar por isso seria pedantismo.
-    private func resolve(_ name: String, siblingOf address: String) -> String? {
+    func resolve(_ name: String, siblingOf address: String) -> String? {
         if targets[name] != nil { return name }
         let workbench = String(address.split(separator: "/").first ?? "")
         let qualified = "\(workbench)/\(name)"
@@ -981,7 +981,8 @@ final class Dispatcher {
     /// escrevia. Omitindo o campo ele passava por você e não encontrava guarda
     /// nenhuma; preenchendo com o nome de um vizinho, usava as arestas do outro.
     func dispatch(_ request: DispatchRequest, from origin: Target?) throws -> String {
-        guard let destination = targets[request.target] else {
+        let address = origin.flatMap { resolve(request.target, siblingOf: $0.address) } ?? request.target
+        guard let destination = targets[address] else {
             throw DispatchError.unknownTarget(request.target, available: addresses)
         }
 
@@ -1050,14 +1051,19 @@ final class Dispatcher {
             throw DispatchError.tooManyVisits(target: destination.address, limit: ceiling, chain: chain)
         }
 
+        if !toShell, let notice = request.commandNotice(from: sender) {
+            destination.enqueue(notice, mode: request.inject, chain: chain)
+        }
         destination.enqueue(prompt, mode: request.inject, chain: chain)
         // Passou o bastão: o fim de turno DELE não te chama mais. Para shell
         // não há bastão — ninguém vai responder, e quem mandou ainda te deve o
         // aviso de que terminou.
         // Resposta não abre espera: se o destino estava esperando por quem
         // manda, isto é a volta (ADR-058), e quem responde não aguarda nada.
+        // Comando também não: `/clear` não tem resposta, e quem o mandou
+        // ficaria aguardando para sempre.
         let isReply = destination.awaitingPeers.peers.contains(sender)
-        if !toShell {
+        if !toShell, !request.isSlashCommand {
             origin.handedOff = true
             if !isReply { origin.awaitingPeers.sent(to: destination.address) }
         }

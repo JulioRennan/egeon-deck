@@ -78,5 +78,28 @@ final class DispatchRequestTests: XCTestCase {
         XCTAssertTrue(enveloped.hasPrefix("[ED] mensagem de deck/maestro"), enveloped)
         XCTAssertTrue(enveloped.hasSuffix("npm test"))
     }
-}
 
+    // O CLI só reconhece `/comando` no começo do prompt, e o envelope viraria
+    // argumento dele: comando vai cru, com um aviso com remetente antes.
+    func testSlashCommandGoesRawWithNoticeBefore() {
+        var req = DispatchRequest(target: "deck/dev")
+        req.text = "/model sonnet"
+        XCTAssertTrue(req.isSlashCommand)
+        XCTAssertEqual(req.message(from: "deck/maestro", toShell: false), "/model sonnet")
+        let notice = req.commandNotice(from: "deck/maestro") ?? ""
+        XCTAssertTrue(notice.hasPrefix("[ED] mensagem de deck/maestro"))
+        XCTAssertTrue(notice.contains("`/model sonnet`"))
+    }
+
+    func testPathOrTextIsNotACommand() {
+        for text in ["/Users/x/a.md é o arquivo", "/ sozinho", "/2 itens", "oi /clear", ""] {
+            var req = DispatchRequest(target: "deck/dev")
+            req.text = text
+            XCTAssertFalse(req.isSlashCommand, text)
+            XCTAssertNil(req.commandNotice(from: "deck/maestro"), text)
+        }
+        var compact = DispatchRequest(target: "deck/dev")
+        compact.text = "/compact foca no bug do login"
+        XCTAssertTrue(compact.isSlashCommand)
+    }
+}
