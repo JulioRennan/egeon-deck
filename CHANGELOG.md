@@ -11,6 +11,7 @@ citados entre parênteses.
 
 ### Adicionado
 
+- Links no modo chat são clicáveis e abrem no navegador: URL solta (`https://…`) e link de Markdown (`[documentação](https://…)`, que mostra só o rótulo), nas respostas dos agentes e nas suas mensagens.
 - Agente Claude numa worktree nova não pergunta mais se você confia na pasta nem pede os imports externos do CLAUDE.md, quando o repositório de origem já foi aceito: a worktree herda as respostas — inclusive a pasta do multi-projeto, que junta vários repositórios e só herda se todos foram aceitos (ADR-071).
 - Bancada cuja pasta o macOS não deixa ler (Documentos, Mesa, Transferências) pede o acesso de novo sozinha ao abrir; se continuar sem, fica travada com o aviso e os botões **Abrir Ajustes** e **Pedir de novo**, e destrava sozinha — subindo os agentes — assim que você libera. Antes o agente caía com "low max file descriptors" (ADR-070).
 - Um agente pode mandar comando do CLI para outro (`/clear`, `/compact`, `/model sonnet`) pelo `egeon send`: o vizinho recebe antes um aviso dizendo quem vai mandar o quê, e o comando roda no terminal dele (ADR-069).

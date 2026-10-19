@@ -96,6 +96,12 @@ class ChatRowView: NSView {
         view.textContainerInset = NSSize.zero
         view.isVerticallyResizable = false
         view.isHorizontallyResizable = false
+        // Link no tom do chat, sublinhado; o clique abre no navegador padrão.
+        view.linkTextAttributes = [
+            .foregroundColor: NSColor(calibratedRed: 0.45, green: 0.68, blue: 1, alpha: 1),
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .cursor: NSCursor.pointingHand,
+        ]
         return view
     }
 

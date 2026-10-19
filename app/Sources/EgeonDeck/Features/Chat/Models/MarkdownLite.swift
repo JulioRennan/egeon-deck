@@ -4,7 +4,7 @@ import AppKit
 
 /// O agente escreve Markdown, e a TUI renderiza; a bolha mostrava os
 /// asteriscos. Isto cobre o que aparece em resposta de agente — negrito,
-/// código inline, título, lista, bloco de código — e nada mais: link, tabela
+/// código inline, título, lista, bloco de código e link — e nada mais: tabela
 /// e imagem ficam como texto. Não é um parser de Markdown; é o suficiente
 /// para a bolha ler como o terminal (ADR-039).
 enum MarkdownLite {
@@ -12,6 +12,8 @@ enum MarkdownLite {
         case text(String)
         case bold(String)
         case code(String)
+        /// `[rótulo](url)`: o rótulo aparece, a URL vai no clique.
+        case link(label: String, url: String)
     }
 
     enum Block: Equatable {
@@ -88,6 +90,20 @@ enum MarkdownLite {
         return nil
     }
 
+    /// `[rótulo](url)` começando em `start`. Só URL com esquema — `[1](2)` em
+    /// texto comum não é link.
+    private static func link(in text: String, at start: String.Index)
+        -> (label: String, url: String, end: String.Index)? {
+        let afterBracket = text.index(after: start)
+        guard let close = text[afterBracket...].firstIndex(of: "]"), close > afterBracket else { return nil }
+        let open = text.index(after: close)
+        guard open < text.endIndex, text[open] == "(",
+              let end = text[open...].firstIndex(of: ")") else { return nil }
+        let url = String(text[text.index(after: open)..<end]).trimmingCharacters(in: .whitespaces)
+        guard let scheme = URL(string: url)?.scheme, !scheme.isEmpty, !url.contains(" ") else { return nil }
+        return (String(text[afterBracket..<close]), url, text.index(after: end))
+    }
+
     /// `**negrito**` e `` `código` `` dentro de uma linha. Código ganha do
     /// negrito: `**` dentro de crase é literal.
     static func spans(_ text: String) -> [Span] {
@@ -105,6 +121,10 @@ enum MarkdownLite {
                 flushPlain()
                 out.append(.code(String(text[text.index(after: index)..<close])))
                 index = text.index(after: close)
+            } else if char == "[", let link = link(in: text, at: index) {
+                flushPlain()
+                out.append(.link(label: link.label, url: link.url))
+                index = link.end
             } else if text[index...].hasPrefix("**"),
                       let close = text.range(of: "**", range: text.index(index, offsetBy: 2)..<text.endIndex),
                       close.lowerBound > text.index(index, offsetBy: 2) {
@@ -153,6 +173,10 @@ enum MarkdownLite {
                     out.append(NSAttributedString(string: s, attributes: [.font: bold, .foregroundColor: color]))
                 case .code(let s):
                     out.append(NSAttributedString(string: s, attributes: [.font: mono, .foregroundColor: codeColor]))
+                case .link(let label, let url):
+                    var attributes: [NSAttributedString.Key: Any] = [.font: base, .foregroundColor: color]
+                    if let target = URL(string: url) { attributes[.link] = target }
+                    out.append(NSAttributedString(string: label, attributes: attributes))
                 }
             }
         }
@@ -177,6 +201,21 @@ enum MarkdownLite {
                     out.append(CodePalette.attributed(String(l), language: lang, font: mono, base: codeColor))
                 }
             }
+        }
+        return out
+    }
+
+    /// URL solta no texto vira link — a do agente quase nunca vem em
+    /// `[rótulo](url)`. Não mexe no que já é link.
+    static func linkify(_ text: NSAttributedString) -> NSAttributedString {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        else { return text }
+        let out = NSMutableAttributedString(attributedString: text)
+        let whole = NSRange(location: 0, length: out.length)
+        for match in detector.matches(in: out.string, range: whole) {
+            guard let url = match.url, let scheme = url.scheme, ["http", "https"].contains(scheme),
+                  out.attribute(.link, at: match.range.location, effectiveRange: nil) == nil else { continue }
+            out.addAttribute(.link, value: url, range: match.range)
         }
         return out
     }

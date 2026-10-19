@@ -78,9 +78,9 @@ enum ChatBlockLayout {
     static func attributed(_ kind: ChatBlock.Kind) -> NSAttributedString? {
         switch kind {
         case .prompt(let to, let from, let text, _, _, _, let mention):
-            return prompt(text, to: to, from: from, mention: mention)
+            return MarkdownLite.linkify(prompt(text, to: to, from: from, mention: mention))
         case .prose(_, let blocks):
-            return MarkdownLite.render(blocks, font: proseFont, color: proseColor)
+            return MarkdownLite.linkify(MarkdownLite.render(blocks, font: proseFont, color: proseColor))
         case .code(_, let language, let code):
             return MarkdownLite.renderCode(language, code, font: codeFont)
         case .step(_, let step, let expanded):
