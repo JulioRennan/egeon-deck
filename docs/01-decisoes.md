@@ -4173,3 +4173,37 @@ bancada com a pasta em chmod 000 abriu travada (foto), e o `chmod 755` destravou
 em ~2s com "acesso à pasta liberado — subindo os agentes". O pedido de novo do
 macOS (o `tccutil` de dentro do app) não foi exercitado com uma recusa real.
 
+## ADR-071 — A worktree herda a confiança do Claude do repositório de origem
+
+**Contexto.** Toda worktree nova abria o agente com "Quick safety check: … one
+you trust?" e, depois, com o pedido de imports externos do CLAUDE.md. O Claude
+Code guarda as respostas no `.claude.json` da configuração em uso, por pasta:
+`projects[<pasta>].hasTrustDialogAccepted` e
+`hasClaudeMdExternalIncludes{Approved,WarningShown}`; lê subindo pelos pais, e
+dentro de git usa a raiz canônica. O próprio CLI, ao recusar, sugere gravar ali
+(binário 2.1.303). Medido num pty: worktree ligada de um repositório aceito não
+pergunta; a pasta do multi-projeto (`worktrees/<multi>/<branch>`, que não é git
+e só junta worktrees, ADR-065) pergunta sempre, mesmo com os repositórios de
+dentro aceitos.
+
+**Decisão.** Antes de subir um agente Claude, `ClaudeTrustSeeder` acha de onde
+a pasta herda — worktree ligada: o checkout principal; pasta fora de git: os
+repositórios de cada subpasta git — e, no `.claude.json` da configuração do nó
+(`CLAUDE_CONFIG_DIR`, ou `~/.claude.json`), liga na entrada da pasta as chaves
+que TODAS as origens já têm ligadas (`ClaudeTrust.inheriting`). Nunca concede o
+que você não concedeu: origem não aceita, nada muda. Entrada nova nasce com o
+esqueleto que o CLI põe (`allowedTools`, `mcpServers`…), sem nada da conversa
+da origem.
+
+**Armadilhas.** A chave é o `realpath`: `resolvingSymlinksInPath` e
+`standardizingPath` do Foundation tiram o `/private` de `/private/tmp`, e a
+chave não casava. O arquivo é gravado também pelos `claude` em execução: lê,
+muda três chaves e troca de uma vez (`.atomic`), como o CLI; dois gravando no
+mesmo instante podem perder a marcação, e o diálogo volta — nada além disso.
+
+**Verificação.** `ClaudeTrustTests` (herda o aceito, esqueleto sem dados da
+origem, nada sem origem aceita ou alvo já aceito, multi exige todos, pai
+aceito vale, `/private` mantido, fontes com git de verdade). No pty, os quatro
+casos acima. No DEV, um agente na pasta de multi-projeto subiu direto no
+prompt, com "herdou de app" no log.
+

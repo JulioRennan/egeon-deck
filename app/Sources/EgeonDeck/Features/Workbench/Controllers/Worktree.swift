@@ -425,6 +425,14 @@ enum Worktree {
         return nil
     }
 
+    /// A raiz da worktree em que a pasta está (a ligada, se for uma). Nil fora
+    /// de git. Leve: sem o `status`, que custa num repositório grande.
+    static func topLevel(of path: String) -> String? {
+        guard let root = try? run(["rev-parse", "--show-toplevel"], in: path).trimmed,
+              !root.isEmpty else { return nil }
+        return root
+    }
+
     /// De qual repositório uma pasta faz parte, sempre pelo checkout principal.
     ///
     /// `--show-toplevel` devolve a raiz da worktree LIGADA quando você está dentro

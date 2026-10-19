@@ -11,6 +11,7 @@ citados entre parênteses.
 
 ### Adicionado
 
+- Agente Claude numa worktree nova não pergunta mais se você confia na pasta nem pede os imports externos do CLAUDE.md, quando o repositório de origem já foi aceito: a worktree herda as respostas — inclusive a pasta do multi-projeto, que junta vários repositórios e só herda se todos foram aceitos (ADR-071).
 - Bancada cuja pasta o macOS não deixa ler (Documentos, Mesa, Transferências) pede o acesso de novo sozinha ao abrir; se continuar sem, fica travada com o aviso e os botões **Abrir Ajustes** e **Pedir de novo**, e destrava sozinha — subindo os agentes — assim que você libera. Antes o agente caía com "low max file descriptors" (ADR-070).
 - Um agente pode mandar comando do CLI para outro (`/clear`, `/compact`, `/model sonnet`) pelo `egeon send`: o vizinho recebe antes um aviso dizendo quem vai mandar o quê, e o comando roda no terminal dele (ADR-069).
 - Notificação do macOS, com som, quando um agente precisa de você ou termina, com o Egeon Deck fora da frente — "A bancada X precisa de você" ou "A bancada X já terminou o serviço", com o terminal e o que está esperando embaixo; clicar abre a bancada; nasce no estilo alerta, que fica na tela até você fechar (troca-se em Ajustes › Notificações). Segundo plano e "aguardando vizinho" não notificam.

@@ -292,6 +292,12 @@ final class TerminalNode: NodeView {
         // `preexec` do zsh, que entra por aqui (ADR-036).
         if profile == nil { environment["ZDOTDIR"] = ShellHook.directory.path }
 
+        // Antes de subir: a worktree nova herda a confiança do repositório de
+        // onde saiu, e o Claude não pergunta de novo (ADR-071).
+        if let profile, ClaudeModelCatalog.applies(to: profile) {
+            ClaudeTrustSeeder.prepare(cwd: cwd, configDir: profile.configEnv.flatMap { environment[$0] })
+        }
+
         let env: [String] = environment.map { "\($0.key)=\($0.value)" }
 
         let line = "cd \(shellQuote(cwd)); clear; \(command)"
