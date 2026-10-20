@@ -53,7 +53,7 @@ final class AgentPaletteTests: XCTestCase {
     }
 }
 
-/// Quem entra no grupo: agentes e shells; editor e web ficam de fora.
+/// Quem entra no grupo: agentes e shells; o web fica de fora.
 final class ChatParticipantTests: XCTestCase {
     private func node(_ json: String) throws -> NodeConfig {
         try JSONDecoder().decode(NodeConfig.self, from: Data(json.utf8))
@@ -63,7 +63,6 @@ final class ChatParticipantTests: XCTestCase {
         let nodes = [
             try node(#"{"type":"agent","id":"revisor","agent":"claude","prompt":"revise\ntudo"}"#),
             try node(#"{"type":"shell","id":"zsh","cmd":"npm run dev"}"#),
-            try node(#"{"type":"editor","id":"code"}"#),
             try node(#"{"type":"web","id":"docs"}"#),
         ]
         let participants = ChatParticipant.from(nodes: nodes, workbench: "deck") {

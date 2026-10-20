@@ -35,6 +35,7 @@ citados entre parênteses.
 
 ### Removido
 
+- O **VSCode** no canvas (nó de editor, o code-server): sai o card, a ferramenta da barra e o item **Novo VSCode** do menu — **Novo web** passa a ser ⌘3. O app não sobe mais o code-server, e bancadas e templates salvos com card de editor abrem sem ele (ADR-076).
 - A extensão **Egeon Spec** do editor (code-server): o preview de markdown com comentário inline e o botão **Request changes** que mandava os comentários ao agente. O `.md` volta a abrir como texto no editor, e a extensão que as versões anteriores instalaram é apagada no arranque (ADR-075).
 
 ## [1.2.0] - 2026-10-06

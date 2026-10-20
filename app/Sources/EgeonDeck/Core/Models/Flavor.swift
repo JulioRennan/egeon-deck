@@ -66,11 +66,6 @@ enum Flavor {
         NSString(string: isDev ? "~/egeon-dev.log" : "~/egeon.log").expandingTildeInPath
     }
 
-    /// Uma porta por flavor. Sem isto o segundo a subir encontraria a porta
-    /// tomada, concluiria que é um code-server órfão da execução anterior — que é
-    /// o caso comum — e mataria o do outro app.
-    var codeServerPort: Int { isDev ? 8392 : 8391 }
-
     /// Prefixo de rótulo de fila e afins, para os dois processos se distinguirem
     /// em ferramenta de diagnóstico.
     var identifier: String { isDev ? "egeon-dev" : "egeon" }

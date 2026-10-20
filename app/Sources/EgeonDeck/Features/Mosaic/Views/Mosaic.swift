@@ -330,10 +330,8 @@ final class MosaicContainer: NSView {
         return byColumn.keys.sorted().compactMap { byColumn[$0] }
     }
 
-    /// Editor à esquerda porque é quem precisa de largura; web na ponta porque é
-    /// quem menos precisa de olho em cima.
+    /// Web na ponta porque é quem menos precisa de olho em cima.
     private static func column(of node: NodeView) -> Int {
-        if node is EditorNode { return 0 }
         if node is WebNode { return 2 }
         return 1
     }

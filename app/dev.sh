@@ -28,13 +28,13 @@ PATTERN="$APP_NAME.app/Contents/MacOS/EgeonDeck"
 # Compilar antes de derrubar o app: build quebrado com o app já morto te deixa
 # sem nada. E encerrar antes do `make.sh`, que faz `rm -rf` no bundle — apagar o
 # executável de um app rodando o mata na validação de assinatura, pulando o
-# `applicationWillTerminate` que grava o sessions.json e encerra o code-server.
+# `applicationWillTerminate` que grava o sessions.json.
 swift build -c "$CONFIG"
 
 if pgrep -f "$PATTERN" >/dev/null; then
   # `quit` em vez de `pkill`: SIGTERM não passa pelo `applicationWillTerminate`
-  # de um app Cocoa, e é lá que o sessions.json é gravado, o code-server é
-  # encerrado e as janelas estacionadas são resgatadas.
+  # de um app Cocoa, e é lá que o sessions.json é gravado e as janelas
+  # estacionadas são resgatadas.
   osascript -e "tell application \"$QUIT_NAME\" to quit" >/dev/null 2>&1 || true
 
   # Reabrir antes de o processo sair de fato faz o LaunchServices trazer a

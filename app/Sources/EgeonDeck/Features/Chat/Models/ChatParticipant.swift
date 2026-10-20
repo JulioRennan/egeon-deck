@@ -3,7 +3,7 @@ import AppKit
 // MARK: - Quem está no grupo
 
 /// Um participante do modo chat: agente ou shell da bancada, como estado puro.
-/// Editor e web ficam de fora — não são endereçáveis e não têm conversa.
+/// O web fica de fora — não é endereçável e não tem conversa.
 struct ChatParticipant: Equatable {
     let id: String
     /// `bancada/id` — o endereço que o Dispatcher entende.

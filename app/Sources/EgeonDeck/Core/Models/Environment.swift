@@ -1,6 +1,6 @@
 import Foundation
 
-/// Ambiente entregue aos subprocessos: terminais, agentes e o code-server.
+/// Ambiente entregue aos subprocessos: terminais e agentes.
 ///
 /// Existe porque um app lançado pelo Finder não herda o shell de ninguém — ele
 /// recebe o PATH mínimo do launchd. E `zsh -lc` não resolve: o `.zshrc`, onde a
@@ -8,8 +8,7 @@ import Foundation
 ///
 /// O sintoma é sempre o mesmo e sempre confuso: um binário que funciona no
 /// Terminal vira "command not found" aqui. Já aconteceu com o `claude`; com o
-/// `flutter` sob fvm o efeito é a extensão Dart do editor não achar o SDK e o
-/// debug de Flutter simplesmente não subir.
+/// `flutter` sob fvm, também.
 enum AppEnvironment {
 
     /// Diretórios que instaladores usam e que o launchd não conhece. Ordem

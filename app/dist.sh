@@ -80,6 +80,6 @@ e notarizar na Apple (conta paga):
   xcrun notarytool submit <zip> --keychain-profile <perfil> --wait
   xcrun stapler staple "build/EgeonDeck.app"
 
-E o app não é auto-contido: o nó de editor precisa de `code-server` na máquina de
-quem recebe, e o nó de agente precisa do CLI que ele já usa. Está no README.
+E o app não é auto-contido: o nó de agente precisa do CLI que quem recebe já
+usa. Está no README.
 FIM

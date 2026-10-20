@@ -4,11 +4,6 @@ import AppKit
 // Sidebar de bancadas + canvas por bancada com terminais reais.
 // Terminais do tipo `agent` são alvos endereçáveis do dispatcher, que recebe
 // prompts pelo socket de controle em ~/.egeon/sock.
-//
-// O nó `editor` é code-server num WKWebView. Ancorar a janela real do VSCode por
-// Accessibility API foi abandonado (ADR-001/ADR-003): o macOS não deixa uma
-// janela de outro processo ficar DENTRO da nossa. O porquê está no ADR; o código
-// saiu.
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
@@ -91,8 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         //
         // A ADR-032 já impede o roubo do socket, e com ela a segunda cópia subia
         // inteira, só sem socket: duas janelas iguais, os mesmos terminais abertos
-        // duas vezes nas mesmas pastas, dois code-servers na mesma porta se matando
-        // por "órfão de execução anterior", e o workbenches.json ficando com o
+        // duas vezes nas mesmas pastas, e o workbenches.json ficando com o
         // snapshot de quem gravou por último — aresta e nó da outra sumindo sem log.
         // A segunda instância não é caso de uso a suportar; é acidente a barrar.
         //
@@ -108,9 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alerta.messageText = "\(Flavor.current.displayName) já está aberto"
             alerta.informativeText = """
                 Há uma cópia de pé (pid \(owner)). As duas dividiriam \
-                \(Flavor.current.configDirectory.path), o socket de controle e a porta \
-                \(Flavor.current.codeServerPort) — e a segunda sobrescreve as bancadas da \
-                primeira. Esta vai sair.
+                \(Flavor.current.configDirectory.path) e o socket de controle — e a \
+                segunda sobrescreve as bancadas da primeira. Esta vai sair.
 
                 Esta cópia: \(Bundle.main.bundleURL.path)
                 """
@@ -211,10 +204,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-
-        // Sobe o code-server antes dos nós: EditorNode espera o healthz e só
-        // então carrega, evitando WKWebView batendo em porta morta.
-        CodeServer.shared.start()
 
         AppControl.workbenchNames = { [weak self] in self?.configs.map(\.name) ?? [] }
         AppControl.workspacesSnapshot = { [weak self] in self?.workspacesSnapshot() ?? [:] }
@@ -551,7 +540,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WorkbenchStore.save(configs)
 
         control.stop()
-        CodeServer.shared.stop()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -1304,8 +1292,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if case .alreadyCheckedOut(let existing) = plan {
                 pasta.stringValue = NodeWorktreePlanner.short(existing)
                 // Reaproveitar worktree torna fácil cair na pasta de uma bancada
-                // que já está aberta — dois code-servers vigiando os mesmos
-                // arquivos, e dois agentes editando sem saber um do outro. Não é
+                // que já está aberta — dois agentes editando os mesmos arquivos
+                // sem saber um do outro. Não é
                 // proibido; é o tipo de coisa que tem de ser dita antes.
                 if let aberta = configs.first(where: { $0.url.path == existing }) {
                     verdict.stringValue += " Cuidado: essa pasta já é a bancada \"\(aberta.name)\"."
@@ -1474,7 +1462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Renomear mexe no endereço de dispatch, então os alvos vivos são
-    /// re-registrados — sem derrubar terminal nem recarregar o editor.
+    /// re-registrados — sem derrubar terminal.
     private func renameWorkbench(_ index: Int) {
         guard index >= 0, index < configs.count else { return }
         let current = configs[index].name
@@ -1712,7 +1700,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `cacheDisplay` desenha a árvore de views num bitmap sem depender da tela —
     /// funciona com a janela atrás de outra, o que o `screencapture` não faz. O
     /// corpo de um `WKWebView` sai em branco por esse caminho (ele pinta fora da
-    /// árvore), e para o conteúdo do editor existe o `/shot` normal.
+    /// árvore).
     private func cardSnapshot(target: String, file: URL) -> String {
         // `window` fotografa a janela inteira — barra, sidebar e conteúdo. É o que
         // permite conferir de fora uma mudança de barra, que não tem card nenhum.
@@ -2290,7 +2278,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for node in workbench.nodes { counts[node.type, default: 0] += 1 }
 
         let rótulos: [(NodeKind, String, String)] = [
-            (.editor, "editor", "editores"),
             (.agent, "agente", "agentes"),
             (.shell, "terminal", "terminais"),
             (.web, "web", "webs")
@@ -2305,34 +2292,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             + "\(workbench.path) como pasta inicial."
     }
 
-    /// Layout de quem ainda não tem frame gravado: editor à esquerda, o resto
-    /// empilhado à direita. Um nó só passa por aqui uma vez — na primeira vez o
-    /// resultado é escrito no workbenches.json e a partir daí manda o arquivo.
+    /// Layout de quem ainda não tem frame gravado: os nós empilhados numa
+    /// coluna. Um nó só passa por aqui uma vez — na primeira vez o resultado é
+    /// escrito no workbenches.json e a partir daí manda o arquivo.
     private func defaultFrames(for config: WorkbenchConfig) -> [String: NSRect] {
         let size = root.contentFrame.size
         let margin: CGFloat = 40
         let gap: CGFloat = 16
         let usableW = max(900, size.width - margin * 2)
         let usableH = max(600, size.height - margin * 2)
-        let editorW = (usableW * 0.62).rounded()
-        let columnX = margin + editorW + gap
-        let columnW = usableW - editorW - gap
-
-        let stacked = config.nodes.filter { $0.type != .editor }
-        let rowH = stacked.isEmpty ? usableH
-            : ((usableH - gap * CGFloat(stacked.count - 1)) / CGFloat(stacked.count)).rounded()
+        let count = max(1, config.nodes.count)
+        let rowH = ((usableH - gap * CGFloat(count - 1)) / CGFloat(count)).rounded()
 
         var frames: [String: NSRect] = [:]
-        var row = 0
-        for node in config.nodes {
-            if node.type == .editor {
-                frames[node.id] = NSRect(x: margin, y: margin, width: editorW, height: usableH)
-            } else {
-                frames[node.id] = NSRect(x: columnX,
-                                         y: margin + CGFloat(row) * (rowH + gap),
-                                         width: columnW, height: rowH)
-                row += 1
-            }
+        for (row, node) in config.nodes.enumerated() {
+            frames[node.id] = NSRect(x: margin, y: margin + CGFloat(row) * (rowH + gap),
+                                     width: usableW, height: rowH)
         }
         return frames
     }
@@ -2554,10 +2529,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = "\(config.name)/\(node.id)"
 
         switch node.type {
-        case .editor:
-            return EditorNode(frame: frame, address: address, title: title,
-                              folder: config.directory(for: node))
-
         case .web:
             let web = WebNode(frame: frame, address: address, title: title,
                               url: node.url, profile: node.profile)
@@ -3137,7 +3108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Reergue os agentes de uma bancada no lugar em que estão, com o system
-    /// prompt refeito. Só os agentes: shell, editor e navegador não leem regra.
+    /// prompt refeito. Só os agentes: shell e navegador não leem regra.
     private func restartAgents(in index: Int) {
         guard index >= 0, index < configs.count, let shell = shell(at: index) else { return }
         for node in shell.nodes {
@@ -3777,19 +3748,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func zoomReset() { activeCanvas?.zoom(to: 1) }
 
     /// Um key equivalent de menu é consultado antes do responder chain, então um
-    /// item habilitado engole a tecla mesmo com o cursor dentro do editor.
-    /// Desabilitar devolve a tecla a quem tem o foco — ⌘1…⌘4 focam grupos de
-    /// editor no workbench, e ⌘=/⌘− dão zoom no código.
+    /// item habilitado engole a tecla mesmo com o foco dentro de um nó.
+    /// Desabilitar devolve a tecla a quem tem o foco — numa página web, ⌘=/⌘−
+    /// são o zoom dela.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         // Os itens de visualização carregam o estado: a marca diz em que modo a
         // bancada ativa está, sem precisar olhar a barra.
         if menuItem.action == #selector(toggleSidebarCollapsed) {
             menuItem.state = root.isCollapsed ? .on : .off
-            // ⌘/ é "comentar linha" no workbench, e key equivalent de menu é
-            // consultado ANTES do responder chain: habilitado com o cursor dentro
-            // do editor, a tecla deixaria de comentar. No terminal ela não tem
-            // dono, e ali a barra continua respondendo.
-            return !(shell(at: activeIndex)?.focusIsInsideEditor ?? false)
+            return true
         }
 
         // ⌘1…⌘9: a aba tem de existir, senão a tecla vira um beep.
@@ -3825,7 +3792,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let canvasOnly: Set<Selector> = [
             #selector(pickCursorTool), #selector(pickTerminalTool),
-            #selector(pickEditorTool), #selector(pickWebTool),
+            #selector(pickWebTool),
             #selector(zoomIn), #selector(zoomOut), #selector(zoomReset)
         ]
         guard let action = menuItem.action, canvasOnly.contains(action) else { return true }
@@ -3837,7 +3804,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func pickCursorTool() { activeCanvas?.tool = .cursor }
     @objc func pickTerminalTool() { activeCanvas?.tool = .terminal }
-    @objc func pickEditorTool() { activeCanvas?.tool = .editor }
     @objc func pickWebTool() { activeCanvas?.tool = .web }
 
     @objc func copyTargets() {
@@ -3895,7 +3861,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // procurados no `mainMenu` e despachados pelo responder chain. Sem menu
         // nenhum com `copy:`/`paste:`, ⌘V caía como keyDown no terminal, que o
         // ignora — e copiar e colar não funcionava em lugar nenhum do app,
-        // terminal e code-server incluídos. O SwiftTerm já implementa os dois
+        // terminal incluído. O SwiftTerm já implementa os dois
         // seletores; faltava quem os chamasse.
         //
         // `target` fica nulo de propósito: é o que faz o comando descer pelo
@@ -3919,8 +3885,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // funcionam sem monitor de evento: ⌘V/⌘T/⌘W, ⌘+/⌘−/⌘0.
         let canvasItem = NSMenuItem()
         let canvasMenu = NSMenu(title: "Canvas")
-        // ⌥⌘1/⌥⌘2 e não ⌘1/⌘2: estes últimos já são as ferramentas, e o workbench
-        // do code-server usa ⌘1…⌘4 para focar grupos de editor.
+        // ⌥⌘1/⌥⌘2 e não ⌘1/⌘2: estes últimos já são as ferramentas.
         canvasMenu.addItem(withTitle: "Ver no canvas", action: #selector(showCanvasView),
                            keyEquivalent: "1").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Ver em mosaico", action: #selector(showMosaicView),
@@ -3936,8 +3901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // navegação dentro do workbench.
         canvasMenu.addItem(withTitle: "Cursor", action: #selector(pickCursorTool), keyEquivalent: "1")
         canvasMenu.addItem(withTitle: "Novo terminal", action: #selector(pickTerminalTool), keyEquivalent: "2")
-        canvasMenu.addItem(withTitle: "Novo VSCode", action: #selector(pickEditorTool), keyEquivalent: "3")
-        canvasMenu.addItem(withTitle: "Novo web", action: #selector(pickWebTool), keyEquivalent: "4")
+        canvasMenu.addItem(withTitle: "Novo web", action: #selector(pickWebTool), keyEquivalent: "3")
         canvasMenu.addItem(.separator())
         canvasMenu.addItem(withTitle: "Aproximar", action: #selector(zoomIn), keyEquivalent: "=")
         canvasMenu.addItem(withTitle: "Afastar", action: #selector(zoomOut), keyEquivalent: "-")

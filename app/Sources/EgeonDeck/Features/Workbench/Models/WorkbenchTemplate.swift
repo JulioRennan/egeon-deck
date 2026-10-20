@@ -34,6 +34,18 @@ struct WorkbenchTemplate: Codable {
     func instantiate() -> [NodeConfig] { nodes.map(\.withoutConversation) }
 }
 
+extension WorkbenchTemplate {
+    private enum CodingKeys: String, CodingKey { case nodes, basePath, view, mosaic }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nodes = try c.decodeNodes(forKey: .nodes) ?? []
+        basePath = try c.decodeIfPresent(String.self, forKey: .basePath)
+        view = try c.decodeIfPresent(ViewMode.self, forKey: .view)
+        mosaic = try c.decodeIfPresent(MosaicLayout.self, forKey: .mosaic)
+    }
+}
+
 enum WorkbenchTemplateStore {
     static let configURL = URL(fileURLWithPath:
         Flavor.current.config("templates.json").path)

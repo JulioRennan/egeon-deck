@@ -256,9 +256,9 @@ final class MaestroPlanTests: XCTestCase {
     func testOtherMaestroAndNonTerminalNodesAreOffLimits() {
         var base = bench()
         base.nodes[1].maestro = true
-        base.nodes.append(NodeConfig(type: .editor, id: "editor"))
+        base.nodes.append(NodeConfig(type: .web, id: "docs"))
         for json in [#"{"nodes":[{"id":"revisor","role":"x"}]}"#, #"{"remove":["revisor"]}"#,
-                     #"{"nodes":[{"id":"editor","role":"x"}]}"#] {
+                     #"{"nodes":[{"id":"docs","role":"x"}]}"#] {
             guard case .success(let parsed) = parse(json) else { return XCTFail() }
             XCTAssertFalse(MaestroPlanner.plan(parsed, on: base, context: context()).errors.isEmpty, json)
         }

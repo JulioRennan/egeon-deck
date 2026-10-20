@@ -2,7 +2,6 @@ import CoreGraphics
 import Foundation
 
 enum NodeKind: String, Codable {
-    case editor   // code-server no WKWebView
     case shell    // terminal comum
     case agent    // terminal com IA
     case web      // navegador no canvas, com perfil próprio

@@ -4226,3 +4226,33 @@ usava para oferecer os terminais da bancada do arquivo aberto. O
 **Instalações antigas.** O app criava um link `egeon.spec-<versão>` na pasta de
 extensões do flavor; sem a fonte o link fica quebrado. O `CodeServer` agora
 apaga esses links no arranque.
+
+## ADR-076 — O VSCode sai do canvas
+
+**Decisão.** O nó `editor` — code-server num `WKWebView` (ADR-001/003/004) —
+sai inteiro, a pedido, por falta de uso; o passo seguinte ao ADR-075, que já
+tinha tirado a extensão de review que rodava dentro dele. O canvas fica com
+terminal, agente e navegador. Saem o módulo `Nodes/Features/EditorNode`
+(`EditorNode`, `EditorRegistry`, `CodeServer`), o `NodeKind.editor`, a
+ferramenta e o item de menu (o "Novo web" sobe para ⌘3), a porta por flavor
+(`Flavor.codeServerPort`), as rotas que só dirigiam o workbench (`/open`,
+`/view`, `/file`, `/change`, `/probe`) — o `/shot` passa a fotografar sempre o
+card — e a exceção do ⌘/ que cedia a tecla ao "comentar linha" do editor. O
+layout inicial, que dava ao editor a coluna larga da esquerda, empilha os nós
+numa coluna só.
+
+**O que fica.** A exceção de rede local do ATS no `Info.plist`: o nó web
+também abre `http://127.0.0.1` (o servidor de desenvolvimento). O ajuste de
+escala do `WKWebView` no zoom do canvas, que é do nó web.
+
+**Compatibilidade.** `workbenches.json`, `templates.json` e
+`node-templates.json` gravados com nó ou componente `editor` abrem sem ele:
+`Retirable` pula o tipo aposentado e só ele — qualquer outro tipo desconhecido
+continua sendo erro de leitura. O card some do arquivo na próxima gravação. A
+pasta `code-server/` dentro do diretório do flavor (perfil e extensões do
+workbench) fica no disco; o app não a lê mais.
+
+**Verificação.** `RetiredNodeTests` (bancada, template e componente com
+editor; tipo desconhecido que não é o aposentado ainda falha). No DEV, a
+`testes-bancada`, que tinha um card de editor, abre sem ele, a barra de baixo
+fica com cursor, terminal e web, e nenhum code-server sobe (log e `pgrep`).

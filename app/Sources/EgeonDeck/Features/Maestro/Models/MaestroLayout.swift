@@ -4,7 +4,7 @@ import CoreGraphics
 ///
 /// Desenha a hierarquia em vez de empilhar onde houver vaga: o maestro à
 /// esquerda; os agentes em grade ao lado; os terminais normais numa faixa
-/// embaixo, mais baixos — são log, não conversa; editor e navegador por
+/// embaixo, mais baixos — são log, não conversa; o navegador por
 /// último, com o tamanho que já têm. Coordenadas do documento do canvas, que é
 /// flipped: y cresce para baixo.
 enum MaestroLayout {
@@ -34,7 +34,7 @@ enum MaestroLayout {
         let maestros = nodes.filter(\.isMaestro)
         let workers = nodes.filter { $0.type == .agent && !$0.isMaestro }
         let shells = nodes.filter { $0.type == .shell }
-        let others = nodes.filter { $0.type == .editor || $0.type == .web }
+        let others = nodes.filter { $0.type == .web }
 
         let ids = Set(workers.map(\.id))
         let linked = edges.contains { ids.contains($0.from) && ids.contains($0.to) }

@@ -131,7 +131,7 @@ chega cru (`DispatchRequest.message(from:toShell:)`, sem envelope e sem
 
 ## 4. Guardas de cadeia (`Dispatcher.dispatch(_:from:)`)
 
-`origin == nil` (extensão VSCode, seu `curl`, teste, composer do chat) **é
+`origin == nil` (seu `curl`, teste, composer do chat) **é
 você**: cadeia nova, entrega direta, nenhuma guarda. Todo o resto passa, nesta
 ordem:
 

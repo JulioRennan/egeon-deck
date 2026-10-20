@@ -24,7 +24,7 @@ final class SidebarRow: NSView {
     var onClear: ((Int) -> Void)?
 
     var isSelected = false { didSet { needsDisplay = true; restyle() } }
-    /// Bancada já materializada (terminais rodando, editor carregado).
+    /// Bancada já materializada (terminais rodando).
     var isLive = false { didSet { restyle() } }
     /// Apagando as worktrees da bancada em segundo plano: o badge vira
     /// "removendo…" e o nome apaga, até ela sair da lista (ou a remoção falhar).

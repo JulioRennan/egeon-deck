@@ -5,8 +5,7 @@
 #
 # Depois disto, o app de verdade é o instalado — o `build/` do repositório existe
 # para desenvolvimento. Rodar os dois ao mesmo tempo não funciona: mesmo bundle
-# id, mesmo `~/.egeon`, mesmo socket e mesma porta de code-server, os dois
-# brigando pelos mesmos arquivos.
+# id, mesmo `~/.egeon` e mesmo socket, os dois brigando pelos mesmos arquivos.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -52,7 +51,7 @@ gemeos() {
 # Isto já custou uma vez: o `make.sh` faz `rm -rf` no `build/EgeonDeck.app`, e
 # apagar o executável de um app vivo o mata na validação de assinatura da página
 # seguinte — pulando o `applicationWillTerminate`, que é onde o sessions.json é
-# gravado e o code-server encerrado. Avisar depois de rodar o make é avisar depois
+# gravado. Avisar depois de rodar o make é avisar depois
 # do estrago.
 #
 # Vale para os dois lugares: o de `build/` e o já instalado. Ambos são o flavor
@@ -79,8 +78,7 @@ encerrar() {
   local padrao="$1" nome="$2"
   # Pelo BUNDLE ID antes de tudo: é o único jeito que não depende do caminho nem
   # do nome de exibição, e é o que alcança a cópia translocada. Pedir quit dá ao
-  # app o `applicationWillTerminate`, onde o sessions.json é gravado e o
-  # code-server encerrado.
+  # app o `applicationWillTerminate`, onde o sessions.json é gravado.
   osascript -e 'tell application id "dev.duckcoder.egeondeck" to quit' >/dev/null 2>&1 || true
   osascript -e "tell application \"$nome\" to quit" >/dev/null 2>&1 || true
   [ -n "$(vivo "$padrao")" ] || { echo "encerrado: $nome"; return 0; }

@@ -328,7 +328,7 @@ enum MaestroGuide {
         - pasta que não existe; aresta para nó que não existe;
         - mexer em você mesmo (`nodes` ou `remove` com o seu id) — reiniciar
           quem está aplicando mataria o turno; peça ao usuário, no card;
-        - mexer em outro maestro, ou em card de editor e navegador;
+        - mexer em outro maestro, ou em card de navegador;
         - `config` fora das `configs` do CLI em `egeon models`;
         - reiniciar ou remover terminal em turno ou pedindo permissão
           (`state` `working` ou `asking` em `egeon bench`) — espere;

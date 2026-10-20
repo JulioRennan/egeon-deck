@@ -744,103 +744,16 @@ final class ControlSocket {
             respond(fd, status: state == nil ? "404 Not Found" : "200 OK",
                     json: ["ok": state != nil, "collapsed": state ?? false])
 
-        case ("GET", _, _) where route.contains("/open"):
-            // /open?target=ws/id&folder=<path> — troca a pasta do editor.
-            let query = Self.query(in: route)
-            let target = query["target"] ?? ""
-            let folder = query["folder"] ?? ""
-            let ok = DispatchQueue.main.sync { () -> Bool in
-                guard let node = EditorRegistry.node(target), !folder.isEmpty else { return false }
-                node.open(folder: folder)
-                return true
-            }
-            respond(fd, status: ok ? "200 OK" : "404 Not Found",
-                    json: ["ok": ok, "target": target, "folder": folder])
-
-        case ("GET", _, _) where route.contains("/view"):
-            // /view?target=ws/id&name=Source%20Control — foca uma view do workbench.
-            let query = Self.query(in: route)
-            let target = query["target"] ?? ""
-            let name = query["name"] ?? "Explorer"
-            let result = awaitMain { done in
-                guard let node = EditorRegistry.node(target) else {
-                    done("erro: editor desconhecido '\(target)'")
-                    return
-                }
-                node.focusView(named: name, completion: done)
-            }
-            respond(fd, status: "200 OK",
-                    json: ["target": target, "view": name, "result": result ?? "timeout"])
-
-        case ("GET", _, _) where route.contains("/file"):
-            // /file?target=ws/id&name=<arquivo ou pasta> — clica no Explorer.
-            let query = Self.query(in: route)
-            let target = query["target"] ?? ""
-            let name = query["name"] ?? ""
-            let result = awaitMain { done in
-                guard let node = EditorRegistry.node(target) else {
-                    done("erro: editor desconhecido '\(target)'")
-                    return
-                }
-                node.openInExplorer(named: name, completion: done)
-            }
-            respond(fd, status: "200 OK",
-                    json: ["target": target, "name": name, "result": result ?? "timeout"])
-
-        case ("GET", _, _) where route.contains("/change"):
-            // /change?target=ws/id&index=0 — abre uma mudança no diff editor.
-            let query = Self.query(in: route)
-            let target = query["target"] ?? ""
-            let index = Int(query["index"] ?? "0") ?? 0
-            let result = awaitMain { done in
-                guard let node = EditorRegistry.node(target) else {
-                    done("erro: editor desconhecido '\(target)'")
-                    return
-                }
-                node.openChange(index: index, matching: query["name"], completion: done)
-            }
-            respond(fd, status: "200 OK",
-                    json: ["target": target, "index": index, "result": result ?? "timeout"])
-
-        case ("GET", _, _) where route.contains("/probe"):
-            // /probe?target=ws/id — sonda o DOM do workbench dentro do editor.
-            let target = Self.target(in: route)
-            let result = awaitMain { done in
-                guard let node = EditorRegistry.node(target) else {
-                    done("erro: editor desconhecido '\(target)'; conhecidos: "
-                         + EditorRegistry.addresses.joined(separator: ", "))
-                    return
-                }
-                node.probe(done)
-            }
-            respond(fd, status: "200 OK", json: ["target": target, "probe": result ?? "timeout"])
-
         case ("GET", _, _) where route.contains("/shot"):
-            // /shot?target=ws/id — PNG em disco. Log e DOM podem mentir sobre
-            // "apareceu"; imagem não.
-            //
-            // `&card=1` fotografa o CARD inteiro, com cabeçalho e borda, em vez do
-            // conteúdo do editor — é a única forma de conferir de fora uma mudança
-            // que é só desenho, como o cabeçalho de duas linhas.
+            // /shot?target=ws/id — PNG do card inteiro em disco, com cabeçalho e
+            // borda. Log pode mentir sobre "apareceu"; imagem não.
             let query = Self.query(in: route)
             let target = query["target"] ?? ""
             let file = URL(fileURLWithPath: NSString(string: Flavor.current.config("shots").path)
                 .expandingTildeInPath)
                 .appendingPathComponent(target.replacingOccurrences(of: "/", with: "_") + ".png")
-            let card = query["card"] == "1" || EditorRegistry.node(target) == nil
-            let result: String?
-            if card {
-                result = DispatchQueue.main.sync {
-                    AppControl.cardSnapshot?(target, file) ?? "erro: app sem canvas"
-                }
-            } else {
-                result = awaitMain(timeout: 20) { done in
-                    guard let node = EditorRegistry.node(target) else {
-                        done("erro: editor desconhecido '\(target)'")
-                        return
-                    }
-                    node.snapshot(to: file, completion: done)
-                }
+            let result = DispatchQueue.main.sync {
+                AppControl.cardSnapshot?(target, file) ?? "erro: app sem canvas"
             }
             respond(fd, status: "200 OK", json: ["target": target, "path": result ?? "timeout"])
 
@@ -938,22 +851,6 @@ final class ControlSocket {
     }
 
     private static func target(in route: String) -> String { query(in: route)["target"] ?? "" }
-
-    /// Roda uma operação assíncrona da main thread e espera o resultado.
-    /// Screenshot e sonda de DOM são callbacks do WebKit, que só existem na
-    /// main; o handler do socket vive numa fila de trabalho.
-    private func awaitMain(timeout: TimeInterval = 10,
-                           _ work: @escaping (@escaping (String) -> Void) -> Void) -> String? {
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: String?
-        DispatchQueue.main.async {
-            work { value in
-                result = value
-                semaphore.signal()
-            }
-        }
-        return semaphore.wait(timeout: .now() + timeout) == .success ? result : nil
-    }
 
     /// Lê cabeçalho até a linha em branco, depois exatamente Content-Length bytes.
     private func readRequest(_ fd: Int32) -> (head: String, body: Data)? {

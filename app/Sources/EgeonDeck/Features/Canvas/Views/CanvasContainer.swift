@@ -13,11 +13,11 @@ final class CanvasDocument: NSView {
     // CanvasContainer.
     //
     // Um cursor rect cobrindo o documento inteiro valia por baixo de TODO nó, e
-    // quem perdia era o WKWebView do editor: ele troca o cursor por conta
-    // própria, com `NSCursor.set`, e não tem cursor rect para disputar. O
-    // resultado era a patinha grudada sobre o code-server, cobrindo o I-beam do
-    // editor de código. O terminal escapava por acidente — o SwiftTerm declara
-    // o cursor rect dele, e cursor rect de subview ganha do pai.
+    // quem perdia era o WKWebView: ele troca o cursor por conta própria, com
+    // `NSCursor.set`, e não tem cursor rect para disputar. O resultado era a
+    // patinha grudada sobre a página, cobrindo o I-beam. O terminal escapava por
+    // acidente — o SwiftTerm declara o cursor rect dele, e cursor rect de
+    // subview ganha do pai.
 
     // O pan vive no CanvasContainer, num monitor de eventos: aqui só chegariam
     // cliques que nenhum nó consumiu, e é justamente sobre os nós que o pan
@@ -116,7 +116,7 @@ final class CanvasContainer: NSView {
     /// todo nó novo nasceria exatamente no mesmo canto.
     var placedNodes: (() -> [NodeView])?
 
-    /// Ligações da bancada. Só terminal liga: editor e web não têm quem receba
+    /// Ligações da bancada. Só terminal liga: o web não tem quem receba
     /// prompt.
     var edges: [EdgeConfig] {
         get { edgeLayer.edges }
@@ -320,7 +320,7 @@ final class CanvasContainer: NSView {
         return bounds.contains(point) && !toolbarPanel.frame.contains(point)
     }
 
-    /// O teclado está sendo digitado dentro de um nó (terminal, editor, campo de
+    /// O teclado está sendo digitado dentro de um nó (terminal, página, campo de
     /// URL) e não no canvas. Quem monta o menu usa isto para ceder os atalhos:
     /// ⌘1…⌘4 e ⌘=/⌘− já têm dono dentro do workbench.
     var focusIsInsideNode: Bool {
@@ -358,9 +358,9 @@ final class CanvasContainer: NSView {
     /// A patinha vive no cabeçalho do nó, e em nenhum outro lugar.
     ///
     /// Por `NSCursor.set` e não por cursor rect: um rect no documento valia por
-    /// baixo de todo nó, e quem perdia era o WKWebView do editor — ele troca o
-    /// cursor sozinho, com `set`, e não tem rect para disputar. Era assim que a
-    /// patinha grudava sobre o code-server, cobrindo o I-beam do editor.
+    /// baixo de todo nó, e quem perdia era o WKWebView — ele troca o cursor
+    /// sozinho, com `set`, e não tem rect para disputar. Era assim que a patinha
+    /// grudava sobre a página, cobrindo o I-beam.
     ///
     /// O corpo do nó fica de fora de propósito: quem manda ali é o terminal ou o
     /// WKWebView, cada um sabendo o cursor que quer.

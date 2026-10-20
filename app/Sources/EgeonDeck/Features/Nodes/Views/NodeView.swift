@@ -276,8 +276,7 @@ class NodeView: NSView {
             guard let self else { return }
             self.onRequestWorktree?(self)
         }
-        // Só nós que têm o que configurar. O editor não tem comando nem papel; o
-        // que ele abre vem da pasta da bancada.
+        // Só nós que têm o que configurar.
         editButton.isHidden = !supportsEditing
         // Só quem abre pasta pode ganhar worktree. O nó web não abre nenhuma.
         worktreeButton.isHidden = !supportsWorktree
@@ -293,8 +292,8 @@ class NodeView: NSView {
     /// Botão direito no cabeçalho: o que dá para fazer com este card.
     ///
     /// Só no cabeçalho: o corpo é do SwiftTerm e do WKWebView, cada um com o menu
-    /// de contexto dele — roubá-lo tiraria o "colar" do terminal e o "inspecionar"
-    /// do editor.
+    /// de contexto dele — roubá-lo tiraria o "colar" do terminal e o menu da
+    /// página.
     override func rightMouseDown(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
         guard local.y <= headerExtent, supportsEditing || supportsWorktree else {
@@ -393,13 +392,12 @@ class NodeView: NSView {
     ///
     /// É o mesmo que o WebKit faz ao arrastar uma janela para o Retina; a
     /// diferença é que o zoom do canvas ele não enxerga, porque a magnificação
-    /// mora num scroll view que não é dele. Sem isto o code-server desenha em 1x
-    /// e chega esticado — resolvido o terminal, o editor era o que sobrava
-    /// embaçado.
+    /// mora num scroll view que não é dele. Sem isto a página desenha em 1x e
+    /// chega esticada.
     ///
     /// API privada, então o `responds(to:)` não é decoração: sem ele, uma
-    /// versão de WebKit que largue o seletor derruba o app. Perder a nitidez do
-    /// editor é o pior que pode acontecer aqui.
+    /// versão de WebKit que largue o seletor derruba o app. Perder a nitidez da
+    /// página é o pior que pode acontecer aqui.
     private static func overrideDeviceScale(_ web: WKWebView, at scale: CGFloat) {
         let selector = Selector(("_setOverrideDeviceScaleFactor:"))
         guard web.responds(to: selector), let imp = web.method(for: selector) else { return }
@@ -504,7 +502,7 @@ class NodeView: NSView {
     // MARK: - Remoção
 
     /// O que o usuário perde ao remover este nó. Cada tipo responde por si —
-    /// terminal mata processo, editor não, e o diálogo precisa dizer qual é qual.
+    /// terminal mata processo, web não, e o diálogo precisa dizer qual é qual.
     var removalWarning: String {
         "O nó sai do canvas e do workbenches.json."
     }

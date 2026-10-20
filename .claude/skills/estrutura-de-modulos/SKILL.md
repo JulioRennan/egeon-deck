@@ -32,9 +32,8 @@ app/Sources/EgeonDeck/
 │   ├── Mosaic/                 o modo mosaico
 │   ├── Nodes/                  NodeConfig, NodeView e os concretos
 │   │   └── Features/
-│   │       ├── AgentNode/      contrato genérico de agente (AgentProfile)
+│   │       └── AgentNode/      contrato genérico de agente (AgentProfile)
 │   │       │   └── Features/ClaudeCode/   o que é SÓ do Claude Code
-│   │       └── EditorNode/     EditorNode + CodeServer
 │   ├── Notifications/          Activity, HookEvent, Spinner, AttentionSound
 │   ├── Trace/                  trilha da bancada: TraceEntry, TraceLog
 │   ├── Workbench/              WorkbenchConfig, Store, Template, worktree

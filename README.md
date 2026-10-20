@@ -1,7 +1,7 @@
 # Egeon Deck
 
 App macOS: um **canvas infinito onde cada nó é uma ferramenta de trabalho real** —
-editor de código, terminal comum, terminal rodando um agente de IA, navegador. Você
+terminal comum, terminal rodando um agente de IA, navegador. Você
 monta a bancada uma vez por projeto e ela fica em pé.
 
 O ponto não é "mais um workspace manager". É **dirigir vários agentes de IA em
@@ -16,11 +16,10 @@ Uso pessoal, um usuário, macOS. Não há multiusuário, telemetria, nem servido
 |---|---|
 | macOS 14+ | as barras usam vidro (`NSGlassEffectView`) no 26+; abaixo disso caem sozinhas num fundo semiopaco |
 | Xcode ou Command Line Tools | só se for compilar. Há zip pronto nas [releases](https://github.com/JulioRennan/egeon-deck/releases), mas o app é Swift/SPM e quem clona compila |
-| [`code-server`](https://github.com/coder/code-server) | é o nó de editor. `brew install code-server`. Procurado em `/opt/homebrew/bin`, `/usr/local/bin` e `~/.local/bin` |
 | um CLI de agente | o que você já usa. Vêm configurados `claude`, `codex`, `opencode` e `gemini`; qualquer outro entra em `~/.egeon/agents.json` |
 
-Nenhum deles é verificado no arranque: sem `code-server` o nó de editor não sobe e o
-resto funciona igual.
+O CLI não é verificado no arranque: sem ele o nó de agente não sobe e o resto
+funciona igual.
 
 ## Instalar
 
@@ -79,7 +78,7 @@ export EG_SIGN_ID="nome-do-certificado"
 
 1. `+` na barra da esquerda cria uma bancada — uma pasta e os nós abertos sobre ela.
 2. Na barra de baixo, escolha a ferramenta e clique (ou arraste) no canvas para criar
-   o nó: terminal, editor, navegador.
+   o nó: terminal ou navegador.
 3. O nó de terminal tem um endereço — `bancada/id`, por exemplo `deck/claude-1`. É por
    ele que se manda prompt de fora.
 4. Arraste a porta `+` de um card até outro para **ligar** dois agentes: dali em
@@ -191,8 +190,8 @@ Egeon não escreve em nenhuma delas.
 
 ## Dirigir de fora
 
-O app fala HTTP por um socket unix em `~/.egeon/sock`. É como a extensão do editor
-conversa com ele, e é como se testa o app sem tocar na tela:
+O app fala HTTP por um socket unix em `~/.egeon/sock`. É como os agentes conversam
+com ele, e é como se testa o app sem tocar na tela:
 
 ```bash
 curl --unix-socket ~/.egeon/sock http://eg/targets
@@ -226,7 +225,7 @@ verdade, e o dev, que é o que se derruba.
 ./app/dev.sh debug stable # mexe no estável — mata seus agentes
 ```
 
-O dev usa `~/.egeon-dev/`, socket próprio, log próprio e outra porta de code-server.
+O dev usa `~/.egeon-dev/`, socket próprio e log próprio.
 
 ## Mais fundo
 
@@ -238,6 +237,6 @@ tmux ou detecção de ociosidade: essas já custaram protótipo.
 ## Licença
 
 AGPL-3.0-only, texto completo em [`LICENSE`](LICENSE). Copyleft forte e **de rede**: o
-app é um servidor (socket de controle em HTTP, code-server numa porta), e sob GPL
+app é um servidor (socket de controle em HTTP), e sob GPL
 comum quem o hospedasse como serviço não deveria nada a ninguém. Não impede vender nem
 usar comercialmente; impede fechar o fonte.

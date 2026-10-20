@@ -13,13 +13,13 @@ final class MaestroLinksLayoutTests: XCTestCase {
 
     func testMaestroReachesEveryoneAndAgentsReachBack() {
         let bench = WorkbenchConfig(name: "deck", path: "/tmp", nodes: [
-            node("m", .agent, maestro: true), node("a", .agent), node("dev", .shell), node("ed", .editor)])
+            node("m", .agent, maestro: true), node("a", .agent), node("dev", .shell), node("docs", .web)])
         let edges = MaestroLinks.effective(bench)
         XCTAssertTrue(edges.contains(EdgeConfig(from: "m", to: "a")))
         XCTAssertTrue(edges.contains(EdgeConfig(from: "a", to: "m")), "é por onde chega a resposta")
         XCTAssertTrue(edges.contains(EdgeConfig(from: "m", to: "dev")))
         XCTAssertFalse(edges.contains(EdgeConfig(from: "dev", to: "m")), "shell não responde")
-        XCTAssertFalse(edges.contains { $0.to == "ed" }, "editor não é alvo")
+        XCTAssertFalse(edges.contains { $0.to == "docs" }, "web não é alvo")
         XCTAssertTrue(edges.allSatisfy { $0.maxSends == nil }, "implícita: só o teto da bancada")
         XCTAssertEqual(bench.edgeList, [], "nada se desenha")
     }

@@ -202,19 +202,6 @@ final class WorkbenchShell: NSView {
         }
     }
 
-    /// O foco está dentro de um EDITOR.
-    ///
-    /// Mora aqui, e não no canvas, porque em mosaico o canvas está fora da
-    /// hierarquia e `window` é nulo lá — a resposta sairia sempre falsa.
-    var focusIsInsideEditor: Bool {
-        var view = window?.firstResponder as? NSView
-        while let current = view {
-            if current is EditorNode { return true }
-            view = current.superview
-        }
-        return false
-    }
-
     /// O foco está numa caixa de texto do app — o composer do chat, um campo de
     /// formulário. Ali ⌘← e ⌘→ são "início" e "fim da linha", e um item de menu
     /// com esse atalho é consultado ANTES do responder chain: habilitado, ele

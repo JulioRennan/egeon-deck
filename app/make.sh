@@ -116,7 +116,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSMicrophoneUsageDescription</key>
   <string>O $DISPLAY usa o microfone para o ditado por voz dos agentes que rodam nos terminais.</string>
 
-  <!-- O nó de editor carrega http://127.0.0.1 (code-server local).
+  <!-- O nó web abre servidor local (http://127.0.0.1, o `npm run dev`).
        Sem esta exceção o ATS bloqueia HTTP e o WKWebView mostra erro. -->
   <key>NSAppTransportSecurity</key>
   <dict>

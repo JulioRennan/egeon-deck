@@ -1,7 +1,7 @@
 # Egeon Deck
 
 App macOS de uso pessoal: um **canvas infinito onde cada nó é uma ferramenta de
-trabalho real** — editor, terminal, agente de IA, navegador. O ponto é dirigir
+trabalho real** — terminal, agente de IA, navegador. O ponto é dirigir
 vários agentes em paralelo: cada um vive num terminal endereçável, recebe prompt
 por injeção e avisa quando precisa de você. Um usuário, sem distribuição.
 
@@ -32,7 +32,6 @@ app/Sources/EgeonDeck/
 │   ├── Mosaic/          o modo mosaico
 │   ├── Nodes/           NodeConfig, NodeView, NodeTemplate + concretos
 │   │   └ Features/AgentNode (contrato genérico → Features/ClaudeCode)
-│   │   └ Features/EditorNode (EditorNode + CodeServer)
 │   ├── Notifications/   Activity, HookEvent, Spinner, AttentionSound
 │   ├── Trace/           trilha da bancada — TraceEntry, TraceLog, ShellHook
 │   ├── Workbench/       WorkbenchConfig, Store, WorkbenchTemplate, worktree
@@ -67,7 +66,7 @@ app/Sources/EgeonDeck/
   workspace (`members`): a pasta dele é `projects/<id>/` com um link por repo,
   e em worktree vira `worktrees/<multi>/<branch>/<repo>`.
 - **Bancada** — uma frente de trabalho: pasta + nós abertos sobre ela.
-- **Nó** — um card: `editor` · `shell` · `agent` · `web`. `NodeConfig` é a
+- **Nó** — um card: `shell` · `agent` · `web` (o `editor`, VSCode, saiu — ADR-076). `NodeConfig` é a
   montagem; conversa nunca é copiada junto (`withoutConversation`).
 - **Endereço** — `bancada/id` (ex. `deck/revisor`); estável. A bancada tem
   ainda um `id` próprio (8 hex) que sobrevive a rename e não se repete — é por
@@ -188,7 +187,6 @@ app/Sources/EgeonDeck/
 | bundle | `/Applications/Egeon Deck.app` | `app/build/EgeonDeck Dev.app` |
 | config · socket | `~/.egeon/` | `~/.egeon-dev/` |
 | log | `~/egeon.log` | `~/egeon-dev.log` |
-| code-server | 8391 | 8392 |
 
 - `./app/dev.sh` reconstrói o DEV. **Rebuild do estável mata os agentes em
   andamento** — só com pedido explícito (`./app/install.sh`).

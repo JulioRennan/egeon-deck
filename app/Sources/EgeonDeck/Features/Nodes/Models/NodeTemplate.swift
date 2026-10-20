@@ -224,9 +224,9 @@ enum NodeTemplateStore {
 
     static func load() -> [String: NodeTemplate] {
         guard let data = try? Data(contentsOf: configURL),
-              let map = try? JSONDecoder().decode([String: NodeTemplate].self, from: data)
+              let map = try? JSONDecoder().decode([String: Retirable<NodeTemplate>].self, from: data)
         else { return [:] }
-        return map
+        return map.compactMapValues(\.value)
     }
 
     /// Ordem estável: a de um dicionário muda a cada execução, e o menu de

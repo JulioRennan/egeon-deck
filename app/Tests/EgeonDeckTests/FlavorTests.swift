@@ -22,13 +22,6 @@ final class FlavorTests: XCTestCase {
         XCTAssertTrue(Flavor.dev.logPath.hasSuffix("/egeon-dev.log"))
     }
 
-    // Porta repetida faz o segundo app a subir matar o code-server do outro,
-    // achando que é órfão.
-    func testCodeServerPortsDiffer() {
-        XCTAssertEqual(Flavor.stable.codeServerPort, 8391)
-        XCTAssertEqual(Flavor.dev.codeServerPort, 8392)
-    }
-
     // Sem bundle (swift run, swift test) assume estável.
     func testCurrentWithoutBundleIsStable() {
         XCTAssertEqual(Flavor.current, .stable)

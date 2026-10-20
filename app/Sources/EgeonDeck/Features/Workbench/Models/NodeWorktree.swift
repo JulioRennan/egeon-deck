@@ -71,9 +71,7 @@ struct NodeWorktree {
 enum NodeWorktreePlanner {
     /// Levanta o estado de cada nó que tem pasta.
     ///
-    /// Nó `web` fica fora: ele não abre pasta nenhuma. Editor entra junto dos
-    /// terminais — ele também resolve `cwd`, e um editor apontado para o repo
-    /// vizinho tem o mesmo problema.
+    /// Nó `web` fica fora: ele não abre pasta nenhuma.
     static func inspect(_ config: WorkbenchConfig,
                         workbenchRoot: String,
                         branch: String) -> [NodeWorktree] {

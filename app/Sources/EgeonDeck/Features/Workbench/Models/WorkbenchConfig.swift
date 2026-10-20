@@ -91,7 +91,7 @@ struct WorkbenchConfig: Codable {
         id = try c.decodeIfPresent(String.self, forKey: .id) ?? WorkbenchConfig.newID()
         name = try c.decode(String.self, forKey: .name)
         path = try c.decode(String.self, forKey: .path)
-        nodes = try c.decodeIfPresent([NodeConfig].self, forKey: .nodes) ?? []
+        nodes = try c.decodeNodes(forKey: .nodes) ?? []
         template = try c.decodeIfPresent(String.self, forKey: .template)
         project = try c.decodeIfPresent(String.self, forKey: .project)
         edges = try c.decodeIfPresent([EdgeConfig].self, forKey: .edges)
