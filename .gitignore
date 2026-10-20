@@ -1,7 +1,6 @@
 # Build artifacts
 app/.build/
 app/build/
-extension/node_modules/
 
 # Runtime state — dados de sessão, não fonte.
 # Barra no meio do padrão ancora na raiz, então precisa de **/ para pegar as

@@ -754,7 +754,7 @@ final class Target {
         let item = queue.removeFirst()
         // O agente ganhou o que fazer: o aviso anterior está resolvido.
         inputArrived()
-        // Pedido seu (chat, extensão), não de agente: a conversa recomeça de
+        // Pedido seu (chat, socket), não de agente: a conversa recomeça de
         // você, e a espera por vizinho de antes não cala mais o fim deste turno.
         if item.chain.isEmpty { awaitingPeers.clear() }
         // A cadeia da mensagem entregue passa a ser a deste terminal: é dela que
@@ -884,7 +884,7 @@ final class Dispatcher {
     /// Troca o endereço de um alvo vivo, sem derrubar o pty.
     ///
     /// Renomear a bancada muda a primeira parte do endereço. Sem re-chavear aqui,
-    /// o `/dispatch` da extensão continuaria procurando o nome antigo e não
+    /// o `/dispatch` continuaria procurando o nome antigo e não
     /// acharia mais ninguém.
     func rekey(from old: String, to new: String) {
         guard old != new, let target = targets.removeValue(forKey: old) else { return }
@@ -919,7 +919,7 @@ final class Dispatcher {
 
     /// De qual terminal partiu a conexão aberta em `fd`, se de algum.
     ///
-    /// Nil significa "não veio de terminal nenhum" — a extensão do VSCode, um
+    /// Nil significa "não veio de terminal nenhum" — o chat, um
     /// `curl` seu, um teste. Esse caso é VOCÊ, e é o único que entrega sem as
     /// guardas de cadeia.
     func target(callingOn fd: Int32) -> Target? {
@@ -943,7 +943,7 @@ final class Dispatcher {
             case .unknownTarget(let target, let available):
                 return "alvo desconhecido '\(target)'. disponíveis: \(available.joined(separator: ", "))"
             case .emptyPrompt:
-                return "requisição não produziu prompt (kind/text/comments vazios?)"
+                return "requisição não produziu prompt (text vazio?)"
             case .unknownSender(let from):
                 return "remetente desconhecido '\(from)'"
             case .notLinked(let from, let to):

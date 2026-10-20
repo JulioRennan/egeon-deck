@@ -5,8 +5,7 @@ import Foundation
 /// `~/.egeon-dev/sock` na cópia de desenvolvimento.
 ///
 /// Unix domain socket, não porta TCP — nada exposto na rede. Fala HTTP/1.1
-/// mínimo só para permitir testar com `curl --unix-socket` antes de existir
-/// qualquer extensão do VSCode.
+/// mínimo para dirigir e testar com `curl --unix-socket`.
 ///
 ///   curl --unix-socket ~/.egeon/sock -X POST http://eg/dispatch \
 ///        -d '{"target":"deck/claude-1","kind":"raw","text":"oi"}'
@@ -192,30 +191,15 @@ final class ControlSocket {
         let method = parts.first ?? ""
         let route = parts.count > 1 ? parts[1] : ""
 
-        // Rota sem a query. `/targets?folder=…` não termina em "/targets", e o
+        // Rota sem a query: `/dispatch?…` não termina em "/dispatch", e o
         // pedido cairia direto no 404.
         let bare = route.split(separator: "?").first.map(String.init) ?? route
 
         switch (method, bare.hasSuffix("/targets"), bare.hasSuffix("/dispatch")) {
         case ("GET", true, _):
-            // `folder` é como a extensão do editor pergunta "quem posso acionar
-            // DAQUI": sem ele a lista é global, e o editor de um projeto
-            // oferecia terminal de outro, que não tem nada a ver com o arquivo
-            // aberto. `all` acompanha para quem escolhe de propósito atravessar
-            // bancada continuar podendo.
-            let folder = Self.query(in: route)["folder"] ?? ""
             let payload = DispatchQueue.main.sync { () -> [String: Any] in
                 let all = Dispatcher.shared.activeAddresses
-                guard !folder.isEmpty else { return ["targets": all, "all": all] }
-                let workbench = AppControl.workbenchOwning?(folder) ?? ""
-                return ["targets": workbench.isEmpty
-                            ? [] : all.filter { $0.hasPrefix(workbench + "/") },
-                        "all": all,
-                        "workbench": workbench,
-                        // `session` é o nome antigo da chave. Fica por uma versão: a
-                        // extensão instalada no code-server lê ela, e trocar as duas
-                        // pontas no mesmo commit não atualiza quem já está rodando.
-                        "session": workbench]
+                return ["targets": all, "all": all]
             }
             respond(fd, status: "200 OK", json: payload)
 

@@ -1,8 +1,8 @@
 import XCTest
 @testable import EgeonDeck
 
-/// O prompt que o socket entrega, nas quatro formas: raw, task, review e o
-/// envelope entre agentes.
+/// O prompt que o socket entrega, nas três formas: raw, task e o envelope
+/// entre agentes.
 final class DispatchRequestTests: XCTestCase {
     private func request(_ json: String) throws -> DispatchRequest {
         try JSONDecoder().decode(DispatchRequest.self, from: Data(json.utf8))
@@ -27,22 +27,10 @@ final class DispatchRequestTests: XCTestCase {
                        "[ED] a.swift\n\ntroque X\n\nAplique no código.")
     }
 
-    func testReviewQuotesEveryLineOfTheSelection() throws {
-        let req = try request("""
-            {"target":"ws/t1","kind":"review","file":"doc.md",
-             "comments":[{"line":3,"quote":"um\\ndois","body":"ajuste"}]}
-            """)
-        let prompt = try XCTUnwrap(req.buildPrompt())
-        // A seleção atravessa parágrafos: TODA linha citada leva o prefixo,
-        // senão o agente não sabe onde a citação termina.
-        XCTAssertTrue(prompt.contains("  > um\n  > dois"))
-        XCTAssertTrue(prompt.contains("L3"))
-        XCTAssertTrue(prompt.contains("    ajuste"))
-        XCTAssertTrue(prompt.hasPrefix("[ED] review de doc.md"))
-    }
-
-    func testReviewWithoutCommentsIsNothing() throws {
-        let req = try request(#"{"target":"ws/t1","kind":"review","file":"doc.md"}"#)
+    // O review da extensão saiu (ADR-075): o tipo antigo cai no raw, e sem
+    // texto não há o que entregar.
+    func testRemovedReviewKindDeliversNothing() throws {
+        let req = try request(#"{"target":"ws/t1","kind":"review","file":"doc.md","comments":[{"body":"x"}]}"#)
         XCTAssertNil(req.buildPrompt())
     }
 

@@ -33,6 +33,10 @@ citados entre parênteses.
 - Renomear um terminal ou marcá-lo como maestro pelo formulário não abre mais uma conversa nova: o agente reinicia e retoma a mesma conversa (desde que o CLI e a pasta sejam os mesmos). O ultracode e o endereço de nó web também não se perdem mais ao aplicar o formulário.
 - ⌘-clique em caminho relativo no terminal abre o arquivo mesmo com a pontuação da frase grudada (`docs/a.md.`, `(README.md)`), e passa a funcionar também em nome solto, sem barra (`README.md`, `main.swift:42`), quando o arquivo existe na pasta do terminal.
 
+### Removido
+
+- A extensão **Egeon Spec** do editor (code-server): o preview de markdown com comentário inline e o botão **Request changes** que mandava os comentários ao agente. O `.md` volta a abrir como texto no editor, e a extensão que as versões anteriores instalaram é apagada no arranque (ADR-075).
+
 ## [1.2.0] - 2026-10-06
 
 ### Adicionado

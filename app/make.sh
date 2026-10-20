@@ -80,23 +80,6 @@ if [ -f Resources/icon.png ]; then
   rm -rf "$WORK"
 fi
 
-# A extensão do code-server vai dentro do bundle: ela é parte do produto — sem
-# ela o .md abre como texto e o request changes não existe —, e quem recebe o app
-# copiado não tem o repositório para rodar o install.sh. Quem cria o link na
-# pasta de extensões do flavor é o app, no arranque.
-#
-# `node_modules` junto (2,7 MB) porque a extensão depende do markdown-it em
-# runtime e não há passo de bundling aqui.
-if [ -d ../extension ]; then
-  if [ -d ../extension/node_modules ]; then
-    mkdir -p "$APP/Contents/Resources"
-    rm -rf "$APP/Contents/Resources/extension"
-    cp -R ../extension "$APP/Contents/Resources/extension"
-  else
-    echo "aviso: ../extension sem node_modules — a extensão NÃO vai no bundle"
-    echo "       rode 'npm install' em extension/ e refaça o build"
-  fi
-fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

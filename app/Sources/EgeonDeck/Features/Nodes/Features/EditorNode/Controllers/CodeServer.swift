@@ -72,10 +72,6 @@ final class CodeServer {
     /// Control — a tela enchia de repositório que não é o desta bancada. Quem
     /// quiser ver outra worktree abre outra bancada, que é o que o worktree do
     /// Egeon faz.
-    ///
-    /// `egeon.socketPath` é do flavor, e tem de ser: o padrão da extensão é
-    /// `~/.egeon/sock`, então o code-server do dev mandava os request changes
-    /// para o app ESTÁVEL — chegavam, no terminal errado, sem erro nenhum.
     private static var managedSettings: [String: Any] {
         [
             "security.workspace.trust.enabled": false,
@@ -85,8 +81,7 @@ final class CodeServer {
             "window.menuBarVisibility": "hidden",
             "workbench.colorTheme": "Default Dark Modern",
             "git.detectWorktrees": false,
-            "git.openRepositoryInParentFolders": "never",
-            "egeon.socketPath": ControlSocket.path
+            "git.openRepositoryInParentFolders": "never"
         ]
     }
 
@@ -119,70 +114,18 @@ final class CodeServer {
         }
     }
 
-    /// Garante a extensão de review de markdown instalada, a partir da cópia que
-    /// vive dentro do bundle.
+    /// Tira a extensão de review de markdown que versões anteriores
+    /// instalavam (ADR-075).
     ///
-    /// O app instala, e não um script que alguém tem de lembrar de rodar, porque
-    /// a extensão é parte do produto: sem ela o `.md` abre como texto e o request
-    /// changes não existe. Quem recebe o app copiado não tem o repositório para
-    /// rodar script nenhum.
-    ///
-    /// Symlink, e não cópia: o code-server varre a pasta de extensões e segue
-    /// link (ADR-004). Refeito a cada arranque porque o `make.sh` apaga o bundle
-    /// inteiro, e o link do arranque anterior aponta para o que não existe mais.
-    private func seedExtension() {
-        guard let source = Bundle.main.resourceURL?
-            .appendingPathComponent("extension"),
-              FileManager.default.fileExists(atPath: source.path) else {
-            // `swift run` não tem bundle, e aí a extensão vem do install.sh.
-            Log.write("code-server: extensão não veio no bundle — "
-                      + "rode extension/install.sh se precisar dela", key: "extension.missing")
-            return
-        }
-
-        let version = (try? Data(contentsOf: source.appendingPathComponent("package.json")))
-            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-            .flatMap { $0?["version"] as? String } ?? "0.1.0"
-
+    /// Ela era um link na pasta de extensões apontando para o bundle ou para o
+    /// repositório; com a fonte apagada o link fica quebrado, e o code-server
+    /// passava a reclamar dele a cada varredura.
+    private func removeRetiredExtension() {
         let dir = root.appendingPathComponent("extensions")
-        let link = dir.appendingPathComponent("egeon.spec-\(version)")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        clearObsolete(in: dir, id: "egeon.spec-\(version)")
-
-        // `destinationOfSymbolicLink` e não `fileExists`: link quebrado responde
-        // que não existe, e aí o create falharia com "arquivo já existe".
-        let current = try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)
-        guard current != source.path else { return }
-
-        try? FileManager.default.removeItem(at: link)
-        do {
-            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: source)
-            Log.write("code-server: extensão instalada — \(link.path) -> \(source.path)")
-        } catch {
-            Log.write("code-server: não consegui instalar a extensão — \(error)")
-        }
-    }
-
-    /// Tira a nossa extensão do `.obsolete` do code-server.
-    ///
-    /// Ele marca ali o que considera desinstalado e ignora na varredura. Duas
-    /// pastas apontando para a mesma extensão — que é o que sobra de uma
-    /// renomeação — são lidas como o mesmo id, e ele "desinstala" a duplicata:
-    /// a extensão some sem erro nenhum, e reinstalar não resolve enquanto a
-    /// marca continuar lá.
-    ///
-    /// Só a nossa chave sai; o resto do arquivo é dele.
-    private func clearObsolete(in directory: URL, id: String) {
-        let file = directory.appendingPathComponent(".obsolete")
-        guard let data = try? Data(contentsOf: file),
-              var marks = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              marks[id] != nil else { return }
-
-        marks[id] = nil
-        if let updated = try? JSONSerialization.data(withJSONObject: marks) {
-            try? updated.write(to: file)
-            Log.write("code-server: \(id) estava marcada como desinstalada — marca removida")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        for name in names where name.hasPrefix("egeon.spec-") {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+            Log.write("code-server: extensão aposentada removida — \(name)")
         }
     }
 
@@ -215,7 +158,7 @@ final class CodeServer {
 
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         seedSettings()
-        seedExtension()
+        removeRetiredExtension()
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: binary)

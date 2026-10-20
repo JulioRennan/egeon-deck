@@ -458,9 +458,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { return nil }
             return shell.chat.compose(text, send: send)
         }
-        AppControl.workbenchOwning = { [weak self] folder in
-            self?.workbenchOwning(folder: folder)
-        }
         AppControl.setEdgeDirection = { [weak self] workbench, from, to, direction in
             guard let self,
                   let index = self.configs.firstIndex(where: { $0.name == workbench })
@@ -2548,27 +2545,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard changed else { return }
         schedulePersist()
-    }
-
-    /// Qual bancada é dona de uma pasta.
-    ///
-    /// Primeiro pelas pastas que os nós de editor de fato abriram, que é resposta
-    /// exata. Só depois pelo caminho da bancada, e aí o mais específico ganha:
-    /// duas bancadas podem apontar para o mesmo repositório em worktrees
-    /// diferentes, e a worktree é sempre o caminho mais longo — comparar pela
-    /// primeira que casa daria a resposta do checkout principal.
-    private func workbenchOwning(folder raw: String) -> String? {
-        let folder = URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
-            .standardized.path
-        for config in configs {
-            for node in config.nodes where node.type == .editor {
-                if config.directory(for: node) == folder { return config.name }
-            }
-        }
-        return configs
-            .filter { folder == $0.url.path || folder.hasPrefix($0.url.path + "/") }
-            .max { $0.url.path.count < $1.url.path.count }?
-            .name
     }
 
     private func makeNode(_ raw: NodeConfig, in config: WorkbenchConfig, frame: NSRect) -> NodeView {

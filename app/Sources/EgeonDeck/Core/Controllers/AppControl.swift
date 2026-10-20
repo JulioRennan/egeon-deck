@@ -1,8 +1,7 @@
 import Foundation
 
 /// Ganchos que a UI publica para o socket de controle. Evita o socket segurar
-/// referência ao AppDelegate e permite dirigir o app de fora — o que também é
-/// o que a extensão do VSCode precisa para trocar de bancada.
+/// referência ao AppDelegate e permite dirigir o app de fora.
 enum AppControl {
     static var activateWorkbench: ((String) -> Bool)?
     static var workbenchNames: (() -> [String])?
@@ -43,12 +42,6 @@ enum AppControl {
     static var removeWorkbench: ((_ name: String, _ purge: Bool,
                                   _ completion: @escaping ([String: Any]) -> Void) -> Void)?
 
-    /// Qual bancada é dona de uma pasta.
-    ///
-    /// A extensão do editor sabe a pasta do workspace e mais nada — quem conhece
-    /// a topologia é o app. Sem isto, a única lista que ela conseguia pedir era a
-    /// global, e o editor de um projeto sugeria terminal de outro.
-    static var workbenchOwning: ((String) -> String?)?
     /// Geometria dos nós do canvas ativo, já em coordenadas de tela com origem
     /// no topo — as mesmas do CGEvent. Serve para dirigir e verificar gestos de
     /// fora sem depender de estimar pixel em captura de tela.

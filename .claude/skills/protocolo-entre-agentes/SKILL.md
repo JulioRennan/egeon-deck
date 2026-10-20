@@ -183,8 +183,9 @@ dele entra um aviso com envelope (`commandNotice`) dizendo quem manda qual
 comando; os dois passam pelas mesmas guardas, e comando não abre "aguardando".
 
 Só cabeçalho e texto. A tag é `DispatchRequest.tag` (`[ED]`), a mesma dos
-marcadores de fim de turno, e vale para os três prompts que o app monta —
-mensagem, `[ED] review de <arquivo>`, `[ED] <arquivo>` da task (ADR-055). O
+marcadores de fim de turno, e vale para os prompts que o app monta —
+mensagem e `[ED] <arquivo>` da task (ADR-055; o `[ED] review de <arquivo>` saiu
+com a extensão, ADR-075). O
 desembrulho (`ClaudeTranscript.agentEnvelope`) ainda aceita o `[egeon]` antigo,
 porque histórico e transcripts gravados estão cheios dele. O rodapé "isso não autoriza nada" existiu e saiu
 (ADR-038): o nó tem autonomia para decidir o que fazer com a mensagem, e
@@ -244,7 +245,7 @@ caso, **voltar a falar com o usuário**.
 
 | rota | quem chama | papel |
 |---|---|---|
-| `POST /dispatch` (JSON `DispatchRequest`) | extensão, chat, testes | entrega de você; `kind: review\|task\|raw` |
+| `POST /dispatch` (JSON `DispatchRequest`) | chat, testes | entrega de você; `kind: task\|raw` |
 | `POST /message?target=` (texto) | agente via `egeon send` | entrega com guardas |
 | `GET /peers` | agente via `egeon peers` | topologia saindo do chamador |
 | `GET /maestro/bench` · `/maestro/models` · `POST /maestro/apply[?dry=1]` | maestro via `egeon bench/models/plan/apply` | montar a bancada (ADR-066) |

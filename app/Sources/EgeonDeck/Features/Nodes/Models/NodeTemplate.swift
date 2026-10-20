@@ -260,7 +260,7 @@ enum NodeTemplateStore {
     /// `front end` → `front-end`.
     ///
     /// O nome vira id, e o id entra no endereço de dispatch, que viaja em query
-    /// string até a extensão do VSCode. Espaço e barra ali dão dor de cabeça.
+    /// string. Espaço e barra ali dão dor de cabeça.
     static func identifier(from name: String) -> String {
         let lowered = name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let allowed = CharacterSet(charactersIn:

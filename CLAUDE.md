@@ -7,7 +7,6 @@ por injeção e avisa quando precisa de você. Um usuário, sem distribuição.
 
 ```
 app/          executável Swift (SPM) → EgeonDeck.app
-extension/    extensão VSCode/code-server — review inline de markdown
 docs/         00-prior-art · 01-decisoes (ADRs) · 02-mvp
 poc/          protótipos descartados
 ```

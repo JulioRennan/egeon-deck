@@ -4207,3 +4207,22 @@ aceito vale, `/private` mantido, fontes com git de verdade). No pty, os quatro
 casos acima. No DEV, um agente na pasta de multi-projeto subiu direto no
 prompt, com "herdou de app" no log.
 
+## ADR-075 — A extensão de review de markdown sai
+
+**Decisão.** A extensão `egeon.spec` do code-server (pasta `extension/`) sai
+inteira, a pedido, por falta de uso: o custom editor que abria todo `.md`
+renderizado, os comentários inline ancorados por conteúdo (ADR-005/005b) e o
+"Request changes" que juntava os comentários num prompt para o agente. O
+chat e o `egeon send` cobrem o pedir mudança ao agente.
+
+**O que sai junto.** O `kind: "review"` do `/dispatch` (e o
+`DispatchComment`) — um pedido antigo com ele cai no raw e, sem `text`, não
+entrega nada; a cópia da extensão para dentro do bundle no `make.sh`; a
+chave `egeon.socketPath` das configurações do code-server; e o filtro
+`/targets?folder=` com o `AppControl.workbenchOwning`, que só a extensão
+usava para oferecer os terminais da bancada do arquivo aberto. O
+`kind: "task"` fica: é do socket, não da extensão.
+
+**Instalações antigas.** O app criava um link `egeon.spec-<versão>` na pasta de
+extensões do flavor; sem a fonte o link fica quebrado. O `CodeServer` agora
+apaga esses links no arranque.

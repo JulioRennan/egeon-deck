@@ -17,7 +17,8 @@ Um app com **sessões na barra lateral**. Cada sessão tem um canvas com nós:
 
 E um fluxo de **request changes** sobre arquivos `.md` que o agente escreveu:
 você comenta inline no diff, aperta um botão, os comentários viram um prompt
-único na sessão viva do agente.
+único na sessão viva do agente. *Removido depois* — a extensão saiu inteira
+([ADR-075](01-decisoes.md)).
 
 ## Modelo de nós
 
@@ -200,7 +201,7 @@ Socket unix em `~/.egeon/sock` (não porta TCP — nada exposto na rede).
 POST /dispatch
 {
   "target": "deck/claude-1",
-  "kind": "review",              // "review" | "task" | "raw"
+  "kind": "review",              // "review" | "task" | "raw" — review saiu (ADR-075)
   "file": "specs/pagamentos.md",
   "comments": [
     { "line": 12, "quote": "- [ ] retry no webhook", "body": "backoff exponencial, máx 5" },
@@ -227,6 +228,9 @@ linha o que mudou.
 Entra na fila do alvo, sai quando o pty ficar em silêncio pelo tempo do perfil.
 
 ## Ciclo de review
+
+> **Removido** ([ADR-075](01-decisoes.md)): a extensão `egeon.spec`, o preview
+> e o request changes saíram. Fica aqui como registro do que existiu.
 
 ```
 1. clique no .md     → abre no custom editor egeon.spec, renderizado
@@ -317,7 +321,7 @@ ADR-014.
 **O Egeon escreve em dois lugares fora da casa dele.** Prioridade secundária —
 levantado e adiado em 20/08/2026, nenhum dos dois quebra nada hoje.
 
-O primeiro é a extensão: ela grava `egeon.target` com
+O primeiro era a extensão — *resolvido com a saída dela* (ADR-075): ela gravava `egeon.target` com
 `ConfigurationTarget.Workspace`, e isso vira `<pasta aberta>/.vscode/settings.json`
 — o repositório de quem usa. Quatro lugares em `extension/src/extension.js`
 escrevem: a escolha do QuickPick, duas limpezas quando o alvo morre, e o
@@ -338,6 +342,5 @@ CLAUDE.md já cobra para todo caminho novo.
 
 Nada disso vale para as `managedSettings` do `CodeServer.swift`: elas moram no
 perfil isolado do app (`~/.egeon/code-server/user-data/User/settings.json`) e não
-tocam o VSCode de ninguém. Das nove chaves, quatro se pagam — `egeon.socketPath`,
-`security.workspace.trust.enabled`, e o par de `git.detectWorktrees` /
+tocam o VSCode de ninguém. Das oito chaves, três se pagam — `security.workspace.trust.enabled` e o par de `git.detectWorktrees` /
 `git.openRepositoryInParentFolders`. As outras cinco são opinião.
