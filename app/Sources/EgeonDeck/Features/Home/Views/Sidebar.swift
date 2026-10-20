@@ -76,9 +76,10 @@ final class SidebarRow: NSView {
         nameLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         nameLabel.lineBreakMode = .byTruncatingTail
 
-        pathLabel.stringValue = config.exists
-            ? (config.path as NSString).abbreviatingWithTildeInPath
-            : "caminho não existe — \(config.path)"
+        // Pasta que existe: a linha é do cronômetro, que chega pelo `showClock`.
+        // Mostrar o caminho até lá era um lampejo de texto trocando a cada
+        // recriação da barra.
+        pathLabel.stringValue = config.exists ? "" : "caminho não existe — \(config.path)"
         pathLabel.font = .systemFont(ofSize: 10)
         pathLabel.textColor = config.exists
             ? NSColor(calibratedWhite: 1, alpha: 0.5)
@@ -787,6 +788,8 @@ final class Sidebar: NSView {
     }()
 
     private var rows: [SidebarRow] = []
+    private var lastSummaries: [String: ActivitySummary]?
+    private var lastClocks: [String: (WorkbenchClock, WorkbenchClock.Phase?)]?
     private var groups: [SidebarGroupRow] = []
     private var tree = WorkspaceTree(workspaces: [], workbenches: [])
     private let scroll = NSScrollView()
@@ -956,6 +959,11 @@ final class Sidebar: NSView {
         groups.forEach { $0.isCompact = isCompact }
         emptyLabel.isHidden = isCompact || !configs.isEmpty
         needsLayout = true
+        // As linhas nascem vazias — sem cronômetro, badge nem borda — e o laço
+        // de 0,12s só as preenche no tique seguinte: era a piscada a cada clique
+        // num projeto, que recria a barra. O último estado recebido vai junto.
+        if let lastSummaries { showActivity(lastSummaries) }
+        if let lastClocks { showClocks(lastClocks) }
     }
 
     private static func makeDivider() -> NSView {
@@ -1135,6 +1143,7 @@ final class Sidebar: NSView {
     /// que está na tela. Os grupos somam o que têm embaixo.
     /// Os cronômetros, por nome da bancada — a chave das linhas.
     func showClocks(_ clocks: [String: (WorkbenchClock, WorkbenchClock.Phase?)]) {
+        lastClocks = clocks
         for row in rows {
             guard let (clock, phase) = clocks[row.name] else { continue }
             row.showClock(clock, phase: phase)
@@ -1142,6 +1151,7 @@ final class Sidebar: NSView {
     }
 
     func showActivity(_ summaries: [String: ActivitySummary]) {
+        lastSummaries = summaries
         for row in rows { row.show(summaries[row.name] ?? ActivitySummary()) }
         for group in groups {
             let members: [Int]

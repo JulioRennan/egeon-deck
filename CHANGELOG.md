@@ -33,6 +33,7 @@ citados entre parênteses.
 
 ### Corrigido
 
+- As bancadas da barra lateral não piscam mais ao clicar num projeto (ou em qualquer coisa que redesenhe a barra): o cronômetro, o indicador de atividade e a borda já aparecem no lugar, em vez de surgirem um instante depois.
 - O app não cai mais, sem aviso e sem relatório, quando quem chamou o socket de controle desiste antes da resposta — o gancho do agente com o app ocupado por mais de 1 s, ou um agente interrompido no meio de um `egeon send`. Era a queda repetida em bancadas com muitos agentes (morte por SIGPIPE).
 - `egeon send` e `egeon peek` voltam a aceitar só o id do vizinho da mesma bancada (`testador` em vez de `testes-bancada/testador`), como o manual diz.
 - Renomear um terminal ou marcá-lo como maestro pelo formulário não abre mais uma conversa nova: o agente reinicia e retoma a mesma conversa (desde que o CLI e a pasta sejam os mesmos). O ultracode e o endereço de nó web também não se perdem mais ao aplicar o formulário.
