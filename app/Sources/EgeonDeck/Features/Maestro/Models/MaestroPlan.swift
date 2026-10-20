@@ -85,7 +85,6 @@ struct MaestroPlan: Equatable {
     }
 
     var rules: PlanField<String> = .keep
-    var maxVisits: PlanField<Int> = .keep
     var nodes: [Node] = []
     var remove: [String] = []
     var edges: [Edge] = []
@@ -101,7 +100,7 @@ struct MaestroPlan: Equatable {
     var layout: Bool?
 
     var isEmpty: Bool {
-        rules.isKeep && maxVisits.isKeep && nodes.isEmpty && remove.isEmpty
+        rules.isKeep && nodes.isEmpty && remove.isEmpty
             && edges.isEmpty && unlink.isEmpty && layout != true
     }
 }
@@ -124,14 +123,13 @@ extension MaestroPlan: Decodable {
     struct ParseError: Error, Equatable { let message: String }
 
     enum Keys: String, CodingKey, CaseIterable {
-        case rules, maxVisits, nodes, remove, edges, unlink, force, layout
+        case rules, nodes, remove, edges, unlink, force, layout
     }
 
     init(from decoder: Decoder) throws {
         try PlanKeys.check(decoder, Keys.self, path: "plano")
         let c = try decoder.container(keyedBy: Keys.self)
         rules = try c.field(String.self, .rules)
-        maxVisits = try c.field(Int.self, .maxVisits)
         nodes = try c.decodeIfPresent([Node].self, forKey: .nodes) ?? []
         remove = try c.decodeIfPresent([String].self, forKey: .remove) ?? []
         edges = try c.decodeIfPresent([Edge].self, forKey: .edges) ?? []

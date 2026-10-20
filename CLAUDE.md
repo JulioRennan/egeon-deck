@@ -29,7 +29,6 @@ app/Sources/EgeonDeck/
 │   ├── Dispatch/        fila, injeção, Target, guardas de cadeia
 │   ├── Home/            RootView, ViewToolbar, WorkbenchShell, Sidebar
 │   ├── Maestro/         o nó que monta a bancada — plano, planejador, manual
-│   ├── Mosaic/          o modo mosaico
 │   ├── Nodes/           NodeConfig, NodeView, NodeTemplate + concretos
 │   │   └ Features/AgentNode (contrato genérico → Features/ClaudeCode)
 │   ├── Notifications/   Activity, HookEvent, Spinner, AttentionSound
@@ -73,11 +72,13 @@ app/Sources/EgeonDeck/
   ele que o app guarda o que é de uma bancada (`shells`, `edgeControllers`,
   abas); posição na lista envelhece, e `WorkbenchLookup` faz a tradução.
 - **Aresta** — `from` pode acionar `to`. Vive na **bancada**, não no nó; nasce
-  bidirecional; guardas: aresta obrigatória, `maxSends`, `maxVisits`, fila.
+  bidirecional; guardas: aresta obrigatória, `maxSends` e fila por remetente — o
+  limite é só o da aresta (ADR-077).
 - **Conversa** — `conversationId` por nó agente; o CLI chama de sessão.
-- **Visualização** — canvas · mosaico · chat (⌥⌘1/2/3); o card é o MESMO
-  `NodeView` reparentado, o dono é o `WorkbenchShell`. Em chat o canvas fica
-  montado por baixo, coberto (o pty precisa do passe de layout).
+- **Visualização** — canvas · chat (⌥⌘1/2); o card é o MESMO `NodeView`, o
+  dono é o `WorkbenchShell`. Em chat o canvas fica montado por baixo, coberto
+  (o pty precisa do passe de layout), e o terminal mostrado no chat é o card
+  reparentado. O mosaico saiu (ADR-073).
 - **Abas** (ADR-061) — as bancadas ABERTAS numa faixa no topo do conteúdo, com
   os mesmos badges da barra lateral; a lateral continua sendo o catálogo (tudo
   que existe). **Fechar a aba não encerra a bancada**: sai da faixa, os

@@ -2,16 +2,16 @@ import AppKit
 
 
 /// Raiz: a barra de bancadas à esquerda e o conteúdo à direita — flutuando por cima
-/// dele no canvas, e ao LADO dele no mosaico.
+/// dele no canvas, e ao LADO dele no chat.
 ///
 /// A diferença é o que cada modo promete. O canvas é uma bancada com sobra de
-/// espaço, e ali a barra por cima do grid é o efeito desejado. O mosaico divide a
-/// janela inteira entre os cards, e sobreposição ali significa terminal coberto —
+/// espaço, e ali a barra por cima do grid é o efeito desejado. O chat ocupa a
+/// janela com conteúdo opaco, e sobreposição ali significa mensagem coberta —
 /// então ele cede a largura que a barra estiver ocupando.
 ///
 /// A bancada em si ocupa a janela inteira em todo modo; quem cede é só o
 /// conteúdo dela, via `WorkbenchShell.contentInset`. Assim a barra de cima é a
-/// mesma nos três modos e cobre a faixa da titlebar de ponta a ponta.
+/// mesma nos dois modos e cobre a faixa da titlebar de ponta a ponta.
 final class RootView: NSView {
     /// Margem do vidro até a borda da janela.
     private static let margin: CGFloat = 10
@@ -26,9 +26,9 @@ final class RootView: NSView {
     private let sidebarPanel: GlassPanel
     private var content: NSView?
 
-    /// A bancada na tela está em mosaico. Só muda o LAYOUT: ao lado em vez de por
-    /// cima. Não mexe em recolher.
-    private var isMosaic = false
+    /// O conteúdo na tela fica ao lado da barra, e não por baixo dela. Só muda o
+    /// LAYOUT. Não mexe em recolher.
+    private var isBeside = false
     /// Recolhida ao trilho. Quem muda isso é você — ⌘/ ou o botão da barra — e
     /// nada mais: nem o modo, nem o mouse passando por cima.
     private(set) var isCollapsed = false
@@ -54,17 +54,17 @@ final class RootView: NSView {
     /// canvas ela flutua por cima do grid, então enquadrar nós tem de descontar
     /// isto — e lido na hora, porque recolher a barra muda o número.
     var floatingSidebarInset: CGFloat {
-        isMosaic ? 0 : Self.margin + sidebarWidth + Self.gap
+        isBeside ? 0 : Self.margin + sidebarWidth + Self.gap
     }
 
     var contentFrame: NSRect { bounds }
 
     /// Quanto o conteúdo da bancada cede à barra lateral. No canvas nada: o grid
     /// corre por baixo do vidro, e é isso que faz a barra parecer flutuando. No
-    /// mosaico e no chat cede a largura de verdade — e a faixa que sobra não
+    /// chat cede a largura de verdade — e a faixa que sobra não
     /// aparece porque o fundo do shell é o mesmo 0.09 desta view.
     var contentInset: CGFloat {
-        isMosaic ? Self.margin + sidebarWidth + Self.gap : 0
+        isBeside ? Self.margin + sidebarWidth + Self.gap : 0
     }
 
     /// Quanto a bancada cede à barra lateral.
@@ -97,13 +97,13 @@ final class RootView: NSView {
     /// Fora do canvas a barra fica ao lado do conteúdo; no canvas, por cima do grid.
     ///
     /// Só o canvas tem folga: o grid corre até a borda e por baixo do vidro, e é isso
-    /// que faz a barra parecer flutuando. O mosaico divide a janela inteira com
-    /// conteúdo opaco, e sobreposição ali é terminal — ou mensagem — coberta.
+    /// que faz a barra parecer flutuando. O chat ocupa a janela com conteúdo
+    /// opaco, e sobreposição ali é mensagem coberta.
     ///
     /// Chamado por quem troca de modo e por quem troca de bancada.
-    func setMosaic(_ on: Bool) {
-        guard isMosaic != on else { return }
-        isMosaic = on
+    func setBeside(_ on: Bool) {
+        guard isBeside != on else { return }
+        isBeside = on
         relayout()
     }
 

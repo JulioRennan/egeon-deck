@@ -84,7 +84,7 @@ export EG_SIGN_ID="nome-do-certificado"
 4. Arraste a porta `+` de um card até outro para **ligar** dois agentes: dali em
    diante o primeiro pode acionar o segundo com `egeon send`.
 
-Atalhos que valem saber: `⌥⌘1`/`⌥⌘2` trocam canvas e mosaico, `⌘/` recolhe a barra de
+Atalhos que valem saber: `⌥⌘1`/`⌥⌘2` trocam canvas e chat, `⌘/` recolhe a barra de
 bancadas, `⌘1`…`⌘4` escolhem a ferramenta.
 
 ## O comando `egeon` e a trilha da bancada

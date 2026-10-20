@@ -93,6 +93,7 @@ final class ViewToolbar: NSView {
     static let height: CGFloat = 46
 
     var onSelect: ((ViewMode) -> Void)?
+    var onResetClock: (() -> Void)?
 
     /// Onde o título começa. A barra corre de borda a borda em todo modo e, com
     /// `fullSizeContentView`, os botões da janela ficam sempre em cima dela — o
@@ -106,7 +107,12 @@ final class ViewToolbar: NSView {
     private let pill = NSView()
     private let hint = NSTextField(labelWithString: "")
     private let title = NSTextField(labelWithString: "")
-    private let subtitle = NSTextField(labelWithString: "")
+    /// O cronômetro da bancada, no lugar do caminho — que foi para a dica do
+    /// título (ADR-074).
+    private let clock = NSTextField(labelWithString: "")
+    private var path = ""
+    private var shownClock: (WorkbenchClock, WorkbenchClock.Phase?)?
+    private var clockSignature = ""
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -132,10 +138,8 @@ final class ViewToolbar: NSView {
         title.lineBreakMode = .byTruncatingTail
         addSubview(title)
 
-        subtitle.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        subtitle.textColor = NSColor(calibratedWhite: 1, alpha: 0.4)
-        subtitle.lineBreakMode = .byTruncatingMiddle
-        addSubview(subtitle)
+        clock.lineBreakMode = .byTruncatingTail
+        addSubview(clock)
 
         hint.font = .systemFont(ofSize: 10)
         hint.textColor = NSColor(calibratedWhite: 1, alpha: 0.35)
@@ -147,8 +151,26 @@ final class ViewToolbar: NSView {
     /// Que bancada a barra está anunciando.
     func setWorkbench(name: String, path: String) {
         title.stringValue = name
-        subtitle.stringValue = path
+        self.path = path
         needsLayout = true
+    }
+
+    /// As três fases lado a lado, sempre as três: um zero também é leitura. A
+    /// fase em curso fica acesa, as outras apagadas.
+    func setClock(_ value: WorkbenchClock, phase: WorkbenchClock.Phase?) {
+        // Vem do laço do spinner: escrever o mesmo texto 8 vezes por segundo
+        // custaria redesenho à toa.
+        let signature = WorkbenchClockText.signature(value, phase: phase)
+        guard signature != clockSignature else { return }
+        clockSignature = signature
+        shownClock = (value, phase)
+        clock.attributedStringValue = WorkbenchClockText.attributed(value, phase: phase, size: 11)
+        needsLayout = true
+    }
+
+    private var clockTip: String {
+        guard let (value, _) = shownClock else { return "" }
+        return WorkbenchClockText.tooltip(value) + "\nclique para zerar"
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -183,19 +205,27 @@ final class ViewToolbar: NSView {
         }
 
         let esquerda = max(0, pill.frame.minX - Self.titleInset - margem)
-        title.frame = NSRect(x: Self.titleInset, y: 8, width: esquerda, height: 16)
-        subtitle.frame = NSRect(x: Self.titleInset, y: 25, width: esquerda, height: 13)
+        title.frame = NSRect(x: Self.titleInset, y: 5, width: esquerda, height: 16)
+        let clockWidth = min(esquerda, clock.intrinsicContentSize.width + 4)
+        clock.frame = NSRect(x: Self.titleInset, y: 26, width: clockWidth, height: 15)
 
         let direita = max(0, bounds.width - pill.frame.maxX - margem * 2)
         hint.frame = NSRect(x: pill.frame.maxX + margem, y: (bounds.height - 13) / 2,
                             width: direita, height: 13)
 
-        // O caminho é truncado no meio e a dica é a única forma de ler inteiro.
-        // Vive numa região da barra porque o campo saiu do hit test.
+        // As dicas vivem em regiões da barra porque os campos saíram do hit test.
         removeAllToolTips()
-        if !subtitle.stringValue.isEmpty {
-            addToolTip(subtitle.frame, owner: subtitle.stringValue as NSString, userData: nil)
+        if !path.isEmpty {
+            addToolTip(title.frame, owner: path as NSString, userData: nil)
         }
+        if shownClock != nil {
+            addToolTip(clock.frame, owner: clockTip as NSString, userData: nil)
+        }
+        window?.invalidateCursorRects(for: self)
+    }
+
+    override func resetCursorRects() {
+        if shownClock != nil { addCursorRect(clock.frame, cursor: .pointingHand) }
     }
 
     // MARK: A barra faz o que a titlebar faria
@@ -207,6 +237,15 @@ final class ViewToolbar: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 
     override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if shownClock != nil, clock.frame.contains(point) {
+            let menu = NSMenu()
+            let item = NSMenuItem(title: "Zerar cronômetro", action: #selector(resetClock), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            menu.popUp(positioning: nil, at: NSPoint(x: clock.frame.minX, y: clock.frame.maxY + 4), in: self)
+            return
+        }
         guard event.clickCount == 2 else {
             // `performDrag` roda o laço de arrasto do próprio AppKit — com snap às
             // bordas e a outros monitores, que um `setFrameOrigin` à mão não tem.
@@ -222,12 +261,14 @@ final class ViewToolbar: NSView {
         }
     }
 
-    /// Rótulo é texto, não botão: sobre o nome e o caminho da bancada o clique tem
+    @objc private func resetClock() { onResetClock?() }
+
+    /// Rótulo é texto, não botão: sobre o nome e o cronômetro da bancada o clique tem
     /// de continuar sendo clique na barra. `NSTextField` é `NSControl` e responde
     /// ao hit test mesmo sem ser editável nem selecionável.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let alvo = super.hitTest(point)
-        if alvo === title || alvo === subtitle || alvo === hint { return self }
+        if alvo === title || alvo === clock || alvo === hint { return self }
         return alvo
     }
 
@@ -242,7 +283,6 @@ final class ViewToolbar: NSView {
     func select(_ mode: ViewMode) {
         for (key, button) in buttons { button.isSelected = (key == mode) }
         switch mode {
-        case .mosaic: hint.stringValue = "as posições do canvas ficam guardadas"
         case .chat:   hint.stringValue = "os terminais continuam rodando"
         case .canvas: hint.stringValue = ""
         }

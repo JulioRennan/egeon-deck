@@ -22,11 +22,11 @@ final class WorkbenchConfigTests: XCTestCase {
         XCTAssertEqual(ws.targets(of: "c"), [])
     }
 
-    func testVisitLimitDefaultsToFour() throws {
-        let ws = try workbench(#"{"name":"deck","path":"/t","nodes":[]}"#)
-        XCTAssertEqual(ws.visitLimit, 4)
-        let strict = try workbench(#"{"name":"deck","path":"/t","nodes":[],"maxVisits":1}"#)
-        XCTAssertEqual(strict.visitLimit, 1)
+    // O teto de visitas da bancada saiu (ADR-077): o campo gravado antes não
+    // quebra a leitura.
+    func testOldMaxVisitsIsIgnored() throws {
+        let ws = try workbench(#"{"name":"deck","path":"/t","nodes":[],"maxVisits":10}"#)
+        XCTAssertEqual(ws.name, "deck")
     }
 
     // As três formas de cwd, cada uma com seu motivo. `..` resolve lexical

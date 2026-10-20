@@ -8,19 +8,10 @@ enum AppControl {
     /// Workspaces → projetos → nomes de bancada, como a barra lateral lista.
     static var workspacesSnapshot: (() -> [String: Any])?
 
-    /// Troca dois cards de painel no mosaico da bancada ativa.
-    ///
-    /// O gesto de arrastar o cabeçalho não é dirigível de fora — evento de mouse
-    /// sintético exige permissão de Acessibilidade, que a assinatura ad-hoc perde a
-    /// cada build (ADR-003). O que precisa ser verificado é o arranjo: quem foi para
-    /// qual painel, e se aquilo sobreviveu ao `workbenches.json`.
-    static var swapMosaic: ((_ workbench: String, _ first: String, _ second: String)
-                            -> [String: Any])?
-
     /// Direção de uma ligação: criar, apontar para um lado, ou ciclar.
     ///
-    /// Existe pelo mesmo motivo do `swapMosaic`: desenhar aresta é arrasto e trocar
-    /// direção é clique num botão de 24pt, e nenhum dos dois é dirigível de fora —
+    /// Desenhar aresta é arrasto e trocar direção é clique num botão de 24pt, e
+    /// nenhum dos dois é dirigível de fora —
     /// evento sintético exige Acessibilidade, que a assinatura ad-hoc perde a cada
     /// build (ADR-003). Sem esta rota não há como verificar que o par nasce nos dois
     /// sentidos nem que o ciclo do botão passa onde deve.
@@ -47,7 +38,7 @@ enum AppControl {
     /// fora sem depender de estimar pixel em captura de tela.
     static var canvasGeometry: (() -> [String: Any])?
 
-    /// Troca a visualização da bancada ativa — canvas ou mosaico.
+    /// Troca a visualização da bancada ativa — canvas ou chat.
     ///
     /// Existe pelo mesmo motivo que `/geometry`: dirigir e verificar o app de fora
     /// sem depender de gesto na tela. Nulo de volta significa modo desconhecido ou
@@ -68,7 +59,7 @@ enum AppControl {
 
     /// Recolher a barra de bancadas ao trilho, ou abrir.
     ///
-    /// Existe pelo mesmo motivo que `/mosaic?swap=`: recolher é tecla de menu e
+    /// Existe pelo mesmo motivo que `/edge`: recolher é tecla de menu e
     /// clique, e nenhum dos dois é dirigível de fora sem permissão de
     /// Acessibilidade, que a assinatura ad-hoc perde a cada build (ADR-003). Sem
     /// esta rota não há como conferir de fora o que a barra faz por cima de um
@@ -88,14 +79,13 @@ enum AppControl {
     static var makeWorktree: ((_ target: String, _ branch: String,
                               _ nodeBranches: [String: String]) -> [String: Any])?
 
-    /// Ligações e teto de revisitas de uma bancada, por nome.
+    /// Ligações de uma bancada, por nome.
     ///
-    /// O Dispatcher precisa dos dois para validar mensagem entre agentes, e não
+    /// O Dispatcher precisa delas para validar mensagem entre agentes, e não
     /// conhece o `workbenches.json` — quem conhece é o AppDelegate. Mesmo arranjo
     /// dos ganchos acima, e pelo mesmo motivo: evita o Dispatcher segurar
     /// referência à UI.
     static var workbenchEdges: ((String) -> [EdgeConfig])?
-    static var workbenchVisitLimit: ((String) -> Int)?
     /// Papel do nó, para a lista de vizinhos dizer o que cada um faz — sem isso
     /// o agente lê endereços e não tem como escolher entre dois irmãos.
     static var nodeRole: ((String) -> String?)?

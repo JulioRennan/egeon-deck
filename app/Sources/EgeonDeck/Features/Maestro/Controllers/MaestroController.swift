@@ -99,7 +99,7 @@ final class MaestroController {
         }
         guard !plan.isEmpty else {
             return (400, ["ok": false, "errors": ["plano sem nada: use nodes, remove, edges, "
-                                                   + "unlink, rules ou maxVisits"]])
+                                                   + "unlink ou rules"]])
         }
 
         let outcome = MaestroPlanner.plan(plan, on: bench, context: wiring.context(bench, me.id))

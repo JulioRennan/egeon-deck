@@ -16,8 +16,8 @@ Tudo o que você precisa está neste documento.
   gravado pelo CLI).
 - Agentes conversam entre si quando há uma aresta ligando os dois — o front
   pode pedir algo ao back e receber a resposta dentro do próprio fluxo.
-- A bancada tem visualizações intercambiáveis: canvas (cards livres), mosaico
-  (janela dividida) e o chat desta spec — ⌥⌘1/2/3. Mesmo conteúdo, jeitos
+- A bancada tem visualizações intercambiáveis: canvas (cards livres) e o chat
+  desta spec — ⌥⌘1/2. Mesmo conteúdo, jeitos
   diferentes de olhar.
 
 ## Linguagem visual atual (ver print do canvas)

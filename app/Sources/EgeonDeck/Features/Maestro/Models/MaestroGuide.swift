@@ -59,7 +59,7 @@ enum MaestroGuide {
 
         ## Os comandos
 
-            egeon bench          a bancada agora: regras, maxVisits, nós, arestas, estado
+            egeon bench          a bancada agora: regras, nós, arestas, estado
             egeon models         CLIs, modelos e níveis de esforço que cada um aceita
             egeon plan <<'JSON'  valida um plano e mostra o que mudaria (não muda nada)
             { ... }
@@ -219,17 +219,13 @@ enum MaestroGuide {
         ## Arestas e limites de conversa
 
         Entre os outros terminais, o app só deixa um acionar outro por
-        **aresta**; entre você e qualquer um, a ligação já existe. E ele corta
-        cadeias longas:
+        **aresta**; entre você e qualquer um, a ligação já existe. O único
+        limite é o da aresta:
 
         - `maxSends` (por aresta desenhada, padrão 2): quantas vezes aquela
-          seta dispara numa mesma cadeia. As suas ligações implícitas não têm
-          esse limite.
-        - `maxVisits` (da bancada, padrão 4): quantas vezes um mesmo terminal
-          pode reaparecer numa cadeia — é o SEU limite de fato. Em fases
-          sequenciais (A, depois B, depois revisão, cada um voltando a você)
-          você reaparece a cada volta: para orquestração de várias fases,
-          suba para 8–12.
+          seta dispara numa mesma cadeia, e quantas mensagens do mesmo
+          remetente podem esperar leitura no destino. As suas ligações
+          implícitas não têm esse limite.
         - A cadeia zera quando o usuário digita. Recusa por limite não é erro
           seu para contornar: volte a falar com o usuário.
 
@@ -241,7 +237,6 @@ enum MaestroGuide {
         ```json
         {
           "rules": "regras da bancada — null apaga",
-          "maxVisits": 8,
           "nodes": [
             {
               "id": "back",
@@ -315,7 +310,7 @@ enum MaestroGuide {
 
         **`edges`** — `from`, `to`, `both` (as duas setas) e `maxSends`
         (de 1 a 10; tirar o limite é só do usuário). Aresta que já existe só
-        tem o limite ajustado. `maxVisits` vai de 1 a 12. **`unlink`** — `from`, `to`, `both`.
+        tem o limite ajustado. **`unlink`** — `from`, `to`, `both`.
 
         **`force`** — `true` deixa reiniciar ou remover terminal em segundo
         plano (veja abaixo). Nunca vale para terminal em turno.
@@ -372,7 +367,6 @@ enum MaestroGuide {
         egeon plan <<'JSON'
         {
           "rules": "Peça ao usuário antes de commitar ou instalar dependência.\nRode os testes da sua pasta antes de dizer que terminou.",
-          "maxVisits": 8,
           "nodes": [
             { "id": "back", "cwd": "api", "model": "sonnet", "effort": "medium",
               "role": "Você é o dono do backend em api/: rotas, sessão e integração OAuth.\nAo terminar, responda ao maestro com egeon send maestro: o que mudou, onde, e o contrato da API (rotas, payloads).\nO front é do terminal web." },

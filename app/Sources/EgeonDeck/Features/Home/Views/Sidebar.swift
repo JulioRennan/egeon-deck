@@ -6,7 +6,12 @@ final class SidebarRow: NSView {
     /// o índice da linha não serve, porque o endereço de dispatch é por nome.
     let name: String
     private let nameLabel = NSTextField(labelWithString: "")
+    /// Segunda linha: o cronômetro da bancada (ADR-074). O caminho só aparece
+    /// aqui quando a pasta sumiu — aí é aviso, e ganha do cronômetro; no resto
+    /// do tempo ele está no cabeçalho do projeto e na dica da linha.
     private let pathLabel = NSTextField(labelWithString: "")
+    private let pathExists: Bool
+    private var clockSignature = ""
     private let dot = NSView()
     private let statusLabel = NSTextField(labelWithString: "")
     /// Pastilha com a inicial da bancada, só no trilho recolhido. Nome inteiro não
@@ -18,7 +23,6 @@ final class SidebarRow: NSView {
     var onRename: ((Int) -> Void)?
     var onDuplicateAsWorktree: ((Int) -> Void)?
     var onRemove: ((Int) -> Void)?
-    var onEditVisitLimit: ((Int) -> Void)?
     var onEditRules: ((Int) -> Void)?
     /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
     var onClear: ((Int) -> Void)?
@@ -40,7 +44,7 @@ final class SidebarRow: NSView {
     /// Guardado porque `restyle` não vê o resumo.
     private var ringTone: AttentionRing.Tone?
     /// A borda: na linha inteira com a barra aberta, na pastilha no trilho.
-    private lazy var rowRing = AttentionRing(host: self, cornerRadius: 7)
+    private lazy var rowRing = AttentionRing(host: self, cornerRadius: 9)
     private lazy var tileRing = AttentionRing(host: tile, cornerRadius: 7, lineWidth: 2)
 
     /// Trilho recolhido: só a pastilha da inicial e o badge, sem nome nem caminho.
@@ -64,6 +68,7 @@ final class SidebarRow: NSView {
     init(index: Int, config: WorkbenchConfig) {
         self.index = index
         self.name = config.name
+        self.pathExists = config.exists
         super.init(frame: .zero)
         wantsLayer = true
 
@@ -79,6 +84,7 @@ final class SidebarRow: NSView {
             ? NSColor(calibratedWhite: 1, alpha: 0.5)
             : NSColor.systemRed.withAlphaComponent(0.85)
         pathLabel.lineBreakMode = .byTruncatingMiddle
+        toolTip = (config.path as NSString).abbreviatingWithTildeInPath
 
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 3
@@ -136,15 +142,27 @@ final class SidebarRow: NSView {
 
         // Mesma coluna de texto que o cabeçalho do projeto (`SidebarGroupRow`):
         // dentro do tile, a bancada tem de ler como item da mesma lista.
-        dot.frame = NSRect(x: 15, y: bounds.midY - 3, width: 6, height: 6)
+        dot.frame = NSRect(x: 15, y: 14, width: 6, height: 6)
         let textWidth = bounds.width - 44 - badgeWidth
-        nameLabel.frame = NSRect(x: 32, y: 7, width: textWidth, height: 17)
-        pathLabel.frame = NSRect(x: 32, y: 24, width: textWidth, height: 13)
+        nameLabel.frame = NSRect(x: 32, y: 8, width: textWidth, height: 17)
+        // O cronômetro corre a largura toda: o badge mora na linha do nome, e
+        // centrado na linha ele cortava os tempos ao meio.
+        pathLabel.frame = NSRect(x: 32, y: 30, width: bounds.width - 40, height: 15)
         // 4 da borda da linha, que é onde o `+` do cabeçalho termina: encostado
         // no limite útil da direita e alinhado com o que já estava lá.
-        statusLabel.frame = NSRect(x: bounds.width - badgeWidth - 4,
-                                   y: bounds.midY - 9,
+        statusLabel.frame = NSRect(x: bounds.width - badgeWidth - 6, y: 7,
                                    width: badgeWidth, height: 18)
+    }
+
+    func showClock(_ clock: WorkbenchClock, phase: WorkbenchClock.Phase?) {
+        guard pathExists else { return }
+        let signature = WorkbenchClockText.signature(clock, phase: phase)
+        guard signature != clockSignature else { return }
+        clockSignature = signature
+        pathLabel.attributedStringValue = WorkbenchClockText.attributed(clock, phase: phase, size: 10)
+        pathLabel.lineBreakMode = .byTruncatingTail
+        toolTip = (toolTip?.components(separatedBy: "\n").first ?? "")
+            + "\n" + WorkbenchClockText.tooltip(clock)
     }
 
     /// A bancada que precisa de você quase nunca é a que está na tela: o canvas
@@ -268,12 +286,19 @@ final class SidebarRow: NSView {
     /// barra agora passa o canvas — grid claro, terminal branco — e o que era
     /// legível em cima de 0.09 opaco virava lodo.
     private func restyle() {
-        // No trilho quem carrega a seleção é a pastilha: realçar a linha inteira
-        // pinta uma faixa de 52pt de ponta a ponta, que lê como divisor.
-        layer?.backgroundColor = (isSelected && !isCompact)
-            ? NSColor(calibratedWhite: 1, alpha: 0.14).cgColor
-            : NSColor.clear.cgColor
-        layer?.cornerRadius = 7
+        // Expandida, a bancada é um card: fundo e fio próprios, para cada uma
+        // ler como peça separada e não como linha de lista. No trilho quem
+        // carrega a seleção é a pastilha: realçar a linha inteira pinta uma
+        // faixa de 52pt de ponta a ponta, que lê como divisor.
+        if isCompact {
+            layer?.backgroundColor = NSColor.clear.cgColor
+            layer?.borderWidth = 0
+        } else {
+            layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: isSelected ? 0.14 : 0.045).cgColor
+            layer?.borderWidth = 1
+            layer?.borderColor = NSColor(calibratedWhite: 1, alpha: isSelected ? 0.22 : 0.08).cgColor
+        }
+        layer?.cornerRadius = 9
         nameLabel.textColor = isRemoving
             ? NSColor(calibratedWhite: 1, alpha: 0.35)
             : isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.72)
@@ -317,8 +342,6 @@ final class SidebarRow: NSView {
                      action: #selector(duplicateFromMenu), keyEquivalent: "")
         menu.addItem(withTitle: "Regras da bancada…",
                      action: #selector(rulesFromMenu), keyEquivalent: "")
-        menu.addItem(withTitle: "Limite de conversa entre agentes…",
-                     action: #selector(visitLimitFromMenu), keyEquivalent: "")
         menu.addItem(.separator())
         // Varrer para baixo do tapete: os agentes esquecem a conversa e o chat
         // vai para o arquivo. Mora aqui, com as outras ações da bancada, e não
@@ -336,7 +359,6 @@ final class SidebarRow: NSView {
     @objc private func renameFromMenu() { onRename?(index) }
     @objc private func duplicateFromMenu() { onDuplicateAsWorktree?(index) }
     @objc private func removeFromMenu() { onRemove?(index) }
-    @objc private func visitLimitFromMenu() { onEditVisitLimit?(index) }
     @objc private func rulesFromMenu() { onEditRules?(index) }
     @objc private func clearFromMenu() { onClear?(index) }
 }
@@ -701,6 +723,11 @@ final class Sidebar: NSView {
     private static let cardGap: CGFloat = 8
     private static let cardInset: CGFloat = 6
     private static let rowGap: CGFloat = 2
+    /// A bancada expandida é card (fundo e fio próprios): mais alta que as
+    /// linhas de cabeçalho, para nome e cronômetro respirarem, e com vão entre
+    /// uma e outra.
+    private static let workbenchHeight: CGFloat = 54
+    private static let workbenchGap: CGFloat = 6
     /// O fio do projeto e o respiro que ele ocupa (1pt de linha + folga).
     private static let dividerGap: CGFloat = 7
 
@@ -795,7 +822,6 @@ final class Sidebar: NSView {
     var onRename: ((Int) -> Void)?
     var onDuplicateAsWorktree: ((Int) -> Void)?
     var onRemove: ((Int) -> Void)?
-    var onEditVisitLimit: ((Int) -> Void)?
     var onEditRules: ((Int) -> Void)?
     /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
     var onClear: ((Int) -> Void)?
@@ -860,7 +886,6 @@ final class Sidebar: NSView {
             row.onRename = { [weak self] in self?.onRename?($0) }
             row.onDuplicateAsWorktree = { [weak self] in self?.onDuplicateAsWorktree?($0) }
             row.onRemove = { [weak self] in self?.onRemove?($0) }
-            row.onEditVisitLimit = { [weak self] in self?.onEditVisitLimit?($0) }
             row.onEditRules = { [weak self] in self?.onEditRules?($0) }
             row.onClear = { [weak self] in self?.onClear?($0) }
             rows.append(row)
@@ -998,10 +1023,10 @@ final class Sidebar: NSView {
                 for row in tile.rows {
                     row.isHidden = false
                     row.frame = NSRect(x: x + inset, y: y, width: width - inset * 2,
-                                       height: Self.rowHeight)
-                    y += Self.rowHeight + Self.rowGap
+                                       height: Self.workbenchHeight)
+                    y += Self.workbenchHeight + Self.workbenchGap
                 }
-                if !tile.rows.isEmpty { y += inset - Self.rowGap }
+                if !tile.rows.isEmpty { y += inset - Self.workbenchGap }
             } else {
                 tile.rows.forEach { $0.isHidden = true }
             }
@@ -1108,6 +1133,14 @@ final class Sidebar: NSView {
 
     /// Chamado pelo laço da UI com o resumo de TODAS as bancadas vivas, não só a
     /// que está na tela. Os grupos somam o que têm embaixo.
+    /// Os cronômetros, por nome da bancada — a chave das linhas.
+    func showClocks(_ clocks: [String: (WorkbenchClock, WorkbenchClock.Phase?)]) {
+        for row in rows {
+            guard let (clock, phase) = clocks[row.name] else { continue }
+            row.showClock(clock, phase: phase)
+        }
+    }
+
     func showActivity(_ summaries: [String: ActivitySummary]) {
         for row in rows { row.show(summaries[row.name] ?? ActivitySummary()) }
         for group in groups {

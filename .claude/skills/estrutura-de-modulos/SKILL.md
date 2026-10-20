@@ -29,7 +29,6 @@ app/Sources/EgeonDeck/
 │   │                           (JSON), MaestroPlanner (valida e calcula, puro),
 │   │                           MaestroSnapshot, MaestroGuide (o manual/skill),
 │   │                           MaestroController (aplica por closures)
-│   ├── Mosaic/                 o modo mosaico
 │   ├── Nodes/                  NodeConfig, NodeView e os concretos
 │   │   └── Features/
 │   │       └── AgentNode/      contrato genérico de agente (AgentProfile)

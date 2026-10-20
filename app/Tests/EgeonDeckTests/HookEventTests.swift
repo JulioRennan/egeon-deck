@@ -18,6 +18,6 @@ final class HookEventTests: XCTestCase {
     }
 
     func testExpectedListsAllCases() {
-        XCTAssertEqual(HookEvent.expected, "stop|prompt|ask|start")
+        XCTAssertEqual(HookEvent.expected, "stop|prompt|ask|start|failure")
     }
 }

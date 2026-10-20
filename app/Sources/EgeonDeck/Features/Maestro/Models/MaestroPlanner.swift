@@ -45,13 +45,12 @@ struct MaestroOutcome {
     var freshConversation: [String] = []
     var edgesChanged = false
     var rulesChanged = false
-    var visitsChanged = false
     /// Os cards foram rearrumados: os frames de `next` são os novos.
     var relaid = false
 
     var changed: Bool {
         !created.isEmpty || !restarted.isEmpty || !removed.isEmpty
-            || edgesChanged || rulesChanged || visitsChanged || relaid
+            || edgesChanged || rulesChanged || relaid
     }
 
     /// Uma linha para a trilha e para a resposta: `+front ~revisor −velho ·
@@ -62,7 +61,6 @@ struct MaestroOutcome {
         if !nodes.isEmpty { parts.append(nodes.joined(separator: " ")) }
         if edgesChanged { parts.append("\(next.edgeList.count) aresta(s)") }
         if rulesChanged { parts.append("regras da bancada") }
-        if visitsChanged { parts.append("maxVisits \(next.visitLimit)") }
         if relaid { parts.append("canvas rearrumado") }
         return parts.isEmpty ? "nada muda" : parts.joined(separator: " · ")
     }
@@ -78,7 +76,6 @@ enum MaestroPlanner {
     static let maxSendsCeiling = 10
     /// Menor que isto o terminal não mostra uma linha de prompt inteira.
     static let minimumSize = CGSize(width: 320, height: 200)
-    static let visitCeiling = 12
 
     static func plan(_ plan: MaestroPlan, on bench: WorkbenchConfig,
                      context: MaestroContext) -> MaestroOutcome {
@@ -156,15 +153,6 @@ enum MaestroPlanner {
             next.rules = trimmed.isEmpty ? nil : trimmed
         }
         out.rulesChanged = next.rules != bench.rules
-        switch plan.maxVisits {
-        case .keep: break
-        case .clear: next.maxVisits = nil
-        case .set(let n):
-            if n < 1 || n > visitCeiling {
-                errors.append("maxVisits tem de ficar entre 1 e \(visitCeiling)")
-            } else { next.maxVisits = n }
-        }
-        out.visitsChanged = next.visitLimit != bench.visitLimit
 
         // Arestas. Primeiro some o que aponta para nó removido, depois o que
         // o plano diz. Nó novo não ganha seta para o maestro: a ligação dele

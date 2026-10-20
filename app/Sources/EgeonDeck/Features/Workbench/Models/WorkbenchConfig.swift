@@ -30,18 +30,6 @@ struct WorkbenchConfig: Codable {
     /// Quem pode acionar quem, dentro desta bancada.
     var edges: [EdgeConfig]?
 
-    /// Teto de revisitas de um mesmo terminal numa cadeia. É rede de segurança,
-    /// não o botão do dia a dia — quem você regula é o limite da aresta.
-    ///
-    /// Existe porque limite por aresta não segura `A→B→C→A`: ali cada seta
-    /// dispara uma vez só e o limite dela nunca chega perto. Só o contador da
-    /// cadeia inteira fecha essa porta.
-    ///
-    /// Conta revisita, e não comprimento: `pm → front → pm → back → pm` é
-    /// orquestração normal, e cortar por comprimento estrangularia trabalho
-    /// legítimo. O que precisa de teto é a volta.
-    var maxVisits: Int?
-
     /// As regras desta bancada: valem para TODO agente que abre aqui, e cada nó
     /// pode somar as suas.
     ///
@@ -52,19 +40,16 @@ struct WorkbenchConfig: Codable {
 
     /// De que jeito esta bancada estava sendo olhada. Ausente = canvas.
     ///
-    /// Por bancada e não global: uma frente com um editor e quatro agentes pede
-    /// mosaico, e a do lado, com dois terminais soltos e as arestas à vista, pede
-    /// canvas.
+    /// Por bancada e não global: uma frente de quatro agentes conversando pede
+    /// chat, e a do lado, com dois terminais soltos e as arestas à vista, pede
+    /// canvas. O `"mosaic"` gravado antes do mosaico sair abre no canvas.
     var view: ViewMode?
-
-    /// Proporções dos divisores do mosaico, quando você já arrastou algum.
-    var mosaic: MosaicLayout?
 
     /// Esta bancada estava ABERTA na faixa de abas quando o app fechou, e em que
     /// ordem. Nulo = fechada; é a chave que faz o app reabrir na semana seguinte
     /// com o mesmo conjunto de bancadas na tela.
     ///
-    /// Mora aqui, ao lado de `view` e `mosaic`, porque é da mesma natureza: o
+    /// Mora aqui, ao lado de `view`, porque é da mesma natureza: o
     /// jeito como esta bancada estava sendo olhada. Um arquivo à parte teria de
     /// ser conciliado com esta lista, que já tem dono e debounce.
     var tabOrder: Int?
@@ -80,7 +65,7 @@ struct WorkbenchConfig: Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, path, nodes, template, project, edges, maxVisits, rules, view, mosaic
+        case id, name, path, nodes, template, project, edges, rules, view
         case tabOrder, tabActive
     }
 
@@ -95,18 +80,16 @@ struct WorkbenchConfig: Codable {
         template = try c.decodeIfPresent(String.self, forKey: .template)
         project = try c.decodeIfPresent(String.self, forKey: .project)
         edges = try c.decodeIfPresent([EdgeConfig].self, forKey: .edges)
-        maxVisits = try c.decodeIfPresent(Int.self, forKey: .maxVisits)
         rules = try c.decodeIfPresent(String.self, forKey: .rules)
         view = try c.decodeIfPresent(ViewMode.self, forKey: .view)
-        mosaic = try c.decodeIfPresent(MosaicLayout.self, forKey: .mosaic)
         tabOrder = try c.decodeIfPresent(Int.self, forKey: .tabOrder)
         tabActive = try c.decodeIfPresent(Bool.self, forKey: .tabActive)
     }
 
     init(id: String = WorkbenchConfig.newID(), name: String, path: String, nodes: [NodeConfig],
          template: String? = nil, project: String? = nil, edges: [EdgeConfig]? = nil,
-         maxVisits: Int? = nil, rules: String? = nil,
-         view: ViewMode? = nil, mosaic: MosaicLayout? = nil, tabOrder: Int? = nil,
+         rules: String? = nil,
+         view: ViewMode? = nil, tabOrder: Int? = nil,
          tabActive: Bool? = nil) {
         self.id = id
         self.name = name
@@ -115,18 +98,13 @@ struct WorkbenchConfig: Codable {
         self.template = template
         self.project = project
         self.edges = edges
-        self.maxVisits = maxVisits
         self.rules = rules
         self.view = view
-        self.mosaic = mosaic
         self.tabOrder = tabOrder
         self.tabActive = tabActive
     }
 
     var edgeList: [EdgeConfig] { edges ?? [] }
-    /// Folgado o bastante para uma orquestração de três nós passar sem esbarrar
-    /// nele — o corte que você sente no dia a dia deve vir da aresta.
-    var visitLimit: Int { maxVisits ?? 4 }
 
     /// Para onde `node` pode mandar mensagem.
     func targets(of node: String) -> [String] {

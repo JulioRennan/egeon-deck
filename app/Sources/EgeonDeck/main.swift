@@ -196,7 +196,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.duplicateWorkbenchAsWorktree(index)
         }
         sidebar.onRemove = { [weak self] index in self?.confirmRemoveWorkbench(index) }
-        sidebar.onEditVisitLimit = { [weak self] index in self?.editVisitLimit(index) }
         sidebar.onEditRules = { [weak self] index in self?.editWorkbenchRules(index) }
         sidebar.onClear = { [weak self] index in self?.confirmClearWorkbench(index) }
         root = RootView(sidebar: sidebar)
@@ -277,9 +276,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // implícitas do maestro; o canvas desenha só as primeiras (ADR-066).
         AppControl.workbenchEdges = { [weak self] name in
             self?.configs.first { $0.name == name }.map(MaestroLinks.effective) ?? []
-        }
-        AppControl.workbenchVisitLimit = { [weak self] name in
-            self?.configs.first { $0.name == name }?.visitLimit ?? 3
         }
         AppControl.nodeRole = { [weak self] address in
             let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
@@ -456,16 +452,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? ["ok": false, "error": "bancada desconhecida '\(workbench)'"]
         }
 
-        AppControl.swapMosaic = { [weak self] workbench, first, second in
-            guard let self,
-                  let index = self.configs.firstIndex(where: { $0.name == workbench })
-            else { return ["ok": false, "error": "bancada desconhecida '\(workbench)'"] }
-            guard self.shell(at: index)?.swapInMosaic(first, second) == true else {
-                return ["ok": false,
-                        "error": "não trocou — nó desconhecido, ou a bancada não está em mosaico"]
-            }
-            return ["ok": true, "workbench": workbench, "swapped": [first, second]]
-        }
         AppControl.cardSnapshot = { [weak self] target, file in
             self?.cardSnapshot(target: target, file: file) ?? "erro: app encerrando"
         }
@@ -506,6 +492,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.shell(at: self.activeIndex)?.refreshBadges()
             let activity = Dispatcher.shared.activitySummary()
             self.root.sidebar.showActivity(activity)
+            // Todas as bancadas, não só a da tela: a de trás também está
+            // rodando, e o cronômetro dela tem de andar.
+            var phases: [String: WorkbenchClock.Phase] = [:]
+            for config in self.configs {
+                if let phase = activity[config.name].flatMap(WorkbenchClock.phase(for:)) { phases[config.id] = phase }
+            }
+            WorkbenchClocks.shared.tick(phases)
+            var clocks: [String: (WorkbenchClock, WorkbenchClock.Phase?)] = [:]
+            for config in self.configs {
+                clocks[config.name] = (WorkbenchClocks.shared.clock(for: config.id), phases[config.id])
+            }
+            self.root.sidebar.showClocks(clocks)
+            if self.activeIndex >= 0, self.activeIndex < self.configs.count {
+                let id = self.configs[self.activeIndex].id
+                self.shell(at: self.activeIndex)?.showClock(WorkbenchClocks.shared.clock(for: id), phase: phases[id])
+            }
             // A faixa mostra o MESMO estado da barra lateral, e no mesmo quadro
             // do spinner: são os dois lugares onde uma bancada que não está na
             // tela consegue te chamar.
@@ -538,6 +540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for index in liveIndices { syncFrames(index: index) }
         recordTabOrder()
         WorkbenchStore.save(configs)
+        WorkbenchClocks.shared.flush()
 
         control.stop()
     }
@@ -562,8 +565,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         revealInSidebar(index)
         root.show(shell)
         // O layout da barra é do MODO, e o modo é por bancada: entrar numa bancada em
-        // mosaico tem de tirar a barra de cima do conteúdo.
-        root.setMosaic(shell.mode != .canvas)
+        // chat tem de tirar a barra de cima do conteúdo.
+        root.setBeside(shell.mode != .canvas)
         root.sidebar.select(index)
         root.sidebar.markLive(index)
         // Trocar de bancada dá por visto o "terminou" das DUAS: a que você abre,
@@ -711,9 +714,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             template: template,
             project: projectID)
 
-        // O modo vem do preset: um template desenhado em mosaico abre em mosaico.
+        // O modo vem do preset: um template desenhado em chat abre em chat.
         config.view = preset?.view
-        config.mosaic = preset?.mosaic
 
         // Frames vindos do template já servem; sem template a bancada nasce vazia
         // e você monta pela barra.
@@ -943,7 +945,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         config.edges = origin?.edges
         config.rules = origin?.rules
         config.view = origin?.view
-        config.mosaic = origin?.mosaic
 
         configs.append(config)
         reconcileWorkspaces()
@@ -1042,9 +1043,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // A worktree é do mesmo projeto que a origem: saiu dela.
                 project: origin.project,
                 edges: origin.edges,
-                maxVisits: origin.maxVisits,
-                view: origin.view,
-                mosaic: origin.mosaic)
+                view: origin.view)
             configs.append(config)
             alvo = configs.count - 1
             reloadSidebar()
@@ -2648,7 +2647,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// e cujo sintoma é um botão de fechar que apaga o nó da bancada vizinha.
     private func wire(_ shell: WorkbenchShell, id: String) {
         // Fechar e configurar nó chegam pelo shell: quem os disparou pode ser o
-        // canvas ou o mosaico, e daqui não faz diferença qual.
+        // canvas ou o chat, e daqui não faz diferença qual.
         shell.onRequestClose = { [weak self] node in
             guard let self, let index = self.index(ofID: id) else { return }
             self.confirmRemoval(of: node, index: index)
@@ -2672,13 +2671,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // socket sem estar visíveis.
             //
             // Ao lado em tudo que não é canvas: a barra flutua porque o grid corre
-            // por baixo dela e é isso que a faz parecer suspensa. O mosaico tem
+            // por baixo dela e é isso que a faz parecer suspensa. O chat tem
             // conteúdo opaco de largura cheia, e ali flutuar é cobrir conteúdo.
-            if index == self.activeIndex { self.root.setMosaic(mode != .canvas) }
-        }
-        shell.onMosaicLayoutChanged = { [weak self] layout in
-            guard let self, let index = self.index(ofID: id) else { return }
-            self.recordMosaicLayout(layout, index: index)
+            if index == self.activeIndex { self.root.setBeside(mode != .canvas) }
         }
         shell.tabs.onPick = { [weak self] picked in
             guard let self, let index = self.index(ofID: picked) else { return }
@@ -2686,8 +2681,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         shell.tabs.onClose = { [weak self] in self?.closeTab($0) }
         shell.tabs.onReorder = { [weak self] order in self?.reorderTabs(order) }
+        shell.onResetClock = {
+            WorkbenchClocks.shared.reset(id)
+            Log.write("bancada \(id): cronômetro zerado")
+        }
         guard let index = index(ofID: id) else { return }
-        shell.mosaicLayout = configs[index].mosaic
         shell.setWorkbench(name: configs[index].name, path: configs[index].path)
 
         wireChat(shell.chat, id: id)
@@ -2978,6 +2976,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onFinish: { [weak self] result in
                 guard let self else { return }
                 self.cleaners[config.id] = nil
+                // Bancada limpa é período novo: o cronômetro recomeça junto
+                // com o chat e a trilha.
+                WorkbenchClocks.shared.reset(config.id)
                 // O arquivo saiu do disco; o eco local e o turno ao vivo ainda
                 // estavam na memória do chat, e sem isto voltariam a desenhar
                 // numa thread vazia.
@@ -3008,21 +3009,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.write("bancada \(configs[index].name): visualização \(mode.rawValue)")
     }
 
-    private func recordMosaicLayout(_ layout: MosaicLayout, index: Int) {
-        guard index >= 0, index < configs.count, configs[index].mosaic != layout else { return }
-        configs[index].mosaic = layout
-        // De volta para o shell também: ele repassa a proporção na hora de montar
-        // o mosaico, e sem isto ida e volta ao canvas ressuscitaria a do arranque
-        // — o arrasto só sobreviveria depois de fechar o app.
-        shell(at: index)?.mosaicLayout = layout
-        schedulePersist()
-    }
-
     /// Recolher a barra de bancadas ao trilho, ou abrir de volta.
     @objc func toggleSidebarCollapsed() { root.toggleCollapsed() }
 
     @objc func showCanvasView() { shell(at: activeIndex)?.show(.canvas) }
-    @objc func showMosaicView() { shell(at: activeIndex)?.show(.mosaic) }
     @objc func showChatView() { shell(at: activeIndex)?.show(.chat) }
 
     // MARK: - Ligações entre terminais
@@ -3035,34 +3025,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a montagem que se usa é o par conversando, e desenhar a volta à mão toda vez
     /// era o passo que se esquecia — o limite continua sendo o `maxSends` da linha,
     /// que passa a contar ida e volta desde o começo. Ver ADR-028.
-    /// Teto de revisitas da bancada — a rede, não o botão do dia a dia.
-    private func editVisitLimit(_ index: Int) {
-        guard index >= 0, index < configs.count else { return }
-
-        let alert = NSAlert()
-        alert.messageText = "Limite de conversa — \(configs[index].name)"
-        alert.informativeText = "Quantas vezes um mesmo terminal pode entrar numa cadeia de "
-            + "mensagens entre agentes antes de o Egeon Deck cortar.\n\n"
-            + "Isto é a rede de segurança da bancada inteira: é o único limite que segura um "
-            + "ciclo de três ou mais terminais, onde cada ligação dispara uma vez só. O ajuste "
-            + "do dia a dia é na pastilha da própria seta, no canvas."
-        alert.addButton(withTitle: "Salvar")
-        alert.addButton(withTitle: "Cancelar")
-
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 80, height: 24))
-        field.stringValue = String(configs[index].visitLimit)
-        alert.accessoryView = field
-        alert.window.initialFirstResponder = field
-
-        guard alert.runModal() == .alertFirstButtonReturn,
-              let typed = Int(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
-        else { return }
-
-        configs[index].maxVisits = max(1, typed)
-        schedulePersist()
-        Log.write("bancada \(configs[index].name): teto de visitas = \(configs[index].visitLimit)")
-    }
-
     /// As regras da bancada: valem para todo agente que abre aqui (ADR-056).
     ///
     /// Salvar reinicia os agentes da bancada — o system prompt só é lido no
@@ -3309,8 +3271,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ? current.id
             : nextID(prefix: renamed, in: configs[index])
 
-        // Em modo mosaico o frame da view é o do painel, e gravá-lo destruiria a
-        // posição que o nó tem no canvas. Quem sabe qual é ela é o shell.
+        // O terminal emprestado ao chat está fora do canvas, e o frame dele lá não
+        // é a posição no canvas. Quem sabe qual é ela é o shell.
         let canvasFrame = shell.canvasFrame(of: current.id) ?? node.frame
         var updated = NodeTemplateStore.instantiate(component, id: newID).keepingState(of: current)
         updated.setFrame(canvasFrame)
@@ -3616,9 +3578,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Lê de volta o que está na tela. A view é a verdade sobre posição: o
     /// usuário acabou de arrastar.
     ///
-    /// Só em modo canvas. No mosaico o frame do card é o do painel do split view,
-    /// e gravá-lo aqui achataria a montagem do canvas inteira — na volta, todo nó
-    /// nasceria do tamanho da coluna em que estava.
+    /// Só em modo canvas: no chat o terminal emprestado tem o frame da thread, e
+    /// gravá-lo aqui o faria voltar do tamanho dela.
     private func syncFrames(index: Int) {
         guard index >= 0, index < configs.count, let shell = shell(at: index),
               shell.mode == .canvas else { return }
@@ -3697,8 +3658,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ])
         }
 
-        // `mode` na frente porque muda o sentido do resto: em mosaico o `docFrame`
-        // é o do painel, `grabPoint` não arrasta nada e não há zoom.
+        // `mode` na frente porque muda o sentido do resto: em chat o canvas está
+        // coberto, `grabPoint` não arrasta nada e não há zoom.
         return [
             "workbench": activeIndex < configs.count ? configs[activeIndex].name : "?",
             "mode": shell.mode.rawValue,
@@ -3781,7 +3742,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let modeItems: [Selector: ViewMode] = [
             #selector(showCanvasView): .canvas,
-            #selector(showMosaicView): .mosaic,
             #selector(showChatView): .chat
         ]
         if let action = menuItem.action, let wants = modeItems[action] {
@@ -3888,10 +3848,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ⌥⌘1/⌥⌘2 e não ⌘1/⌘2: estes últimos já são as ferramentas.
         canvasMenu.addItem(withTitle: "Ver no canvas", action: #selector(showCanvasView),
                            keyEquivalent: "1").keyEquivalentModifierMask = [.command, .option]
-        canvasMenu.addItem(withTitle: "Ver em mosaico", action: #selector(showMosaicView),
-                           keyEquivalent: "2").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Ver como chat", action: #selector(showChatView),
-                           keyEquivalent: "3").keyEquivalentModifierMask = [.command, .option]
+                           keyEquivalent: "2").keyEquivalentModifierMask = [.command, .option]
         canvasMenu.addItem(withTitle: "Recolher a barra de bancadas",
                            action: #selector(toggleSidebarCollapsed), keyEquivalent: "/")
         canvasMenu.addItem(.separator())
@@ -3922,6 +3880,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 final class FormView: NSView {
     override var isFlipped: Bool { true }
 }
+
+// SIGPIPE mata o processo calado, sem relatório. Erro de escrita em pipe ou
+// socket fechado tem de voltar como EPIPE para quem escreveu, não derrubar o
+// app com todos os terminais dentro. O socket de controle ainda põe
+// `SO_NOSIGPIPE` em cada conexão; isto cobre o resto (pipes de `Process`).
+signal(SIGPIPE, SIG_IGN)
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)

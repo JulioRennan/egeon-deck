@@ -108,12 +108,12 @@ final class CanvasContainer: NSView {
     /// Clique no botão de direção: ida → ida e volta → volta.
     var onCycleEdgeDirection: ((EdgeLink) -> Void)?
     /// Aviso a mostrar. O banner mora acima do canvas, e não aqui, porque em modo
-    /// mosaico este container está fora da hierarquia — o aviso não apareceria.
+    /// chat este container está coberto — o aviso não apareceria.
     var onBanner: ((String?) -> Void)?
-    /// Todos os nós da bancada, inclusive os que estão no mosaico agora.
+    /// Todos os nós da bancada, inclusive o terminal que o chat pegou emprestado.
     ///
-    /// `spawnRect` precisa deles: com o mosaico ativo, `doc.subviews` está vazio e
-    /// todo nó novo nasceria exatamente no mesmo canto.
+    /// `spawnRect` precisa deles: o card fora do `doc` não ocupa espaço ali, e o
+    /// nó novo nasceria em cima do lugar dele.
     var placedNodes: (() -> [NodeView])?
 
     /// Ligações da bancada. Só terminal liga: o web não tem quem receba
@@ -322,7 +322,7 @@ final class CanvasContainer: NSView {
 
     /// O teclado está sendo digitado dentro de um nó (terminal, página, campo de
     /// URL) e não no canvas. Quem monta o menu usa isto para ceder os atalhos:
-    /// ⌘1…⌘4 e ⌘=/⌘− já têm dono dentro do workbench.
+    /// ⌘=/⌘− já têm dono dentro da página.
     var focusIsInsideNode: Bool {
         var view = window?.firstResponder as? NSView
         while let current = view {
@@ -710,8 +710,6 @@ final class CanvasContainer: NSView {
 
     func add(_ node: NodeView) {
         doc.addSubview(node)
-        // O nó pode estar voltando do mosaico, onde perdeu a alça e a porta.
-        node.isFreeform = true
         // Sem forçar o layout, o terminal nasce com frame zero e só descobre o
         // tamanho real na primeira interação — até lá o pty roda numa tela de
         // dimensão degenerada e o buffer sai vazio.

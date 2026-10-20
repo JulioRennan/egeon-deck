@@ -268,8 +268,7 @@ final class MaestroPlanTests: XCTestCase {
     func testChainGuardsHaveACeiling() {
         XCTAssertFalse(plan(#"{"edges":[{"from":"maestro","to":"revisor","maxSends":null}]}"#).errors.isEmpty)
         XCTAssertFalse(plan(#"{"edges":[{"from":"maestro","to":"revisor","maxSends":50}]}"#).errors.isEmpty)
-        XCTAssertFalse(plan(#"{"maxVisits":100}"#).errors.isEmpty)
-        XCTAssertEqual(plan(#"{"edges":[{"from":"maestro","to":"revisor","maxSends":10}],"maxVisits":12}"#).errors, [])
+        XCTAssertEqual(plan(#"{"edges":[{"from":"maestro","to":"revisor","maxSends":10}]}"#).errors, [])
     }
 
     func testUnlinkOfARemovedNodeIsNotAnError() {
@@ -347,7 +346,7 @@ final class MaestroPlanTests: XCTestCase {
     }
 
     func testErrorsAccumulateInsteadOfStoppingAtTheFirst() {
-        let out = plan(#"{"nodes":[{"id":"a","model":"gpt-9"},{"id":"b","cli":"cursor"}],"maxVisits":0}"#)
+        let out = plan(#"{"nodes":[{"id":"a","model":"gpt-9"},{"id":"b","cli":"cursor"}],"edges":[{"from":"maestro","to":"revisor","maxSends":50}]}"#)
         XCTAssertGreaterThanOrEqual(out.errors.count, 3, "\(out.errors)")
     }
 

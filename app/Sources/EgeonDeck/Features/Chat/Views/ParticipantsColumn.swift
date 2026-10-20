@@ -187,6 +187,9 @@ private final class ParticipantRow: NSView {
         case .background: return "em segundo plano"
         case .awaiting(let peers):
             return "aguardando " + (peers.isEmpty ? "vizinho" : peers.joined(separator: ", "))
+        case .retrying(let attempt, _):
+            return "tentando de novo (\(attempt)/\(ApiFailure.maxAttempts))"
+        case .failed(let why):  return "falhou — \(why)"
         default:        return participant.role ?? ""
         }
     }
@@ -194,6 +197,7 @@ private final class ParticipantRow: NSView {
     private func roleColor(_ participant: ChatParticipant) -> NSColor {
         switch participant.activity {
         case .asking:  return .systemOrange
+        case .failed:  return .systemRed
         case .working: return participant.color.withAlphaComponent(0.85)
         default:       return NSColor(calibratedWhite: 0.55, alpha: 1)
         }
@@ -202,7 +206,7 @@ private final class ParticipantRow: NSView {
     private func statusGlyph(_ activity: Activity) -> String {
         switch activity {
         case .working, .starting: return String(Spinner.current)
-        case .background, .awaiting: return String(Spinner.hourglass)
+        case .background, .awaiting, .retrying: return String(Spinner.hourglass)
         case .dead:               return "✕"
         default:                  return "●"
         }
@@ -212,7 +216,10 @@ private final class ParticipantRow: NSView {
         switch participant.activity {
         case .waiting:            return .systemGreen
         case .asking:             return .systemOrange
-        case .working, .starting, .background, .awaiting: return participant.color
+        // A bolinha vermelha: o agente parou por erro e o app desistiu de
+        // tentar sozinho (ADR-072).
+        case .failed:             return .systemRed
+        case .working, .starting, .background, .awaiting, .retrying: return participant.color
         case .dead:               return NSColor(calibratedWhite: 0.4, alpha: 1)
         case .ready:              return NSColor(calibratedWhite: 1, alpha: 0.18)
         }

@@ -591,7 +591,7 @@ final class ChatContainer: NSView {
 
     /// Clicar num shell é querer VER o terminal: o card sai do canvas coberto e
     /// entra aqui, no lugar da thread — reparentar não mexe no pty, é o mesmo
-    /// truque do mosaico. O composer continua: Enter manda comando para ele.
+    /// mesmo truque da troca de modo. O composer continua: Enter manda comando para ele.
     private func showTerminal(of participant: ChatParticipant) {
         guard let view = terminalView?(participant.id) else { return }
         if shownTerminal !== view { leaveTerminal() }

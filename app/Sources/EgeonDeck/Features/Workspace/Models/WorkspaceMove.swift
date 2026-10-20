@@ -88,7 +88,7 @@ enum WorkspaceMove {
         rest.insert(moved, at: landing)
 
         // Nada mudou: mesmo lugar e mesmo projeto. `WorkbenchConfig` não é
-        // Equatable (tem nós, arestas, mosaico), então a comparação é de
+        // Equatable (tem nós, arestas, modo), então a comparação é de
         // posição e projeto — o que esta operação mexe.
         guard landing != index || benches[index].project != project else { return nil }
         return (rest, map(from: index, to: landing))

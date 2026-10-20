@@ -201,20 +201,12 @@ class NodeView: NSView {
         Self.headerHeight + (accessoryRow.isEmpty ? 0 : Self.accessoryRowHeight)
     }
 
-    /// Arrasto pelo cabeçalho quando o card NÃO manda na própria posição — isto é,
-    /// no mosaico. Em coordenadas de janela; quem resolve sobre qual painel o
-    /// cursor está é o container, que é quem conhece o arranjo.
-    var onHeaderDrag: ((NodeView, NSPoint) -> Void)?
-    var onHeaderRelease: ((NodeView, NSPoint) -> Void)?
-
     /// Arrasto saindo do `+` deste nó, em coordenadas de janela. Quem converte
     /// para o documento e resolve o destino é o canvas.
     var onPortDrag: ((NodeView, NSPoint) -> Void)?
     var onPortRelease: ((NodeView, NSPoint) -> Void)?
 
     private var dragOffset: CGPoint?
-    /// Arrasto de troca em curso (mosaico).
-    private var swapping = false
 
     /// A borda em repouso — sem alerta. O maestro a carrega mais forte e mais
     /// grossa: é o card que manda na bancada (ADR-066).
@@ -319,24 +311,6 @@ class NodeView: NSView {
     @objc private func menuConfigure() { onRequestEdit?(self) }
     @objc private func menuWorktree() { onRequestWorktree?(self) }
     @objc private func menuClose() { onRequestClose?(self) }
-
-    /// O card manda na própria posição?
-    ///
-    /// No canvas sim. No mosaico não: quem dá o frame é o split view, e arrastar o
-    /// cabeçalho lá chamaria `onRequestSpace` — que desloca o mundo do canvas e
-    /// regrava o `workbenches.json` com coordenadas que não são de lá. A alça de
-    /// resize e a porta de aresta desaparecem pelo mesmo motivo: brigariam com o
-    /// divisor no quadro seguinte.
-    var isFreeform = true {
-        didSet {
-            guard isFreeform != oldValue else { return }
-            grip.isHidden = !isFreeform
-            freeformDidChange()
-        }
-    }
-
-    /// Gancho para a subclasse esconder o que só serve no canvas.
-    func freeformDidChange() {}
 
     private var isAlerting = false
 
@@ -540,9 +514,7 @@ class NodeView: NSView {
         onFrameChanging?()
     }
 
-    // Arrastar pelo cabeçalho move o nó no espaço do canvas. No mosaico, onde
-    // quem dá o frame é o split view, o mesmo gesto troca este card de lugar com
-    // aquele sob o cursor.
+    // Arrastar pelo cabeçalho move o nó no espaço do canvas.
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         guard p.y <= headerExtent else { return super.mouseDown(with: event) }
@@ -556,10 +528,6 @@ class NodeView: NSView {
             return
         }
 
-        guard isFreeform else {
-            swapping = true
-            return
-        }
         let inDoc = superview!.convert(event.locationInWindow, from: nil)
         dragOffset = CGPoint(x: inDoc.x - frame.minX, y: inDoc.y - frame.minY)
     }
@@ -572,10 +540,6 @@ class NodeView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        if swapping {
-            onHeaderDrag?(self, event.locationInWindow)
-            return
-        }
         guard let off = dragOffset, let doc = superview else { return }
         let inDoc = doc.convert(event.locationInWindow, from: nil)
         let desired = NSPoint(x: (inDoc.x - off.x).rounded(), y: (inDoc.y - off.y).rounded())
@@ -599,11 +563,6 @@ class NodeView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if swapping {
-            swapping = false
-            onHeaderRelease?(self, event.locationInWindow)
-            return
-        }
         guard dragOffset != nil else { return }
         dragOffset = nil
         onFrameChanged?(self)

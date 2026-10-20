@@ -13,7 +13,6 @@ enum MaestroSnapshot {
             "workbench": bench.name,
             "path": bench.path,
             "you": caller,
-            "maxVisits": bench.visitLimit,
             "nodes": bench.nodes.map { node(of: $0, caller: caller, activity: activity($0.id)) },
             "edges": bench.edgeList.map { edge -> [String: Any] in
                 ["from": edge.from, "to": edge.to, "maxSends": edge.maxSends.map { $0 as Any } ?? NSNull()]
@@ -58,6 +57,8 @@ enum MaestroSnapshot {
         case .awaiting: return "awaiting"
         case .waiting: return "done"
         case .asking: return "asking"
+        case .retrying: return "retrying"
+        case .failed: return "failed"
         case .dead: return "dead"
         }
     }

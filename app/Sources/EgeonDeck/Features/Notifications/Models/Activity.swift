@@ -26,13 +26,25 @@ enum Activity: Equatable {
     /// os nomes vão junto, para o card dizer quem. A resposta chega como prompt
     /// novo; sem som, porque não há nada para você fazer (ADR-067).
     case awaiting([String])
+    /// O turno morreu por erro passageiro da API, e o app tenta de novo
+    /// sozinho às `at` — a tentativa `attempt` de `ApiFailure.maxAttempts`
+    /// (ADR-072). Sem som: ainda não há o que você fazer.
+    case retrying(attempt: Int, at: Date)
+    /// O turno morreu por erro da API e o app desistiu — erro sem volta ou
+    /// tentativas esgotadas. Chama você, em vermelho (ADR-072).
+    case failed(String)
     /// Processo encerrado.
     case dead
 
     /// Estados que INTERROMPEM: borda laranja e som. Só a pergunta entra aqui.
     /// "Terminou" você lê quando olhar; tratar os dois como o mesmo alarme é o
     /// que fazia o aviso virar barulho de fundo (ADR-024).
-    var needsAttention: Bool { self == .asking }
+    var needsAttention: Bool {
+        switch self {
+        case .asking, .failed: return true
+        default:               return false
+        }
+    }
 
     /// Sufixo do cabeçalho do nó. `nil` quando não vale ocupar a linha.
     var label: String? {
@@ -44,6 +56,9 @@ enum Activity: Equatable {
             return "\(Spinner.hourglass) aguardando " + (peers.isEmpty ? "vizinho" : peers.joined(separator: ", "))
         case .waiting:  return "● terminou"
         case .asking:   return "● precisa de você"
+        case .retrying(let attempt, let at):
+            return "⟳ tentando de novo às \(Self.clock(at)) (\(attempt)/\(ApiFailure.maxAttempts))"
+        case .failed(let why): return "● falhou — \(why)"
         case .dead:     return "✕ processo encerrado"
         case .ready:    return nil
         }
@@ -57,9 +72,15 @@ enum Activity: Equatable {
         // o cabeçalho; a cor você reconhece de longe, que é quando importa.
         case .waiting: return .systemGreen
         case .asking:  return .systemOrange
-        case .dead:    return .systemRed
+        case .dead, .failed: return .systemRed
         default:       return nil
         }
+    }
+}
+
+extension Activity {
+    fileprivate static func clock(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
     }
 }
 
@@ -79,6 +100,10 @@ struct ActivitySummary: Equatable {
     var background = 0
     var attention = 0
     var done = 0
+    /// Os que pararam por erro da API, desistidos ou esperando a próxima
+    /// tentativa. Subconjunto — cada um já conta em `attention` ou em
+    /// `background`; separado só para o cronômetro saber que é erro.
+    var failed = 0
 
     /// Só terminais subindo, nada mais a dizer: é a bancada se preparando.
     var isPreparing: Bool {

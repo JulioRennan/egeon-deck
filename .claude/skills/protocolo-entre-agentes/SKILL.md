@@ -1,6 +1,6 @@
 ---
 name: protocolo-entre-agentes
-description: O mapa completo da camada de coordenação e segurança entre agentes do Egeon Deck — marcadores [[ED:ok]]/[[ED:ask]], ganchos do CLI, o comando `egeon`, as guardas de cadeia (aresta, maxSends, maxVisits, fila) e o envelope de procedência. Consultar antes de mexer em Dispatch, Notifications, EgeonCLI, EdgeConfig, ou em qualquer coisa que decida "quem chama quem" e "quando o usuário é avisado".
+description: O mapa completo da camada de coordenação e segurança entre agentes do Egeon Deck — marcadores [[ED:ok]]/[[ED:ask]], ganchos do CLI, o comando `egeon`, as guardas de cadeia (aresta, maxSends, fila por remetente) e o envelope de procedência. Consultar antes de mexer em Dispatch, Notifications, EgeonCLI, EdgeConfig, ou em qualquer coisa que decida "quem chama quem" e "quando o usuário é avisado".
 ---
 
 # Protocolo entre agentes do Egeon Deck
@@ -121,7 +121,7 @@ com `"force": true`; agente novo nasce com `maestro ↔ novo` (`maxSends` padrã
 ajustável no mesmo plano); regras da bancada reiniciam os outros agentes, nunca o
 maestro. **A guarda 1 (aresta) tem uma exceção: o maestro.** `MaestroLinks.effective`
 soma às arestas desenhadas as implícitas maestro → todo agente/shell e agente →
-maestro, sem `maxSends` (só o `maxVisits` vale); `AppControl.workbenchEdges`
+maestro, sem `maxSends` — sem limite nenhum, desde que o teto de visitas da bancada saiu (ADR-077); `AppControl.workbenchEdges`
 devolve essas, então `link(from:to:)`, `peers(of:)` e `mayPeek` as enxergam, e o
 canvas não as desenha. Plano que cria/remove nó rearruma o canvas
 (`MaestroLayout`, `"layout"` no plano). Shell entra como alvo de
@@ -139,16 +139,15 @@ ordem:
 |---|---|---|---|
 | 0 | alvo existe | `targets[request.target]` | `alvo desconhecido 'X'. disponíveis: …` |
 | 1 | **aresta obrigatória** `from → to` | `link(from:to:)` em `EdgeConfig` da bancada (`Features/Canvas/Models/EdgeConfig.swift`; nasce bidirecional, ADR-028) | `não existe ligação de A para B — desenhe a aresta no canvas` |
-| 2 | **fila do destino** `< 5` | `maxPendingFromAgents = 5` | `cadeia recusada: X ainda tem N mensagens por ler. Espere ele responder antes de mandar outra.` |
+| 2 | **fila do destino, por remetente** — mensagens DESTE remetente ainda por ler no destino (o aviso de comando não conta) | `SenderBacklog.count`; o limite é o `maxSends` da própria aresta; sem ele (`↻ ∞`, inclusive as implícitas do maestro), não há teto (ADR-077) | `cadeia recusada: X ainda tem N mensagens suas por ler (limite L). Espere ele responder antes de mandar outra.` |
 | 3 | **`maxSends` da aresta** — vezes que ESTA seta disparou nesta cadeia | `EdgeConfig.maxSends`, padrão `defaultSends = 2`; `nil` = ∞ (mostrado como `↻ ∞` na aresta) | `cadeia recusada: a ligação A → B já disparou N× nesta conversa (cadeia). Volte a falar com o usuário.` |
-| 4 | **`maxVisits` da bancada** — vezes que o DESTINO aparece na cadeia | `WorkbenchConfig.maxVisits`, `visitLimit` padrão `4` | `cadeia recusada: X já entrou N× nesta conversa (cadeia). Volte a falar com o usuário.` |
 
-Por que duas contagens (ADR-012 "Quatro guardas, nenhuma no texto do prompt"):
-`maxSends` é o botão do dia a dia — "este par conversa N vezes"; `maxVisits` é
-rede — única que segura `A→B→C→A`, onde cada seta dispara uma vez só.
-Conta **revisita, não comprimento**: `pm→front→pm→back→pm` é orquestração
-legítima. Fila existe porque a cadeia só avança na **entrega**: agente em laço
-manda três antes do destino ler a primeira, e as três chegariam como "envio 1".
+Um limite só, o da aresta (ADR-077): `maxSends` é "este par conversa N vezes"
+nesta cadeia. O `maxVisits` da bancada (rede para `A→B→C→A`) saiu — num ciclo
+cada seta continua contando os próprios disparos, então ele também termina.
+Fila existe porque a cadeia só avança na **entrega**: agente em laço manda três
+antes do destino ler a primeira, e as três chegariam como "envio 1"; por isso
+ela conta por remetente, com o mesmo `maxSends`.
 
 ### A cadeia em si
 
@@ -285,8 +284,8 @@ cauda do transcript) · `TraceTests` (carimbo da entrada, um arquivo por bancada
 ordem entre agentes) · `ChatHistoryTests` (corrente na raiz, arquivo, dedupe,
 `lastTurn` com cauda cortada).
 
-**Sem teste hoje**: as quatro guardas em `dispatch(_:from:)` (`sendCount`,
-`visitLimit`, fila), `verdict(from:)`, `attend`/latches. Mudança ali nasce com
+**Sem teste hoje**: as guardas em `dispatch(_:from:)` (`sendCount`, fila — só
+a contagem tem teste, `SenderBacklogTests`), `verdict(from:)`, `attend`/latches. Mudança ali nasce com
 teste — é a regra do CLAUDE.md.
 
 ## 9. ADRs que sustentam tudo isto (`docs/01-decisoes.md`)

@@ -20,6 +20,9 @@ enum HookEvent: String, CaseIterable {
     /// acabava antes de o CLI terminar de carregar, e o card ficava sem rótulo
     /// com o programa ainda subindo.
     case start
+    /// Gancho `StopFailure`: o turno morreu por erro da API, no lugar do
+    /// `Stop` (ADR-072).
+    case failure
 
     /// Para a mensagem de erro da rota: o que ela aceita, por extenso.
     static var expected: String {

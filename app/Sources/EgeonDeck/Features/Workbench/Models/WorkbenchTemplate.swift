@@ -16,12 +16,10 @@ struct WorkbenchTemplate: Codable {
     /// diálogo, o que é o caminho para a segunda worktree.
     var basePath: String?
 
-    /// Em que modo a bancada abre, e com que proporções se for mosaico. Faz parte
-    /// da montagem tanto quanto a posição dos nós: um preset de "editor mais
-    /// quatro agentes" nasce torto se abrir no canvas quando foi desenhado em
-    /// mosaico.
+    /// Em que modo a bancada abre. Faz parte da montagem tanto quanto a posição
+    /// dos nós: um preset de agentes conversando nasce torto se abrir no canvas
+    /// quando foi desenhado em chat.
     var view: ViewMode?
-    var mosaic: MosaicLayout?
 
     /// Instancia os nós para uma bancada nova.
     ///
@@ -35,14 +33,13 @@ struct WorkbenchTemplate: Codable {
 }
 
 extension WorkbenchTemplate {
-    private enum CodingKeys: String, CodingKey { case nodes, basePath, view, mosaic }
+    private enum CodingKeys: String, CodingKey { case nodes, basePath, view }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         nodes = try c.decodeNodes(forKey: .nodes) ?? []
         basePath = try c.decodeIfPresent(String.self, forKey: .basePath)
         view = try c.decodeIfPresent(ViewMode.self, forKey: .view)
-        mosaic = try c.decodeIfPresent(MosaicLayout.self, forKey: .mosaic)
     }
 }
 
@@ -105,7 +102,7 @@ enum WorkbenchTemplateStore {
             nodes[i] = nodes[i].withoutConversation
         }
         return WorkbenchTemplate(nodes: nodes, basePath: workbench.path,
-                        view: workbench.view, mosaic: workbench.mosaic)
+                        view: workbench.view)
     }
 
     /// `http://localhost:3000/farms/123` → `http://localhost:3000`.

@@ -16,7 +16,9 @@ final class Target {
     /// consegue forjar escrevendo texto.
     var shellPid: pid_t { view?.process?.shellPid ?? 0 }
 
-    private var queue: [(prompt: String, mode: String?, chain: [String])] = []
+    /// `notice` é o aviso que vai antes de um comando com `/`: entra na fila,
+    /// mas não conta como mensagem do remetente — comando e aviso são um envio só.
+    private var queue: [(prompt: String, mode: String?, chain: [String], notice: Bool)] = []
 
     /// Por onde passou a mensagem que este terminal está atendendo agora.
     ///
@@ -76,6 +78,15 @@ final class Target {
     /// Entrada é o sinal exato — um agente parado só volta a ter o que fazer se
     /// alguém lhe der.
     private var attentionHeld = false
+
+    /// Falhas de API seguidas neste trabalho — zera num turno que fecha bem ou
+    /// num pedido seu (ADR-072).
+    private var failures = 0
+    /// A tentativa agendada, para cancelar quando você assume.
+    private var retryWork: DispatchWorkItem?
+    /// O prompt em curso é a tentativa do app, não um pedido novo: o
+    /// `UserPromptSubmit` dele não zera a contagem.
+    private var retryInFlight = false
     /// Este terminal foi lançado com os nossos ganchos?
     ///
     /// Sabido no arranque, e não descoberto no primeiro relato: quem monta a
@@ -136,6 +147,9 @@ final class Target {
     private let questionPatterns: [NSRegularExpression]
 
     var pending: Int { queue.count }
+
+    /// As cadeias das mensagens esperando leitura, sem os avisos de comando.
+    var queuedChains: [[String]] { queue.filter { !$0.notice }.map(\.chain) }
     var displayName: String { profile?.displayName ?? "shell" }
 
     init(address: String, profile: AgentProfile?, view: MBTerminalView, hooked: Bool) {
@@ -207,8 +221,8 @@ final class Target {
         return Array(visible.suffix(lines))
     }
 
-    func enqueue(_ prompt: String, mode: String? = nil, chain: [String] = []) {
-        queue.append((prompt, mode, chain))
+    func enqueue(_ prompt: String, mode: String? = nil, chain: [String] = [], notice: Bool = false) {
+        queue.append((prompt, mode, chain, notice))
         Log.write("dispatch[\(address)]: enfileirado (\(queue.count) na fila)")
     }
 
@@ -285,6 +299,11 @@ final class Target {
             transition(to: .starting)
             return
         }
+
+        // Tentativa agendada depois de erro de API: o estado é ela até a hora
+        // chegar — nem a entrega anterior por confirmar, nem o foco, nem o pty
+        // calado a apagam (ADR-072).
+        if retryWork != nil { return }
 
         // Fila por drenar, entrega sem confirmação ou Enter por sair: o terminal
         // não está esperando você — está esperando a gente.
@@ -376,6 +395,8 @@ final class Target {
         // Tecla aqui com o diálogo de permissão aberto é a resposta dada no
         // terminal: o gancho que espera pelo chat sai calado (ADR-068).
         PermissionDesk.shared.drop(address: address, why: "respondido no terminal")
+        // Você assumiu: a tentativa agendada não vale mais.
+        cancelRetry(resetCount: true)
         inputArrived()
         chain = []
         // Você assumiu: o que o agente esperava do vizinho deixou de ser a
@@ -415,17 +436,22 @@ final class Target {
     /// pedindo permissão). O segundo é o caso que marcador nenhum alcança: o
     /// diálogo de permissão é desenhado pelo programa, não é mensagem do modelo
     /// (ADR-024).
-    func hookReported(_ event: HookEvent, transcript: URL? = nil, report: StopReport = StopReport()) {
+    func hookReported(_ event: HookEvent, transcript: URL? = nil, report: StopReport = StopReport(),
+                      failure: ApiFailure? = nil) {
         // Dois por turno, e é o que responde "o CLI está mesmo relatando?" e em
         // que ordem — a pergunta que o recap obrigou a fazer.
         Log.write("gancho[\(address)]: \(event.rawValue)")
         speaksHooks = true
-        if event == .stop || event == .prompt {
+        if event == .stop || event == .prompt || event == .failure {
             PermissionDesk.shared.drop(address: address, why: "o turno seguiu")
         }
         switch event {
+        case .failure:
+            turnInFlight = false
+            failed(failure ?? ApiFailure(error: "unknown"))
         case .stop:
             turnInFlight = false
+            failures = 0
             settleStop(transcript: transcript, report: report, token: hookToken(event.rawValue), attempt: 0)
         case .start:
             sessionUp = true
@@ -437,6 +463,12 @@ final class Target {
             turnInFlight = true
             turnStartedAt = Date()
             inBackground = false
+            if retryInFlight { retryInFlight = false } else { cancelRetry(resetCount: true) }
+            // O CLI recebeu o prompt: é a confirmação da entrega, melhor que
+            // esperar byte no pty. Sem isto, um turno que morre em menos de 1,5s
+            // (erro de API na hora) achava a entrega pendente e voltava a
+            // "trabalhando" por cima do estado de fim (ADR-072).
+            unconfirmed = nil
         case .ask:
             // `Notification` são dois avisos num: o pedido de permissão e o
             // "você sumiu há 60s". O segundo não traz notícia nenhuma — o fim do
@@ -461,6 +493,70 @@ final class Target {
             awaitingLatched = false
             attend(.asking, via: "gancho Notification", stop: hookToken(event.rawValue))
         }
+    }
+
+    /// O turno morreu por erro da API (ADR-072). Erro passageiro ou limite de
+    /// uso: agenda a tentativa de novo, sem som — o card mostra quando. Sem
+    /// volta, ou tentativas esgotadas: para e te chama, em vermelho.
+    private func failed(_ failure: ApiFailure) {
+        failures += 1
+        cancelRetry(resetCount: false)
+        Log.write("falha[\(address)]: \(failure.error)"
+                  + (failure.detail.map { " — \($0.prefix(160))" } ?? "") + " (\(failures)ª)")
+        guard let delay = failure.delay(attempt: failures) else {
+            let tried = failures - 1
+            failures = 0
+            let why = failure.label + (tried > 0 ? " (depois de \(tried) tentativa\(tried > 1 ? "s" : ""))" : "")
+            attend(.failed(why), via: "gancho StopFailure (\(failure.error))", stop: hookToken("failure"))
+            return
+        }
+        let at = Date().addingTimeInterval(delay)
+        // Segura o estado: o pty calado não pode virar "pronto" por cima.
+        attentionHeld = true
+        transition(to: .retrying(attempt: failures, at: at))
+        Log.write("falha[\(address)]: tentando de novo em \(Int(delay))s "
+                  + "(\(failures)/\(ApiFailure.maxAttempts))")
+        lastFailure = failure
+        let work = DispatchWorkItem { [weak self] in self?.retry(failure) }
+        retryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// Manda o "continue" agora, sem esperar a hora — ou a hora chegou.
+    private func retry(_ failure: ApiFailure) {
+        // Cancelada, a tarefa nem roda: quem desiste é o `cancel` dela.
+        retryWork = nil
+        retryInFlight = true
+        attentionHeld = false
+        enqueue(failure.retryPrompt, chain: chain)
+        lastFailure = nil
+    }
+
+    /// A falha que agendou a tentativa em curso, para o "tentar agora".
+    private var lastFailure: ApiFailure?
+
+    /// Tentar agora (`now`) ou desistir da tentativa agendada. `false` quando
+    /// não há tentativa agendada.
+    @discardableResult
+    func retryControl(now: Bool) -> Bool {
+        guard let work = retryWork else { return false }
+        work.cancel()
+        retryWork = nil
+        if now {
+            retry(lastFailure ?? ApiFailure(error: "unknown"))
+        } else {
+            failures = 0
+            attentionHeld = false
+            transition(to: .waiting)
+            Log.write("falha[\(address)]: tentativa cancelada por você")
+        }
+        return true
+    }
+
+    private func cancelRetry(resetCount: Bool) {
+        retryWork?.cancel()
+        retryWork = nil
+        if resetCount { failures = 0 }
     }
 
     /// O gancho diz QUANDO o turno acabou; o marcador diz QUAL das duas paradas
@@ -664,8 +760,13 @@ final class Target {
         if let notice = SystemNotice(address: address, activity: next, detail: detail) {
             SystemNotifier.shared.post(notice)
         }
-        Log.write(String(format: "atenção[%@]: %@ — por %@, rajada de %.1fs", address,
-                         next == .asking ? "precisa de você" : "terminou",
+        let said: String
+        switch next {
+        case .asking:          said = "precisa de você"
+        case .failed(let why): said = "falhou (\(why))"
+        default:               said = "terminou"
+        }
+        Log.write(String(format: "atenção[%@]: %@ — por %@, rajada de %.1fs", address, said,
                          via, burst))
     }
 
@@ -934,9 +1035,8 @@ final class Dispatcher {
         case emptyPrompt
         case unknownSender(String)
         case notLinked(from: String, to: String)
-        case tooManyVisits(target: String, limit: Int, chain: [String])
         case tooManySends(from: String, to: String, limit: Int, chain: [String])
-        case targetBacklogged(target: String, pending: Int)
+        case targetBacklogged(target: String, pending: Int, limit: Int)
 
         var description: String {
             switch self {
@@ -948,12 +1048,9 @@ final class Dispatcher {
                 return "remetente desconhecido '\(from)'"
             case .notLinked(let from, let to):
                 return "não existe ligação de \(from) para \(to) — desenhe a aresta no canvas"
-            case .tooManyVisits(let target, let limit, let chain):
-                return "cadeia recusada: \(target) já entrou \(limit)× nesta conversa "
-                    + "(\(chain.joined(separator: " → "))). Volte a falar com o usuário."
-            case .targetBacklogged(let target, let pending):
-                return "cadeia recusada: \(target) ainda tem \(pending) mensagens por ler. "
-                    + "Espere ele responder antes de mandar outra."
+            case .targetBacklogged(let target, let pending, let limit):
+                return "cadeia recusada: \(target) ainda tem \(pending) mensagens suas por ler "
+                    + "(limite \(limit)). Espere ele responder antes de mandar outra."
             case .tooManySends(let from, let to, let limit, let chain):
                 return "cadeia recusada: a ligação \(from) → \(to) já disparou \(limit)× "
                     + "nesta conversa (\(chain.joined(separator: " → "))). "
@@ -1014,14 +1111,15 @@ final class Dispatcher {
         // "envio 1" e o limite de profundidade nem é consultado. Achei isto
         // testando — profundidade não segura volume.
         //
-        // A Anthropic põe o mesmo teto na mensageria entre bancadas do Claude
-        // Code, pelo mesmo motivo. Aqui o número é bem menor porque o destino é
-        // um terminal que atende um prompt por vez.
-        guard destination.pending < Self.maxPendingFromAgents else {
+        // Por remetente, e com o número da ligação (ADR-077): o que se quer
+        // barrar é UM agente em laço, não o time respondendo junto ao maestro.
+        // Ligação sem limite (↻ ∞) não tem teto aqui também.
+        let mine = SenderBacklog.count(from: sender, in: destination.queuedChains)
+        if let backlogLimit = edge.maxSends, mine >= max(1, backlogLimit) {
             Log.write("cadeia[\(sender) → \(destination.address)]: RECUSADA, "
-                      + "fila do destino com \(destination.pending) mensagens")
+                      + "\(mine) mensagens dele ainda por ler (limite \(backlogLimit))")
             throw DispatchError.targetBacklogged(target: destination.address,
-                                                 pending: destination.pending)
+                                                 pending: mine, limit: backlogLimit)
         }
 
         // A cadeia herda o caminho que o remetente estava atendendo. Se ele foi
@@ -1029,10 +1127,9 @@ final class Dispatcher {
         var chain = origin.chain.isEmpty ? [sender] : origin.chain
         chain.append(destination.address)
 
-        // Duas guardas, e elas não são a mesma coisa. O limite da seta é o botão
-        // que você regula: "este par pode conversar N vezes". O da bancada é rede,
-        // e é o único que segura ciclo de três ou mais — ali cada seta dispara uma
-        // vez só e o limite dela nunca chega perto.
+        // O limite da seta é o único: "este par pode conversar N vezes" nesta
+        // cadeia. O teto de visitas da bancada saiu (ADR-077) — num ciclo de
+        // três, cada seta continua contando os próprios disparos.
         let sends = sendCount(from: sender, to: destination.address, in: chain)
         if let allowed = edge.maxSends, sends > allowed {
             Log.write("cadeia[\(sender) → \(destination.address)]: RECUSADA, "
@@ -1042,17 +1139,8 @@ final class Dispatcher {
                                              limit: allowed, chain: chain)
         }
 
-        let ceiling = visitLimit(forWorkbenchOf: destination.address)
-        let visits = chain.filter { $0 == destination.address }.count
-        guard visits <= ceiling else {
-            Log.write("cadeia[\(sender) → \(destination.address)]: RECUSADA, "
-                      + "\(visits)ª visita (teto da bancada \(ceiling)) "
-                      + "— \(chain.joined(separator: " → "))")
-            throw DispatchError.tooManyVisits(target: destination.address, limit: ceiling, chain: chain)
-        }
-
         if !toShell, let notice = request.commandNotice(from: sender) {
-            destination.enqueue(notice, mode: request.inject, chain: chain)
+            destination.enqueue(notice, mode: request.inject, chain: chain, notice: true)
         }
         destination.enqueue(prompt, mode: request.inject, chain: chain)
         // Passou o bastão: o fim de turno DELE não te chama mais. Para shell
@@ -1068,17 +1156,11 @@ final class Dispatcher {
             if !isReply { origin.awaitingPeers.sent(to: destination.address) }
         }
         destination.peerAnswered(sender)
-        let budget = edge.maxSends.map { "envio \(sends)/\($0)" } ?? "visita \(visits)/\(ceiling)"
+        let budget = "envio \(sends)/" + (edge.maxSends.map(String.init) ?? "∞")
         Log.write("cadeia[\(sender) → \(destination.address)]: \(budget) "
                   + "— \(chain.joined(separator: " → "))")
         return "enfileirado para \(destination.address); \(destination.pending) na fila; \(budget)"
     }
-
-    /// Teto de mensagens de agente esperando leitura num terminal.
-    ///
-    /// Baixo porque o destino atende um prompt por vez: fila de cinco já são
-    /// cinco turnos enfileirados, e o sexto seria um agente falando sozinho.
-    private static let maxPendingFromAgents = 5
 
     /// Quantas vezes esta seta já disparou nesta cadeia, contando a de agora.
     ///
@@ -1129,11 +1211,6 @@ final class Dispatcher {
             .first { $0.from == id(from) && $0.to == id(to) }
     }
 
-    private func visitLimit(forWorkbenchOf address: String) -> Int {
-        let workbench = String(address.split(separator: "/").first ?? "")
-        return AppControl.workbenchVisitLimit?(workbench) ?? 3
-    }
-
     /// Quanto cada bancada tem de trabalho em curso e de espera por você.
     ///
     /// Vive aqui, e não no canvas, porque a barra lateral precisa disso das
@@ -1147,11 +1224,13 @@ final class Dispatcher {
             switch target.activity {
             case .starting:           entry.starting += 1
             case .working:            entry.working += 1
-            case .background, .awaiting: entry.background += 1
-            case .asking:             entry.attention += 1
+            case .background, .awaiting, .retrying: entry.background += 1
+            case .asking, .failed:    entry.attention += 1
             case .waiting:            entry.done += 1
             case .ready, .dead:       break
             }
+            if case .failed = target.activity { entry.failed += 1 }
+            if case .retrying = target.activity { entry.failed += 1 }
             out[name] = entry
         }
         return out

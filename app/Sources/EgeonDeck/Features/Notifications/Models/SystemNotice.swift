@@ -19,9 +19,13 @@ struct SystemNotice: Equatable {
     init?(address: String, activity: Activity, detail: String? = nil) {
         guard let slash = address.lastIndex(of: "/") else { return nil }
         let headline: String
+        var detail = detail
         switch activity {
         case .asking:  headline = "precisa de você"
         case .waiting: headline = "já terminou o serviço"
+        case .failed(let why):
+            headline = "parou por um erro"
+            detail = detail ?? why
         default:       return nil
         }
         workbench = String(address[..<slash])

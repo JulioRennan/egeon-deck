@@ -2,7 +2,7 @@ import XCTest
 @testable import EgeonDeck
 
 /// A faixa sobrevive ao fechar do app: quais bancadas estavam abertas, e em que
-/// ordem, vai para o `workbenches.json` ao lado de `view` e `mosaic`.
+/// ordem, vai para o `workbenches.json` ao lado de `view`.
 final class WorkbenchTabOrderTests: XCTestCase {
     /// Arquivo antigo não tem a chave — e tem de carregar como se estivesse
     /// fechada, sem uma linha de migração.

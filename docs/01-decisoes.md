@@ -4207,6 +4207,95 @@ aceito vale, `/private` mantido, fontes com git de verdade). No pty, os quatro
 casos acima. No DEV, um agente na pasta de multi-projeto subiu direto no
 prompt, com "herdou de app" no log.
 
+## ADR-072 — Erro de API tenta de novo sozinho; sem volta, bolinha vermelha
+
+**Contexto.** O Claude parava quando a API falhava (sobrecarga, erro do
+servidor, limite de uso) e ficava assim: o card dizia "terminou", e a única
+saída era ir até ele e mandar um "oi". O Claude Code tem um gancho para isso,
+`StopFailure`, que dispara no lugar do `Stop` com `error` (`overloaded`,
+`server_error`, `rate_limit`, `authentication_failed`, `billing_error`,
+`invalid_request`, `model_not_found`, `unknown`…) e `error_details` (binário
+2.1.303). Medido: o 529 chega como `server_error`, o 400 como `unknown`.
+
+**Decisão.** O gancho relata a falha (`/activity?event=failure&error=&detail=`)
+e `ApiFailure` decide pelo tipo: passageiro (`overloaded`, `server_error`,
+`unknown`) tenta de novo em 30 s, 2 min e 5 min; `rate_limit` em 2, 10 e 30 min;
+o resto não tenta. A tentativa é o "oi" que você mandava, dizendo por quê ("A
+última chamada à API falhou (…). Continue de onde parou."), pela fila normal de
+entrega. Enquanto espera, o terminal fica em `.retrying` — "⟳ tentando de novo
+às HH:MM (n/3)", ampulheta na barra, sem som —, e o rótulo do card abre **Tentar
+agora** / **Cancelar tentativa** (`POST /retry?target=&now=1`, sem `now`
+cancela). Sem volta ou na quarta falha seguida: `.failed`, que chama como a
+pergunta (borda, som, notificação "parou por um erro") e põe a bolinha vermelha
+no chat. A contagem zera num turno que fecha bem (`Stop`), num pedido seu ou
+numa tecla sua no terminal; o `UserPromptSubmit` da própria tentativa não zera.
+
+**Armadilhas medidas.** O ciclo de estado (0,25 s) apagava o `.retrying`: no
+shell por não vigiar atenção, e em qualquer um pela entrega anterior ainda "por
+confirmar" — a tentativa agendada agora vale antes dessas regras. E a falha
+chega em menos de 1,5 s, antes de o app confirmar a entrega pelo pty: o
+`UserPromptSubmit` passou a confirmar a entrega, o que também evita reenvio.
+
+**Fora.** O agente congelado sem erro nenhum ("requesting…" para sempre) não
+dispara gancho; pegá-lo pediria vigia por tempo sem saída, que se confunde com
+comando longo.
+
+**Verificação.** `ApiFailureTests` (tipos, esperas, desistência, leitura da
+query, estados no resto do app). No DEV, um `claude` apontado para um servidor
+falso (529 e 400, `CLAUDE_CODE_MAX_RETRIES=0`): a tentativa automática saiu aos
+30 s e contou 2/3; "tentar agora" pela rota avançou até a quarta falha, que
+virou "falhou — erro desconhecido (depois de 3 tentativas)" com a bolinha
+vermelha na coluna de agentes do chat (foto).
+
+## ADR-073 — O mosaico sai
+
+**Decisão.** A bancada fica com dois modos, canvas e chat; o mosaico (janela
+dividida entre os cards por `NSSplitView`, com troca de card arrastando o
+cabeçalho e proporções gravadas) sai inteiro, a pedido. Junto com ele saem o
+que só ele usava: `MosaicLayout` e o campo `mosaic` da bancada e do template,
+`isFreeform` e a troca por arrasto no `NodeView`, a rota `/mosaic?swap=` e o
+`AppControl.swapMosaic`. O chat passa de ⌥⌘3 para ⌥⌘2.
+
+**O que fica.** O conteúdo ao lado da barra lateral, e não por baixo dela, era
+do mosaico e também do chat: virou `RootView.setBeside`. O retrato das posições
+no canvas (`canvasFrames`) continua, porque o chat pega um terminal emprestado
+do canvas e o devolve no lugar.
+
+**Compatibilidade.** `workbenches.json` e templates gravados com `"view":
+"mosaic"` abrem no canvas (o `ViewMode` já trata valor desconhecido assim), e a
+chave `mosaic` que ficou no arquivo é ignorada na carga e some na próxima
+gravação.
+
+## ADR-074 — Cronômetro da bancada: rodando, esperando você, em erro
+
+**Decisão.** A linha de baixo da barra superior, que mostrava o caminho da
+pasta, passa a mostrar três tempos da bancada: trabalhando (martelo), esperando você
+(mão, laranja) e em erro (sinal de parada, vermelho) — ícones do SF Symbols, porque os
+glifos `▶ ● ✕` se confundiam com as bolinhas do badge de atividade
+(`WorkbenchClockText`). A mesma linha vai para cada bancada da barra lateral,
+também no lugar do caminho, que fica só quando a pasta sumiu (é aviso). O
+caminho continua acessível na dica do título e da linha. Clicar no cronômetro oferece "Zerar cronômetro"; limpar a bancada zera
+também, porque é o começo de outro período, como o chat e a trilha.
+
+**Fases exclusivas, por relógio de parede.** A cada tique do laço do spinner
+(0,12 s) a bancada está em UMA fase, ou em nenhuma, e só ela anda: cinco
+agentes trabalhando juntos contam um segundo por segundo. A fase sai do
+`ActivitySummary`: erro (falhou ou esperando a tentativa automática — o
+`ActivitySummary.failed`, subconjunto) vence você (precisa de você), que vence
+rodando (trabalhando, segundo plano, aguardando vizinho). É a prioridade da
+borda: um agente parado pedindo algo segura a bancada mesmo com outro
+trabalhando. Bancada parada sem pendência (todos terminaram, ou subindo) não
+conta — "terminou" não é tempo de ninguém.
+
+**Guardado por `id`.** `workbenches/<id>/clock.json`, gravado a cada 15 s e no
+encerramento. Um passo de tique maior que 2 s (Mac dormindo, app travado) conta
+só 2 s. Todas as bancadas de pé andam, não só a da tela.
+
+**Verificação.** `WorkbenchClockTests` (precedência, teto do passo, formato,
+soma, persistência, zerar). No DEV, um turno de ~30 s na `testes-bancada`: ▶
+aceso contando durante o turno, parado em 32 s e apagado ao terminar, e o
+`clock.json` com o mesmo valor (fotos).
+
 ## ADR-075 — A extensão de review de markdown sai
 
 **Decisão.** A extensão `egeon.spec` do code-server (pasta `extension/`) sai
@@ -4256,3 +4345,31 @@ workbench) fica no disco; o app não a lê mais.
 editor; tipo desconhecido que não é o aposentado ainda falha). No DEV, a
 `testes-bancada`, que tinha um card de editor, abre sem ele, a barra de baixo
 fica com cursor, terminal e web, e nenhum code-server sobe (log e `pgrep`).
+
+## ADR-077 — Só o limite da aresta: sai o teto da bancada, e a fila conta por remetente
+
+**Contexto.** Havia dois limites de conversa além da aresta. O teto de
+visitas da bancada (`maxVisits`, padrão 4, ADR-012) era a rede para ciclos de
+três ou mais. A guarda de fila cheia (`maxPendingFromAgents = 5`, desde o
+primeiro commit, sem ADR) segurava agente em laço — a cadeia só avança na
+entrega, então quem dispara `egeon send` em sequência manda tudo antes de o
+destino ler o primeiro. Mas o teto da fila era por DESTINO, cinco mensagens de
+quem fosse: no teste de carga (maestro em Opus com 14 agentes em Sonnet), as
+respostas do time chegaram juntas e três foram recusadas com "fila do destino
+com 5 mensagens".
+
+**Decisão.** O único limite é o da aresta, a pedido.
+- `maxVisits` sai inteiro: o campo da bancada (ignorado na leitura dos
+  arquivos antigos), o item "Limite de conversa entre agentes…" do menu, o
+  `maxVisits` do plano do maestro e do `egeon bench`. Num ciclo `A→B→C→A`
+  cada seta continua contando os próprios disparos, então ele também acaba.
+- A fila conta por remetente (`SenderBacklog.count`, pelo penúltimo elo da
+  cadeia de cada item), com o `maxSends` da própria aresta como teto. O aviso
+  que antecede um comando com `/` (ADR-069) entra marcado e não conta.
+
+**Consequência.** Aresta sem limite (`↻ ∞`) não tem teto nenhum — nem de
+envios, nem de fila. Isso inclui as ligações implícitas do maestro
+(`MaestroLinks`), que até aqui eram seguras pelo teto da bancada.
+
+**Verificação.** `SenderBacklogTests`; `WorkbenchConfigTests` (arquivo com
+`maxVisits` ainda abre); `MaestroPlanTests` sem o campo.

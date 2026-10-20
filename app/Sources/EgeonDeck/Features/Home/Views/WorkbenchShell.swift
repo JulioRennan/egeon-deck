@@ -2,14 +2,13 @@ import AppKit
 
 // MARK: - A bancada na tela
 
-/// Uma bancada: a barra de visualização em cima e, embaixo, o canvas ou o
-/// mosaico — os dois com os MESMOS nós.
+/// Uma bancada: a barra de visualização em cima e, embaixo, o canvas ou o chat
+/// — os dois com os MESMOS nós.
 ///
-/// É o dono dos nós, e é por isso que existe. Antes quem os guardava era o
-/// canvas, na forma de `doc.subviews`; com dois containers disputando o mesmo
-/// card, a lista tem de viver acima dos dois — senão entrar no mosaico faz a
-/// bancada parecer vazia para todo mundo que contava nós pelo canvas: spinner do
-/// cabeçalho, geometria do socket, persistência.
+/// É o dono dos nós, e é por isso que existe: o chat pega um terminal do canvas
+/// emprestado, e a lista tem de viver acima dos dois — senão o card emprestado
+/// some para todo mundo que contava nós pelo canvas: spinner do cabeçalho,
+/// geometria do socket, persistência.
 final class WorkbenchShell: NSView {
     let canvas = CanvasContainer(frame: .zero)
 
@@ -25,10 +24,9 @@ final class WorkbenchShell: NSView {
     private let busy = BusyOverlay(frame: .zero)
     /// A trava de quando o macOS não deixa ler a pasta da bancada.
     let accessLock = AccessOverlay(frame: .zero)
-    private var mosaic: MosaicContainer?
-    /// O modo chat. Criado junto com a bancada e não sob demanda como o mosaico:
-    /// não guarda geometria de card, então nasce barato, e main.swift precisa
-    /// dele para ligar as fontes de dados uma vez só.
+    /// O modo chat. Criado junto com a bancada: não guarda geometria de card,
+    /// então nasce barato, e main.swift precisa dele para ligar as fontes de
+    /// dados uma vez só.
     let chat = ChatContainer()
 
     private(set) var nodes: [NodeView] = []
@@ -36,8 +34,6 @@ final class WorkbenchShell: NSView {
 
     /// Você trocou de modo — hora de gravar no workbenches.json.
     var onModeChanged: ((ViewMode) -> Void)?
-    /// Divisor do mosaico arrastado.
-    var onMosaicLayoutChanged: ((MosaicLayout) -> Void)?
     /// Repassados pelo container que estiver na tela, para quem escuta não ter de
     /// saber qual é.
     var onRequestClose: ((NodeView) -> Void)?
@@ -47,30 +43,22 @@ final class WorkbenchShell: NSView {
 
     /// Onde cada nó estava no canvas, por id.
     ///
-    /// O mosaico sobrescreve o frame do card no primeiro layout, então sem este
-    /// retrato voltar para o canvas empilharia todos no mesmo canto — e o
-    /// `workbenches.json`, que é gravado a partir do que está na tela, levaria a
-    /// pilha junto.
+    /// O terminal que o chat pega emprestado perde o frame do canvas; sem este
+    /// retrato ele voltaria para o canto — e o `workbenches.json`, que é gravado
+    /// a partir do que está na tela, levaria o canto junto.
     private var canvasFrames: [String: NSRect] = [:]
 
     /// Que bancada a barra de cima anuncia.
     func setWorkbench(name: String, path: String) { bar.setWorkbench(name: name, path: path) }
-
-    /// Troca dois cards de painel no mosaico, por id. Nada acontece no canvas —
-    /// lá a posição é livre e não há painel para trocar.
-    @discardableResult
-    func swapInMosaic(_ primeiro: String, _ segundo: String) -> Bool {
-        mosaic?.swap(primeiro, segundo) ?? false
-    }
-
-    /// Proporções salvas do mosaico. Repassadas na hora de montá-lo.
-    var mosaicLayout: MosaicLayout? {
-        didSet { mosaic?.layoutRatios = mosaicLayout }
+    func showClock(_ clock: WorkbenchClock, phase: WorkbenchClock.Phase?) { bar.setClock(clock, phase: phase) }
+    var onResetClock: (() -> Void)? {
+        get { bar.onResetClock }
+        set { bar.onResetClock = newValue }
     }
 
     /// Quanto o CONTEÚDO cede à esquerda para a barra lateral — a barra de cima
     /// não cede nunca. Ela é a faixa da titlebar da janela: encurtá-la no
-    /// mosaico deixava o trecho sobre a barra lateral sem ninguém para tratar
+    /// chat deixava o trecho sobre a barra lateral sem ninguém para tratar
     /// arrasto e duplo clique, e o título perdia o recuo dos botões da janela.
     var contentInset: CGFloat = 0 {
         didSet { if contentInset != oldValue { needsLayout = true } }
@@ -108,8 +96,8 @@ final class WorkbenchShell: NSView {
         addSubview(accessLock)
 
         // O canvas conhece avisos que só ele sabe dar (componente armado, ciclo
-        // de arestas), mas em modo mosaico ele está fora da hierarquia e o aviso
-        // não apareceria. O banner mora aqui, e ele pede.
+        // de arestas), mas em modo chat ele está coberto e o aviso não
+        // apareceria. O banner mora aqui, e ele pede.
         canvas.onBanner = { [weak self] text in self?.showBanner(text) }
         canvas.onRequestClose = { [weak self] node in self?.onRequestClose?(node) }
         canvas.onRequestEditNode = { [weak self] node in self?.onRequestEditNode?(node) }
@@ -117,8 +105,8 @@ final class WorkbenchShell: NSView {
         canvas.onRequestNodeModel = { [weak self] node, model in
             self?.onRequestNodeModel?(node, model)
         }
-        // Com o mosaico ativo o documento do canvas está vazio, e sem isto todo
-        // nó novo nasceria no mesmo canto de lá.
+        // O card emprestado ao chat não está no documento do canvas, e sem isto
+        // o nó novo nasceria em cima do lugar dele.
         canvas.placedNodes = { [weak self] in self?.nodes ?? [] }
 
         // O chat pega um terminal emprestado do canvas coberto e devolve depois.
@@ -147,9 +135,6 @@ final class WorkbenchShell: NSView {
 
         switch mode {
         case .canvas: canvas.add(node)
-        // A coluna inteira muda de tamanho com um nó a mais, então não há como
-        // encaixar sem remontar.
-        case .mosaic: mosaic?.arrange(nodes)
         // Em chat o card entra no canvas coberto, como em `place`: ele precisa
         // do passe de layout para o pty nascer com colunas.
         case .chat:
@@ -165,22 +150,19 @@ final class WorkbenchShell: NSView {
         canvasFrames[node.nodeID] = nil
         node.prepareForRemoval()
         node.removeFromSuperview()
-        if mode == .mosaic { mosaic?.arrange(nodes) }
         if mode == .chat { chat.refresh() }
     }
 
     /// Leva os cards a novos lugares no canvas, de uma vez, e enquadra — o
-    /// arranjo que o maestro dá à bancada (ADR-066). Em mosaico só a memória
-    /// do canvas muda: os cards estão nos painéis, e voltam já no lugar novo.
+    /// arranjo que o maestro dá à bancada (ADR-066).
     func arrange(_ frames: [String: NSRect]) {
         for (id, frame) in frames where canvasFrames[id] != nil || nodes.contains(where: { $0.nodeID == id }) {
             canvasFrames[id] = frame
         }
-        guard mode != .mosaic else { return }
         canvas.arrange(frames)
     }
 
-    /// Onde este nó fica no canvas, mesmo que agora esteja num painel do mosaico.
+    /// Onde este nó fica no canvas, mesmo que agora esteja emprestado ao chat.
     /// Quem grava geometria no `workbenches.json` pergunta aqui.
     func canvasFrame(of nodeID: String) -> NSRect? {
         if mode == .canvas, let node = nodes.first(where: { $0.nodeID == nodeID }) {
@@ -191,13 +173,12 @@ final class WorkbenchShell: NSView {
 
     /// O container que está na tela.
     ///
-    /// Quem mede geometria pergunta a ele, e não ao canvas: em mosaico o canvas
-    /// está fora da hierarquia de janela, e converter coordenada nele devolve
-    /// número plausível e errado.
+    /// Quem mede geometria pergunta a ele, e não ao canvas: em chat o canvas
+    /// está coberto, e converter coordenada nele devolve número plausível e
+    /// errado.
     var visibleContent: NSView {
         switch mode {
         case .canvas: return canvas
-        case .mosaic: return mosaic ?? canvas
         case .chat:   return chat
         }
     }
@@ -254,21 +235,12 @@ final class WorkbenchShell: NSView {
 
         switch mode {
         case .canvas:
-            mosaic?.removeFromSuperview()
             chat.removeFromSuperview()
             addSubview(canvas, positioned: .below, relativeTo: bannerPanel)
             for node in nodes {
                 if let frame = canvasFrames[node.nodeID] { node.frame = frame }
                 canvas.add(node)
             }
-
-        case .mosaic:
-            canvas.removeFromSuperview()
-            chat.removeFromSuperview()
-            let container = mosaic ?? makeMosaic()
-            addSubview(container, positioned: .below, relativeTo: bannerPanel)
-            container.layoutRatios = mosaicLayout
-            container.arrange(nodes)
 
         case .chat:
             // O canvas CONTINUA montado, com os nós nele, e o chat entra opaco
@@ -278,7 +250,6 @@ final class WorkbenchShell: NSView {
             // terminais com tamanho zero, a TUI não tem onde desenhar, e a tela
             // fica vazia para sempre: `SIGWINCH` depois não faz o shell
             // reimprimir o prompt.
-            mosaic?.removeFromSuperview()
             addSubview(canvas, positioned: .below, relativeTo: bannerPanel)
             for node in nodes {
                 if let frame = canvasFrames[node.nodeID] { node.frame = frame }
@@ -290,23 +261,6 @@ final class WorkbenchShell: NSView {
 
         needsLayout = true
         layoutSubtreeIfNeeded()
-    }
-
-    private func makeMosaic() -> MosaicContainer {
-        let container = MosaicContainer(frame: contentFrame)
-        container.onRequestClose = { [weak self] node in self?.onRequestClose?(node) }
-        container.onRequestEditNode = { [weak self] node in self?.onRequestEditNode?(node) }
-        container.onRequestNodeWorktree = { [weak self] node in
-            self?.onRequestNodeWorktree?(node)
-        }
-        container.onRequestNodeModel = { [weak self] node, model in
-            self?.onRequestNodeModel?(node, model)
-        }
-        container.onLayoutChanged = { [weak self] layout in
-            self?.onMosaicLayoutChanged?(layout)
-        }
-        mosaic = container
-        return container
     }
 
     // MARK: Layout
@@ -330,7 +284,6 @@ final class WorkbenchShell: NSView {
                             height: WorkbenchTabsBar.height)
         let content = contentFrame
         canvas.frame = content
-        mosaic?.frame = content
         chat.frame = content
         bannerPanel.frame = NSRect(x: bounds.midX - 380, y: topInset + 12,
                                    width: 760, height: 30)

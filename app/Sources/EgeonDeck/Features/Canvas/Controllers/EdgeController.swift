@@ -52,16 +52,14 @@ final class EdgeController {
         // você no meio.
         // Par conversando é o padrão agora, e `maxSends` é quem segura ele: avisar
         // em toda ligação criada transformaria o banner em ruído, e ruído não avisa
-        // nada. O que ainda merece aviso é o ciclo que só o teto da bancada segura —
-        // três nós ou mais, onde cada seta dispara uma vez e nenhum contador de
-        // seta chega perto (ADR-012).
+        // nada. O que ainda merece aviso é o ciclo de três nós ou mais: máquinas
+        // conversando em roda sem você no meio, seguras só pelo limite de cada
+        // seta (ADR-012, ADR-077).
         if let cycle = Self.cycle(through: edge, in: edges), cycle.count - 1 >= 3 {
-            let limit = cfg.visitLimit
             let canvas = canvas()
             canvas?.showBanner("Ciclo: \(cycle.joined(separator: " → ")) — "
-                               + "cada terminal entra \(limit)× na mesma cadeia, depois recusa")
-            Log.write("aresta[\(cfg.name)]: ciclo \(cycle.joined(separator: " → ")), "
-                      + "limite de \(limit) visitas")
+                               + "cada ligação dispara até o limite dela na mesma cadeia, depois recusa")
+            Log.write("aresta[\(cfg.name)]: ciclo \(cycle.joined(separator: " → "))")
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak canvas] in
                 canvas?.showBanner(nil)
             }
@@ -97,8 +95,7 @@ final class EdgeController {
             : (link.aToB ? "\(link.a) → \(link.b)" : "\(link.b) → \(link.a)")
         alert.informativeText = "Quantas vezes esta ligação pode disparar numa mesma conversa. "
             + "Num par ligado nos dois sentidos, é o número de idas e voltas.\n\n"
-            + "Vazio = sem limite próprio; vale só o teto da bancada "
-            + "(\(cfg.visitLimit) visitas por terminal)."
+            + "Vazio = sem limite."
         alert.addButton(withTitle: "Salvar")
         alert.addButton(withTitle: "Cancelar")
 

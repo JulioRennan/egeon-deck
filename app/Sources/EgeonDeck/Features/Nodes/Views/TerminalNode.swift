@@ -230,6 +230,7 @@ final class TerminalNode: NodeView {
         subtitle = NodeWorktreePlanner.short(cwd)
         subtitlePath = cwd
         term.startDirectory = cwd
+        if profile != nil { statusLabel.addGestureRecognizer(retryClick) }
         titleLabel.toolTip = address + (profile.map { " · \($0.displayName)" } ?? "")
         body.addSubview(term)
         if let profile, profile.offersModelChoice(catalog: catalog, current: model) || profile.offersEfforts {
@@ -340,10 +341,6 @@ final class TerminalNode: NodeView {
         "O processo do terminal é encerrado junto — o que estiver rodando nele para."
     }
 
-    /// A porta de aresta só existe no canvas: a ligação é desenhada arrastando de
-    /// um card até outro, e no mosaico não há espaço livre onde soltar.
-    override func freeformDidChange() { port.isHidden = !isFreeform || isMaestro }
-
     override func workbenchRenamed(to workbench: String) {
         let updated = "\(workbench)/\(nodeID)"
         Dispatcher.shared.rekey(from: address, to: updated)
@@ -440,6 +437,35 @@ final class TerminalNode: NodeView {
         titleLabel.textColor = isMaestro ? accent : activity.color ?? accent
         statusLabel.textColor = activity.color ?? NSColor(calibratedWhite: 0.62, alpha: 1)
         setAlert(activity.needsAttention)
+
+        // Tentativa agendada: o rótulo vira botão (ADR-072).
+        let retrying: Bool
+        if case .retrying = activity { retrying = true } else { retrying = false }
+        if retrying != statusIsRetry {
+            statusIsRetry = retrying
+            statusLabel.toolTip = retrying ? "Clique para tentar agora ou cancelar" : nil
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+
+    /// O rótulo de estado está mostrando uma tentativa agendada.
+    private var statusIsRetry = false
+    private lazy var retryClick = NSClickGestureRecognizer(target: self, action: #selector(retryMenu))
+
+    @objc private func retryMenu() {
+        guard statusIsRetry else { return }
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Tentar agora", action: #selector(retryNow), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Cancelar tentativa", action: #selector(retryCancel), keyEquivalent: "").target = self
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: statusLabel.bounds.height + 2), in: statusLabel)
+    }
+
+    @objc private func retryNow() { Dispatcher.shared.target(address)?.retryControl(now: true) }
+    @objc private func retryCancel() { Dispatcher.shared.target(address)?.retryControl(now: false) }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if statusIsRetry { addCursorRect(statusLabel.frame, cursor: .pointingHand) }
     }
 
     /// Chegou um catálogo novo — o Claude Code foi atualizado com o app aberto.

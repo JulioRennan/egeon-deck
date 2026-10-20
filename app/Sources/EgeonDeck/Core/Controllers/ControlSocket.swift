@@ -176,6 +176,13 @@ final class ControlSocket {
                 if errno == EINTR { continue }
                 return
             }
+            // Quem chamou pode desistir antes da resposta — o gancho do CLI tem
+            // `--max-time 1`, e um agente interrompido leva o `egeon` junto. O
+            // `write` num socket fechado manda SIGPIPE, cuja ação padrão é
+            // matar o processo sem relatório de crash: foram seis quedas do app
+            // numa bancada de oito agentes antes de se saber disto.
+            var on: Int32 = 1
+            setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
             workQueue.async { [weak self] in self?.handle(clientFD) }
         }
     }
@@ -337,13 +344,29 @@ final class ControlSocket {
             let transcript = query["transcript"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
             let resolved: Bool = DispatchQueue.main.sync {
                 guard let target = hookCaller(fd, query: query) else { return false }
-                target.hookReported(event, transcript: transcript, report: StopReport(query: query))
+                target.hookReported(event, transcript: transcript, report: StopReport(query: query),
+                                    failure: ApiFailure(query: query))
                 return true
             }
             if resolved {
                 respond(fd, status: "200 OK", json: ["ok": true])
             } else {
                 respond(fd, status: "403 Forbidden", json: ["ok": false, "error": Self.notFromTerminal])
+            }
+
+        case ("POST", _, _) where route.contains("/retry"):
+            // /retry?target=<bancada/id>&now=1 tenta de novo já; sem `now`,
+            // cancela a tentativa agendada depois de um erro de API (ADR-072).
+            let query = Self.query(in: route)
+            let target = query["target"] ?? ""
+            let done: Bool = DispatchQueue.main.sync {
+                Dispatcher.shared.target(target)?.retryControl(now: query["now"] == "1") ?? false
+            }
+            if done {
+                respond(fd, status: "200 OK", json: ["ok": true])
+            } else {
+                respond(fd, status: "409 Conflict",
+                        json: ["ok": false, "error": "nenhuma tentativa agendada em '\(target)'"])
             }
 
         case ("POST", _, _) where route.contains("/message"):
@@ -646,23 +669,6 @@ final class ControlSocket {
             respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
                     json: payload)
 
-        case ("GET", _, _) where route.contains("/mosaic"):
-            // /mosaic?target=ws&swap=id1,id2 — troca dois cards de painel, o mesmo
-            // que arrastar o cabeçalho de um sobre o outro.
-            let query = Self.query(in: route)
-            let pares = (query["swap"] ?? "").split(separator: ",").map(String.init)
-            guard pares.count == 2 else {
-                respond(fd, status: "400 Bad Request",
-                        json: ["ok": false, "error": "use swap=id1,id2"])
-                return
-            }
-            let payload = DispatchQueue.main.sync {
-                AppControl.swapMosaic?(query["target"] ?? "", pares[0], pares[1])
-                    ?? ["ok": false, "error": "app sem mosaico disponível"]
-            }
-            respond(fd, status: (payload["ok"] as? Bool) == true ? "200 OK" : "400 Bad Request",
-                    json: payload)
-
         case ("GET", _, _) where route.contains("/remove"):
             // /remove?target=ws[&worktrees=1] — remove a bancada, e só com
             // `worktrees=1` apaga as worktrees dela do disco. O padrão é não
@@ -723,7 +729,7 @@ final class ControlSocket {
             }
 
         case ("GET", _, _) where route.contains("/layout"):
-            // /layout?mode=canvas|mosaic — troca a visualização da bancada ativa.
+            // /layout?mode=canvas|chat — troca a visualização da bancada ativa.
             let mode = Self.query(in: route)["mode"] ?? ""
             let applied = DispatchQueue.main.sync { AppControl.setViewMode?(mode) }
             respond(fd, status: applied == nil ? "404 Not Found" : "200 OK",
@@ -755,7 +761,7 @@ final class ControlSocket {
             let result = DispatchQueue.main.sync {
                 AppControl.cardSnapshot?(target, file) ?? "erro: app sem canvas"
             }
-            respond(fd, status: "200 OK", json: ["target": target, "path": result ?? "timeout"])
+            respond(fd, status: "200 OK", json: ["target": target, "path": result])
 
         case ("POST", _, true):
             guard let request = try? JSONDecoder().decode(DispatchRequest.self, from: body) else {

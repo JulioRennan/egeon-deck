@@ -127,6 +127,19 @@ enum ClaudeHooks {
           ask|start)
             post "/activity?event=$event"
             ;;
+          failure)
+            # O tipo do erro decide se o app tenta de novo; o detalhe é o que a
+            # API disse, para o card e a notificação (ADR-072).
+            q=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
+              'import sys,json,urllib.parse as u
+        d=json.load(sys.stdin)
+        q="error="+u.quote(str(d.get("error") or "unknown"))
+        x=d.get("error_details")
+        if isinstance(x,str) and x:
+            q+="&detail="+u.quote(x[:300],safe="")
+        print(q)' 2>/dev/null)
+            post "/activity?event=failure&${q:-error=unknown}"
+            ;;
           permission)
             # Abre o pedido no app e espera a resposta do chat. O diálogo do CLI
             # continua na tela enquanto isto roda, e responder lá também vale:
@@ -190,6 +203,9 @@ enum ClaudeHooks {
             ],
             "Stop": [
               { "hooks": [{ "type": "command", "command": "\(command("stop"))", "timeout": 5 }] }
+            ],
+            "StopFailure": [
+              { "hooks": [{ "type": "command", "command": "\(command("failure"))", "timeout": 5 }] }
             ],
             "PermissionRequest": [
               { "hooks": [{ "type": "command", "command": "\(command("permission"))", "timeout": \(permissionWait + 20) }] }
