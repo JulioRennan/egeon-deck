@@ -9,6 +9,8 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-20
+
 ### Adicionado
 
 - Cronômetro da bancada na barra de cima e em cada bancada da barra lateral, no lugar do caminho da pasta (que agora aparece ao passar o mouse): quanto tempo ela passou **trabalhando** (martelo, ciano), **esperando você** (mão, laranja) e **em erro** (sinal de parada, vermelho), com a fase em curso em destaque e o tempo em minuto e segundo (`01:18`, a hora entrando quando passa de 60 min). Conta só enquanto há algo acontecendo, sobrevive a fechar o app e a renomear, recomeça ao limpar a bancada, e clicar nele oferece **Zerar cronômetro** (ADR-074).
@@ -226,7 +228,8 @@ Primeira versão para passar adiante (tag `v0`).
 - Aviso de "terminou" e "precisa de você" vindo do gancho do CLI.
 - Socket de controle em `~/.egeon/sock`.
 
-[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.0.0...v1.1.0
