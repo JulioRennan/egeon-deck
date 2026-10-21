@@ -9,6 +9,15 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Alterado
+
+- O cronômetro da bancada conta as fases ao mesmo tempo: um agente esperando você não para mais o tempo de trabalho de quem segue trabalhando ao lado, e as fases em curso ficam todas acesas. Aguardar outro agente continua contando como trabalho, não como espera por você (ADR-078).
+- O card no canvas que precisa de você (pergunta, permissão ou erro) ganha a mesma borda girando da bancada na barra lateral, em vez da borda laranja parada.
+
+### Corrigido
+
+- Terminal que pediu permissão no meio do turno e depois terminou respondendo a outro agente não fica mais preso em "precisa de você" — antes o card seguia laranja e o cronômetro contava a bancada como esperando você, mesmo com o turno fechado em `ok` (ADR-074).
+
 ## [1.3.0] - 2026-10-20
 
 ### Adicionado

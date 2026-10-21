@@ -494,19 +494,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.root.sidebar.showActivity(activity)
             // Todas as bancadas, não só a da tela: a de trás também está
             // rodando, e o cronômetro dela tem de andar.
-            var phases: [String: WorkbenchClock.Phase] = [:]
+            var phases: [String: Set<WorkbenchClock.Phase>] = [:]
             for config in self.configs {
-                if let phase = activity[config.name].flatMap(WorkbenchClock.phase(for:)) { phases[config.id] = phase }
+                phases[config.id] = activity[config.name].map(WorkbenchClock.phases(for:)) ?? []
             }
             WorkbenchClocks.shared.tick(phases)
-            var clocks: [String: (WorkbenchClock, WorkbenchClock.Phase?)] = [:]
+            var clocks: [String: (WorkbenchClock, Set<WorkbenchClock.Phase>)] = [:]
             for config in self.configs {
-                clocks[config.name] = (WorkbenchClocks.shared.clock(for: config.id), phases[config.id])
+                clocks[config.name] = (WorkbenchClocks.shared.clock(for: config.id), phases[config.id] ?? [])
             }
             self.root.sidebar.showClocks(clocks)
             if self.activeIndex >= 0, self.activeIndex < self.configs.count {
                 let id = self.configs[self.activeIndex].id
-                self.shell(at: self.activeIndex)?.showClock(WorkbenchClocks.shared.clock(for: id), phase: phases[id])
+                self.shell(at: self.activeIndex)?.showClock(WorkbenchClocks.shared.clock(for: id), phases: phases[id] ?? [])
             }
             // A faixa mostra o MESMO estado da barra lateral, e no mesmo quadro
             // do spinner: são os dois lugares onde uma bancada que não está na

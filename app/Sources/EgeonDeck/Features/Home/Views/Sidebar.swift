@@ -155,12 +155,12 @@ final class SidebarRow: NSView {
                                    width: badgeWidth, height: 18)
     }
 
-    func showClock(_ clock: WorkbenchClock, phase: WorkbenchClock.Phase?) {
+    func showClock(_ clock: WorkbenchClock, phases: Set<WorkbenchClock.Phase>) {
         guard pathExists else { return }
-        let signature = WorkbenchClockText.signature(clock, phase: phase)
+        let signature = WorkbenchClockText.signature(clock, phases: phases)
         guard signature != clockSignature else { return }
         clockSignature = signature
-        pathLabel.attributedStringValue = WorkbenchClockText.attributed(clock, phase: phase, size: 10)
+        pathLabel.attributedStringValue = WorkbenchClockText.attributed(clock, phases: phases, size: 10)
         pathLabel.lineBreakMode = .byTruncatingTail
         toolTip = (toolTip?.components(separatedBy: "\n").first ?? "")
             + "\n" + WorkbenchClockText.tooltip(clock)
@@ -789,7 +789,7 @@ final class Sidebar: NSView {
 
     private var rows: [SidebarRow] = []
     private var lastSummaries: [String: ActivitySummary]?
-    private var lastClocks: [String: (WorkbenchClock, WorkbenchClock.Phase?)]?
+    private var lastClocks: [String: (WorkbenchClock, Set<WorkbenchClock.Phase>)]?
     private var groups: [SidebarGroupRow] = []
     private var tree = WorkspaceTree(workspaces: [], workbenches: [])
     private let scroll = NSScrollView()
@@ -1142,11 +1142,11 @@ final class Sidebar: NSView {
     /// Chamado pelo laço da UI com o resumo de TODAS as bancadas vivas, não só a
     /// que está na tela. Os grupos somam o que têm embaixo.
     /// Os cronômetros, por nome da bancada — a chave das linhas.
-    func showClocks(_ clocks: [String: (WorkbenchClock, WorkbenchClock.Phase?)]) {
+    func showClocks(_ clocks: [String: (WorkbenchClock, Set<WorkbenchClock.Phase>)]) {
         lastClocks = clocks
         for row in rows {
-            guard let (clock, phase) = clocks[row.name] else { continue }
-            row.showClock(clock, phase: phase)
+            guard let (clock, phases) = clocks[row.name] else { continue }
+            row.showClock(clock, phases: phases)
         }
     }
 

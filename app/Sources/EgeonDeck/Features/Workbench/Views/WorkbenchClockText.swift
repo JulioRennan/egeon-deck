@@ -14,12 +14,12 @@ enum WorkbenchClockText {
     ]
 
     /// Cor cheia nas três — apagadas, viravam cinza sobre o fundo escuro e não
-    /// se distinguiam. A fase em curso se destaca pelo peso.
-    static func attributed(_ clock: WorkbenchClock, phase: WorkbenchClock.Phase?,
+    /// se distinguiam. As fases em curso se destacam pelo peso.
+    static func attributed(_ clock: WorkbenchClock, phases: Set<WorkbenchClock.Phase>,
                            size: CGFloat) -> NSAttributedString {
         let out = NSMutableAttributedString()
         for (index, (key, symbol, color)) in entries.enumerated() {
-            let lit = key == phase
+            let lit = phases.contains(key)
             let tint = color.withAlphaComponent(lit ? 1 : 0.8)
             let font = NSFont.monospacedDigitSystemFont(ofSize: size, weight: lit ? .bold : .medium)
             if index > 0 { out.append(NSAttributedString(string: "   ", attributes: [.font: font])) }
@@ -36,9 +36,9 @@ enum WorkbenchClockText {
     }
 
     /// Chave para não redesenhar a cada tique do spinner o que não mudou.
-    static func signature(_ clock: WorkbenchClock, phase: WorkbenchClock.Phase?) -> String {
+    static func signature(_ clock: WorkbenchClock, phases: Set<WorkbenchClock.Phase>) -> String {
         [clock.running, clock.waiting, clock.failed].map(WorkbenchClock.format).joined(separator: "/")
-            + "/" + (phase?.rawValue ?? "-")
+            + "/" + phases.map(\.rawValue).sorted().joined(separator: "+")
     }
 
     private static func icon(_ name: String, color: NSColor, size: CGFloat, font: NSFont) -> NSAttributedString? {

@@ -2,9 +2,10 @@ import Foundation
 
 /// Quanto tempo a bancada passou rodando, esperando você e em erro (ADR-074).
 ///
-/// As três fases são exclusivas e somam o tempo de relógio em que a bancada
-/// estava viva e fazendo alguma coisa — com cinco agentes trabalhando juntos,
-/// conta um segundo por segundo, não cinco. Parada sem pendência (todos
+/// Cada fase conta um segundo por segundo enquanto houver pelo menos um
+/// terminal nela — com cinco agentes trabalhando juntos, um segundo, não cinco.
+/// As fases andam juntas: um agente perguntando algo não para o relógio de
+/// quem segue trabalhando ao lado (ADR-078). Parada sem pendência (todos
 /// terminaram, ou nem subiram) não conta em nenhuma.
 struct WorkbenchClock: Codable, Equatable {
     enum Phase: String, Codable {
@@ -22,14 +23,19 @@ struct WorkbenchClock: Codable, Equatable {
     /// trabalho de ninguém.
     static let maxStep: TimeInterval = 2
 
-    /// A fase da bancada pelo estado dos terminais dela. Erro primeiro, depois
-    /// você: um agente parado pedindo algo trava a bancada mesmo com outro
-    /// trabalhando — é a mesma prioridade da borda (laranja sobre verde).
-    static func phase(for summary: ActivitySummary) -> Phase? {
-        if summary.failed > 0 { return .failed }
-        if summary.attention > 0 { return .waiting }
-        if summary.working + summary.background > 0 { return .running }
-        return nil
+    /// As fases em curso pelo estado dos terminais da bancada (ADR-078).
+    ///
+    /// Esperar você é só pergunta e permissão: quem aguarda um vizinho está em
+    /// `background` e conta como trabalho, porque o trabalho seguiu no outro
+    /// card. O erro sai das outras duas — o desistido conta em `attention` e a
+    /// tentativa agendada em `background`, e nenhum dos dois é você nem trabalho.
+    static func phases(for summary: ActivitySummary) -> Set<Phase> {
+        var out: Set<Phase> = []
+        let gaveUp = summary.failed - summary.retrying
+        if summary.failed > 0 { out.insert(.failed) }
+        if summary.attention - gaveUp > 0 { out.insert(.waiting) }
+        if summary.working + summary.background - summary.retrying > 0 { out.insert(.running) }
+        return out
     }
 
     mutating func add(_ seconds: TimeInterval, to phase: Phase) {

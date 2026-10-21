@@ -50,7 +50,7 @@ final class WorkbenchShell: NSView {
 
     /// Que bancada a barra de cima anuncia.
     func setWorkbench(name: String, path: String) { bar.setWorkbench(name: name, path: path) }
-    func showClock(_ clock: WorkbenchClock, phase: WorkbenchClock.Phase?) { bar.setClock(clock, phase: phase) }
+    func showClock(_ clock: WorkbenchClock, phases: Set<WorkbenchClock.Phase>) { bar.setClock(clock, phases: phases) }
     var onResetClock: (() -> Void)? {
         get { bar.onResetClock }
         set { bar.onResetClock = newValue }

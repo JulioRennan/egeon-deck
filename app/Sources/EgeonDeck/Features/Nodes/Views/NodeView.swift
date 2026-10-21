@@ -313,18 +313,24 @@ class NodeView: NSView {
     @objc private func menuClose() { onRequestClose?(self) }
 
     private var isAlerting = false
+    private lazy var ring = AttentionRing(host: self, cornerRadius: 10, lineWidth: 3)
 
     /// Acende o card enquanto alguém espera você.
     ///
     /// A borda, e não só o texto: com zoom out o cabeçalho fica ilegível muito
     /// antes de o card sumir, e é aí que você mais precisa achar quem parou.
+    /// Girando, como a bancada na barra lateral e a aba: a mesma chamada nos
+    /// três lugares.
     func setAlert(_ on: Bool) {
         guard on != isAlerting else { return }
         isAlerting = on
         layer?.borderWidth = on ? max(2, restingBorder.width) : restingBorder.width
+        // Apagada por baixo do giro: cheia, o traço laranja sumia sobre ela.
         layer?.borderColor = on
-            ? NSColor.systemOrange.withAlphaComponent(0.95).cgColor
+            ? NSColor.systemOrange.withAlphaComponent(0.35).cgColor
             : accent.withAlphaComponent(restingBorder.alpha).cgColor
+        ring.tone = on ? .asking : nil
+        if on { ring.layout() }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -402,6 +408,7 @@ class NodeView: NSView {
 
     override func layout() {
         super.layout()
+        if isAlerting { ring.layout() }
         // Uma linha: à esquerda a coluna do texto (título em cima, pasta embaixo),
         // à direita a linha dos botões, centrada na altura do cabeçalho inteiro.
         let botão: CGFloat = 30

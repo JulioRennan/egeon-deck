@@ -104,6 +104,8 @@ struct ActivitySummary: Equatable {
     /// tentativa. Subconjunto — cada um já conta em `attention` ou em
     /// `background`; separado só para o cronômetro saber que é erro.
     var failed = 0
+    /// Os de `failed` que ainda vão tentar de novo (e contam em `background`).
+    var retrying = 0
 
     /// Só terminais subindo, nada mais a dizer: é a bancada se preparando.
     var isPreparing: Bool {

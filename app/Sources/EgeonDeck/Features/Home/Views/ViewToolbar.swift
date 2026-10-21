@@ -111,7 +111,7 @@ final class ViewToolbar: NSView {
     /// título (ADR-074).
     private let clock = NSTextField(labelWithString: "")
     private var path = ""
-    private var shownClock: (WorkbenchClock, WorkbenchClock.Phase?)?
+    private var shownClock: (WorkbenchClock, Set<WorkbenchClock.Phase>)?
     private var clockSignature = ""
 
     override init(frame frameRect: NSRect) {
@@ -156,15 +156,15 @@ final class ViewToolbar: NSView {
     }
 
     /// As três fases lado a lado, sempre as três: um zero também é leitura. A
-    /// fase em curso fica acesa, as outras apagadas.
-    func setClock(_ value: WorkbenchClock, phase: WorkbenchClock.Phase?) {
+    /// fases em curso ficam acesas, as outras apagadas.
+    func setClock(_ value: WorkbenchClock, phases: Set<WorkbenchClock.Phase>) {
         // Vem do laço do spinner: escrever o mesmo texto 8 vezes por segundo
         // custaria redesenho à toa.
-        let signature = WorkbenchClockText.signature(value, phase: phase)
+        let signature = WorkbenchClockText.signature(value, phases: phases)
         guard signature != clockSignature else { return }
         clockSignature = signature
-        shownClock = (value, phase)
-        clock.attributedStringValue = WorkbenchClockText.attributed(value, phase: phase, size: 11)
+        shownClock = (value, phases)
+        clock.attributedStringValue = WorkbenchClockText.attributed(value, phases: phases, size: 11)
         needsLayout = true
     }
 

@@ -618,15 +618,19 @@ final class Target {
         AppControl.turnEnded?(address, transcript, turnStartedAt)
         inBackground = outcome == .background
         awaitingLatched = outcome == .awaiting
+        // O `Stop` é a parada nova: a permissão pedida no meio do turno já foi
+        // respondida, senão o turno não teria fechado. Com o latch dela armado,
+        // o fim de quem passou o bastão (`hold(.ready)`) era engolido e o card
+        // ficava em "precisa de você" depois de um `ok` — contando no
+        // cronômetro como bancada esperando você.
+        attentionHeld = false
         switch outcome {
         case .awaiting:
-            attentionHeld = false
             transition(to: .awaiting(awaitingPeers.names))
             Log.write("atenção[\(address)]: aguardando \(awaitingPeers.peers.joined(separator: ", "))"
                       + " — por \(via)")
         case .background:
             // Sem som e sem latch de aviso: não há nada para você fazer ainda.
-            attentionHeld = false
             transition(to: .background)
             Log.write("atenção[\(address)]: em segundo plano — por \(via)")
         case .asked:
@@ -1230,7 +1234,7 @@ final class Dispatcher {
             case .ready, .dead:       break
             }
             if case .failed = target.activity { entry.failed += 1 }
-            if case .retrying = target.activity { entry.failed += 1 }
+            if case .retrying = target.activity { entry.failed += 1; entry.retrying += 1 }
             out[name] = entry
         }
         return out

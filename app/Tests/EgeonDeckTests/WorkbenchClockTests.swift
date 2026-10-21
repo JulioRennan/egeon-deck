@@ -2,15 +2,24 @@ import XCTest
 @testable import EgeonDeck
 
 final class WorkbenchClockTests: XCTestCase {
-    func testPhasePrecedence() {
-        XCTAssertNil(WorkbenchClock.phase(for: ActivitySummary()))
-        XCTAssertNil(WorkbenchClock.phase(for: ActivitySummary(starting: 2, done: 1)))
-        XCTAssertEqual(WorkbenchClock.phase(for: ActivitySummary(working: 1)), .running)
-        XCTAssertEqual(WorkbenchClock.phase(for: ActivitySummary(background: 1)), .running)
-        XCTAssertEqual(WorkbenchClock.phase(for: ActivitySummary(working: 3, attention: 1)), .waiting)
-        XCTAssertEqual(WorkbenchClock.phase(for: ActivitySummary(working: 1, attention: 2, failed: 1)), .failed)
-        // Tentativa agendada conta em background e em failed: é erro, não trabalho.
-        XCTAssertEqual(WorkbenchClock.phase(for: ActivitySummary(background: 1, failed: 1)), .failed)
+    func testPhasesRunTogether() {
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary()), [])
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary(starting: 2, done: 1)), [])
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary(working: 1)), [.running])
+        // Aguardar vizinho é `background`: trabalho, não espera por você.
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary(background: 1)), [.running])
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary(attention: 1)), [.waiting])
+        // Um perguntando não para o relógio de quem trabalha ao lado (ADR-078).
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary(working: 3, attention: 1)), [.running, .waiting])
+    }
+
+    func testFailedIsNeitherWaitingNorRunning() {
+        // Desistido conta em `attention`, mas é erro, não pergunta.
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary(attention: 1, failed: 1)), [.failed])
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary(working: 1, attention: 2, failed: 1)),
+                       [.failed, .waiting, .running])
+        // Tentativa agendada conta em `background`, mas é erro, não trabalho.
+        XCTAssertEqual(WorkbenchClock.phases(for: ActivitySummary(background: 1, failed: 1, retrying: 1)), [.failed])
     }
 
     func testAddCapsLongGaps() {
@@ -35,10 +44,11 @@ final class WorkbenchClockTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let clocks = WorkbenchClocks(directory: dir)
         let start = Date()
-        clocks.tick(["a": .running], now: start)            // primeiro tique só marca
-        clocks.tick(["a": .running, "b": .failed], now: start.addingTimeInterval(1))
-        clocks.tick(["a": .waiting], now: start.addingTimeInterval(1.5))
-        XCTAssertEqual(clocks.clock(for: "a").running, 1, accuracy: 0.001)
+        clocks.tick(["a": [.running]], now: start)          // primeiro tique só marca
+        clocks.tick(["a": [.running], "b": [.failed]], now: start.addingTimeInterval(1))
+        clocks.tick(["a": [.running, .waiting]], now: start.addingTimeInterval(1.5))
+        clocks.tick(["a": []], now: start.addingTimeInterval(3))
+        XCTAssertEqual(clocks.clock(for: "a").running, 1.5, accuracy: 0.001)
         XCTAssertEqual(clocks.clock(for: "a").waiting, 0.5, accuracy: 0.001)
         XCTAssertEqual(clocks.clock(for: "b").failed, 1, accuracy: 0.001)
 

@@ -32,15 +32,15 @@ final class WorkbenchClocks {
         return loaded
     }
 
-    /// Soma o tempo desde o tique anterior à fase atual de cada bancada.
-    /// Bancada fora de `phases` (parada, ou sem terminais de pé) não anda.
-    func tick(_ phases: [String: WorkbenchClock.Phase], now: Date = Date()) {
+    /// Soma o tempo desde o tique anterior a cada fase em curso de cada
+    /// bancada. Bancada fora de `phases` (parada, ou sem terminais de pé) não anda.
+    func tick(_ phases: [String: Set<WorkbenchClock.Phase>], now: Date = Date()) {
         defer { lastTick = now }
         guard let lastTick else { lastSave = now; return }
         let elapsed = now.timeIntervalSince(lastTick)
-        for (id, phase) in phases {
+        for (id, current) in phases where !current.isEmpty {
             var clock = clock(for: id)
-            clock.add(elapsed, to: phase)
+            for phase in current { clock.add(elapsed, to: phase) }
             clocks[id] = clock
             dirty.insert(id)
         }

@@ -4277,7 +4277,7 @@ também no lugar do caminho, que fica só quando a pasta sumiu (é aviso). O
 caminho continua acessível na dica do título e da linha. Clicar no cronômetro oferece "Zerar cronômetro"; limpar a bancada zera
 também, porque é o começo de outro período, como o chat e a trilha.
 
-**Fases exclusivas, por relógio de parede.** A cada tique do laço do spinner
+**Fases exclusivas, por relógio de parede** (substituído pelo ADR-078: as fases andam juntas). A cada tique do laço do spinner
 (0,12 s) a bancada está em UMA fase, ou em nenhuma, e só ela anda: cinco
 agentes trabalhando juntos contam um segundo por segundo. A fase sai do
 `ActivitySummary`: erro (falhou ou esperando a tentativa automática — o
@@ -4373,3 +4373,28 @@ envios, nem de fila. Isso inclui as ligações implícitas do maestro
 
 **Verificação.** `SenderBacklogTests`; `WorkbenchConfigTests` (arquivo com
 `maxVisits` ainda abre); `MaestroPlanTests` sem o campo.
+
+## ADR-078 — Cronômetro: as fases andam juntas
+
+**Contexto.** As fases do ADR-074 eram exclusivas, com o erro vencendo você e
+você vencendo o trabalho. Na prática, numa bancada com o maestro trabalhando
+e o `claude-2` com uma pergunta aberta, o relógio passava a contar só
+"esperando você" — o trabalho do maestro sumia da conta, e o tempo parecia
+ocioso.
+
+**Decisão.** Cada fase anda enquanto houver pelo menos um terminal nela, e
+elas andam juntas (`WorkbenchClock.phases(for:)` devolve um conjunto). Ainda é
+relógio de parede por fase: cinco trabalhando contam um segundo por segundo.
+- **Esperando você** é só pergunta e permissão (`asking`). Quem aguarda um
+  vizinho continua em `background` e conta como trabalho — o trabalho seguiu
+  no outro card, ninguém espera por você.
+- **Em erro** sai das outras duas: o desistido (`failed`) conta em
+  `attention`, mas não é pergunta; a tentativa agendada (`retrying`, contagem
+  nova no `ActivitySummary`) conta em `background`, mas não é trabalho.
+- Na tela, as fases em curso ficam todas acesas (em negrito).
+
+**Consequência.** A soma das três pode passar do tempo de relógio em que a
+bancada esteve viva: elas medem coisas que acontecem ao mesmo tempo.
+
+**Verificação.** `WorkbenchClockTests` (fases juntas, erro fora das outras
+duas, tique somando em duas fases).
