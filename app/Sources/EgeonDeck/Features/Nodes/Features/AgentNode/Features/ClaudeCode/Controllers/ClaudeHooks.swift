@@ -112,12 +112,16 @@ enum ClaudeHooks {
             # crons) e `last` o fim da última mensagem, de onde sai o marcador
             # sem esperar o transcript ser gravado (ADR-067). Os dois só vão
             # quando o CLI manda: sem eles o app decide pelo transcript.
+            # `bgw` são os vigias de página publicada, que o CLI arma sozinho a
+            # cada publicação e nunca terminam (ADR-081).
             q=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
               'import sys,json,urllib.parse as u
         d=json.load(sys.stdin)
         q="transcript="+u.quote(d.get("transcript_path") or "")
         if "background_tasks" in d or "session_crons" in d:
-            q+="&bg="+str(len(d.get("background_tasks") or [])+len(d.get("session_crons") or []))
+            t=d.get("background_tasks") or []
+            q+="&bg="+str(len(t)+len(d.get("session_crons") or []))
+            q+="&bgw="+str(sum(1 for x in t if isinstance(x,dict) and x.get("type")=="monitor" and "(auto-armed on publish)" in (x.get("description") or "")))
         m=d.get("last_assistant_message")
         if isinstance(m,str) and m:
             q+="&last="+u.quote(m[-400:],safe="")

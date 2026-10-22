@@ -611,6 +611,7 @@ final class Target {
             via = "gancho Stop, \(verdict.via) na tela"
         }
         if let background = report.background { via += ", \(background) de fundo" }
+        if report.watchers > 0 { via += ", \(report.watchers) vigia\(report.watchers > 1 ? "s" : "") de página" }
         let outcome = StopOutcome.decide(marker: closing, background: report.background,
                                          awaitingPeers: !awaitingPeers.isEmpty)
         // Depois de assentar: as releituras acima são o que garante que a

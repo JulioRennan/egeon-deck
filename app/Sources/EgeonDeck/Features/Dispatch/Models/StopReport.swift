@@ -8,19 +8,28 @@ import Foundation
 /// gravado). Os dois são opcionais aqui porque CLI sem eles — outra versão,
 /// outro programa — continua decidindo pelo marcador, como antes.
 struct StopReport: Equatable {
-    /// Tarefas de fundo mais crons da sessão. `nil` quando o CLI não relatou.
+    /// Tarefas de fundo mais crons da sessão que ainda vão acordar o agente.
+    /// `nil` quando o CLI não relatou.
     var background: Int?
+    /// Vigias de página publicada, fora do `background` (ADR-081): o CLI arma
+    /// um a cada publicação e ele vive a sessão inteira — contado, o card
+    /// ficava na ampulheta para sempre depois de um `[[ED:ok]]`. Só para o log.
+    var watchers: Int
     /// O fim da última mensagem do agente. `nil` quando o CLI não relatou.
     var lastMessage: String?
 
-    init(background: Int? = nil, lastMessage: String? = nil) {
+    init(background: Int? = nil, watchers: Int = 0, lastMessage: String? = nil) {
         self.background = background
+        self.watchers = watchers
         self.lastMessage = lastMessage
     }
 
-    /// Lido da query de `/activity`: `bg` e `last`.
+    /// Lido da query de `/activity`: `bg`, `bgw` (vigias, contidos em `bg`) e
+    /// `last`.
     init(query: [String: String]) {
-        self.background = query["bg"].flatMap(Int.init)
+        let watchers = query["bgw"].flatMap(Int.init) ?? 0
+        self.watchers = watchers
+        self.background = query["bg"].flatMap(Int.init).map { max(0, $0 - watchers) }
         self.lastMessage = query["last"].flatMap { $0.isEmpty ? nil : $0 }
     }
 }

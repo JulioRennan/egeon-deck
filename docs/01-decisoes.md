@@ -4465,3 +4465,29 @@ listagem, recusas, resposta com trilha, só o usuário concede). No DEV, pedido
 falso em nome do `dev` com o `maestro2` aprovando: `ls -la src` permitido em
 13 s com o gancho recebendo `allow`; `rm -rf ~/Documents && git push --force`
 negado em 5 s, com o motivo mandado ao `dev`.
+
+## ADR-081 — Vigia de página publicada não é trabalho de fundo
+
+**Contexto.** A ampulheta do Claude Code vem do `background_tasks` do `Stop`
+(ADR-067), e o payload vence o marcador. Ao publicar uma página (Artifact), o
+CLI arma sozinho um vigia de comentários — `type: "monitor"`, descrição
+`live updates for artifact … (auto-armed on publish)` — que vive a sessão
+inteira. Medido no estável: a BoosterAGRO fechou o turno com `[[ED:ok]]` e
+`1 de fundo` (só o vigia; o comando de fundo tinha acabado quatro minutos
+antes), e o card ficou em "⏳ em segundo plano" sem prazo — e o cronômetro
+contando como trabalho. Uma sessão chegou a ter 25 vigias.
+
+**Decisão.** O gancho manda, além de `bg`, `bgw`: quantos dos `background_tasks`
+são vigias de página (monitor com "(auto-armed on publish)"). O `StopReport`
+desconta `bgw` de `bg`; o log mostra os vigias à parte. Comando de fundo,
+subagente, `Monitor` armado pelo agente e cron continuam valendo: esses
+terminam ou acordam o agente com motivo.
+
+**Consequência.** Comentário novo na página ainda acorda o agente — vira turno
+novo, com gancho, e o card acompanha. Se o CLI mudar a descrição, o vigia volta
+a contar e a ampulheta volta a ficar presa: o sintoma é "ok no payload, N de
+fundo" no log com nada rodando.
+
+**Verificação.** `StopReportTests.testPageWatchersAreNotBackgroundWork`. O
+payload real foi gravado no gancho do estável (`bg-debug.log`, temporário):
+monitores de página nas sessões que publicaram, `shell` nas que rodavam pytest.

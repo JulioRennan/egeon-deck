@@ -10,6 +10,24 @@ final class StopReportTests: XCTestCase {
         XCTAssertEqual(report.lastMessage, "feito\n[[ED:ok]]")
     }
 
+    // O vigia de página publicada nunca termina: não é trabalho que vai
+    // acordar o agente, e um `ok` com só ele de pé é fim de turno (ADR-081).
+    func testPageWatchersAreNotBackgroundWork() {
+        let onlyWatcher = StopReport(query: ["bg": "1", "bgw": "1"])
+        XCTAssertEqual(onlyWatcher.background, 0)
+        XCTAssertEqual(onlyWatcher.watchers, 1)
+        XCTAssertEqual(StopOutcome.decide(marker: .ok, background: onlyWatcher.background,
+                                          awaitingPeers: false), .finished)
+
+        let withShell = StopReport(query: ["bg": "26", "bgw": "25"])
+        XCTAssertEqual(withShell.background, 1)
+        XCTAssertEqual(StopOutcome.decide(marker: .ok, background: withShell.background,
+                                          awaitingPeers: false), .background)
+
+        XCTAssertEqual(StopReport(query: ["bg": "2"]).background, 2, "gancho antigo, sem bgw")
+        XCTAssertEqual(StopReport(query: ["bg": "1", "bgw": "3"]).background, 0)
+    }
+
     // CLI sem os campos: nada inventado, decide o marcador.
     func testQueryWithoutFieldsIsUnknown() {
         let report = StopReport(query: ["transcript": "/tmp/x.jsonl", "last": ""])

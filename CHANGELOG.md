@@ -21,6 +21,7 @@ citados entre parênteses.
 
 ### Corrigido
 
+- Terminal que publicou uma página do Claude e terminou o turno não fica mais preso em "⏳ em segundo plano" — o vigia de comentários que o Claude Code arma em cada publicação contava como trabalho de fundo, e o cronômetro seguia contando a bancada como trabalhando (ADR-081).
 - Terminal que pediu permissão no meio do turno e depois terminou respondendo a outro agente não fica mais preso em "precisa de você" — antes o card seguia laranja e o cronômetro contava a bancada como esperando você, mesmo com o turno fechado em `ok` (ADR-074).
 
 ## [1.3.0] - 2026-10-20
