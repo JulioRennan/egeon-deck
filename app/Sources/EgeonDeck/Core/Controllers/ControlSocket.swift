@@ -532,6 +532,44 @@ final class ControlSocket {
             respond(fd, status: payload["ok"] as? Bool == false ? "404 Not Found" : "200 OK",
                     json: payload)
 
+        case ("GET", _, _) where bare.hasSuffix("/apps"):
+            // /apps — os apps de desktop que o Egeon abriu e quem usa cada um.
+            respond(fd, status: "200 OK", json: AppKeeper.shared.snapshot)
+
+        case ("POST", _, _) where bare.hasSuffix("/processes/reap"):
+            // /processes/reap[?dry=1] — a limpeza periódica agora, com a política
+            // de `processes.json`: órfão velho, fora o daemon do Claude Code.
+            // `dry` só diz quem ela levaria.
+            let dry = Self.query(in: route)["dry"] == "1"
+            let killed = OrphanReaper.shared.reapNow(dry: dry)
+            respond(fd, status: "200 OK",
+                    json: ["ok": true, dry ? "wouldKill" : "killed": killed.map { $0.json() }])
+
+        case ("POST", _, _) where bare.hasSuffix("/processes/kill"):
+            // /processes/kill[?pid=N,M] — SIGTERM nos órfãos, ou nos pids dados
+            // se a leitura de agora disser que são do Egeon (ADR-083).
+            let pids = Self.query(in: route)["pid"].map {
+                Set($0.split(separator: ",").compactMap { Int32($0) })
+            }
+            let killed = ProcessScanner.terminate(pids)
+            respond(fd, status: "200 OK",
+                    json: ["ok": true, "killed": killed.map { $0.json() }])
+
+        case ("GET", _, _) where bare.hasSuffix("/processes"):
+            // /processes[?orphans=1] — o que o Egeon lançou: debaixo do app, e
+            // os órfãos que ainda carregam a marca no ambiente (ADR-083).
+            if Self.query(in: route)["show"] == "1" {
+                DispatchQueue.main.sync { AppControl.showProcesses?() }
+            }
+            let all = ProcessScanner.scan()
+            let shown = Self.query(in: route)["orphans"] == "1" ? all.filter(\.orphan) : all
+            respond(fd, status: "200 OK", json: [
+                "ok": true,
+                "owned": all.filter { !$0.orphan }.count,
+                "orphans": all.filter(\.orphan).count,
+                "processes": shown.map { $0.json() },
+            ])
+
         case ("GET", _, _) where route.contains("/workspaces"):
             // /workspaces — a árvore da barra lateral (ADR-043), para conferir
             // conciliação e pertencimento sem abrir a barra.

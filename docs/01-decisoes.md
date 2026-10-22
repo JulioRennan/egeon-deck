@@ -4530,3 +4530,127 @@ rodar sobe para o topo das Ativas na hora.
 nunca rodou no fim) e `WorkbenchClockTests` (`lastActive` no tique, no zerar e
 no arquivo antigo). No DEV, as duas abas por `/sidebar?tab=`, com captura da
 janela.
+
+## ADR-083 — Processo lançado pelo Egeon carrega a procedência no ambiente
+
+**Contexto.** Com muitos agentes, o Monitor de Atividade se enche de `node`,
+`python`, Chrome do Playwright, `esbuild`… e não dá para saber se é do Egeon,
+de uma sessão de agente que já fechou ou de outra coisa. A árvore (Visualizar ›
+Hierarquicamente) só diz enquanto o pai vive: quando o terminal fecha, o que
+ficou de pé vira filho do `launchd`. Num levantamento, eram 37 órfãos, 24 deles
+de uma bancada com 19 dias — servidores de teste que ninguém derrubou. O
+Monitor de Atividade não aceita coluna nem rótulo de fora.
+
+**Decisão.**
+- Todo nó — agente **e shell** — sobe com `EGEON_NODE=<bancada/id>` e
+  `EGEON_DECK=<flavor>` no ambiente. Ambiente, e não nome do processo, porque é
+  herdado por tudo que o terminal abre e sobrevive ao pai. `EGEON_TARGET`, só
+  dos agentes, continua sendo o do gancho; processo de antes da marca é
+  reconhecido por ele.
+- A procedência herdada sai do ambiente do app antes de marcar: lançado de
+  dentro de um terminal do Egeon (`install.sh`, `dev.sh`), o app levava o
+  endereço daquele terminal para todo shell que abria.
+- Leitura pelo kernel (`KERN_PROC_UID` + `KERN_PROCARGS2`), não `ps -E`: são
+  centenas de processos a cada três segundos com a janela aberta.
+- Classificação: descendente do app é **no app** (pela árvore, mesmo sem marca);
+  marcado fora de qualquer Egeon Deck vivo é **órfão**, com os filhos dele. O que
+  está debaixo de outro Egeon Deck (dev visto do estável) é daquele. O `zsh -lc`
+  de agente tem o ambiente ilegível — o system prompt na linha de comando
+  estoura o buffer do kernel — e pega o nó dos filhos.
+- Onde ver: janela **Processos…** (⌥⌘P), órfãos no topo em laranja, com
+  "Encerrar órfãos" e "Encerrar selecionados"; `egeon ps [--orphans]` e
+  `egeon ps --kill [pid…]`; `GET /processes[?orphans=1][&show=1]` e
+  `POST /processes/kill[?pid=]`.
+- Encerrar é SIGTERM, e só em pid que a leitura **daquele instante** diz ser do
+  Egeon: pid vindo de fora pode já ter sido reaproveitado.
+- **Nó que morre leva a árvore.** Remover o terminal, a bancada, trocar o
+  modelo ou o esforço (tudo que passa por `prepareForRemoval`) encerra todos os
+  descendentes do shell do nó, de qualquer grupo: o Bash do Claude Code põe cada
+  comando num grupo próprio, e o `killpg` no shell não alcançava o servidor que
+  o agente tinha subido — eram os 24 da bancada de 19 dias. A árvore é lida
+  antes de matar o shell, enquanto ainda existe; quem ignora o SIGTERM leva
+  SIGKILL 2 s depois, se ainda for o mesmo processo (pid e início). O daemon do
+  Claude Code não é atingido: ele vai para o `launchd` assim que nasce.
+- **A saída do app NÃO leva a árvore.** O `install.sh` roda dentro de um
+  terminal do estável e pede o quit: com a árvore indo junto, a reinstalação se
+  matava no meio. O que sobra de um app que saiu ou caiu fica para a limpeza.
+- **Limpeza periódica** (`OrphanReaper`): a cada 10 min, encerra órfão com mais
+  de 1 h — idade do processo; o kernel não diz quando o pai morreu. Poupa a
+  árvore do daemon do Claude Code (`claude daemon run`, `bg-pty-host`,
+  `bg-spare`), que é órfão de propósito e segura as sessões em segundo plano.
+  Ligada por padrão; "Limpar órfãos automaticamente" no menu do app desliga, e
+  `processes.json` (`enabled`, `intervalMinutes`, `minAgeMinutes`) ajusta. A
+  janela mostra a última limpeza; `POST /processes/reap[?dry=1]` roda agora, ou
+  só diz quem levaria.
+- **App aberto por `open` não é órfão.** O macOS passa o ambiente de quem
+  pediu para o app que abre — o Docker Desktop que um agente subiu chegava
+  marcado, e a limpeza o teria levado. O `__CFBundleIdentifier` separa: o
+  launchd põe o do app aberto, e tudo que desce do Egeon carrega
+  `dev.duckcoder.egeondeck`.
+
+**Verificação.** `ProcessTableTests` (árvore, órfão com filhos, outro flavor,
+marca antiga, shell ilegível, app aberto por `open`, descendentes entre grupos,
+política da limpeza com o daemon poupado, `processes.json` incompleto, parse do
+`PROCARGS2`, ordem e idade, ambiente sem marca herdada, `egeon ps` no script).
+No DEV: `/processes` com cada processo no nó certo; um agente subiu
+`sleep 7777` em segundo plano (grupo próprio), a troca de esforço reiniciou o
+nó e o log deu "SIGTERM em 4 descendente(s)" com o `sleep` morto; a limpeza em
+`dry=1` deixou de fora o daemon e o Docker Desktop; um órfão sintético saiu
+por `egeon ps --kill`.
+
+## ADR-084 — App de desktop que o Egeon abriu fecha com o último que o usa
+
+**Contexto.** Um agente abre o Docker Desktop com `open -a Docker` para subir
+o banco, a bancada sai, e o Docker fica de pé para sempre. Fechar todo app que
+um agente tocou é pior: ele pode só ter trazido para a frente um app que você
+já usava, ou outra bancada pode estar usando o mesmo app.
+
+**Decisão.**
+- **Quem abriu** é a marca da ADR-083 no ambiente do processo do app. O `open`
+  repassa o ambiente de quem pediu ao app que ABRE; se o app já estava de pé,
+  ele só vem para a frente e o processo — e o ambiente — continua o seu. App
+  sem marca nunca é fechado. Visto nos apps abertos: só o Docker tinha marca.
+- **Quem usa** é medido na hora de fechar, quando o nó ou a bancada é removido
+  (trocar modelo, esforço ou regras reinicia o agente e não larga app):
+  - processo de nó de pé ligado por socket unix ao app ou aos filhos dele
+    (`lsof -U -F pdn`, casando `->0x…` de um lado com o socket do outro);
+  - no Docker, container de pé cuja pasta do compose
+    (`com.docker.compose.project.working_dir`) é de uma bancada de pé — container
+    não segura conexão com ninguém depois do `up -d`.
+- **Último a sair fecha.** Quem ainda usava quando o dono saiu vira herdeiro
+  (`apps.json`); quando o último herdeiro sai, o app fecha. Container sem dono
+  conhecido, Docker que não responde ou container de bancada parada seguram o
+  app aberto — na dúvida, fica. Os containers da própria bancada que sai não
+  seguram.
+- Fechar é `NSRunningApplication.terminate()`, o ⌘Q: o app pergunta se tiver
+  algo por salvar. Vai para o app e para a **família** dele — os apps filhos na
+  árvore e os do mesmo lançamento (`__CFBundleIdentifier` do app no ambiente).
+  O motor do Docker (`com.docker.docker`) ignora o pedido de saída; quem
+  obedece é a janela do Docker Desktop (`com.electron.dockerdesktop`), que o
+  motor abre, nem sempre como filha na árvore, e que leva o motor junto.
+- Dono é só o app em que o launchd pôs o PRÓPRIO bundle id no ambiente. A
+  janela do Docker Desktop herda a marca do terminal pelo motor; tratada como
+  app à parte, ela "fechava" quando o dono saía — e derrubava o Docker com o
+  container da outra bancada dentro. Pego no teste de ponta a ponta.
+- Pastas comparadas com os links resolvidos: o compose grava `/private/tmp`
+  onde a bancada pode dizer `/tmp`.
+- Descartado: um `open` do Egeon no PATH dos terminais registrando cada pedido
+  de app. O perfil do zsh remonta o PATH e põe `~/.egeon/bin` no fim — o
+  `/usr/bin/open` ganharia sempre, no shell e no Bash dos agentes.
+
+**Limites.** Apps da Apple (Notas, Stickies…) escondem o ambiente: não dá para
+ler a marca, então nunca fecham. Uso que não deixa conexão nem container (um
+app que outra bancada só abriu e largou) não segura o app.
+
+**Verificação.** `AppClaimsTests` (app sem marca, dono saindo, herdeiro como
+último, herdeiro morto, dono só com o próprio bundle, donos de container por
+pasta e worktree, pares do `lsof`). De ponta a ponta no DEV, com bancadas
+descartáveis de um shell cada e um app Cocoa de teste que atende num socket:
+- sozinha: C abre o app, remover C fecha;
+- compartilhado por conexão: A abre, B conecta no socket; remover A deixa
+  aberto ("em uso por teste-apps-b/sh"), remover B fecha;
+- já aberto por fora: A dá `open` e o processo segue o mesmo, sem marca;
+  remover A não fecha;
+- Docker: A abre o Docker Desktop, B sobe um container pelo compose na pasta
+  dela; remover A deixa o Docker aberto, remover B o fecha inteiro em ~4 s.
+O Mockoon, aberto por shell e fechado na remoção, também passou.

@@ -9,6 +9,17 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- Janela **Processos…** (⌥⌘P) e `egeon ps`: tudo o que o Egeon lançou, por bancada e nó, com os processos órfãos — os que ficaram de pé depois que o terminal fechou — no topo, a idade de cada um e botões para encerrá-los; todo terminal, shell incluído, passa a marcar no ambiente de onde veio o que ele abre (ADR-083).
+- App de desktop que um agente abriu — o Docker Desktop, por exemplo — fecha quando a bancada que o abriu é removida, se ninguém mais estiver usando: outra bancada ligada a ele, ou com container de pé no Docker, segura o app aberto e passa a ser quem o fecha. App que já estava aberto antes nunca é fechado (ADR-084).
+- Limpeza automática de processos órfãos: a cada 10 minutos o Egeon encerra o que foi lançado por ele, ficou sem dono e tem mais de 1 hora — sem tocar no daemon do Claude Code nem em apps abertos por um agente, como o Docker Desktop. Desliga em "Limpar órfãos automaticamente", no menu do app, e se ajusta em `processes.json` (ADR-083).
+
+### Corrigido
+
+- Remover um terminal ou uma bancada agora encerra também o que o agente deixou rodando em segundo plano — servidor de desenvolvimento, testes, o navegador do Playwright —, que antes ficava de pé, órfão, por dias (ADR-083).
+- O app aberto de dentro de um terminal do Egeon não passa mais o endereço daquele terminal para os shells que ele abre (ADR-083).
+
 ## [1.4.0] - 2026-10-22
 
 ### Adicionado

@@ -276,6 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.root.toggleCollapsed()
             return self.root.isCollapsed
         }
+        AppControl.showProcesses = { ProcessesWindow.shared.present() }
         AppControl.sidebarTab = { [weak self] raw in
             guard let self, let tab = Sidebar.Tab(rawValue: raw) else { return nil }
             self.root.sidebar.show(tab: tab)
@@ -494,6 +495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Dispatcher.shared.start()
         control.start()
+        OrphanReaper.shared.start()
 
         // 0.12s é o passo do spinner: mais lento ele engasga, mais rápido não
         // acrescenta nada que o olho veja. Quem desenha compara antes de
@@ -1924,8 +1926,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Solta os processos antes de perder a referência à bancada na tela.
         if let shell = shell(at: index) {
+            let addresses = Set(shell.nodes.compactMap { ($0 as? TerminalNode)?.address })
             shell.nodes.forEach { $0.prepareForRemoval() }
             if index == activeIndex { root.show(NSView()) }
+            AppKeeper.shared.release(addresses, paths: benchPaths)
         }
 
         // Shell e controller são chaveados por id: remover do meio desloca as
@@ -3154,9 +3158,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Bancada → pasta, para o `AppKeeper` dizer de quem é cada container.
+    private var benchPaths: [String: [String]] {
+        Dictionary(configs.map { config -> (String, [String]) in
+            let root = NSString(string: config.path).expandingTildeInPath
+            let own = config.nodes.compactMap(\.cwd).map { cwd -> String in
+                let path = NSString(string: cwd).expandingTildeInPath
+                return path.hasPrefix("/") ? path : root + "/" + path
+            }
+            return (config.name, [root] + own)
+        }, uniquingKeysWith: { a, b in a + b })
+    }
+
     private func remove(_ node: NodeView, index: Int, from shell: WorkbenchShell) {
         let id = node.nodeID
+        let address = (node as? TerminalNode)?.address
         shell.detach(node)
+        // Depois do detach: o nó já saiu do Dispatcher e não conta como de pé.
+        if let address { AppKeeper.shared.release([address], paths: benchPaths) }
         if !id.isEmpty {
             configs[index].nodes.removeAll { $0.id == id }
             // Aresta apontando para nó que não existe mais viraria alvo morto no
@@ -3761,6 +3780,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         // Os itens de visualização carregam o estado: a marca diz em que modo a
         // bancada ativa está, sem precisar olhar a barra.
+        if menuItem.action == #selector(toggleOrphanReaper) {
+            menuItem.state = OrphanReaper.shared.policy.enabled ? .on : .off
+            return true
+        }
         if menuItem.action == #selector(toggleSidebarCollapsed) {
             menuItem.state = root.isCollapsed ? .on : .off
             return true
@@ -3812,6 +3835,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func pickTerminalTool() { activeCanvas?.tool = .terminal }
     @objc func pickWebTool() { activeCanvas?.tool = .web }
 
+    @objc func showProcesses() { ProcessesWindow.shared.present() }
+
+    @objc func toggleOrphanReaper() {
+        OrphanReaper.shared.setEnabled(!OrphanReaper.shared.policy.enabled)
+    }
+
     @objc func copyTargets() {
         let list = Dispatcher.shared.addresses.joined(separator: "\n")
         NSPasteboard.general.clearContents()
@@ -3852,6 +3881,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "Copiar alvos de dispatch",
                         action: #selector(copyTargets), keyEquivalent: "t")
             .keyEquivalentModifierMask = [.command, .shift]
+        appMenu.addItem(withTitle: "Processos…", action: #selector(showProcesses), keyEquivalent: "p")
+            .keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(withTitle: "Limpar órfãos automaticamente", action: #selector(toggleOrphanReaper),
+                        keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenu.items.forEach {

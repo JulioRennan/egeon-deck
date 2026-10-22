@@ -46,6 +46,8 @@ enum EgeonCLI {
         #   egeon peek <endereço>    o que ele mostra agora, sem interromper
         #   egeon trace [texto]      registra na trilha da bancada (texto ou stdin)
         #   egeon status             quem você é e como está este terminal
+        #   egeon ps [--orphans]     processos lançados pelo Egeon, e os órfãos
+        #   egeon ps --kill [pid…]   encerra os órfãos (ou os pids dados)
         #
         # Só no terminal maestro (ADR-066) — montar e reconfigurar a bancada:
         #   egeon bench              a bancada: regras, nós, arestas, estado
@@ -103,6 +105,17 @@ enum EgeonCLI {
           status)
             api GET /status
             ;;
+          ps)
+            case "${2:-}" in
+              --orphans) api GET "/processes?orphans=1" ;;
+              --kill)
+                shift 2
+                pids=$(IFS=,; echo "$*")
+                api POST "/processes/kill${pids:+?pid=$pids}"
+                ;;
+              *) api GET /processes ;;
+            esac
+            ;;
           bench)
             api GET /maestro/bench
             ;;
@@ -132,7 +145,7 @@ enum EgeonCLI {
         EGEON_GUIDE
             ;;
           *)
-            sed -n '2,23p' "$0" | cut -c3-
+            sed -n '2,25p' "$0" | cut -c3-
             exit 2
             ;;
         esac

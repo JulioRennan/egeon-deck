@@ -289,6 +289,9 @@ final class TerminalNode: NodeView {
         // Só em nó com agente: shell não tem conversa para rastrear, e a variável
         // ali seria lixo no ambiente de tudo que você rodar à mão.
         if profile != nil { environment[ClaudeHooks.targetVariable] = address }
+        // Em todo nó, shell incluído: é o que diz de onde veio o processo que
+        // ficou de pé quando o terminal fechou (ADR-083).
+        ProcessMark.stamp(&environment, address: address)
         // Shell não tem modelo para instruir: quem registra na trilha é o
         // `preexec` do zsh, que entra por aqui (ADR-036).
         if profile == nil { environment["ZDOTDIR"] = ShellHook.directory.path }
@@ -365,6 +368,9 @@ final class TerminalNode: NodeView {
         guard term.process.running else { return }
 
         let pid = term.process.shellPid
+        // Antes do shell: morto ele, os filhos já são do launchd e não se acha
+        // mais de qual nó eram (ADR-083).
+        if pid > 0 { ProcessScanner.terminateTree(of: pid, reason: "terminal \(address) removido") }
         term.process.terminate()
         guard pid > 0 else { return }
 

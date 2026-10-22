@@ -53,10 +53,12 @@ enum AppEnvironment {
     ///
     /// As variáveis `CLAUDE_CODE*` saem porque, herdadas, fazem um agente aberto
     /// aqui se julgar bancada filha de outro — e desligar transcript, entre outras
-    /// esquisitices.
+    /// esquisitices. A procedência herdada sai pelo mesmo motivo: quem marca é
+    /// o terminal que vai lançar (ADR-083).
     static func forChildProcess() -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
             .filter { !$0.key.hasPrefix("CLAUDE_CODE") && $0.key != "CLAUDECODE" }
+            .filter { !ProcessMark.inherited.contains($0.key) }
         // Na frente de tudo: o `egeon` é do flavor que lançou este processo, e
         // um homônimo em /usr/local/bin faria o agente do dev falar com o socket
         // do estável.

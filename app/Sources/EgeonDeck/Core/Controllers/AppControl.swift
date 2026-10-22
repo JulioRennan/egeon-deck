@@ -73,6 +73,8 @@ enum AppControl {
     static var toggleSidebar: (() -> Bool)?
     /// Troca a aba da barra (`all`/`active`, ADR-082); devolve a aba em vigor.
     static var sidebarTab: ((String) -> String?)?
+    /// /processes?show=1 — abre a janela "Processos" (ADR-083).
+    static var showProcesses: (() -> Void)?
 
     /// Cria worktree e reaponta: `bancada` duplica a bancada inteira levando os
     /// terminais de repo vizinho junto, `bancada/nó` leva só aquele terminal.

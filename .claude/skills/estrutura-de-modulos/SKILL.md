@@ -34,6 +34,9 @@ app/Sources/EgeonDeck/
 │   │       └── AgentNode/      contrato genérico de agente (AgentProfile)
 │   │       │   └── Features/ClaudeCode/   o que é SÓ do Claude Code
 │   ├── Notifications/          Activity, HookEvent, Spinner, AttentionSound
+│   ├── Processes/              procedência dos processos (ADR-083): ProcessMark,
+│   │                           ProcessTable (classifica, puro), ProcessScanner
+│   │                           (sysctl), a janela Processos
 │   ├── Trace/                  trilha da bancada: TraceEntry, TraceLog
 │   ├── Workbench/              WorkbenchConfig, Store, Template, worktree
 │   └── Workspace/              workspace → projeto: Config, Store (conciliação),

@@ -32,6 +32,7 @@ app/Sources/EgeonDeck/
 │   ├── Nodes/           NodeConfig, NodeView, NodeTemplate + concretos
 │   │   └ Features/AgentNode (contrato genérico → Features/ClaudeCode)
 │   ├── Notifications/   Activity, HookEvent, Spinner, AttentionSound
+│   ├── Processes/       procedência dos processos — marca, leitura, janela
 │   ├── Trace/           trilha da bancada — TraceEntry, TraceLog, ShellHook
 │   ├── Workbench/       WorkbenchConfig, Store, WorkbenchTemplate, worktree
 │   └── Workspace/       workspace → projeto: WorkspaceConfig, Store, Tree,
@@ -181,6 +182,15 @@ app/Sources/EgeonDeck/
   `~/.egeon*/workbenches/<id>/trace.md` — um arquivo por bancada, para
   auditar (ADR-036). Tudo que é DE uma bancada mora na pasta dela, e a pasta é
   o `id` (8 hex, nasce com a bancada), não o nome.
+- **Processos** (ADR-083) — todo nó sobe com `EGEON_NODE`/`EGEON_DECK` no
+  ambiente, herdado por tudo que ele abre; a janela Processos… (⌥⌘P), o
+  `egeon ps` e `/processes` mostram o que é do app e os órfãos (marcados, fora
+  de qualquer Egeon vivo), e encerram por SIGTERM. Nó que morre leva a árvore
+  inteira (a saída do app não, por causa do `install.sh`), e o `OrphanReaper`
+  encerra órfão com mais de 1 h a cada 10 min, poupando o daemon do Claude Code.
+  App de desktop que um nó abriu (marca no processo do app) fecha com o último
+  que o usa — conexão viva ou, no Docker, container de bancada de pé (ADR-084,
+  `AppKeeper`, `GET /apps`).
 - Drag & drop de arquivo → paste no terminal (imagem vira anexo no Claude Code).
 - Voz pelo CLI dentro do pty (mic atribuído ao bundle do app).
 
