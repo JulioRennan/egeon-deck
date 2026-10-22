@@ -9,6 +9,8 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-22
+
 ### Adicionado
 
 - Janela **Processos…** (⌥⌘P) e `egeon ps`: tudo o que o Egeon lançou, por bancada e nó, com os processos órfãos — os que ficaram de pé depois que o terminal fechou — no topo, a idade de cada um e botões para encerrá-los; todo terminal, shell incluído, passa a marcar no ambiente de onde veio o que ele abre (ADR-083).
@@ -260,7 +262,8 @@ Primeira versão para passar adiante (tag `v0`).
 - Aviso de "terminou" e "precisa de você" vindo do gancho do CLI.
 - Socket de controle em `~/.egeon/sock`.
 
-[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.1.1...v1.2.0
