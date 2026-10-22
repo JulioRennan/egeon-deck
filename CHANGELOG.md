@@ -9,6 +9,10 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- "Sobre o Egeon Deck", no topo do menu do app: mostra a versão instalada e o commit de que ela foi construída.
+
 ## [1.5.0] - 2026-10-22
 
 ### Adicionado

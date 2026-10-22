@@ -277,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.root.isCollapsed
         }
         AppControl.showProcesses = { ProcessesWindow.shared.present() }
+        AppControl.showAbout = { [weak self] in self?.showAbout() }
         AppControl.sidebarTab = { [weak self] raw in
             guard let self, let tab = Sidebar.Tab(rawValue: raw) else { return nil }
             self.root.sidebar.show(tab: tab)
@@ -3835,6 +3836,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func pickTerminalTool() { activeCanvas?.tool = .terminal }
     @objc func pickWebTool() { activeCanvas?.tool = .web }
 
+    /// O painel padrão do macOS: nome, versão e build (o commit, gravado
+    /// pelo `make.sh`). O nome vem do flavor, para o dev não se passar pelo
+    /// estável.
+    @objc func showAbout() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: Flavor.current.displayName,
+            .credits: NSAttributedString(
+                string: "Licença AGPL-3.0-only",
+                attributes: [.font: NSFont.systemFont(ofSize: 11),
+                             .foregroundColor: NSColor.secondaryLabelColor]),
+        ])
+    }
+
     @objc func showProcesses() { ProcessesWindow.shared.present() }
 
     @objc func toggleOrphanReaper() {
@@ -3857,6 +3872,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // segunda via: nas setas o AppKit consulta o menu antes do responder
         // chain, e dentro de uma caixa de texto elas são início e fim da linha —
         // `validateMenuItem` devolve a tecla nesse caso.
+        appMenu.addItem(withTitle: "Sobre o \(Flavor.current.displayName)", action: #selector(showAbout),
+                        keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Aba à direita", action: #selector(nextWorkbench),
                         keyEquivalent: "\u{2192}")
         appMenu.addItem(withTitle: "Aba à esquerda", action: #selector(previousWorkbench),

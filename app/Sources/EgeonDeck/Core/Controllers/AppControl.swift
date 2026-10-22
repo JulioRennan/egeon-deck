@@ -75,6 +75,8 @@ enum AppControl {
     static var sidebarTab: ((String) -> String?)?
     /// /processes?show=1 — abre a janela "Processos" (ADR-083).
     static var showProcesses: (() -> Void)?
+    /// /about — abre o "Sobre": o clique no menu não é dirigível de fora (ADR-003).
+    static var showAbout: (() -> Void)?
 
     /// Cria worktree e reaponta: `bancada` duplica a bancada inteira levando os
     /// terminais de repo vizinho junto, `bancada/nó` leva só aquele terminal.

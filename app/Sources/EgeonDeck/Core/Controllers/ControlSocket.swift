@@ -778,6 +778,16 @@ final class ControlSocket {
                 respond(fd, status: "200 OK", json: ["ok": true, "target": target, field: value ?? "padrão"])
             }
 
+        case ("GET", _, _) where bare.hasSuffix("/about"):
+            // /about — abre o painel "Sobre" e devolve a versão e o build.
+            let info = Bundle.main.infoDictionary ?? [:]
+            DispatchQueue.main.sync { AppControl.showAbout?() }
+            respond(fd, status: "200 OK", json: [
+                "ok": true,
+                "version": info["CFBundleShortVersionString"] as? String ?? "",
+                "build": info["CFBundleVersion"] as? String ?? "",
+            ])
+
         case ("GET", _, _) where route.contains("/layout"):
             // /layout?mode=canvas|chat — troca a visualização da bancada ativa.
             let mode = Self.query(in: route)["mode"] ?? ""

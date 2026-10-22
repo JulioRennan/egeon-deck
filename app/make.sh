@@ -81,6 +81,11 @@ if [ -f Resources/icon.png ]; then
 fi
 
 
+# O build é o commit: o "Sobre" do app diz de qual commit saiu a cópia
+# instalada, e "+" marca build feito com mudança ainda não commitada.
+BUILD="$(git -C "$(dirname "$0")" rev-parse --short HEAD 2>/dev/null || echo sem-git)"
+git -C "$(dirname "$0")" diff --quiet HEAD 2>/dev/null || BUILD="$BUILD+"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -92,6 +97,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key>      <string>EgeonDeck</string>
   <key>CFBundlePackageType</key>     <string>APPL</string>
   <key>CFBundleShortVersionString</key> <string>1.5.0</string>
+  <key>CFBundleVersion</key>         <string>$BUILD</string>
+  <!-- Sem isto o que o AppKit desenha sozinho (o "Version" do painel Sobre)
+       sai em inglês: o app não tem .lproj, e vale a região de desenvolvimento. -->
+  <key>CFBundleDevelopmentRegion</key> <string>pt-BR</string>
   <key>LSMinimumSystemVersion</key>  <string>14.0</string>
   <key>NSHighResolutionCapable</key> <true/>
   <key>CFBundleIconFile</key>        <string>AppIcon</string>
