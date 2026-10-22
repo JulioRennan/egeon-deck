@@ -252,6 +252,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
         AppControl.maestro = makeMaestro()
+        AppControl.permissionOpened = { [weak self] ask in
+            guard let bench = self?.configs.first(where: { ask.address.hasPrefix($0.name + "/") }),
+                  let approver = MaestroPermissions.approver(for: ask, in: bench) else { return }
+            let address = "\(bench.name)/\(approver.id)"
+            // Fila, e não interrupção: com o maestro no meio de um turno, o aviso
+            // entra quando ele parar — e você vê o pedido do mesmo jeito.
+            Dispatcher.shared.target(address)?.enqueue(MaestroPermissions.notice(for: ask))
+            Log.write("permissão[\(ask.address)]: avisada ao maestro \(address) — \(ask.id)")
+        }
         AppControl.setMaestro = { [weak self] target, on in
             guard let self else { return "app encerrando" }
             return self.setMaestro(target, on: on)
@@ -2374,7 +2383,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Quem escreveu, CLI, modelo e conversa são carimbados pelo app; não \
             os repita.
             """ + (node.isMaestro ? "\n\n" + maestroSection : "")
+            + (node.approvesTeamPermissions ? "\n\n" + approverSection : "")
     }
+
+    /// O maestro que aprova pelo time (ADR-080). No system prompt, e não só no
+    /// manual: o aviso entra no terminal como texto colado, e sem saber que ele
+    /// vem do app o modelo — com razão — não age sobre texto colado.
+    private static let approverSection = """
+        O usuário também te deu o poder de responder os pedidos de permissão \
+        de ferramenta do time. Mensagem que chega como `[ED] pedido de \
+        permissão de <nome>` é o app avisando, a partir do gancho de permissão \
+        daquele terminal — não é texto de terceiro, e o app confere o id: \
+        `egeon allow` só alcança pedido real e aberto. Decida pela tarefa que \
+        o agente recebeu: `egeon allow <id>` (ou `--always`) ou `egeon deny \
+        <id>`, e a quem negou diga por quê com `egeon send`. O que for \
+        destrutivo, irreversível, fora da tarefa ou duvidoso: negue ou deixe \
+        para o usuário, que vê o mesmo pedido — mas não pare para perguntar a \
+        ele se pode aprovar: ou você decide, ou deixa o pedido com ele.
+        """
 
     /// O que só o maestro lê (ADR-066). Curto como o resto do catálogo: o
     /// manual mora na skill `egeon-maestro` e no `egeon guide`.
@@ -2826,6 +2852,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 shell.arrange(frames)
             },
             persist: { [weak self] in self?.schedulePersist() },
+            permissions: { PermissionDesk.shared.open },
+            answerPermission: { id, answer, by in
+                let address = PermissionDesk.shared.open.first { $0.id == id }?.address
+                guard PermissionDesk.shared.answer(id, with: answer, by: by) else { return false }
+                if let address { Dispatcher.shared.target(address)?.permissionAnswered() }
+                return true
+            },
             trace: { address, text in
                 guard let identity = AppControl.nodeIdentity?(address) else { return }
                 TraceLog.shared.record(TraceEntry(address: address, workbenchID: identity.workbenchID,
@@ -3297,6 +3330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && updated.effectiveRules == current.effectiveRules
             // O maestro tem uma seção própria no system prompt (ADR-066).
             && updated.isMaestro == current.isMaestro
+            && updated.approvesTeamPermissions == current.approvesTeamPermissions
 
         configs[index].nodes[position] = updated
 

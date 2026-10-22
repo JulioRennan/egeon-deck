@@ -162,7 +162,7 @@ app/Sources/EgeonDeck/
   `MaestroController` aplica por closures). Não se reconfigura, não faz maestro,
   não reinicia nó em turno (segundo plano só com `force`); é o mestre da bancada —
   alcança todos e todos o alcançam sem aresta desenhada (`MaestroLinks`); time que
-  muda rearruma o canvas (`MaestroLayout`); todo `apply` vai para a trilha. O manual é a skill `egeon-maestro`
+  muda rearruma o canvas (`MaestroLayout`); todo `apply` vai para a trilha. Com "Aprova permissões do time" (só você liga), recebe os pedidos de ferramenta do time em uma linha e responde com `egeon allow`/`deny` (ADR-080). O manual é a skill `egeon-maestro`
   (`MaestroGuide`, publicada pelo `ClaudeSkill`) e o `egeon guide`.
 - **Papel e regras** são campos separados (ADR-056): papel é quem o terminal é;
   regra é como se trabalha, e a da **bancada** (menu de contexto na barra) vale

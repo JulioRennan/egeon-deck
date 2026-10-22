@@ -178,7 +178,7 @@ extension MaestroPlan.Node: Decodable {
 
     /// O que o `egeon bench` mostra e não se escreve: copiar um nó de lá para
     /// o plano não pode falhar por causa deles.
-    enum ReadOnly: String, CodingKey, CaseIterable { case state, you, maestro }
+    enum ReadOnly: String, CodingKey, CaseIterable { case state, you, maestro, approvesPermissions }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -187,6 +187,11 @@ extension MaestroPlan.Node: Decodable {
         if extra.contains(.maestro), (try? extra.decode(Bool.self, forKey: .maestro)) == true {
             throw MaestroPlan.UnknownKeys(path: "nó '\(id)'", keys: ["maestro"],
                                           expected: ["— só o usuário faz um maestro, no formulário"])
+        }
+        if extra.contains(.approvesPermissions),
+           (try? extra.decode(Bool.self, forKey: .approvesPermissions)) == true {
+            throw MaestroPlan.UnknownKeys(path: "nó '\(id)'", keys: ["approvesPermissions"],
+                                          expected: ["— só o usuário dá isso, no formulário"])
         }
         try PlanKeys.check(decoder, Keys.self, path: "nó '\(id)'",
                            ignoring: ReadOnly.allCases.map(\.rawValue))

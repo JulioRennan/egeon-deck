@@ -90,6 +90,9 @@ final class NodeTemplateDialog {
     /// "salvar": é decisão sobre o terminal, não sobre um campo dele.
     private let maestroBox = HandButton(checkboxWithTitle: "Maestro — monta a bancada",
                                         target: nil, action: nil)
+    /// Embaixo do maestro e só com ele ligado: é poder do maestro (ADR-080).
+    private let approveBox = HandButton(checkboxWithTitle: "Aprova permissões do time",
+                                        target: nil, action: nil)
 
     private let nameCaption = caption("NOME")
     private let cmdCaption = caption("COMANDO — vazio abre o zsh")
@@ -155,6 +158,8 @@ final class NodeTemplateDialog {
         nameField.stringValue = component.name
         kindTabs.selectedSegment = component.kind == .agent ? 1 : 0
         maestroBox.state = component.maestro == true ? .on : .off
+        approveBox.state = component.maestro == true && component.approvesTeam == true ? .on : .off
+        maestroChanged()
         selectAgent(component.agent)
         let resolved = component.resolved(for: component.agent)
         reloadConfig(select: resolved.config)
@@ -201,6 +206,7 @@ final class NodeTemplateDialog {
         base.agent = isAgent ? selectedAgentKey : nil
         base.cwd = selectedFolder.isEmpty ? nil : Self.normalizedFolder(selectedFolder)
         base.maestro = isAgent && maestroBox.state == .on ? true : nil
+        base.approvesTeam = base.maestro == true && approveBox.state == .on ? true : nil
         if isAgent {
             base.command = nil
         } else {
@@ -288,13 +294,20 @@ final class NodeTemplateDialog {
         maestroBox.toolTip = "Este terminal ganha `egeon bench`, `models`, `plan` e `apply`: "
             + "cria terminais, escolhe modelo, esforço, papel e regras de cada um, e liga as "
             + "arestas. Reinicia o agente."
+        approveBox.state = initial.maestro == true && initial.approvesTeam == true ? .on : .off
+        approveBox.toolTip = "Os pedidos de permissão de ferramenta dos outros agentes desta bancada "
+            + "chegam ao maestro, que responde com `egeon allow` ou `egeon deny`. Você continua "
+            + "vendo cada pedido, e vale quem responder primeiro. Perguntas a você ficam com você."
+        maestroBox.target = actions
+        maestroBox.action = #selector(DialogActions.maestroChanged)
+        maestroChanged()
 
         let views: [NSView] = [kindTabs, nameCaption, nameField, cmdCaption, cmdField,
                                agentCaption, modelCaption, modelPicker, effortCaption, effortPicker,
                                configCaption, configField, configBrowse,
                                folderCaption, folderAdd, folderScroll,
                                promptCaption, promptScroll, rulesCaption, rulesScroll, saveBox,
-                               maestroBox]
+                               maestroBox, approveBox]
         views.forEach(container.addSubview)
         agentRadios.forEach(container.addSubview)
 
@@ -398,7 +411,7 @@ final class NodeTemplateDialog {
             // (ADR-056). Um embaixo do outro não cabe: acima de ~510 de altura o
             // `NSAlert` põe o ícone de lado para caber na tela.
             let half = (width - Self.gap) / 2
-            let textHeight = max(40, bottom - Self.gap / 2 - y - Self.labelGap)
+            let textHeight = max(40, bottom - Self.checkRow - Self.gap / 2 - y - Self.labelGap)
             place(promptCaption, 13, w: half)
             place(rulesCaption, 13, x: half + Self.gap, w: half)
             y += Self.labelGap
@@ -411,12 +424,17 @@ final class NodeTemplateDialog {
         saveBox.isHidden = false
         if isAgent {
             let half = (width - Self.gap) / 2
-            saveBox.frame = NSRect(x: Self.inset, y: bottom, width: half, height: 18)
+            saveBox.frame = NSRect(x: Self.inset, y: bottom - Self.checkRow, width: half, height: 18)
             maestroBox.isHidden = false
-            maestroBox.frame = NSRect(x: Self.inset + half + Self.gap, y: bottom, width: half, height: 18)
+            maestroBox.frame = NSRect(x: Self.inset + half + Self.gap, y: bottom - Self.checkRow,
+                                      width: half, height: 18)
+            approveBox.isHidden = false
+            approveBox.frame = NSRect(x: Self.inset + half + Self.gap + 18, y: bottom,
+                                      width: half - 18, height: 18)
         } else {
             saveBox.frame = NSRect(x: Self.inset, y: bottom, width: width, height: 18)
             maestroBox.isHidden = true
+            approveBox.isHidden = true
         }
     }
 
@@ -501,6 +519,16 @@ final class NodeTemplateDialog {
     }
 
     fileprivate func kindChanged() { relayout() }
+
+    /// Sem maestro não há quem aprove: a caixa apaga e desmarca.
+    fileprivate func maestroChanged() {
+        let on = maestroBox.state == .on
+        approveBox.isEnabled = on
+        if !on { approveBox.state = .off }
+    }
+
+    /// A linha a mais de caixas de marcar, embaixo dos textos.
+    private static let checkRow: CGFloat = 22
 
     // MARK: - Configuração da CLI
 
@@ -794,6 +822,7 @@ private final class DialogActions: NSObject {
     private weak var dialog: NodeTemplateDialog?
     init(_ dialog: NodeTemplateDialog) { self.dialog = dialog }
     @objc func kindChanged() { dialog?.kindChanged() }
+    @objc func maestroChanged() { dialog?.maestroChanged() }
     @objc func browseConfig() { dialog?.browseConfig() }
     @objc func addFolder() { dialog?.addFolder() }
 }

@@ -358,6 +358,29 @@ enum MaestroGuide {
         que ele pediu para tirar. Reconfigurar um terminal dele que está no
         meio de outro assunto é tomar o lugar dele: pergunte antes.
 
+        ## Permissões do time
+
+        Se o usuário te deu esse poder, `egeon bench` mostra
+        `"approvesPermissions": true` no seu nó. Aí, quando um agente da
+        bancada pede permissão para uma ferramenta (Bash, Edit, Write…), você
+        recebe uma mensagem `[ED] pedido de permissão de <nome>` com o comando
+        e o id do pedido.
+
+        - `egeon allow <id>` permite; `egeon allow <id> --always` permite e
+          grava a regra que o CLI sugeriu, para ele não perguntar mais.
+        - `egeon deny <id>` nega. Diga ao agente por quê, com `egeon send`,
+          senão ele tenta de novo do mesmo jeito.
+        - `egeon permissions` lista os pedidos ainda abertos.
+
+        Permita o que cabe na tarefa que você deu a ele. Negue e pergunte ao
+        usuário o que for destrutivo ou irreversível (apagar fora do projeto,
+        `push`, `reset --hard`, mexer em credenciais, mandar algo para fora) ou
+        que não tenha a ver com a tarefa. Na dúvida, não aprove: o usuário vê
+        o mesmo pedido no card e no chat e pode responder — vale quem responder
+        primeiro, e um pedido já respondido devolve 404. O pedido expira junto
+        com o gancho que espera, então responda logo. Perguntas que o agente
+        faz ao usuário (opções para escolher) não chegam a você.
+
         ## Exemplo
 
         Pedido: "monta a bancada para adicionar login com Google — front em

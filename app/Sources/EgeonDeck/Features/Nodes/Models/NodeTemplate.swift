@@ -36,6 +36,8 @@ struct NodeTemplate: Codable {
     /// O terminal nasce maestro: pode montar a bancada pelo `egeon` (ADR-066).
     /// Papel, e não CLI — vale em qualquer um que rode o `egeon`.
     var maestro: Bool?
+    /// O maestro aprova as permissões do time (ADR-080).
+    var approvesTeam: Bool?
 
     /// O que muda de um CLI para outro, por chave do `agents.json`.
     ///
@@ -160,7 +162,7 @@ struct NodeTemplate: Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, kind, agent, cwd, prompt, rules, byAgent, maestro
+        case name, kind, agent, cwd, prompt, rules, byAgent, maestro, approvesTeam
         // Onde comando, config e modelo moravam antes da ADR-057.
         case cmd, config, model
     }
@@ -179,6 +181,7 @@ struct NodeTemplate: Codable {
         rules = try c.decodeIfPresent(String.self, forKey: .rules)
         byAgent = try c.decodeIfPresent([String: Overrides].self, forKey: .byAgent)
         maestro = try c.decodeIfPresent(Bool.self, forKey: .maestro)
+        approvesTeam = try c.decodeIfPresent(Bool.self, forKey: .approvesTeam)
         // `cmd` na raiz: num agente é o formato de antes da ADR-057; num shell é
         // o comando dele, que nunca teve CLI para onde migrar.
         command = kind == .shell ? try c.decodeIfPresent(String.self, forKey: .cmd) : nil
@@ -200,6 +203,7 @@ struct NodeTemplate: Codable {
         try c.encode(kind, forKey: .kind)
         try c.encodeIfPresent(agent, forKey: .agent)
         try c.encodeIfPresent(maestro == true ? true : nil, forKey: .maestro)
+        try c.encodeIfPresent(maestro == true && approvesTeam == true ? true : nil, forKey: .approvesTeam)
         try c.encodeIfPresent(cwd, forKey: .cwd)
         try c.encodeIfPresent(prompt, forKey: .prompt)
         try c.encodeIfPresent(rules, forKey: .rules)
@@ -297,6 +301,7 @@ enum NodeTemplateStore {
                                     byAgent: byAgent.isEmpty ? nil : byAgent,
                                     command: node.type == .shell ? node.cmd : nil)
         template.maestro = node.isMaestro ? true : nil
+        template.approvesTeam = node.approvesTeamPermissions ? true : nil
         return template
     }
 
@@ -320,6 +325,7 @@ enum NodeTemplateStore {
         node.byAgent = component.byAgent
         node.component = component.name
         node.maestro = component.kind == .agent && component.maestro == true ? true : nil
+        node.approvesTeam = node.isMaestro && component.approvesTeam == true ? true : nil
         return node
     }
 }

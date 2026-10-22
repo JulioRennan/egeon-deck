@@ -4427,3 +4427,41 @@ do CLI: projeto, depois o seu, depois o embutido.
 aspas, configuração falsa com plugin ligado e desligado). No DEV, `/compose` com
 `/`, `/fig`, `/cle`, `/clear agora` e `veja /tmp` lidos pelo `/chat` (popup
 `slash` com os itens certos, e fechado nos dois últimos), e foto.
+
+## ADR-080 — O maestro aprova as permissões do time, se você deixar
+
+**Contexto.** Com um time de agentes, cada pedido de permissão de ferramenta
+parava um deles até você responder — no terminal ou na faixa do chat
+(ADR-068). O maestro já sabe o que cada um foi fazer (foi ele que mandou), e é
+quem melhor julga se o `ls`, o `npm test` ou o `Edit` cabe na tarefa.
+
+**Decisão.** Uma opção do nó, "Aprova permissões do time"
+(`NodeConfig.approvesTeam`), que só vale com o maestro ligado e só você dá — no
+formulário; o plano do maestro recusa `approvesPermissions` como recusa
+`maestro` (ADR-066).
+- **Aviso:** pedido aberto no `PermissionDesk` por outro nó da bancada vira uma
+  mensagem na fila do maestro (`MaestroPermissions.notice`). Fila, e não
+  interrupção: com ele num turno, entra quando ele parar.
+- **UMA linha, curta.** Medido: o aviso de várias linhas entrava no Claude Code
+  como texto colado, e o modelo parava para perguntar a você se podia aprovar —
+  duas vezes, mesmo com o system prompt explicando. Em uma linha ele age.
+- **System prompt:** o maestro que aprova ganha uma seção dizendo que o aviso vem
+  do app e como decidir; o manual (`egeon guide`) tem o critério longo.
+- **Resposta:** `egeon allow <id> [--always]`, `egeon deny <id>`,
+  `egeon permissions` → `/maestro/answer` e `/maestro/asks` (sem "permission"
+  no nome: as rotas do gancho casam pelo sufixo). O controller confere quem
+  chama (maestro com a opção), a bancada, que o pedido não é dele e que é de
+  ferramenta — `AskUserQuestion` é pergunta a você e não chega ao maestro.
+- **Você continua no circuito:** o pedido aparece no card e no chat como antes,
+  vale quem responder primeiro, e toda resposta do maestro vai para a trilha.
+
+**Consequência.** É autorização para um agente aprovar o que outro executa — um
+agente convencido do contrário aprova errado. Por isso é opt-in por maestro,
+desligada por padrão, e a seção do system prompt manda negar ou deixar com
+você o destrutivo, o irreversível e o fora da tarefa.
+
+**Verificação.** `MaestroPermissionsTests` (quem recebe, aviso em uma linha,
+listagem, recusas, resposta com trilha, só o usuário concede). No DEV, pedido
+falso em nome do `dev` com o `maestro2` aprovando: `ls -la src` permitido em
+13 s com o gancho recebendo `allow`; `rm -rf ~/Documents && git push --force`
+negado em 5 s, com o motivo mandado ao `dev`.

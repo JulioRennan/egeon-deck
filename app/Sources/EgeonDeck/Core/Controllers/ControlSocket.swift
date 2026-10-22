@@ -299,7 +299,9 @@ final class ControlSocket {
             let query = Self.query(in: route)
             let opened: PermissionAsk?? = DispatchQueue.main.sync {
                 guard let target = hookCaller(fd, query: query) else { return .none }
-                return .some(PermissionDesk.shared.open(address: target.address, payload: payload))
+                let ask = PermissionDesk.shared.open(address: target.address, payload: payload)
+                if let ask { AppControl.permissionOpened?(ask) }
+                return .some(ask)
             }
             switch opened {
             case .none:
@@ -383,14 +385,24 @@ final class ControlSocket {
             deliver(request, to: fd)
 
         case (_, _, _) where bare.hasPrefix("/maestro/"):
-            // /maestro/bench · /maestro/models · POST /maestro/apply[?dry=1] —
+            // /maestro/bench · /maestro/models · POST /maestro/apply[?dry=1] ·
+            // /maestro/asks · POST /maestro/answer?id=&answer= (ADR-080) — sem
+            // "permission" no nome: os casos do gancho acima casam pelo sufixo.
             // o terminal maestro lendo e montando a bancada (ADR-066). Quem
             // pergunta sai do processo do outro lado, como no `egeon send`: o
             // controller recusa quem não é maestro.
-            let dry = Self.query(in: route)["dry"] == "1"
+            let query = Self.query(in: route)
+            let dry = query["dry"] == "1"
             let reply = DispatchQueue.main.sync { () -> (status: Int, json: [String: Any]) in
                 guard let maestro = AppControl.maestro else { return (503, ["ok": false, "error": "app sem bancadas"]) }
                 let caller = Dispatcher.shared.target(callingOn: fd)?.address
+                if bare.hasSuffix("/asks") { return maestro.permissions(caller: caller) }
+                if method == "POST", bare.hasSuffix("/answer") {
+                    guard let id = query["id"], let answer = query["answer"].flatMap(PermissionAnswer.init) else {
+                        return (400, ["ok": false, "error": "use ?id=<pedido>&answer=allow|always|deny"])
+                    }
+                    return maestro.answerPermission(id, answer: answer, caller: caller)
+                }
                 switch (method, bare.hasSuffix("/bench"), bare.hasSuffix("/models"), bare.hasSuffix("/apply")) {
                 case ("GET", true, _, _): return maestro.bench(caller: caller)
                 case ("GET", _, true, _): return maestro.models(caller: caller)

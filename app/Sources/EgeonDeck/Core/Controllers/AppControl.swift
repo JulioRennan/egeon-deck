@@ -50,6 +50,9 @@ enum AppControl {
     /// Quem atende o terminal maestro: lê a bancada, mostra o plano e aplica
     /// (ADR-066). Montado pelo AppDelegate, que é o dono do `workbenches.json`.
     static var maestro: MaestroController?
+    /// Um pedido de permissão acabou de abrir — para avisar o maestro que
+    /// aprova pelo time (ADR-080).
+    static var permissionOpened: ((PermissionAsk) -> Void)?
 
     /// Liga ou desliga o maestro de um nó, de fora. O checkbox do formulário
     /// passa por `NSAlert`, que não é dirigível sem Acessibilidade (ADR-003).

@@ -29,6 +29,10 @@ final class MaestroController {
         /// enquadra (ADR-066).
         var arrange: (_ bench: String) -> Void = { _ in }
         var persist: () -> Void
+        /// Os pedidos de permissão abertos, de todas as bancadas (ADR-080).
+        var permissions: () -> [PermissionAsk] = { [] }
+        /// Responde um pedido; `by` vai para o log. `false` se ele já acabou.
+        var answerPermission: (_ id: String, _ answer: PermissionAnswer, _ by: String) -> Bool = { _, _, _ in false }
         /// Linha na trilha da bancada, carimbada como quem chamou.
         var trace: (_ address: String, _ text: String) -> Void
     }
@@ -52,6 +56,61 @@ final class MaestroController {
         }
         guard node.isMaestro else { return .failure(Refusal(status: 403, message: Self.notMaestro)) }
         return .success((bench, node))
+    }
+
+    static let notApprover = "você não aprova permissões do time — quem dá isso é o usuário, no "
+        + "formulário do maestro (⚙ no card → \"Aprova permissões do time\")"
+
+    // MARK: - Permissões do time
+
+    private func approver(_ caller: String?) -> Result<(WorkbenchConfig, NodeConfig), Refusal> {
+        authorize(caller).flatMap { found in
+            found.1.approvesTeamPermissions ? .success(found)
+                : .failure(Refusal(status: 403, message: Self.notApprover))
+        }
+    }
+
+    /// Os pedidos de ferramenta abertos no time, sem os seus.
+    func permissions(caller: String?) -> (status: Int, json: [String: Any]) {
+        switch approver(caller) {
+        case .failure(let refusal): return (refusal.status, refusal.json)
+        case .success(let (bench, me)):
+            let mine = "\(bench.name)/\(me.id)"
+            let open = wiring.permissions().filter {
+                $0.address.hasPrefix(bench.name + "/") && $0.address != mine
+                    && MaestroPermissions.delegable($0)
+            }
+            return (200, ["ok": true, "open": open.map(MaestroPermissions.listing)])
+        }
+    }
+
+    func answerPermission(_ id: String, answer: PermissionAnswer,
+                          caller: String?) -> (status: Int, json: [String: Any]) {
+        let bench: WorkbenchConfig, me: NodeConfig
+        switch approver(caller) {
+        case .failure(let refusal): return (refusal.status, refusal.json)
+        case .success(let found): (bench, me) = found
+        }
+        let mine = "\(bench.name)/\(me.id)"
+        guard let ask = wiring.permissions().first(where: { $0.id == id }) else {
+            return (404, ["ok": false, "error": "pedido \(id) já acabou — respondido, expirado ou o turno seguiu"])
+        }
+        guard ask.address.hasPrefix(bench.name + "/") else {
+            return (403, ["ok": false, "error": "pedido \(id) é de outra bancada"])
+        }
+        guard ask.address != mine else {
+            return (403, ["ok": false, "error": "esse pedido é seu — quem responde é o usuário"])
+        }
+        guard MaestroPermissions.delegable(ask) else {
+            return (403, ["ok": false, "error": "pergunta ao usuário não é sua para responder"])
+        }
+        guard wiring.answerPermission(id, answer, "pelo maestro \(me.id)") else {
+            return (404, ["ok": false, "error": "pedido \(id) já acabou"])
+        }
+        let who = ask.address.split(separator: "/").last.map(String.init) ?? ask.address
+        let verb = answer == .deny ? "negou" : answer == .always ? "permitiu sempre" : "permitiu"
+        wiring.trace(mine, "maestro \(verb) \(ask.tool) de \(who): \(ask.summary.prefix(160))")
+        return (200, ["ok": true, "id": id, "answer": answer.rawValue, "from": ask.address])
     }
 
     struct Refusal: Error {

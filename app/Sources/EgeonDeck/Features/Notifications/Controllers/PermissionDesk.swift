@@ -72,12 +72,12 @@ final class PermissionDesk {
 
     /// Você respondeu daqui. `false` se o pedido já tinha acabado.
     @discardableResult
-    func answer(_ id: String, with answer: PermissionAnswer) -> Bool {
+    func answer(_ id: String, with answer: PermissionAnswer, by: String = "pelo chat") -> Bool {
         expire()
         guard let index = asks.firstIndex(where: { $0.id == id }) else { return false }
         let ask = asks.remove(at: index)
         answers[id] = (answer, answer.hookOutput(suggestions: ask.suggestions), now())
-        Log.write("permissão[\(ask.address)]: \(answer.rawValue) pelo chat — \(id)")
+        Log.write("permissão[\(ask.address)]: \(answer.rawValue) \(by) — \(id)")
         return true
     }
 

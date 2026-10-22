@@ -11,6 +11,7 @@ citados entre parênteses.
 
 ### Adicionado
 
+- O maestro pode aprovar as permissões do time: com "Aprova permissões do time" marcado no formulário dele, cada pedido de ferramenta dos outros agentes da bancada chega ao maestro, que permite ou nega pelo `egeon` — você continua vendo o pedido, vale quem responder primeiro, e toda resposta fica na trilha. Perguntas a você continuam só com você (ADR-080).
 - No chat, digitar `/` no começo da mensagem abre a lista do que o Claude Code daquele terminal aceita — comandos embutidos, os seus, os do projeto, skills e plugins habilitados, com a descrição de cada um; digitar filtra, e Tab ou Enter completa (ADR-079).
 
 ### Alterado

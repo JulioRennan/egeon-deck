@@ -54,6 +54,11 @@ enum EgeonCLI {
         #   egeon apply              valida e aplica o plano (JSON no stdin)
         #   egeon guide              o manual do maestro
         #
+        # Só no maestro que aprova as permissões do time (ADR-080):
+        #   egeon permissions        os pedidos de ferramenta abertos no time
+        #   egeon allow <id> [--always]  permite (--always: não pergunta mais)
+        #   egeon deny <id>          nega
+        #
         # Você não diz quem você é: o app descobre pelo processo que abriu a
         # conexão. Não adianta passar o endereço de outro terminal.
         set -euo pipefail
@@ -110,6 +115,15 @@ enum EgeonCLI {
           apply)
             api POST /maestro/apply --data-binary @-
             ;;
+          permissions)
+            api GET /maestro/asks
+            ;;
+          allow|deny)
+            [ $# -ge 2 ] || { echo "uso: egeon $1 <id do pedido>" >&2; exit 2; }
+            answer="$1"
+            [ "$1" = allow ] && [ "${3:-}" = "--always" ] && answer=always
+            api POST "/maestro/answer?id=$(enc "$2")&answer=$answer"
+            ;;
           guide)
             # Embutido e não pedido ao app: é o mesmo texto da skill, e um CLI
             # sem skill precisa dele mesmo quando o maestro ainda não foi ligado.
@@ -118,7 +132,7 @@ enum EgeonCLI {
         EGEON_GUIDE
             ;;
           *)
-            sed -n '2,17p' "$0" | cut -c3-
+            sed -n '2,23p' "$0" | cut -c3-
             exit 2
             ;;
         esac

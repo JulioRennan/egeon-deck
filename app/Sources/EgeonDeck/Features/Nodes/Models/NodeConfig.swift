@@ -56,6 +56,13 @@ struct NodeConfig: Codable {
 
     var isMaestro: Bool { type == .agent && maestro == true }
 
+    /// O maestro responde os pedidos de permissão de ferramenta do time
+    /// (ADR-080). Só você liga, no formulário, e só vale com o maestro ligado:
+    /// é autorização para um agente aprovar o que outro vai executar.
+    var approvesTeam: Bool?
+
+    var approvesTeamPermissions: Bool { isMaestro && approvesTeam == true }
+
     /// O que você configurou para CADA CLI neste terminal.
     ///
     /// `prompt` e `rules` acima são os GERAIS — valem em qualquer CLI. Aqui fica
