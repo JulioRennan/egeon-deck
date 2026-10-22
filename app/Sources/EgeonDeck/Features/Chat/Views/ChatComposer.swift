@@ -12,6 +12,8 @@ final class ChatComposer: NSView {
     var onToggleSwitcher: (() -> Void)?
     /// A menção mudou: `nil` fecha o popup, string (pode ser vazia) filtra.
     var onMentionQuery: ((String?) -> Void)?
+    /// O `/` do começo mudou: `nil` fecha a lista de comandos, string filtra.
+    var onSlashQuery: ((String?) -> Void)?
     /// Um popup está aberto e quer as teclas de navegação do composer.
     var popupCommand: ((Selector) -> Bool)?
     /// A altura ideal mudou — o dono do layout precisa reagir.
@@ -99,7 +101,7 @@ final class ChatComposer: NSView {
         placeholder.stringValue = participant.map { "Prompt para \($0.address)…" }
             ?? "Nenhum terminal vivo nesta bancada"
         microcopy.stringValue = participant.map {
-            "Enter envia — o prompt entra no terminal de \($0.address) · ⇧Enter quebra linha · @ menciona"
+            "Enter envia — o prompt entra no terminal de \($0.address) · ⇧Enter quebra linha · @ menciona · / comandos"
         } ?? ""
         send.contentTintColor = color
         needsLayout = true
@@ -141,6 +143,14 @@ final class ChatComposer: NSView {
         refreshAfterEdit()
     }
 
+    func insertSlash(_ name: String) {
+        let result = SlashParser.insert(name, into: textView.string)
+        textView.string = result.text
+        textView.setSelectedRange(NSRange(location: result.caret, length: 0))
+        onSlashQuery?(nil)
+        refreshAfterEdit()
+    }
+
     /// Onde o popup deve encostar: o topo do composer, em coordenadas do pai.
     var popupAnchor: NSPoint { NSPoint(x: frame.minX + 10, y: frame.minY - 8) }
 
@@ -168,6 +178,7 @@ final class ChatComposer: NSView {
         guard !text.isEmpty else { return }
         textView.string = ""
         onMentionQuery?(nil)
+        onSlashQuery?(nil)
         refreshAfterEdit()
         onSend?(text)
     }
@@ -215,9 +226,10 @@ extension ChatComposer: NSTextViewDelegate {
     func textViewDidChangeSelection(_ notification: Notification) { reportMention() }
 
     fileprivate func reportMention() {
-        let active = MentionParser.activeMention(in: textView.string,
-                                                 caret: textView.selectedRange().location)
+        let caret = textView.selectedRange().location
+        let active = MentionParser.activeMention(in: textView.string, caret: caret)
         onMentionQuery?(active?.query)
+        onSlashQuery?(SlashParser.activeQuery(in: textView.string, caret: caret))
     }
 
     func textView(_ view: NSTextView, doCommandBy selector: Selector) -> Bool {

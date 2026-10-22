@@ -4398,3 +4398,32 @@ bancada esteve viva: elas medem coisas que acontecem ao mesmo tempo.
 
 **Verificação.** `WorkbenchClockTests` (fases juntas, erro fora das outras
 duas, tique somando em duas fases).
+
+## ADR-079 — `/` no chat: a lista de comandos vem do disco do nó
+
+**Contexto.** No terminal, o Claude Code lista comandos, skills e plugins ao
+digitar `/`; no composer do chat não havia nada, e era preciso lembrar o nome
+exato. A lista só existe dentro da TUI — a forma de pedi-la de fora é a saída
+`stream-json` de `claude -p`, que custa uma chamada à API.
+
+**Decisão.** Ler o mesmo que o CLI lê, do disco, a cada abertura da lista
+(`ClaudeSlashCatalog`): o `.claude/` do diretório do nó, a pasta de
+configuração DELE (a escolhida no nó, senão a do perfil, senão `~/.claude`) e os
+plugins ligados em `settings.json` com a pasta de `installed_plugins.json`
+(`plugin:nome`). Skill com `user-invocable: false` fica de fora, como no CLI —
+inclusive a `egeon` que o app publica. Os embutidos são uma lista nossa: moram
+no binário, e o que faltar ainda funciona digitado. A ordem de precedência é a
+do CLI: projeto, depois o seu, depois o embutido.
+
+- Abre só com `/` no começo da mensagem e até o primeiro espaço
+  (`SlashParser`); `/` no meio do texto é caminho de arquivo.
+- Começo do nome vence "contém", e `plugin:` não atrapalha: `/ralph` acha
+  `ralph-loop:ralph-loop`, e `/cancel` acha `ralph-loop:cancel-ralph`. Oito linhas; o resto aparece filtrando.
+- Tab ou Enter completa — Tab, que fora da lista alterna o destinatário, com a
+  lista aberta é completar, como no terminal.
+- Só para nó de Claude Code: shell e outro CLI não abrem lista.
+
+**Verificação.** `SlashCommandTests` (parser, filtro, cabeçalho dobrado e entre
+aspas, configuração falsa com plugin ligado e desligado). No DEV, `/compose` com
+`/`, `/fig`, `/cle`, `/clear agora` e `veja /tmp` lidos pelo `/chat` (popup
+`slash` com os itens certos, e fechado nos dois últimos), e foto.

@@ -2878,6 +2878,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chat.answerQuestion = { id, choices in
             AppControl.answerQuestion?(id, choices) ?? false
         }
+        chat.slashCommands = { [weak self] participant in
+            guard let self, let config = self.config(ofID: id),
+                  let node = config.nodes.first(where: { $0.id == participant.id }),
+                  let profile = node.agent.flatMap({ self.agents[$0] }) else { return [] }
+            return ClaudeSlashCatalog.commands(profile: profile, nodeConfig: node.config,
+                                               cwd: config.directory(for: node)) ?? []
+        }
         chat.historyFile = { [weak self] in
             guard let self, self.config(ofID: id) != nil else { return nil }
             return ChatHistory.shared.current(forWorkbench: id)

@@ -42,10 +42,17 @@ final class ChatListPopup: NSView {
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
 
+    /// A coluna do nome cabe o maior nome, até um teto: `figma:figma-use`
+    /// não cabe nos 110pt de um nome de agente.
+    private var nameWidth: CGFloat = 110
+
     func show(_ items: [Item], title: String) {
         self.items = items
         selected = 0
         header.stringValue = title
+        let font = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
+        let widest = items.map { ($0.name as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        nameWidth = min(max(110, ceil(widest) + 4), 240)
         rebuild()
     }
 
@@ -79,13 +86,15 @@ final class ChatListPopup: NSView {
             let name = NSTextField(labelWithString: item.name)
             name.font = .systemFont(ofSize: 12.5, weight: .semibold)
             name.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
-            name.frame = NSRect(x: 30, y: 9, width: 110, height: 16)
+            name.frame = NSRect(x: 30, y: 9, width: nameWidth, height: 16)
+            name.lineBreakMode = .byTruncatingTail
             row.addSubview(name)
 
             let detail = NSTextField(labelWithString: item.detail)
             detail.font = .monospacedSystemFont(ofSize: 10.5, weight: .regular)
             detail.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
-            detail.frame = NSRect(x: 142, y: 11, width: 140, height: 13)
+            detail.frame = NSRect(x: 32 + nameWidth, y: 11,
+                                  width: max(60, bounds.width - 12 - 42 - nameWidth), height: 13)
             detail.lineBreakMode = .byTruncatingTail
             row.addSubview(detail)
 
@@ -105,8 +114,11 @@ final class ChatListPopup: NSView {
         onChoose?(index)
     }
 
+    private var builtWidth: CGFloat = 0
+
     override func layout() {
         super.layout()
+        if bounds.width != builtWidth { builtWidth = bounds.width; rebuild() }
         header.frame = NSRect(x: 12, y: 9, width: bounds.width - 24, height: 12)
         for (index, row) in rowViews.enumerated() {
             row.frame = NSRect(x: 6, y: 28 + CGFloat(index) * Self.rowHeight,

@@ -9,6 +9,10 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- No chat, digitar `/` no começo da mensagem abre a lista do que o Claude Code daquele terminal aceita — comandos embutidos, os seus, os do projeto, skills e plugins habilitados, com a descrição de cada um; digitar filtra, e Tab ou Enter completa (ADR-079).
+
 ### Alterado
 
 - O cronômetro da bancada conta as fases ao mesmo tempo: um agente esperando você não para mais o tempo de trabalho de quem segue trabalhando ao lado, e as fases em curso ficam todas acesas. Aguardar outro agente continua contando como trabalho, não como espera por você (ADR-078).

@@ -27,6 +27,9 @@ final class ChatContainer: NSView {
     var permissions: (() -> [PermissionAsk])?
     var answerPermission: ((String, PermissionAnswer) -> Bool)?
     var answerQuestion: ((String, [String: [String]]) -> Bool)?
+    /// O que o CLI do participante aceita no `/`. Vazio para shell e para CLI
+    /// sem catálogo — aí a lista não abre.
+    var slashCommands: ((ChatParticipant) -> [SlashCommand])?
     private let permissionTray = PermissionTray()
 
     private let column = ParticipantsColumn()
@@ -153,7 +156,7 @@ final class ChatContainer: NSView {
     }
     private var pending: [ChatThread.Pending] = []
     private var focusedId: String?
-    private enum PopupMode { case none, switcher, mention }
+    private enum PopupMode { case none, switcher, mention, slash }
     private var popupMode = PopupMode.none
     private var refreshTimer: Timer?
 
@@ -189,6 +192,7 @@ final class ChatContainer: NSView {
         composer.onCycleTarget = { [weak self] in self?.cycleFocus() }
         composer.onToggleSwitcher = { [weak self] in self?.togglePopup(.switcher) }
         composer.onMentionQuery = { [weak self] query in self?.mentionChanged(query) }
+        composer.onSlashQuery = { [weak self] query in self?.slashChanged(query) }
         composer.popupCommand = { [weak self] selector in
             self?.handlePopupCommand(selector) ?? false
         }
@@ -577,6 +581,8 @@ final class ChatContainer: NSView {
 
     private func focus(on id: String) {
         focusedId = id
+        // Outro participante, outro CLI: a lista lida para o anterior não vale.
+        slashCatalog = nil
         userChoseFocus = true
         let all = participants?() ?? []
         if let picked = all.first(where: { $0.id == id }), !picked.isAgent {
@@ -687,7 +693,7 @@ final class ChatContainer: NSView {
     func snapshot() -> [String: Any] {
         let all = participants?() ?? []
         let popupInfo: [String: Any] = popupMode == .none ? ["mode": "none"] : [
-            "mode": popupMode == .mention ? "mention" : "switcher",
+            "mode": popupMode == .mention ? "mention" : popupMode == .slash ? "slash" : "switcher",
             "items": popup.items.map(\.name)
         ]
         return [
@@ -770,6 +776,7 @@ final class ChatContainer: NSView {
     }
 
     private func closePopup() {
+        if popupMode == .slash { slashCatalog = nil }
         popupMode = .none
         popup.isHidden = true
     }
@@ -816,8 +823,52 @@ final class ChatContainer: NSView {
         needsLayout = true
     }
 
+    /// Lida do disco quando a lista abre, e guardada enquanto ela fica aberta:
+    /// filtrar a cada tecla não precisa reler as skills.
+    private var slashCatalog: [SlashCommand]?
+    /// Quantas linhas a lista mostra — o resto aparece filtrando.
+    private static let slashRows = 8
+
+    private func slashChanged(_ query: String?) {
+        guard let query, let target = composer.target else {
+            slashCatalog = nil
+            if popupMode == .slash { closePopup() }
+            return
+        }
+        if slashCatalog == nil { slashCatalog = slashCommands?(target) ?? [] }
+        let found = SlashCommand.matching(slashCatalog ?? [], query: query)
+        guard !found.isEmpty else {
+            if popupMode == .slash { closePopup() }
+            return
+        }
+        popupMode = .slash
+        let shown = Array(found.prefix(Self.slashRows))
+        let items = shown.map { command -> ChatListPopup.Item in
+            let (glyph, color): (String, NSColor) = switch command.source {
+            case .builtin: ("/", NSColor(calibratedWhite: 0.6, alpha: 1))
+            case .user: ("★", .systemYellow)
+            case .project: ("◆", .systemTeal)
+            case .plugin: ("⬢", .systemPurple)
+            }
+            return .init(name: command.name, detail: command.detail, color: color, glyph: glyph)
+        }
+        let more = found.count > shown.count ? " · \(found.count) no total, digite para filtrar" : ""
+        popup.show(items, title: "COMANDOS DE \(target.id.uppercased()) — Tab ou Enter completa\(more)")
+        popup.onChoose = { [weak self] index in
+            guard index < shown.count else { return }
+            self?.composer.insertSlash(shown[index].name)
+            self?.closePopup()
+        }
+        popup.isHidden = false
+        needsLayout = true
+    }
+
     private func handlePopupCommand(_ selector: Selector) -> Bool {
         guard popupMode != .none else { return false }
+        if popupMode == .slash, selector == #selector(NSResponder.insertTab(_:)) {
+            popup.chooseSelected()
+            return true
+        }
         switch selector {
         case #selector(NSResponder.moveUp(_:)):    popup.moveSelection(by: -1)
         case #selector(NSResponder.moveDown(_:)):  popup.moveSelection(by: 1)
@@ -894,8 +945,11 @@ final class ChatContainer: NSView {
         if !popup.isHidden {
             let height = popup.desiredHeight
             let anchor = composer.popupAnchor
+            // A lista de comandos traz a descrição: na largura da menção ela
+            // não passava de três palavras.
+            let width = popupMode == .slash ? min(620, composer.frame.width - 20) : 320
             popup.frame = NSRect(x: anchor.x, y: anchor.y - height,
-                                 width: 320, height: height)
+                                 width: width, height: height)
         }
     }
 
