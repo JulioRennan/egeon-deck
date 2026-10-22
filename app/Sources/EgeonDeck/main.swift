@@ -276,6 +276,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.root.toggleCollapsed()
             return self.root.isCollapsed
         }
+        AppControl.sidebarTab = { [weak self] raw in
+            guard let self, let tab = Sidebar.Tab(rawValue: raw) else { return nil }
+            self.root.sidebar.show(tab: tab)
+            return self.root.sidebar.tab.rawValue
+        }
         AppControl.collapseSidebar = { [weak self] state in
             guard let self else { return false }
             self.root.setCollapsed(state)

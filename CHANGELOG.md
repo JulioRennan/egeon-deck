@@ -12,10 +12,14 @@ citados entre parênteses.
 ### Adicionado
 
 - O maestro pode aprovar as permissões do time: com "Aprova permissões do time" marcado no formulário dele, cada pedido de ferramenta dos outros agentes da bancada chega ao maestro, que permite ou nega pelo `egeon` — você continua vendo o pedido, vale quem responder primeiro, e toda resposta fica na trilha. Perguntas a você continuam só com você (ADR-080).
+- A barra lateral ganhou duas abas: **Todas**, a árvore de workspaces de sempre, e **Ativas**, só as bancadas de pé, em cards soltos (nome, projeto e cronômetro, com o ícone do workspace à esquerda), da que rodou por último para a mais antiga, separadas entre as que rodaram nas últimas 24 horas e as paradas há mais que isso; quando a ordem muda, os cards deslizam até o lugar novo (ADR-082).
 - No chat, digitar `/` no começo da mensagem abre a lista do que o Claude Code daquele terminal aceita — comandos embutidos, os seus, os do projeto, skills e plugins habilitados, com a descrição de cada um; digitar filtra, e Tab ou Enter completa (ADR-079).
 
 ### Alterado
 
+- Na barra lateral, workspaces e projetos não ficam mais dentro de caixas, um dentro do outro: são separados por um fio, e só a bancada continua como card (ADR-082).
+- A bancada em foco na barra lateral ganha fundo azulado e um contorno azul firme, parado; a borda de quem parou ficou mais lenta (6 s por volta) e agora anda pela borda em velocidade constante, sem disparar nas pontas do card.
+- Projeto sem bancada não mostra mais a seta de abrir, e clicar nele oferece criar a primeira bancada; workspaces e projetos da barra lateral se realçam ao passar o mouse.
 - O cronômetro da bancada conta as fases ao mesmo tempo: um agente esperando você não para mais o tempo de trabalho de quem segue trabalhando ao lado, e as fases em curso ficam todas acesas. Aguardar outro agente continua contando como trabalho, não como espera por você (ADR-078).
 - O card no canvas que precisa de você (pergunta, permissão ou erro) ganha a mesma borda girando da bancada na barra lateral, em vez da borda laranja parada.
 

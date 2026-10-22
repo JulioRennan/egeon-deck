@@ -18,6 +18,15 @@ final class SidebarRow: NSView {
     /// cabe em 52pt, e uma coluna de bolinhas iguais não diz QUAL bancada é.
     private let tile = NSView()
     private let initial = NSTextField(labelWithString: "")
+    /// Na aba Ativas a bancada vem solta, fora do card do workspace: o ícone
+    /// dele no lugar da bolinha é o que diz de onde ela é (ADR-082).
+    private let workspaceBadge: WorkspaceBadge?
+    static let workspaceBadgeSide: CGFloat = 28
+    /// Solta, a bancada perde o cabeçalho do projeto que dizia de qual repo ela
+    /// é: o projeto vira a linha do meio — título, projeto, cronômetro.
+    private let projectLabel = NSTextField(labelWithString: "")
+    /// Altura do card de três linhas da aba Ativas.
+    static let threeLineHeight: CGFloat = 66
 
     var onClick: ((Int) -> Void)?
     var onRename: ((Int) -> Void)?
@@ -53,9 +62,11 @@ final class SidebarRow: NSView {
             guard isCompact != oldValue else { return }
             nameLabel.isHidden = isCompact
             pathLabel.isHidden = isCompact
+            projectLabel.isHidden = isCompact
             tile.isHidden = !isCompact
             initial.isHidden = !isCompact
-            dot.isHidden = isCompact
+            dot.isHidden = isCompact || workspaceBadge != nil
+            workspaceBadge?.isHidden = isCompact
             // A assinatura do badge não muda de modo, mas a fonte e o alinhamento
             // dele mudam: sem zerar o cache, o rótulo fica com a métrica do modo
             // anterior até a próxima troca de contagem.
@@ -65,11 +76,25 @@ final class SidebarRow: NSView {
         }
     }
 
-    init(index: Int, config: WorkbenchConfig) {
+    init(index: Int, config: WorkbenchConfig, workspace: WorkspaceConfig? = nil,
+         project: String? = nil) {
         self.index = index
         self.name = config.name
         self.pathExists = config.exists
+        workspaceBadge = workspace.map { _ in WorkspaceBadge(side: Self.workspaceBadgeSide) }
         super.init(frame: .zero)
+        if let workspace, let workspaceBadge {
+            workspaceBadge.show(workspace)
+            workspaceBadge.toolTip = workspace.name
+            dot.isHidden = true
+        }
+        if let project {
+            projectLabel.stringValue = project
+            projectLabel.font = .systemFont(ofSize: 11)
+            projectLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.55)
+            projectLabel.lineBreakMode = .byTruncatingTail
+            addSubview(projectLabel)
+        }
         wantsLayer = true
 
         nameLabel.stringValue = config.name
@@ -105,6 +130,7 @@ final class SidebarRow: NSView {
         initial.isHidden = true
 
         addSubview(dot)
+        if let workspaceBadge { addSubview(workspaceBadge) }
         addSubview(tile)
         addSubview(initial)
         addSubview(nameLabel)
@@ -144,11 +170,23 @@ final class SidebarRow: NSView {
         // Mesma coluna de texto que o cabeçalho do projeto (`SidebarGroupRow`):
         // dentro do tile, a bancada tem de ler como item da mesma lista.
         dot.frame = NSRect(x: 15, y: 14, width: 6, height: 6)
-        let textWidth = bounds.width - 44 - badgeWidth
-        nameLabel.frame = NSRect(x: 32, y: 8, width: textWidth, height: 17)
+        var textX: CGFloat = 32
+        if let workspaceBadge {
+            let side = Self.workspaceBadgeSide
+            workspaceBadge.frame = NSRect(x: 9, y: ((bounds.height - side) / 2).rounded(),
+                                          width: side, height: side)
+            textX = 9 + side + 9
+        }
+        let textWidth = bounds.width - textX - 12 - badgeWidth
+        nameLabel.frame = NSRect(x: textX, y: 8, width: textWidth, height: 17)
+        var footerY: CGFloat = 30
+        if projectLabel.superview != nil {
+            projectLabel.frame = NSRect(x: textX, y: 26, width: bounds.width - textX - 8, height: 15)
+            footerY = 45
+        }
         // O cronômetro corre a largura toda: o badge mora na linha do nome, e
         // centrado na linha ele cortava os tempos ao meio.
-        pathLabel.frame = NSRect(x: 32, y: 30, width: bounds.width - 40, height: 15)
+        pathLabel.frame = NSRect(x: textX, y: footerY, width: bounds.width - textX - 8, height: 15)
         // 4 da borda da linha, que é onde o `+` do cabeçalho termina: encostado
         // no limite útil da direita e alinhado com o que já estava lá.
         statusLabel.frame = NSRect(x: bounds.width - badgeWidth - 6, y: 7,
@@ -295,9 +333,14 @@ final class SidebarRow: NSView {
             layer?.backgroundColor = NSColor.clear.cgColor
             layer?.borderWidth = 0
         } else {
-            layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: isSelected ? 0.14 : 0.045).cgColor
-            layer?.borderWidth = 1
-            layer?.borderColor = NSColor(calibratedWhite: 1, alpha: isSelected ? 0.22 : 0.08).cgColor
+            // A em foco puxa para a cor de destaque, e a borda dela gira como a
+            // de quem parou — azul, e mais rápida. O fio parado sai: o aro da
+            // borda girando faz as vezes dele.
+            layer?.backgroundColor = isSelected
+                ? NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor
+                : NSColor(calibratedWhite: 1, alpha: 0.045).cgColor
+            layer?.borderWidth = isSelected ? 0 : 1
+            layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
         }
         layer?.cornerRadius = 9
         nameLabel.textColor = isRemoving
@@ -311,7 +354,9 @@ final class SidebarRow: NSView {
         // duas na mesma pastilha viravam um contorno grosso e borrado.
         tile.layer?.borderWidth = (isLive && ringTone == nil) ? 2 : 0
         tile.layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.75).cgColor
-        rowRing.tone = isCompact ? nil : ringTone
+        // O foco vence o aviso na linha: a bancada em foco está na tela, e os
+        // cards dela no canvas já giram o aviso; o badge segue dizendo o estado.
+        rowRing.tone = isCompact ? nil : (isSelected ? .focus : ringTone)
         tileRing.tone = isCompact ? ringTone : nil
         initial.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.7)
 
@@ -398,12 +443,25 @@ final class SidebarGroupRow: NSView {
     private(set) var isCollapsed = false
     /// Quantos itens o nível tem; zero não mostra pastilha — vazio já se vê.
     private var count = 0
+    /// Projeto sem bancada: não há o que abrir, então sem seta — e o clique,
+    /// que abriria nada, oferece criar a primeira, como o `+`.
+    private var isEmptyProject: Bool {
+        if case .project = item { return count == 0 }
+        return false
+    }
+    private var isHovered = false {
+        didSet {
+            guard isHovered != oldValue else { return }
+            layer?.backgroundColor = isHovered
+                ? NSColor(calibratedWhite: 1, alpha: 0.06).cgColor : NSColor.clear.cgColor
+        }
+    }
     var isCompact = false {
         didSet {
             guard isCompact != oldValue else { return }
             nameLabel.isHidden = isCompact
             pathLabel.isHidden = isCompact
-            chevron.isHidden = isCompact
+            chevron.isHidden = isCompact || isEmptyProject
             addButton?.isHidden = isCompact
             icon.isHidden = isCompact || badge != nil
             lastBadge = ""
@@ -510,6 +568,7 @@ final class SidebarGroupRow: NSView {
         countLabel.value = count
         countLabel.isHidden = count == 0
         addSubview(countLabel)
+        if isEmptyProject { chevron.isHidden = true }
         if let addButton { addSubview(addButton) }
     }
 
@@ -611,12 +670,31 @@ final class SidebarGroupRow: NSView {
         HandCursor.fill(self)
     }
 
+    /// Realce ao passar o mouse, nos cabeçalhos de workspace e de projeto: sem
+    /// a caixa (ADR-082), é o que mostra até onde vai a linha que se clica.
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        hoverArea = nil
+        if case .orphans = item { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp,
+                                                         .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = !isCompact }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+
     var onDrag: ((SidebarDrag) -> Void)?
 
     override func mouseDown(with event: NSEvent) {
         if case .orphans = item { return }
         SidebarDrag.track(event, in: self, item: item, drag: onDrag) { [weak self] in
             guard let self else { return }
+            if self.isEmptyProject { return self.showCreateMenu() }
             self.onToggle?(self.item)
         }
     }
@@ -693,6 +771,9 @@ final class SidebarGroupRow: NSView {
 /// contorno, para o que é de um workspace parecer de fato separado do que é
 /// do outro.
 final class SidebarCard: NSView {
+    /// O fio de baixo, quando o grupo se separa por divisor e não por caixa.
+    private var rule: CALayer?
+
     init(radius: CGFloat, fill: CGFloat, stroke: CGFloat) {
         super.init(frame: .zero)
         wantsLayer = true
@@ -701,8 +782,29 @@ final class SidebarCard: NSView {
         layer?.borderWidth = 1
         layer?.borderColor = NSColor(calibratedWhite: 1, alpha: stroke).cgColor
     }
+
+    /// Sem caixa: só um fio embaixo. Caixa dentro de caixa dentro de caixa —
+    /// workspace, projeto, bancada — virava uma cebola, e o card da bancada,
+    /// que é o que se clica, perdia o destaque.
+    init(rule alpha: CGFloat) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        let line = CALayer()
+        line.backgroundColor = NSColor(calibratedWhite: 1, alpha: alpha).cgColor
+        layer?.addSublayer(line)
+        rule = line
+    }
+
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        rule?.frame = CGRect(x: 4, y: bounds.height - 1, width: max(0, bounds.width - 8), height: 1)
+        CATransaction.commit()
+    }
 }
 
 /// Documento da rolagem: virado, como o resto da barra.
@@ -714,8 +816,11 @@ final class Sidebar: NSView {
     /// Cabeçalho curto porque a barra agora flutua: os botões da janela ficam
     /// FORA dela, e não há mais o que desviar aqui dentro.
     static let headerHeight: CGFloat = 34
+    /// Expandida, o cabeçalho cresce para caber as abas (ADR-082); no trilho
+    /// continua só o botão de abrir.
+    private var currentHeaderHeight: CGFloat { isCompact ? Self.headerHeight : 48 }
     /// Nome, caminho e até três indicadores com contagem cabem sem cortar.
-    static let expandedWidth: CGFloat = 292
+    static let expandedWidth: CGFloat = 308
     /// Largura do trilho recolhido: cabe a pastilha de 26pt com folga, e é o que
     /// o conteúdo reserva de gutter — o que se abre além disso flutua por cima.
     static let railWidth: CGFloat = 52
@@ -730,7 +835,10 @@ final class Sidebar: NSView {
     private static let workbenchHeight: CGFloat = 54
     private static let workbenchGap: CGFloat = 6
     /// O fio do projeto e o respiro que ele ocupa (1pt de linha + folga).
-    private static let dividerGap: CGFloat = 7
+    private static let dividerGap: CGFloat = 10
+    /// Respiro de cada lado do fio que fecha o workspace: sem caixa, é o vão
+    /// que separa um grupo do outro.
+    private static let rulePadding: CGFloat = 12
 
     /// Trilho recolhido. Propagado às linhas, que trocam nome por pastilha; os
     /// projetos e os cards somem — no trilho a hierarquia é workspace → bancada.
@@ -739,8 +847,8 @@ final class Sidebar: NSView {
             guard isCompact != oldValue else { return }
             rows.forEach { $0.isCompact = isCompact }
             groups.forEach { $0.isCompact = isCompact }
-            title.isHidden = isCompact
-            emptyLabel.isHidden = isCompact || !rows.isEmpty
+            tabs.isHidden = isCompact
+            refreshEmpty()
             // O + sai do trilho: criar abre um menu, e menu saindo de uma faixa
             // de 52pt cai por cima dos cards. Você abre a barra e cria.
             addButton.isHidden = isCompact
@@ -794,7 +902,26 @@ final class Sidebar: NSView {
     private var tree = WorkspaceTree(workspaces: [], workbenches: [])
     private let scroll = NSScrollView()
     private let list = SidebarList()
-    private let title = NSTextField(labelWithString: "WORKSPACES")
+    /// Todas (a árvore) ou Ativas (as de pé, soltas, pela última execução —
+    /// ADR-082). Lembrada por máquina: é conveniência de quem olha.
+    enum Tab: String { case all, active }
+    private(set) var tab: Tab = {
+        (UserDefaults.standard.string(forKey: "sidebarTab")).flatMap(Tab.init) ?? .all
+    }()
+    private let tabs = SidebarTabs()
+    /// As duas listas em camadas separadas da rolagem: trocar de aba é esconder
+    /// uma, e o arrasto (que só existe na árvore) mede tudo na camada dela.
+    private let treeLayer = SidebarList()
+    private let activeLayer = SidebarList()
+    private var activeRows: [Int: SidebarRow] = [:]
+    private var live: Set<Int> = []
+    private var active = ActiveWorkbenches()
+    private let recentLabel = SidebarSectionLabel()
+    private let staleLabel = SidebarSectionLabel()
+    /// A aba das áreas de cursor em vigor; trocar pede para recalcular.
+    private var cursorTab: Tab?
+    /// A próxima passada de layout da aba Ativas vem de troca de ordem e anima.
+    private var animatesReorder = false
     private let addButton = ToolbarButton(symbols: ["plus"], tooltip: "Novo workspace ou bancada", size: 22)
     private let collapseButton = ToolbarButton(symbols: ["sidebar.leading", "chevron.left"],
                                                tooltip: "Recolher a barra (⌘/)", size: 22)
@@ -836,9 +963,9 @@ final class Sidebar: NSView {
         // opaca aqui apagaria o vidro por dentro.
         layer?.backgroundColor = NSColor.clear.cgColor
 
-        title.font = .systemFont(ofSize: 10, weight: .bold)
-        title.textColor = NSColor(calibratedWhite: 1, alpha: 0.42)
-        addSubview(title)
+        tabs.onSelect = { [weak self] in self?.show(tab: $0) }
+        tabs.selected = tab
+        addSubview(tabs)
 
         // Menu, e não ação direta: as rotas terminam no mesmo lugar (algo novo na
         // árvore), então pertencem ao mesmo botão.
@@ -863,6 +990,10 @@ final class Sidebar: NSView {
         scroll.verticalScrollElasticity = .allowed
         scroll.horizontalScrollElasticity = .none
         addSubview(scroll)
+        list.addSubview(treeLayer)
+        list.addSubview(activeLayer)
+        activeLayer.addSubview(recentLabel)
+        activeLayer.addSubview(staleLabel)
         list.addSubview(emptyLabel)
 
         reload(workspaces: workspaces, configs: configs)
@@ -875,7 +1006,10 @@ final class Sidebar: NSView {
     /// Recria as linhas. Bancadas, projetos e workspaces mudam em tempo de
     /// execução, então a barra não pode ser montada só uma vez no init.
     func reload(workspaces: [WorkspaceConfig], configs: [WorkbenchConfig]) {
-        list.subviews.filter { $0 !== emptyLabel }.forEach { $0.removeFromSuperview() }
+        treeLayer.subviews.forEach { $0.removeFromSuperview() }
+        activeLayer.subviews.filter { $0 !== recentLabel && $0 !== staleLabel }
+            .forEach { $0.removeFromSuperview() }
+        activeRows = [:]
         rows = []
         groups = []
         cards = []
@@ -898,27 +1032,27 @@ final class Sidebar: NSView {
         // O card entra na hierarquia ANTES do que vai dentro: é fundo, e um
         // fundo por cima engoliria os cliques das linhas.
         for space in workspaces {
-            let card = SidebarCard(radius: 12, fill: 0.045, stroke: 0.09)
-            list.addSubview(card)
+            let card = SidebarCard(rule: 0.10)
+            treeLayer.addSubview(card)
             let header = SidebarGroupRow(workspace: space,
                                          workbenches: tree.indices(inWorkspace: space.id).count)
             wire(header)
             groups.append(header)
-            list.addSubview(header)
+            treeLayer.addSubview(header)
             func tile(for project: ProjectConfig) -> ProjectTile {
-                let tile = SidebarCard(radius: 9, fill: 0.04, stroke: 0.06)
-                list.addSubview(tile)
+                let tile = SidebarCard(rule: 0)
+                treeLayer.addSubview(tile)
                 let members = tree.indices(inProject: project.id)
                 let head = SidebarGroupRow(workspaceID: space.id, project: project,
                                            workbenches: members.count,
                                            joins: space.members(of: project).map(\.name))
                 wire(head)
                 groups.append(head)
-                list.addSubview(head)
+                treeLayer.addSubview(head)
                 let line = Self.makeDivider()
-                list.addSubview(line)
+                treeLayer.addSubview(line)
                 let rowsOfProject = members.map(row)
-                rowsOfProject.forEach { list.addSubview($0) }
+                rowsOfProject.forEach { treeLayer.addSubview($0) }
                 return ProjectTile(tile: tile, header: head, divider: line,
                                    rows: rowsOfProject, projectID: project.id)
             }
@@ -930,7 +1064,7 @@ final class Sidebar: NSView {
             // começar.
             let drawer = DrawerRow(count: stored.count, open: space.isStoredOpen)
             drawer.onClick = { [weak self] in self?.onToggleDrawer?(space.id) }
-            list.addSubview(drawer)
+            treeLayer.addSubview(drawer)
             // Os tiles guardados nascem montados mesmo com a gaveta fechada: é
             // o layout que os esconde, e assim abrir não remonta a barra.
             let storedTiles = stored.map(tile)
@@ -943,21 +1077,47 @@ final class Sidebar: NSView {
         if !lost.isEmpty {
             let tile = SidebarCard(radius: 12, fill: 0.03, stroke: 0.08)
             tile.layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.35).cgColor
-            list.addSubview(tile)
+            treeLayer.addSubview(tile)
             let head = SidebarGroupRow(orphans: lost.count)
             groups.append(head)
-            list.addSubview(head)
+            treeLayer.addSubview(head)
             let members = lost.map(row)
-            members.forEach { list.addSubview($0) }
+            members.forEach { treeLayer.addSubview($0) }
             let line = Self.makeDivider()
-            list.addSubview(line)
+            treeLayer.addSubview(line)
             orphanTile = ProjectTile(tile: tile, header: head, divider: line, rows: members,
                                      projectID: nil)
         }
 
+        // A aba Ativas tem uma linha própria por bancada — a mesma bancada em
+        // dois lugares, cada linha com o seu pai. Montadas todas: quem está de
+        // pé muda a todo instante, e o layout só escolhe quais mostrar.
+        var workspaceOf: [Int: WorkspaceConfig] = [:]
+        for space in workspaces {
+            for index in tree.indices(inWorkspace: space.id) { workspaceOf[index] = space }
+        }
+        for index in configs.indices {
+            let project = configs[index].project.flatMap { workspaceOf[index]?.project(withID: $0)?.name }
+            let row = SidebarRow(index: index, config: configs[index], workspace: workspaceOf[index],
+                                 project: project ?? "sem projeto")
+            row.onClick = { [weak self] in self?.onSelect?($0) }
+            row.onRename = { [weak self] in self?.onRename?($0) }
+            row.onDuplicateAsWorktree = { [weak self] in self?.onDuplicateAsWorktree?($0) }
+            row.onRemove = { [weak self] in self?.onRemove?($0) }
+            row.onEditRules = { [weak self] in self?.onEditRules?($0) }
+            row.onClear = { [weak self] in self?.onClear?($0) }
+            rows.append(row)
+            activeRows[index] = row
+            activeLayer.addSubview(row)
+        }
+
         rows.forEach { $0.isCompact = isCompact }
         groups.forEach { $0.isCompact = isCompact }
-        emptyLabel.isHidden = isCompact || !configs.isEmpty
+        live = live.filter { $0 < configs.count }
+        refreshActive()
+        refreshEmpty()
+        // Linhas novas: as áreas de cursor delas também.
+        cursorTab = nil
         needsLayout = true
         // As linhas nascem vazias — sem cronômetro, badge nem borda — e o laço
         // de 0,12s só as preenche no tique seguinte: era a piscada a cada clique
@@ -990,16 +1150,141 @@ final class Sidebar: NSView {
             collapseButton.frame = NSRect(x: ((bounds.width - 22) / 2).rounded(), y: 8,
                                           width: 22, height: 22)
         } else {
-            title.frame = NSRect(x: 16, y: 12, width: bounds.width - 84, height: 14)
-            addButton.frame = NSRect(x: bounds.width - 60, y: 8, width: 22, height: 22)
-            collapseButton.frame = NSRect(x: bounds.width - 32, y: 8, width: 22, height: 22)
+            let mid = (currentHeaderHeight - SidebarTabs.height) / 2 + 2
+            tabs.frame = NSRect(x: 10, y: mid, width: bounds.width - 76, height: SidebarTabs.height)
+            addButton.frame = NSRect(x: bounds.width - 60, y: mid + 5, width: 22, height: 22)
+            collapseButton.frame = NSRect(x: bounds.width - 32, y: mid + 5, width: 22, height: 22)
         }
-        scroll.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width,
-                              height: max(0, bounds.height - Self.headerHeight))
+        scroll.frame = NSRect(x: 0, y: currentHeaderHeight, width: bounds.width,
+                              height: max(0, bounds.height - currentHeaderHeight))
         emptyLabel.frame = NSRect(x: 16, y: 8, width: bounds.width - 32, height: 56)
 
-        let y = isCompact ? layoutRail() : layoutCards()
+        treeLayer.isHidden = tab != .all
+        activeLayer.isHidden = tab != .active
+        let y: CGFloat
+        switch tab {
+        case .all:    y = isCompact ? layoutRail() : layoutCards()
+        case .active: y = layoutActive()
+        }
         list.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(y + 8, scroll.bounds.height))
+        let resized = treeLayer.frame != list.bounds
+        treeLayer.frame = list.bounds
+        activeLayer.frame = list.bounds
+        // As camadas nascem com tamanho zero e as áreas de cursor das linhas
+        // são recortadas por elas: sem recalcular quando crescem (ou quando a
+        // aba troca qual aparece), a mão não aparecia nos projetos.
+        if resized || tab != cursorTab {
+            cursorTab = tab
+            window?.invalidateCursorRects(for: list)
+            list.subviews.forEach { window?.invalidateCursorRects(for: $0) }
+            treeLayer.subviews.forEach { window?.invalidateCursorRects(for: $0) }
+            activeLayer.subviews.forEach { window?.invalidateCursorRects(for: $0) }
+        }
+    }
+
+    /// A aba Ativas: cards soltos, sem workspace nem projeto em volta, e o
+    /// rótulo de cada metade só quando ela tem alguém.
+    private func layoutActive() -> CGFloat {
+        let shown = Set(active.recent + active.stale)
+        let wasShown = Set(activeRows.filter { !$0.value.isHidden }.keys)
+        for (index, row) in activeRows { row.isHidden = !shown.contains(index) }
+        // Só a troca de ordem anima; redimensionar a barra ou trocar de aba
+        // reposiciona na hora, que é o que se espera de um layout.
+        let animated = animatesReorder
+        animatesReorder = false
+        var moves: [(NSView, NSRect)] = []
+        var arrivals: [NSView] = []
+        func place(_ view: NSView, _ frame: NSRect, known: Bool) {
+            guard animated, known, view.frame != frame else {
+                view.frame = frame
+                if animated, !known { arrivals.append(view) }
+                return
+            }
+            moves.append((view, frame))
+        }
+        var y: CGFloat = isCompact ? 0 : 4
+        let x: CGFloat = isCompact ? 2 : 8
+        let width = bounds.width - x * 2
+        func section(_ label: SidebarSectionLabel, _ indices: [Int], _ title: String) {
+            let labelWasShown = !label.isHidden
+            label.isHidden = indices.isEmpty || isCompact
+            if indices.isEmpty { return }
+            if isCompact {
+                if y > 0 { y += 10 }
+            } else {
+                label.show(title, count: indices.count)
+                place(label, NSRect(x: x + 6, y: y, width: width - 12, height: SidebarSectionLabel.height),
+                      known: labelWasShown)
+                y += SidebarSectionLabel.height
+            }
+            for index in indices {
+                guard let row = activeRows[index] else { continue }
+                let height = isCompact ? Self.rowHeight : SidebarRow.threeLineHeight
+                place(row, NSRect(x: x, y: y, width: width, height: height),
+                      known: wasShown.contains(index))
+                y += height + (isCompact ? Self.rowGap : Self.workbenchGap)
+            }
+            y += isCompact ? 0 : 8
+        }
+        section(recentLabel, active.recent, "Últimas 24 horas")
+        section(staleLabel, active.stale, "Paradas há mais de 24 horas")
+        if !moves.isEmpty || !arrivals.isEmpty {
+            // O card desliza do lugar antigo para o novo, e quem chega à lista
+            // aparece aos poucos: pular de posição de um quadro para o outro
+            // fazia você perder de vista a bancada que estava olhando.
+            arrivals.forEach { $0.alphaValue = 0 }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.28
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.allowsImplicitAnimation = true
+                for (view, frame) in moves { view.animator().frame = frame }
+                arrivals.forEach { $0.animator().alphaValue = 1 }
+            }
+        }
+        return y
+    }
+
+    func show(tab: Tab) {
+        guard tab != self.tab else { return }
+        self.tab = tab
+        tabs.selected = tab
+        UserDefaults.standard.set(tab.rawValue, forKey: "sidebarTab")
+        refreshEmpty()
+        needsLayout = true
+    }
+
+    private func refreshEmpty() {
+        let empty: Bool
+        switch tab {
+        case .all:
+            empty = tree.workbenches.isEmpty
+            emptyLabel.stringValue = "Nenhuma bancada.\nUse + para criar,\nvazia ou de um template."
+        case .active:
+            empty = active.isEmpty
+            emptyLabel.stringValue = "Nenhuma bancada de pé.\nAbra uma na aba Todas."
+        }
+        emptyLabel.isHidden = isCompact || !empty
+        tabs.activeCount = live.count
+        tabs.allCount = tree.workbenches.count
+    }
+
+    /// Recalcula a ordem da aba Ativas pelo último instante de cada cronômetro;
+    /// só pede layout quando a ordem mudou — isto roda a cada tique do laço.
+    private func refreshActive() {
+        var lastActive: [Int: Date] = [:]
+        if let lastClocks {
+            for (index, config) in tree.workbenches.enumerated() {
+                if let date = lastClocks[config.name]?.0.lastActive { lastActive[index] = date }
+            }
+        }
+        let next = ActiveWorkbenches(live: live, lastActive: lastActive)
+        guard next != active else { return }
+        let emptied = next.isEmpty != active.isEmpty
+        // Lista vazia que ganha a primeira bancada não tem de onde deslizar.
+        animatesReorder = !active.isEmpty && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        active = next
+        if emptied { refreshEmpty() }
+        if tab == .active { needsLayout = true }
     }
 
     /// Expandido: card por workspace, tile por projeto, linhas dentro do tile.
@@ -1024,6 +1309,7 @@ final class Sidebar: NSView {
             y += Self.rowHeight
             tile.divider.isHidden = !expanded || tile.rows.isEmpty
             if !tile.divider.isHidden {
+                y += 4
                 tile.divider.frame = NSRect(x: x + inset, y: y, width: width - inset * 2, height: 1)
                 y += Self.dividerGap
             }
@@ -1075,8 +1361,9 @@ final class Sidebar: NSView {
                     y += inset
                 }
             }
+            y += Self.rulePadding - Self.cardInset
             card.card.frame = NSRect(x: outer, y: top, width: width, height: y - top)
-            y += Self.cardGap
+            y += Self.rulePadding
         }
 
         if let orphanTile {
@@ -1148,6 +1435,7 @@ final class Sidebar: NSView {
             guard let (clock, phases) = clocks[row.name] else { continue }
             row.showClock(clock, phases: phases)
         }
+        refreshActive()
     }
 
     func showActivity(_ summaries: [String: ActivitySummary]) {
@@ -1175,11 +1463,17 @@ final class Sidebar: NSView {
     }
 
     func markLive(_ index: Int) {
-        rows.first { $0.index == index }?.isLive = true
+        for row in rows where row.index == index { row.isLive = true }
+        live.insert(index)
+        refreshActive()
+        refreshEmpty()
     }
 
     func markLive(indices: Set<Int>) {
         for row in rows { row.isLive = indices.contains(row.index) }
+        live = indices
+        refreshActive()
+        refreshEmpty()
     }
 
     func markRemoving(indices: Set<Int>) {
@@ -1290,11 +1584,11 @@ extension Sidebar {
 
     /// O laço do arrasto, vindo de qualquer linha.
     func handle(_ drag: SidebarDrag) {
-        let point = list.convert(drag.point, from: nil)
+        let point = treeLayer.convert(drag.point, from: nil)
         switch drag.phase {
         case .began:
             dragged = drag.item
-            list.addSubview(dropLine)
+            treeLayer.addSubview(dropLine)
             viewFor(drag.item)?.alphaValue = 0.5
         case .moved:
             guard dragged != nil else { return }

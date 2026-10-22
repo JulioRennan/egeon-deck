@@ -51,12 +51,32 @@ final class WorkbenchClockTests: XCTestCase {
         XCTAssertEqual(clocks.clock(for: "a").running, 1.5, accuracy: 0.001)
         XCTAssertEqual(clocks.clock(for: "a").waiting, 0.5, accuracy: 0.001)
         XCTAssertEqual(clocks.clock(for: "b").failed, 1, accuracy: 0.001)
+        // O último instante com fase andando — o tique vazio não conta.
+        XCTAssertEqual(clocks.clock(for: "a").lastActive, start.addingTimeInterval(1.5))
+        XCTAssertEqual(clocks.clock(for: "b").lastActive, start.addingTimeInterval(1))
 
         clocks.flush()
         let reloaded = WorkbenchClocks(directory: dir)
         XCTAssertEqual(reloaded.clock(for: "a"), clocks.clock(for: "a"))
 
         clocks.reset("a")
-        XCTAssertEqual(WorkbenchClocks(directory: dir).clock(for: "a"), WorkbenchClock())
+        // Zerar começa outro período, mas não apaga quando ela rodou.
+        XCTAssertEqual(WorkbenchClocks(directory: dir).clock(for: "a"),
+                       WorkbenchClock(lastActive: start.addingTimeInterval(1.5)))
+    }
+
+    // Arquivo de antes do `lastActive`: a data dele é a última vez que rodou.
+    func testOldFileTakesLastActiveFromModificationDate() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let clocks = WorkbenchClocks(directory: dir)
+        let url = clocks.file(forWorkbench: "a")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try Data(#"{"running":10,"waiting":0,"failed":0}"#.utf8).write(to: url)
+        let when = Date(timeIntervalSince1970: 1_790_000_000)
+        try FileManager.default.setAttributes([.modificationDate: when], ofItemAtPath: url.path)
+        XCTAssertEqual(clocks.clock(for: "a").lastActive, when)
+        XCTAssertEqual(clocks.clock(for: "a").running, 10)
     }
 }

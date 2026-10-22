@@ -17,6 +17,10 @@ struct WorkbenchClock: Codable, Equatable {
     var running: TimeInterval = 0
     var waiting: TimeInterval = 0
     var failed: TimeInterval = 0
+    /// O último instante com alguma fase andando — o "rodou por último" da aba
+    /// Ativas (ADR-082). Sobrevive ao "zerar": é quando a bancada trabalhou, não
+    /// quanto.
+    var lastActive: Date?
 
     /// O maior passo que um tique soma. O laço roda a cada 0,12s; um buraco
     /// maior é o Mac dormindo ou o app travado, e esse tempo não foi de

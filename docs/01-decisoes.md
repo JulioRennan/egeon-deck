@@ -4491,3 +4491,42 @@ fundo" no log com nada rodando.
 **Verificação.** `StopReportTests.testPageWatchersAreNotBackgroundWork`. O
 payload real foi gravado no gancho do estável (`bg-debug.log`, temporário):
 monitores de página nas sessões que publicaram, `shell` nas que rodavam pytest.
+
+## ADR-082 — Barra lateral em duas abas: Todas e Ativas
+
+**Contexto.** A barra é a árvore workspace → projeto → bancada (ADR-043): boa
+para achar qualquer coisa, ruim para o dia a dia, em que o que importa são as
+poucas bancadas de pé, espalhadas por workspaces diferentes, e qual delas rodou
+por último.
+
+**Decisão.** Duas abas no topo da barra, no lugar do título "WORKSPACES":
+- **Todas** — a árvore de sempre, com arrasto e gaveta.
+- **Ativas** — só as bancadas de pé (terminais rodando), em cards soltos, sem
+  card de workspace nem de projeto. Card de três linhas: nome da bancada,
+  projeto e o cronômetro; à esquerda, o ícone do workspace, que é o que diz de
+  onde ela é. Ordem pela **última execução**, dividida em "Últimas 24 horas" e
+  "Paradas há mais de 24 horas". Sem arrasto: a ordem é do relógio.
+- **Última execução** é `WorkbenchClock.lastActive`: o último tique com alguma
+  fase andando (trabalho, espera por você ou erro), gravado no `clock.json` e
+  mantido no "zerar". Arquivo antigo, sem o campo, usa a data de modificação
+  dele — ele só é regravado quando alguma fase anda.
+- Troca de ordem na aba Ativas anima: o card desliza do lugar antigo ao novo
+  (0,28 s) e quem entra na lista aparece aos poucos — pular de posição de um
+  quadro para o outro fazia perder de vista a bancada que você olhava. Só a
+  troca de ordem anima; redimensionar ou trocar de aba é imediato, e com
+  "reduzir movimento" nada anima.
+- Na aba Todas, workspace e projeto deixam de ser caixa: o workspace termina
+  num fio e o projeto se separa das bancadas pelo fio que já tinha. Caixa
+  dentro de caixa dentro de caixa virava uma cebola, e a bancada — o card que
+  se clica — perdia o destaque. Só ela continua card.
+- A aba fica no `UserDefaults` (conveniência por máquina); `/sidebar?tab=` troca
+  de fora. A barra ganhou 16 pt de largura e o cabeçalho, altura para as abas.
+
+**Consequência.** Cada bancada tem duas linhas montadas (uma por aba); badge,
+cronômetro e seleção chegam às duas pelo mesmo `rows`. A bancada que volta a
+rodar sobe para o topo das Ativas na hora.
+
+**Verificação.** `ActiveWorkbenchesTests` (só as de pé, ordem, corte de 24 h,
+nunca rodou no fim) e `WorkbenchClockTests` (`lastActive` no tique, no zerar e
+no arquivo antigo). No DEV, as duas abas por `/sidebar?tab=`, com captura da
+janela.

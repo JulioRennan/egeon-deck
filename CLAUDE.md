@@ -79,6 +79,9 @@ app/Sources/EgeonDeck/
   dono é o `WorkbenchShell`. Em chat o canvas fica montado por baixo, coberto
   (o pty precisa do passe de layout), e o terminal mostrado no chat é o card
   reparentado. O mosaico saiu (ADR-073).
+- **Barra lateral** (ADR-082) — duas abas: Todas (a árvore) e Ativas (as de
+  pé, soltas, pela última execução — `WorkbenchClock.lastActive` —, divididas
+  em últimas 24 h e paradas há mais). `/sidebar?tab=all|active`.
 - **Abas** (ADR-061) — as bancadas ABERTAS numa faixa no topo do conteúdo, com
   os mesmos badges da barra lateral; a lateral continua sendo o catálogo (tudo
   que existe). **Fechar a aba não encerra a bancada**: sai da faixa, os

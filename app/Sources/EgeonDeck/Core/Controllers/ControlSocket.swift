@@ -749,12 +749,19 @@ final class ControlSocket {
 
         case ("GET", _, _) where route.contains("/sidebar"):
             // /sidebar?collapsed=0|1|toggle — recolhe a barra de bancadas, abre,
-            // ou alterna.
+            // ou alterna. /sidebar?tab=all|active troca a aba (ADR-082).
             //
             // `toggle` existe para cobrir exatamente o que o ⌘/ e o botão da barra
             // fazem: nem a tecla de menu nem o clique são dirigíveis de fora sem
             // permissão de Acessibilidade (ADR-003).
-            let raw = Self.query(in: route)["collapsed"] ?? ""
+            let query = Self.query(in: route)
+            if let tab = query["tab"] {
+                let applied = DispatchQueue.main.sync { AppControl.sidebarTab?(tab) }
+                respond(fd, status: applied == nil ? "404 Not Found" : "200 OK",
+                        json: ["ok": applied != nil, "tab": applied ?? tab])
+                return
+            }
+            let raw = query["collapsed"] ?? ""
             let state = DispatchQueue.main.sync { () -> Bool? in
                 raw == "toggle" ? AppControl.toggleSidebar?()
                                 : AppControl.collapseSidebar?(raw == "1")

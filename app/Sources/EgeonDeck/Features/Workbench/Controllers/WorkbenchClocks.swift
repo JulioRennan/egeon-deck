@@ -26,8 +26,14 @@ final class WorkbenchClocks {
 
     func clock(for id: String) -> WorkbenchClock {
         if let clock = clocks[id] { return clock }
-        let loaded = (try? Data(contentsOf: file(forWorkbench: id)))
+        let url = file(forWorkbench: id)
+        var loaded = (try? Data(contentsOf: url))
             .flatMap { try? JSONDecoder().decode(WorkbenchClock.self, from: $0) } ?? WorkbenchClock()
+        // Arquivo de antes do `lastActive`: ele só é gravado quando alguma fase
+        // andou, então a data dele é a última vez que a bancada rodou.
+        if loaded.lastActive == nil {
+            loaded.lastActive = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        }
         clocks[id] = loaded
         return loaded
     }
@@ -41,6 +47,7 @@ final class WorkbenchClocks {
         for (id, current) in phases where !current.isEmpty {
             var clock = clock(for: id)
             for phase in current { clock.add(elapsed, to: phase) }
+            clock.lastActive = now
             clocks[id] = clock
             dirty.insert(id)
         }
@@ -49,7 +56,7 @@ final class WorkbenchClocks {
 
     /// "Limpar a bancada" e o menu do cronômetro: começa outro período.
     func reset(_ id: String) {
-        clocks[id] = WorkbenchClock()
+        clocks[id] = WorkbenchClock(lastActive: clock(for: id).lastActive)
         dirty.insert(id)
         flush()
     }
