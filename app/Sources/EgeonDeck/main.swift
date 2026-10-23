@@ -277,6 +277,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.root.isCollapsed
         }
         AppControl.showProcesses = { ProcessesWindow.shared.present() }
+        AppControl.showUsage = { [weak self] pricesOpen in
+            guard let self, let id = self.activeID, let shell = self.shells[id] else { return }
+            self.showUsageDetail(id: id, from: shell.usageAnchor, pricesOpen: pricesOpen)
+        }
+        AppControl.workbenchIDs = { [weak self] in self?.configs.map { ($0.id, $0.name) } ?? [] }
         AppControl.showAbout = { [weak self] in self?.showAbout() }
         AppControl.sidebarTab = { [weak self] raw in
             guard let self, let tab = Sidebar.Tab(rawValue: raw) else { return nil }
@@ -327,6 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         AppControl.turnEnded = { [weak self] address, transcript, notBefore in
+            UsageStore.shared.refresh()
             let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2, let self, let transcript,
                   let config = self.configs.first(where: { $0.name == parts[0] }),
@@ -497,6 +503,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Dispatcher.shared.start()
         control.start()
         OrphanReaper.shared.start()
+        UsageStore.shared.sources = { [weak self] in
+            guard let self else { return [:] }
+            var out: [String: [UsageStore.Source]] = [:]
+            for config in self.configs {
+                out[config.id] = config.nodes.compactMap { node in
+                    node.transcript.map { UsageStore.Source(node: node.id, transcript: $0) }
+                }
+            }
+            return out
+        }
+        NotificationCenter.default.addObserver(forName: UsageStore.didChange, object: nil, queue: .main) {
+            [weak self] _ in self?.refreshUsage()
+        }
+        UsageStore.shared.start()
 
         // 0.12s é o passo do spinner: mais lento ele engasga, mais rápido não
         // acrescenta nada que o olho veja. Quem desenha compara antes de
@@ -2681,7 +2701,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// índice era capturado por valor, e por isso remover ou arrastar uma
     /// bancada obrigava a religar todos os shells — um passo fácil de esquecer,
     /// e cujo sintoma é um botão de fechar que apaga o nó da bancada vizinha.
+    /// O custo de cada bancada na barra lateral, na barra do canvas e no chat
+    /// (ADR-085). Chamado quando o registro de consumo muda.
+    private func refreshUsage() {
+        let store = UsageStore.shared
+        var costs: [String: (text: String, tooltip: String)] = [:]
+        for config in configs {
+            let ledger = store.ledger(for: config.id)
+            let total = ledger.total
+            let text = total.isEmpty ? "US$ 0,00" : UsageText.cost(total, prices: store.prices)
+            let tooltip = "Consumo da bancada: " + UsageText.breakdown(total.totalUsage)
+            if !total.isEmpty { costs[config.name] = (text, tooltip) }
+            guard let shell = shells[config.id] else { continue }
+            shell.showUsage(text, tooltip: tooltip, byNode: ledger.byNode.mapValues {
+                UsageText.cost($0, prices: store.prices)
+            })
+        }
+        root.sidebar.showCosts(costs)
+    }
+
+    private func showUsageDetail(id: String, from view: NSView, pricesOpen: Bool = false) {
+        guard let config = config(ofID: id) else { return }
+        UsagePanel.show(title: "Consumo · \(config.name)", ledger: UsageStore.shared.ledger(for: id),
+                        prices: UsageStore.shared.prices, from: view, pricesOpen: pricesOpen)
+    }
+
     private func wire(_ shell: WorkbenchShell, id: String) {
+        shell.onUsage = { [weak self] view in self?.showUsageDetail(id: id, from: view) }
+        DispatchQueue.main.async { [weak self] in self?.refreshUsage() }
         // Fechar e configurar nó chegam pelo shell: quem os disparou pode ser o
         // canvas ou o chat, e daqui não faz diferença qual.
         shell.onRequestClose = { [weak self] node in

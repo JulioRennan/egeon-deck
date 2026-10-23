@@ -12,6 +12,9 @@ final class SidebarRow: NSView {
     private let pathLabel = NSTextField(labelWithString: "")
     private let pathExists: Bool
     private var clockSignature = ""
+    /// O custo da bancada, na ponta direita da linha do cronômetro (ADR-085):
+    /// só a soma — o detalhe está no canvas e no chat.
+    private let costLabel = NSTextField(labelWithString: "")
     private let dot = NSView()
     private let statusLabel = NSTextField(labelWithString: "")
     /// Pastilha com a inicial da bancada, só no trilho recolhido. Nome inteiro não
@@ -62,6 +65,7 @@ final class SidebarRow: NSView {
             guard isCompact != oldValue else { return }
             nameLabel.isHidden = isCompact
             pathLabel.isHidden = isCompact
+            costLabel.isHidden = isCompact || costLabel.stringValue.isEmpty
             projectLabel.isHidden = isCompact
             tile.isHidden = !isCompact
             initial.isHidden = !isCompact
@@ -135,8 +139,22 @@ final class SidebarRow: NSView {
         addSubview(initial)
         addSubview(nameLabel)
         addSubview(pathLabel)
+        costLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+        costLabel.textColor = NSColor(calibratedWhite: 1, alpha: 0.55)
+        costLabel.alignment = .right
+        costLabel.isHidden = true
+        addSubview(costLabel)
         addSubview(statusLabel)
         restyle()
+    }
+
+    func showCost(_ text: String?, tooltip: String?) {
+        let value = pathExists ? (text ?? "") : ""
+        guard value != costLabel.stringValue else { return }
+        costLabel.stringValue = value
+        costLabel.toolTip = tooltip
+        costLabel.isHidden = isCompact || value.isEmpty
+        needsLayout = true
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -186,7 +204,10 @@ final class SidebarRow: NSView {
         }
         // O cronômetro corre a largura toda: o badge mora na linha do nome, e
         // centrado na linha ele cortava os tempos ao meio.
-        pathLabel.frame = NSRect(x: textX, y: footerY, width: bounds.width - textX - 8, height: 15)
+        let costWidth = costLabel.isHidden ? 0 : ceil(costLabel.intrinsicContentSize.width) + 2
+        costLabel.frame = NSRect(x: bounds.width - 10 - costWidth, y: footerY, width: costWidth, height: 15)
+        pathLabel.frame = NSRect(x: textX, y: footerY,
+                                 width: bounds.width - textX - 8 - (costWidth > 0 ? costWidth + 6 : 0), height: 15)
         // 4 da borda da linha, que é onde o `+` do cabeçalho termina: encostado
         // no limite útil da direita e alinhado com o que já estava lá.
         statusLabel.frame = NSRect(x: bounds.width - badgeWidth - 6, y: 7,
@@ -898,6 +919,7 @@ final class Sidebar: NSView {
     private var rows: [SidebarRow] = []
     private var lastSummaries: [String: ActivitySummary]?
     private var lastClocks: [String: (WorkbenchClock, Set<WorkbenchClock.Phase>)]?
+    private var lastCosts: [String: (text: String, tooltip: String)]?
     private var groups: [SidebarGroupRow] = []
     private var tree = WorkspaceTree(workspaces: [], workbenches: [])
     private let scroll = NSScrollView()
@@ -1124,6 +1146,7 @@ final class Sidebar: NSView {
         // num projeto, que recria a barra. O último estado recebido vai junto.
         if let lastSummaries { showActivity(lastSummaries) }
         if let lastClocks { showClocks(lastClocks) }
+        if let lastCosts { showCosts(lastCosts) }
     }
 
     private static func makeDivider() -> NSView {
@@ -1436,6 +1459,12 @@ final class Sidebar: NSView {
             row.showClock(clock, phases: phases)
         }
         refreshActive()
+    }
+
+    /// O custo de cada bancada, por nome (ADR-085).
+    func showCosts(_ costs: [String: (text: String, tooltip: String)]) {
+        lastCosts = costs
+        for row in rows { row.showCost(costs[row.name]?.text, tooltip: costs[row.name]?.tooltip) }
     }
 
     func showActivity(_ summaries: [String: ActivitySummary]) {

@@ -778,6 +778,35 @@ final class ControlSocket {
                 respond(fd, status: "200 OK", json: ["ok": true, "target": target, field: value ?? "padrão"])
             }
 
+        case ("GET", _, _) where bare.hasSuffix("/usage"):
+            // /usage[?workbench=<nome>] — o consumo das bancadas (ADR-085):
+            // tokens por nó e por tarifa, e o custo pela tabela de preços.
+            let wanted = Self.query(in: route)["workbench"]
+            // `prices=1` abre já com a tabela de preços à mostra.
+            if Self.query(in: route)["show"] == "1" {
+                let open = Self.query(in: route)["prices"] == "1"
+                DispatchQueue.main.sync { AppControl.showUsage?(open) }
+            }
+            let payload = DispatchQueue.main.sync { () -> [String: Any] in
+                let store = UsageStore.shared
+                var benches: [[String: Any]] = []
+                for (id, name) in AppControl.workbenchIDs?() ?? [] where wanted == nil || wanted == name {
+                    let ledger = store.ledger(for: id)
+                    func tokens(_ usage: TokenUsage) -> [String: Int] {
+                        ["input": usage.input, "output": usage.output, "cacheWrite5m": usage.cacheWrite5m,
+                         "cacheWrite1h": usage.cacheWrite1h, "cacheRead": usage.cacheRead]
+                    }
+                    let nodes = ledger.byNode.mapValues { byPrice -> [String: Any] in
+                        ["cost": store.prices.cost(byPrice).dollars,
+                         "models": byPrice.mapValues(tokens)]
+                    }
+                    benches.append(["workbench": name, "id": id, "cost": store.prices.cost(ledger.total).dollars,
+                                    "files": ledger.cursors.count, "nodes": nodes])
+                }
+                return ["ok": true, "workbenches": benches]
+            }
+            respond(fd, status: "200 OK", json: payload)
+
         case ("GET", _, _) where bare.hasSuffix("/about"):
             // /about — abre o painel "Sobre" e devolve a versão e o build.
             let info = Bundle.main.infoDictionary ?? [:]

@@ -27,6 +27,12 @@ struct ChatRowMetrics: Equatable {
 /// (ADR-042). A linha desenha com o MESMO TextKit (container sem folga,
 /// inset zero), para a altura medida ser a altura desenhada.
 enum ChatBlockLayout {
+    /// "US$ 0,42 · 14:32": o custo do turno antes da hora (ADR-085).
+    static func headerTime(_ at: Date?, cost: ChatCost?) -> String {
+        let time = at.map(clock) ?? "agora"
+        return cost.map { "\($0.text) · \(time)" } ?? time
+    }
+
     /// Vão entre uma bolha e a próxima.
     static let gap: CGFloat = 18
     static let sideInset: CGFloat = 18
@@ -275,10 +281,10 @@ enum ChatBlockLayout {
         var texts: [String: NSAttributedString] = [:]
         for block in bubble {
             switch block.kind {
-            case .header(let from, let at, let quote):
+            case .header(let from, let at, let quote, let cost):
                 let name = size(of: NSAttributedString(string: "\(from.glyph) \(from.id)", attributes: [.font: nameFont]), width: cap).width
                 let address = size(of: NSAttributedString(string: from.address, attributes: [.font: addressFont]), width: cap).width
-                let time = size(of: NSAttributedString(string: at.map(clock) ?? "agora", attributes: [.font: timeFont]), width: cap).width
+                let time = size(of: NSAttributedString(string: headerTime(at, cost: cost), attributes: [.font: timeFont]), width: cap).width
                 width = max(width, name + address + time + 50 + labelSlack * 3, quote == nil ? 0 : 300)
             case .typing(let from):
                 let name = size(of: NSAttributedString(string: "\(from.glyph) \(from.id)", attributes: [.font: nameFont]), width: cap).width
@@ -306,7 +312,7 @@ enum ChatBlockLayout {
         for block in bubble {
             var height: CGFloat
             switch block.kind {
-            case .header(_, _, let quote):
+            case .header(_, _, let quote, _):
                 height = topPad + headerHeight + (quote == nil ? 0 : 8 + quoteHeight)
             case .prose:
                 height = rowGap + size(of: texts[block.id]!, width: width - textInset * 2).height

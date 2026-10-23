@@ -33,6 +33,19 @@ final class ChatContainer: NSView {
     private let permissionTray = PermissionTray()
 
     private let column = ParticipantsColumn()
+    /// O clique na pastilha de custo (ADR-085): quem abre o detalhe é o dono
+    /// da bancada, que sabe de qual registro ler.
+    var onUsage: ((NSView) -> Void)? {
+        didSet { column.usage.onClick = onUsage }
+    }
+
+    var usageAnchor: NSView { column.usage }
+    var clockChip: ClockChip { column.clock }
+
+    /// O custo da bancada embaixo da coluna e o de cada agente na linha dele.
+    func showUsage(_ text: String, tooltip: String?, byNode: [String: String]) {
+        column.showUsage(text, tooltip: tooltip, byNode: byNode)
+    }
     /// A thread é uma tabela: uma linha por bloco, só o visível existe (ADR-042).
     let thread = ChatThreadController()
     private let composer = ChatComposer()

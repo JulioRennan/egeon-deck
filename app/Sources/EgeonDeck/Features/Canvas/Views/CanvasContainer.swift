@@ -69,6 +69,10 @@ final class CanvasContainer: NSView {
     /// O vidro que carrega a barra. É ele que entra na hierarquia e é dele que
     /// sai o frame — a barra em si é só o conteúdo.
     private lazy var toolbarPanel = GlassPanel(content: toolbar, radius: 14)
+    /// Embaixo da barra de ações, num vidro menor: o tempo e o custo da
+    /// bancada (ADR-085). Ler não é agir — por isso não divide a barra.
+    let infoBar = CanvasInfoBar()
+    private lazy var infoPanel = GlassPanel(content: infoBar, radius: 11)
 
     /// De qual template esta bancada nasceu. Repassado à barra, que decide se
     /// mostra o botão de atualizar.
@@ -209,6 +213,8 @@ final class CanvasContainer: NSView {
         toolbar.onResetZoom = { [weak self] in self?.zoom(to: 1) }
         toolbar.onFitAll = { [weak self] in self?.fitAll() }
         addSubview(toolbarPanel)
+        infoBar.onWidthChange = { [weak self] in self?.needsLayout = true }
+        addSubview(infoPanel)
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(viewMoved),
@@ -318,6 +324,7 @@ final class CanvasContainer: NSView {
         let point = convert(event.locationInWindow, from: nil)
         // A barra fica por cima do canvas e tem os cliques dela.
         return bounds.contains(point) && !toolbarPanel.frame.contains(point)
+            && !infoPanel.frame.contains(point)
     }
 
     /// O teclado está sendo digitado dentro de um nó (terminal, página, campo de
@@ -347,7 +354,7 @@ final class CanvasContainer: NSView {
             // Com uma ferramenta armada o overlay está na frente, e o clique é
             // de criação de nó, não de pan.
             if current === overlay { return false }
-            if current === toolbarPanel { return false }
+            if current === toolbarPanel || current === infoPanel { return false }
             view = current.superview
         }
         return hit === doc || hit === scroll || hit === scroll.contentView
@@ -477,10 +484,16 @@ final class CanvasContainer: NSView {
         scroll.frame = bounds
         overlay.frame = bounds
 
+        // No topo do canvas, e a informativa logo embaixo. O container não é
+        // flipped: o topo é `maxY`.
         let size = toolbar.fittingSize
-        toolbarPanel.frame = NSRect(x: (bounds.width - size.width) / 2,
-                                    y: bounds.minY + 24,
+        toolbarPanel.frame = NSRect(x: ((bounds.width - size.width) / 2).rounded(),
+                                    y: bounds.maxY - 12 - size.height,
                                     width: size.width, height: size.height)
+        let info = infoBar.fittingSize
+        infoPanel.frame = NSRect(x: ((bounds.width - info.width) / 2).rounded(),
+                                 y: toolbarPanel.frame.minY - 6 - info.height,
+                                 width: info.width, height: info.height)
     }
 
     func showBanner(_ text: String?) { onBanner?(text) }
@@ -624,15 +637,15 @@ final class CanvasContainer: NSView {
     }
 
     /// O que cobre o canvas por cima e não é canvas: a barra lateral flutuante à
-    /// esquerda (largura lida na hora — recolhida ou aberta) e a barra de
-    /// ferramentas embaixo. Enquadrar usa só o que sobra.
+    /// esquerda (largura lida na hora — recolhida ou aberta) e as barras de
+    /// ação e de informação em cima. Enquadrar usa só o que sobra.
     var visibleInsets: (() -> NSEdgeInsets)?
 
-    /// Em coordenadas do container, que NÃO é flipped: a barra de ferramentas
-    /// fica em y pequeno, embaixo. `y` da área é a borda de baixo.
+    /// Em coordenadas do container, que NÃO é flipped: as barras ficam em y
+    /// grande, em cima. `y` da área é a borda de baixo.
     private var visibleArea: NSRect {
         var insets = visibleInsets?() ?? NSEdgeInsets()
-        insets.bottom = max(insets.bottom, toolbarPanel.frame.maxY + 12)
+        insets.top = max(insets.top, bounds.maxY - infoPanel.frame.minY + 12)
         return NSRect(x: insets.left, y: insets.bottom,
                       width: max(0, bounds.width - insets.left - insets.right),
                       height: max(0, bounds.height - insets.top - insets.bottom))

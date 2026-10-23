@@ -13,6 +13,12 @@ final class ParticipantsColumn: NSView {
     private var agentRows: [ParticipantRow] = []
     private var shellRows: [ParticipantRow] = []
     private var rows: [ParticipantRow] { agentRows + shellRows }
+    /// Tempo e custo da bancada embaixo da lista, e o custo de cada agente na
+    /// linha dele (ADR-085). No chat não há barra de ações para carregá-los.
+    let clock = ClockChip()
+    let usage = UsagePill()
+    /// Custo por nó (o id, não o endereço): sobrevive à remontagem das linhas.
+    private var costs: [String: String] = [:]
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -31,6 +37,17 @@ final class ParticipantsColumn: NSView {
         hint.font = .systemFont(ofSize: 10.5)
         hint.textColor = NSColor(calibratedWhite: 0.38, alpha: 1)
         addSubview(hint)
+        addSubview(clock)
+        addSubview(usage)
+    }
+
+    /// Muda a cada leitura do consumo; atualiza as linhas no lugar, sem
+    /// remontar — remontar piscava.
+    func showUsage(_ text: String, tooltip: String?, byNode: [String: String]) {
+        usage.show(text, tooltip: tooltip)
+        costs = byNode
+        rows.forEach { $0.showCost(costs[$0.node]) }
+        needsLayout = true
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -53,6 +70,7 @@ final class ParticipantsColumn: NSView {
             list.map { participant in
                 let row = ParticipantRow(participant: participant,
                                          focused: participant.id == focused)
+                row.showCost(costs[row.node])
                 row.onClick = { [weak self] in self?.onPick?(participant) }
                 addSubview(row)
                 return row
@@ -70,20 +88,22 @@ final class ParticipantsColumn: NSView {
         agentsTitle.frame = NSRect(x: 14, y: 12, width: bounds.width - 28, height: 13)
         var y: CGFloat = 34
         for row in agentRows {
-            row.frame = NSRect(x: 8, y: y, width: bounds.width - 16, height: 44)
-            y += 47
+            row.frame = NSRect(x: 8, y: y, width: bounds.width - 16, height: ParticipantRow.height)
+            y += ParticipantRow.height + 3
         }
         if !shellRows.isEmpty {
             y += 10
             shellsTitle.frame = NSRect(x: 14, y: y, width: bounds.width - 28, height: 13)
             y += 22
             for row in shellRows {
-                row.frame = NSRect(x: 8, y: y, width: bounds.width - 16, height: 44)
-                y += 47
+                row.frame = NSRect(x: 8, y: y, width: bounds.width - 16, height: ParticipantRow.height)
+                y += ParticipantRow.height + 3
             }
         }
         hint.frame = NSRect(x: 14, y: bounds.height - 26,
                             width: bounds.width - 28, height: 14)
+        usage.frame = NSRect(x: 8, y: bounds.height - 26 - 38, width: bounds.width - 16, height: 30)
+        clock.frame = NSRect(x: 8, y: usage.frame.minY - 34, width: bounds.width - 16, height: 30)
     }
 }
 
@@ -92,9 +112,18 @@ final class ParticipantsColumn: NSView {
 private final class ParticipantRow: NSView {
     var onClick: (() -> Void)?
     private let dead: Bool
+    /// O id do nó — a chave do consumo.
+    let node: String
+    /// Três linhas: nome, papel (ou estado) e o custo — o custo na mesma
+    /// linha do papel brigava com ele.
+    static let height: CGFloat = 56
+    private let costField = NSTextField(labelWithString: "")
+    private var nameField: NSTextField?
+    private var roleField: NSTextField?
 
     init(participant: ChatParticipant, focused: Bool) {
         dead = participant.activity == .dead
+        node = participant.address.split(separator: "/").last.map(String.init) ?? participant.id
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 10
@@ -108,7 +137,7 @@ private final class ParticipantRow: NSView {
             let glyph = NSTextField(labelWithString: participant.glyph)
             glyph.font = .systemFont(ofSize: 13)
             glyph.textColor = participant.color
-            glyph.frame = NSRect(x: 10, y: 14, width: 16, height: 16)
+            glyph.frame = NSRect(x: 10, y: (Self.height - 16) / 2, width: 16, height: 16)
             addSubview(glyph)
         } else {
             // Terminal tem ícone de terminal — o glifo de prompt confundia com
@@ -118,7 +147,7 @@ private final class ParticipantRow: NSView {
                 .withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
             icon.contentTintColor = participant.color
             icon.imageScaling = .scaleNone
-            icon.frame = NSRect(x: 8, y: 13, width: 20, height: 18)
+            icon.frame = NSRect(x: 8, y: (Self.height - 18) / 2, width: 20, height: 18)
             addSubview(icon)
         }
 
@@ -129,7 +158,8 @@ private final class ParticipantRow: NSView {
         let name = NSTextField(labelWithString: participant.id)
         name.font = .systemFont(ofSize: 12.5, weight: .semibold)
         name.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
-        name.frame = NSRect(x: 31, y: roleLabel.isEmpty ? 14 : 7, width: 160, height: 15)
+        name.frame = NSRect(x: 31, y: 0, width: 160, height: 15)
+        nameField = name
         name.lineBreakMode = .byTruncatingTail
         addSubview(name)
 
@@ -137,7 +167,8 @@ private final class ParticipantRow: NSView {
             let role = NSTextField(labelWithString: roleLabel)
             role.font = .systemFont(ofSize: 10.5)
             role.textColor = roleColor(participant)
-            role.frame = NSRect(x: 31, y: 23, width: 190, height: 13)
+            role.frame = NSRect(x: 31, y: 0, width: 190, height: 13)
+            roleField = role
             role.lineBreakMode = .byTruncatingTail
             addSubview(role)
         }
@@ -152,7 +183,18 @@ private final class ParticipantRow: NSView {
         statusField = status
         spinning = participant.activity == .working || participant.activity == .starting
 
+        costField.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        costField.textColor = NSColor(calibratedWhite: 1, alpha: 0.45)
+        costField.alignment = .left
+        addSubview(costField)
+
         if dead { alphaValue = 0.42 }
+    }
+
+    func showCost(_ text: String?) {
+        costField.stringValue = text ?? ""
+        costField.toolTip = text.map { "Consumo deste agente: \($0)" }
+        needsLayout = true
     }
 
     private var statusField: NSTextField?
@@ -168,7 +210,22 @@ private final class ParticipantRow: NSView {
 
     override func layout() {
         super.layout()
-        statusField?.frame = NSRect(x: bounds.width - 34, y: 16, width: 24, height: 13)
+        statusField?.frame = NSRect(x: bounds.width - 34, y: (bounds.height - 13) / 2, width: 24, height: 13)
+        // Embaixo do estado, na coluna da direita: o nome e o papel continuam
+        // com a largura que já tinham.
+        // As linhas que existem, centradas na altura: agente ocioso sem papel
+        // e sem custo fica com o nome no meio, sem vão embaixo.
+        var lines: [(NSView, CGFloat)] = []
+        if let nameField { lines.append((nameField, 15)) }
+        if let roleField { lines.append((roleField, 13)) }
+        if !costField.stringValue.isEmpty { lines.append((costField, 12)) }
+        let gap: CGFloat = 3
+        var y = ((bounds.height - lines.reduce(0) { $0 + $1.1 } - gap * CGFloat(max(0, lines.count - 1))) / 2).rounded()
+        for (view, height) in lines {
+            view.frame = NSRect(x: 31, y: y, width: bounds.width - 31 - 40, height: height)
+            y += height + gap
+        }
+        costField.isHidden = costField.stringValue.isEmpty
     }
 
     override func resetCursorRects() { HandCursor.fill(self, when: !dead) }

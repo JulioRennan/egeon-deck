@@ -120,7 +120,7 @@ final class ChatBlocksTests: XCTestCase {
                                       live: ["front": ("u1", .thinking)], typing: [])
         XCTAssertEqual(blocks.last?.id, "s|u1")
         guard case .status(_, .thinking) = blocks.last!.kind else { return XCTFail() }
-        guard case .header(_, let at, _) = blocks[0].kind else { return XCTFail() }
+        guard case .header(_, let at, _, _) = blocks[0].kind else { return XCTFail() }
         XCTAssertNil(at, "ao vivo é 'agora'")
         XCTAssertTrue(blocks.last!.last)
         XCTAssertFalse(blocks[blocks.count - 2].last)

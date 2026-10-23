@@ -11,7 +11,12 @@ citados entre parênteses.
 
 ### Adicionado
 
+- Consumo de tokens e custo por bancada: a barra lateral mostra quanto cada bancada já custou; no canvas, uma barra informativa sob a barra de ações mostra o custo, e o clique abre o detalhe — para onde foi o dinheiro (entrada, saída, cache escrito e cache lido), cada agente e cada modelo, e a tabela de preços; no chat, cada resposta diz quanto aquele turno custou e cada agente mostra o que já gastou. Os preços vêm da tabela oficial e podem ser ajustados em `pricing.json` (ADR-085).
 - "Sobre o Egeon Deck", no topo do menu do app: mostra a versão instalada e o commit de que ela foi construída.
+
+### Alterado
+
+- A barra de ações do canvas passou para o topo, e embaixo dela uma barra informativa com o cronômetro e o custo da bancada; no chat os dois ficam embaixo da coluna de participantes. O cronômetro saiu de baixo do título, e o clique nele continua oferecendo zerar (ADR-085).
 
 ## [1.5.0] - 2026-10-22
 

@@ -29,8 +29,9 @@ final class ChatHeaderRow: ChatRowView {
         name.textColor = from.color
         address.stringValue = from.address
         switch block.kind {
-        case .header(_, let at, let quote):
-            time.stringValue = at.map(ChatBlockLayout.clock) ?? "agora"
+        case .header(_, let at, let quote, let cost):
+            time.stringValue = ChatBlockLayout.headerTime(at, cost: cost)
+            time.toolTip = cost?.detail
             status.isHidden = true
             if let quote {
                 // Quem perguntou: você (azul) ou outro agente (na cor dele).
@@ -44,6 +45,7 @@ final class ChatHeaderRow: ChatRowView {
             }
         case .typing:
             time.stringValue = "agora"
+            time.toolTip = nil
             status.isHidden = false
             tick()
         default: break

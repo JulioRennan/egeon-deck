@@ -34,6 +34,8 @@ app/Sources/EgeonDeck/
 │   ├── Notifications/   Activity, HookEvent, Spinner, AttentionSound
 │   ├── Processes/       procedência dos processos — marca, leitura, janela
 │   ├── Trace/           trilha da bancada — TraceEntry, TraceLog, ShellHook
+│   ├── Usage/           consumo e custo — registro por bancada, tabela de preços,
+│                        pastilha e detalhe (ADR-085)
 │   ├── Workbench/       WorkbenchConfig, Store, WorkbenchTemplate, worktree
 │   └── Workspace/       workspace → projeto: WorkspaceConfig, Store, Tree,
 │                        pastilha (imagem/inicial) e formulário (ADR-043)
@@ -191,6 +193,14 @@ app/Sources/EgeonDeck/
   App de desktop que um nó abriu (marca no processo do app) fecha com o último
   que o usa — conexão viva ou, no Docker, container de bancada de pé (ADR-084,
   `AppKeeper`, `GET /apps`).
+- **Consumo** (ADR-085) — `UsageStore` soma o `message.usage` dos transcripts
+  (subagentes inclusos) em `workbenches/<id>/usage.json`, por nó e tarifa, lendo
+  só o que cresceu; o passado entra pela conversa carimbada na trilha. Preço na
+  `PriceTable` embutida com `pricing.json` por cima, aplicado na hora de
+  mostrar. Lateral: a soma; canvas: barra de ações no topo e, embaixo, a
+  informativa (`CanvasInfoBar`: cronômetro e custo — o clique abre o detalhe);
+  chat: os dois embaixo da coluna, custo por agente e por turno no cabeçalho.
+  `GET /usage[?show=1][&prices=1]`.
 - Drag & drop de arquivo → paste no terminal (imagem vira anexo no Claude Code).
 - Voz pelo CLI dentro do pty (mic atribuído ao bundle do app).
 

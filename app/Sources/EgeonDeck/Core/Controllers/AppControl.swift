@@ -75,6 +75,11 @@ enum AppControl {
     static var sidebarTab: ((String) -> String?)?
     /// /processes?show=1 — abre a janela "Processos" (ADR-083).
     static var showProcesses: (() -> Void)?
+    /// Id e nome de cada bancada, na ordem da lista — `/usage` precisa dos dois.
+    static var workbenchIDs: (() -> [(String, String)])?
+    /// /usage?show=1 — abre o detalhe do consumo da bancada ativa, na pastilha
+    /// do modo em que ela está: o clique não é dirigível de fora (ADR-003).
+    static var showUsage: ((_ pricesOpen: Bool) -> Void)?
     /// /about — abre o "Sobre": o clique no menu não é dirigível de fora (ADR-003).
     static var showAbout: (() -> Void)?
 

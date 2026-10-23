@@ -50,10 +50,35 @@ final class WorkbenchShell: NSView {
 
     /// Que bancada a barra de cima anuncia.
     func setWorkbench(name: String, path: String) { bar.setWorkbench(name: name, path: path) }
-    func showClock(_ clock: WorkbenchClock, phases: Set<WorkbenchClock.Phase>) { bar.setClock(clock, phases: phases) }
+    /// Na barra informativa do canvas e na coluna do chat — o título ficou só
+    /// com o nome da bancada.
+    func showClock(_ clock: WorkbenchClock, phases: Set<WorkbenchClock.Phase>) {
+        canvas.infoBar.showClock(clock, phases: phases)
+        chat.clockChip.show(clock, phases: phases)
+    }
+
+    /// O custo da bancada nos dois modos e o de cada agente no chat (ADR-085).
+    func showUsage(_ text: String, tooltip: String?, byNode: [String: String]) {
+        canvas.infoBar.showUsage(text, tooltip: tooltip)
+        chat.showUsage(text, tooltip: tooltip, byNode: byNode)
+    }
+
+    /// De onde o detalhe abre: a pastilha do modo que está na tela.
+    var usageAnchor: NSView { mode == .chat ? chat.usageAnchor : canvas.infoBar.usage }
+
+    var onUsage: ((NSView) -> Void)? {
+        get { canvas.infoBar.usage.onClick }
+        set {
+            canvas.infoBar.usage.onClick = newValue
+            chat.onUsage = newValue
+        }
+    }
     var onResetClock: (() -> Void)? {
-        get { bar.onResetClock }
-        set { bar.onResetClock = newValue }
+        get { canvas.infoBar.clock.onReset }
+        set {
+            canvas.infoBar.clock.onReset = newValue
+            chat.clockChip.onReset = newValue
+        }
     }
 
     /// Quanto o CONTEÚDO cede à esquerda para a barra lateral — a barra de cima
@@ -285,7 +310,9 @@ final class WorkbenchShell: NSView {
         let content = contentFrame
         canvas.frame = content
         chat.frame = content
-        bannerPanel.frame = NSRect(x: bounds.midX - 380, y: topInset + 12,
+        // No canvas as barras de ação e de informação moram no topo: o aviso
+        // desce para debaixo delas.
+        bannerPanel.frame = NSRect(x: bounds.midX - 380, y: topInset + (mode == .canvas ? 110 : 12),
                                    width: 760, height: 30)
         busy.frame = content
         accessLock.frame = content

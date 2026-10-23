@@ -41,6 +41,7 @@ enum ClaudeTranscript {
         var out = Scan()
         var turns: [ChatTurn] = []
         var last: LastBlock?
+        var countedUsage: Set<String> = []
         var cursor = data.startIndex
         while cursor < data.endIndex {
             let lineEnd = data[cursor...].firstIndex(of: 0x0A) ?? data.endIndex
@@ -83,8 +84,12 @@ enum ClaudeTranscript {
                 out.promptOffsets.append(offset)
                 last = nil
             case "assistant":
-                guard !turns.isEmpty,
-                      let blocks = message["content"] as? [[String: Any]] else { continue }
+                guard !turns.isEmpty else { continue }
+                // Uma linha por bloco, o mesmo uso em todas: conta o id uma vez.
+                if let usage = ClaudeUsage.entry(fromMessage: message), countedUsage.insert(usage.id).inserted {
+                    turns[turns.count - 1].usage.add(usage, prices: PriceTable.classifier)
+                }
+                guard let blocks = message["content"] as? [[String: Any]] else { continue }
                 for block in blocks {
                     switch block["type"] as? String {
                     case "text":

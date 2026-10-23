@@ -4654,3 +4654,64 @@ descartáveis de um shell cada e um app Cocoa de teste que atende num socket:
 - Docker: A abre o Docker Desktop, B sobe um container pelo compose na pasta
   dela; remover A deixa o Docker aberto, remover B o fecha inteiro em ~4 s.
 O Mockoon, aberto por shell e fechado na remoção, também passou.
+
+## ADR-085 — Consumo de tokens e custo por bancada
+
+**Contexto.** Vários agentes em paralelo, em modelos diferentes, e nenhuma
+ideia de quanto cada bancada custa. O Claude Code grava em cada resposta do
+transcript o `message.usage` — entrada, saída, cache escrito (5 min e 1 h) e
+cache lido — e o modelo; os subagentes têm transcript próprio em
+`<sessão>/subagents/`.
+
+**Decisão.**
+- **Registro por bancada**, `workbenches/<id>/usage.json` (`UsageLedger`): o
+  que cada nó gastou, por tarifa, e um cursor por transcript (byte e último
+  id). Soma incremental, não recontagem: o transcript muda de arquivo a cada
+  `/clear` e limpeza, e o que já foi contado não pode sumir nem entrar de novo.
+  Cada `message.id` conta uma vez — o CLI repete o uso em toda linha da mesma
+  mensagem. Só entra até a última quebra de linha; a linha em escrita fica
+  para a próxima.
+- **Quando lê** (`UsageStore`): a cada 8 s e no fim de turno, só o que cada
+  arquivo cresceu — um `stat` quando nada mudou. O custo anda enquanto o
+  agente trabalha.
+- **O passado entra na primeira contagem**: a trilha carimba a conversa de cada
+  turno (`conversa <8 primeiros>`, ADR-036); os transcripts com esse prefixo em
+  `~/.claude*/projects/*/` entram no registro novo, de antes de cada `/clear`.
+- **Preço** (`PriceTable`): a tabela oficial da API de primeira parte
+  (2026-10-06) embutida, com `pricing.json` por cima — nasce com a tabela,
+  editável, e vale na próxima leitura, sem reiniciar. Escrita de cache a 1,25×
+  (5 min) e 2× (1 h) da entrada; o cache lido vem da tabela (não é fração
+  fixa: 0,05× no Opus 5.5, 0,025× no Fable 5.1). Uma chave por **tarifa**, não
+  por modelo: modo rápido (`speed: "fast"`) é `#fast`, 2×; o Haiku 5.5 com
+  prompt acima de 100K é `#long`. A requisição é classificada na leitura,
+  porque depois só sobra a soma; o dólar é calculado na hora de mostrar —
+  corrigir um preço refaz o histórico. Modelo fora da tabela soma tokens e
+  marca o custo com `+`, em vez de inventar preço.
+- **Onde aparece**: na barra lateral só a soma, na ponta da linha do
+  cronômetro; no canvas, a barra de ações sobe para o topo e, logo embaixo,
+  uma **barra informativa** num vidro menor com o cronômetro (que saiu de
+  baixo do título) e o custo — ler não é agir, por isso não divide a barra; no
+  chat, que não tem barra de ações, os dois ficam embaixo da coluna de
+  participantes, com o custo de cada agente na linha dele e o custo **de cada
+  turno** no cabeçalho da resposta ("US$ 0,42 ·
+  14:32", tokens na dica) — o `ChatTurn` soma o uso das respostas dele na
+  leitura do transcript e o grava no histórico do chat. A pastilha abre o
+  detalhe: o total com uma barra dividida pelas quatro tarifas (para onde foi
+  o dinheiro), cada agente e cada modelo com a sua barra e o modelo principal,
+  e a tabela de preços recolhida, com os modelos usados no topo.
+- `GET /usage[?workbench=][&show=1]` devolve tokens e custo por nó e tarifa (e
+  abre o detalhe da bancada ativa).
+
+**Limites.** Só Claude Code (outro CLI entra pelo leitor dele). O custo do
+turno no chat não inclui subagentes — o da bancada inclui. Turno gravado antes
+do registro não tem custo no cabeçalho. O cache lido do Haiku 5.5 (0,1×) é
+suposição: a tabela publicada não o traz. Preço de Bedrock/Vertex é outro.
+
+**Verificação.** `UsageTests` (um id uma vez, cache sem divisão, chaves e custo
+com rápido e prompt longo, data no id, modelo sem preço, cursor com linha
+partida e mensagem que continua, trilha, uso do turno e ida e volta pelo
+histórico, texto do dinheiro). No DEV: o custo de uma bancada bateu ao
+centavo com a conta feita à parte sobre o transcript (US$ 0,6007, 595.189
+tokens); um prompt de teste apareceu como "US$ 0,25 · 20:06" no cabeçalho e
+somou na lateral, na pastilha e na coluna; editar `pricing.json` mudou o custo
+em 10 s e voltou ao restaurar.

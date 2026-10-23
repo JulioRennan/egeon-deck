@@ -49,6 +49,18 @@ enum ChatGroupLevel: Int, Equatable {
 /// arredonda em cima, a última embaixo (ADR-042). O `id` é estável entre
 /// montagens: é por ele que a tabela sabe o que entrou, saiu ou mudou, e é o
 /// alvo de rolagem de uma citação.
+/// O custo de um turno, pronto para o cabeçalho da bolha (ADR-085).
+struct ChatCost: Equatable {
+    let text: String
+    let detail: String
+
+    init?(_ usage: UsageByPrice) {
+        guard !usage.isEmpty else { return nil }
+        text = UsageText.cost(usage, prices: UsageStore.shared.prices)
+        detail = "Este turno: " + UsageText.breakdown(usage.totalUsage)
+    }
+}
+
 struct ChatBlock: Equatable {
     enum Kind: Equatable {
         /// Seu prompt (ou o de outro agente, com `from`) — bolha de uma linha.
@@ -57,8 +69,9 @@ struct ChatBlock: Equatable {
         /// marcado, como no WhatsApp.
         case prompt(to: ChatParticipant, from: String?, text: String, at: Date,
                     quote: ChatQuote?, pending: Bool, mention: Bool)
-        /// Cabeçalho da resposta: nome, endereço, hora (`nil` é "agora") e a citação.
-        case header(from: ChatParticipant, at: Date?, quote: ChatQuote?)
+        /// Cabeçalho da resposta: nome, endereço, hora (`nil` é "agora"), a
+        /// citação e o custo do turno (ADR-085).
+        case header(from: ChatParticipant, at: Date?, quote: ChatQuote?, cost: ChatCost?)
         /// Um trecho de prosa: parágrafos, títulos e listas seguidos.
         case prose(from: ChatParticipant, blocks: [MarkdownLite.Block])
         /// Bloco de código da prosa (```), na sua caixa.
@@ -90,7 +103,7 @@ struct ChatBlock: Equatable {
     var participant: ChatParticipant {
         switch kind {
         case .prompt(let to, _, _, _, _, _, _): return to
-        case .header(let from, _, _), .prose(let from, _), .code(let from, _, _),
+        case .header(let from, _, _, _), .prose(let from, _), .code(let from, _, _),
              .step(let from, _, _), .group(let from, _, _, _), .diff(let from, _, _), .status(let from, _),
              .typing(let from):                 return from
         }
@@ -136,7 +149,7 @@ enum ChatBlocks {
                 var rows = [ChatBlock(id: "h|\(turn.id)", messageKey: key,
                                       kind: .header(from: agent,
                                                     at: status == nil ? (turn.replyAt ?? turn.promptAt) : nil,
-                                                    quote: quote))]
+                                                    quote: quote, cost: ChatCost(turn.usage)))]
                 var index = 0
                 func add(_ kind: Kind, id: String? = nil, depth: Int = 0) {
                     rows.append(ChatBlock(id: id ?? "b|\(turn.id)|\(index)", messageKey: key,

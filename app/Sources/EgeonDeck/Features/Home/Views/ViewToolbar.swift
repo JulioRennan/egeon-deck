@@ -93,7 +93,6 @@ final class ViewToolbar: NSView {
     static let height: CGFloat = 46
 
     var onSelect: ((ViewMode) -> Void)?
-    var onResetClock: (() -> Void)?
 
     /// Onde o título começa. A barra corre de borda a borda em todo modo e, com
     /// `fullSizeContentView`, os botões da janela ficam sempre em cima dela — o
@@ -107,12 +106,7 @@ final class ViewToolbar: NSView {
     private let pill = NSView()
     private let hint = NSTextField(labelWithString: "")
     private let title = NSTextField(labelWithString: "")
-    /// O cronômetro da bancada, no lugar do caminho — que foi para a dica do
-    /// título (ADR-074).
-    private let clock = NSTextField(labelWithString: "")
     private var path = ""
-    private var shownClock: (WorkbenchClock, Set<WorkbenchClock.Phase>)?
-    private var clockSignature = ""
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -138,8 +132,6 @@ final class ViewToolbar: NSView {
         title.lineBreakMode = .byTruncatingTail
         addSubview(title)
 
-        clock.lineBreakMode = .byTruncatingTail
-        addSubview(clock)
 
         hint.font = .systemFont(ofSize: 10)
         hint.textColor = NSColor(calibratedWhite: 1, alpha: 0.35)
@@ -153,24 +145,6 @@ final class ViewToolbar: NSView {
         title.stringValue = name
         self.path = path
         needsLayout = true
-    }
-
-    /// As três fases lado a lado, sempre as três: um zero também é leitura. A
-    /// fases em curso ficam acesas, as outras apagadas.
-    func setClock(_ value: WorkbenchClock, phases: Set<WorkbenchClock.Phase>) {
-        // Vem do laço do spinner: escrever o mesmo texto 8 vezes por segundo
-        // custaria redesenho à toa.
-        let signature = WorkbenchClockText.signature(value, phases: phases)
-        guard signature != clockSignature else { return }
-        clockSignature = signature
-        shownClock = (value, phases)
-        clock.attributedStringValue = WorkbenchClockText.attributed(value, phases: phases, size: 11)
-        needsLayout = true
-    }
-
-    private var clockTip: String {
-        guard let (value, _) = shownClock else { return "" }
-        return WorkbenchClockText.tooltip(value) + "\nclique para zerar"
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -192,8 +166,9 @@ final class ViewToolbar: NSView {
             largura += (buttons[mode]?.fittingSize.width ?? 0) + padding
         }
         let altura = ModeButton.height + padding * 2
+        let linha = bounds.height
         pill.frame = NSRect(x: ((bounds.width - largura) / 2).rounded(),
-                            y: ((bounds.height - altura) / 2).rounded(),
+                            y: ((linha - altura) / 2).rounded(),
                             width: largura, height: altura)
 
         var x = padding
@@ -205,12 +180,12 @@ final class ViewToolbar: NSView {
         }
 
         let esquerda = max(0, pill.frame.minX - Self.titleInset - margem)
-        title.frame = NSRect(x: Self.titleInset, y: 5, width: esquerda, height: 16)
-        let clockWidth = min(esquerda, clock.intrinsicContentSize.width + 4)
-        clock.frame = NSRect(x: Self.titleInset, y: 26, width: clockWidth, height: 15)
+        // Sozinho: o cronômetro foi para o canvas e o chat, junto do custo.
+        title.frame = NSRect(x: Self.titleInset, y: ((linha - 16) / 2).rounded(),
+                             width: esquerda, height: 16)
 
         let direita = max(0, bounds.width - pill.frame.maxX - margem * 2)
-        hint.frame = NSRect(x: pill.frame.maxX + margem, y: (bounds.height - 13) / 2,
+        hint.frame = NSRect(x: pill.frame.maxX + margem, y: (linha - 13) / 2,
                             width: direita, height: 13)
 
         // As dicas vivem em regiões da barra porque os campos saíram do hit test.
@@ -218,15 +193,9 @@ final class ViewToolbar: NSView {
         if !path.isEmpty {
             addToolTip(title.frame, owner: path as NSString, userData: nil)
         }
-        if shownClock != nil {
-            addToolTip(clock.frame, owner: clockTip as NSString, userData: nil)
-        }
         window?.invalidateCursorRects(for: self)
     }
 
-    override func resetCursorRects() {
-        if shownClock != nil { addCursorRect(clock.frame, cursor: .pointingHand) }
-    }
 
     // MARK: A barra faz o que a titlebar faria
 
@@ -237,15 +206,6 @@ final class ViewToolbar: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 
     override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        if shownClock != nil, clock.frame.contains(point) {
-            let menu = NSMenu()
-            let item = NSMenuItem(title: "Zerar cronômetro", action: #selector(resetClock), keyEquivalent: "")
-            item.target = self
-            menu.addItem(item)
-            menu.popUp(positioning: nil, at: NSPoint(x: clock.frame.minX, y: clock.frame.maxY + 4), in: self)
-            return
-        }
         guard event.clickCount == 2 else {
             // `performDrag` roda o laço de arrasto do próprio AppKit — com snap às
             // bordas e a outros monitores, que um `setFrameOrigin` à mão não tem.
@@ -261,14 +221,13 @@ final class ViewToolbar: NSView {
         }
     }
 
-    @objc private func resetClock() { onResetClock?() }
 
     /// Rótulo é texto, não botão: sobre o nome e o cronômetro da bancada o clique tem
     /// de continuar sendo clique na barra. `NSTextField` é `NSControl` e responde
     /// ao hit test mesmo sem ser editável nem selecionável.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let alvo = super.hitTest(point)
-        if alvo === title || alvo === clock || alvo === hint { return self }
+        if alvo === title || alvo === hint { return self }
         return alvo
     }
 

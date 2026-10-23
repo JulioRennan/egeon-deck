@@ -155,6 +155,9 @@ struct ChatTurn: Equatable, Codable {
     /// existindo — são as somas que a citação e o histórico antigo
     /// usam; a bolha desenha por aqui.
     var parts: [ChatPart] = []
+    /// O que o turno gastou, por tarifa (ADR-085) — o custo no cabeçalho da
+    /// bolha. Vazio em turno gravado antes do registro de consumo.
+    var usage: UsageByPrice = [:]
 
     init(id: String, prompt: String, promptAt: Date, from: String? = nil) {
         self.id = id
@@ -181,7 +184,7 @@ struct ChatTurn: Equatable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, prompt, promptAt, from, steps, replyText, replyAt, parts
+        case id, prompt, promptAt, from, steps, replyText, replyAt, parts, usage
     }
 
     /// Tolerante ao que falta: `parts` nasceu depois do histórico (ADR-039), e
@@ -199,6 +202,7 @@ struct ChatTurn: Equatable, Codable {
         // decodifica como prosa vazia e sai aqui.
         parts = (try c.decodeIfPresent([ChatPart].self, forKey: .parts) ?? [])
             .filter { if case .text("") = $0 { return false } else { return true } }
+        usage = try c.decodeIfPresent(UsageByPrice.self, forKey: .usage) ?? [:]
     }
 
     func encode(to encoder: Encoder) throws {
@@ -211,5 +215,6 @@ struct ChatTurn: Equatable, Codable {
         try c.encode(replyText, forKey: .replyText)
         try c.encodeIfPresent(replyAt, forKey: .replyAt)
         try c.encode(parts, forKey: .parts)
+        if !usage.isEmpty { try c.encode(usage, forKey: .usage) }
     }
 }
