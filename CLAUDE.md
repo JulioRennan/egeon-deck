@@ -195,9 +195,10 @@ app/Sources/EgeonDeck/
   `AppKeeper`, `GET /apps`).
 - **Consumo** (ADR-085) — `UsageStore` soma o `message.usage` dos transcripts
   (subagentes inclusos) em `workbenches/<id>/usage.json`, por nó e tarifa, lendo
-  só o que cresceu; o passado entra pela conversa carimbada na trilha. Preço na
-  `PriceTable` embutida com `pricing.json` por cima, aplicado na hora de
-  mostrar. Lateral: a soma; canvas: barra de ações no topo e, embaixo, a
+  só o que cresceu; o passado entra pela conversa carimbada na trilha. Preço em camadas
+  (`PriceTable`): embutida, o catálogo do binário do Claude Code por cima e o
+  `pricing.json` (só exceções) por cima de tudo; o custo **congela quando
+  entra** (`Spend`) — preço novo vale dali para frente. Lateral: a soma; canvas: barra de ações no topo e, embaixo, a
   informativa (`CanvasInfoBar`: cronômetro e custo — o clique abre o detalhe);
   chat: os dois embaixo da coluna, custo por agente e por turno no cabeçalho.
   `GET /usage[?show=1][&prices=1]`.

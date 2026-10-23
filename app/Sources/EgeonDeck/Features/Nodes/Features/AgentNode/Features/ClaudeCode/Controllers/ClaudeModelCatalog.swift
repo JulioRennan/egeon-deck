@@ -33,11 +33,22 @@ enum ClaudeModelCatalog {
     /// O catálogo do binário que o perfil roda, ou nil quando ainda não se leu
     /// nenhum (ou a leitura não achou tabela). Só na main.
     static func current(for profile: AgentProfile) -> ModelCatalog? {
-        guard applies(to: profile), let name = profile.command.first,
-              let binary = resolve(name), let stamp = stamp(of: binary) else { return nil }
+        guard applies(to: profile), let name = profile.command.first else { return nil }
+        return current(binaryNamed: name)
+    }
+
+    /// Os preços do Claude Code instalado (o `claude` do PATH) — a camada do
+    /// meio da `PriceTable`. Só na main.
+    static func installedPrices() -> [String: ModelPrice] {
+        current(binaryNamed: "claude")?.prices ?? [:]
+    }
+
+    private static func current(binaryNamed name: String) -> ModelCatalog? {
+        guard let binary = resolve(name), let stamp = stamp(of: binary) else { return nil }
         if memo == nil { memo = loadCache() }
+        // Cache de antes da leitura de preços (`prices` nil) relê uma vez.
         if let memo, memo.binary == binary.path, memo.size == stamp.size,
-           memo.modified == stamp.modified {
+           memo.modified == stamp.modified, memo.catalog.prices != nil {
             return memo.catalog
         }
         refresh(binary: binary, stamp: stamp)
@@ -51,6 +62,7 @@ enum ClaudeModelCatalog {
             let started = Date()
             let data = try? Data(contentsOf: binary, options: .alwaysMapped)
             let models = data.map(ClaudeModelRegistry.parse(binary:)) ?? []
+            let prices = data.map { ClaudeModelRegistry.prices(binary: $0, models: models) } ?? [:]
             DispatchQueue.main.async {
                 refreshing.remove(binary.path)
                 let elapsed = String(format: "%.1fs", Date().timeIntervalSince(started))
@@ -60,10 +72,10 @@ enum ClaudeModelCatalog {
                     return
                 }
                 let cache = Cache(binary: binary.path, size: stamp.size, modified: stamp.modified,
-                                  catalog: ModelCatalog(models: models))
+                                  catalog: ModelCatalog(models: models, prices: prices))
                 memo = cache
                 save(cache)
-                Log.write("catálogo de modelos: \(models.count) modelos lidos de "
+                Log.write("catálogo de modelos: \(models.count) modelos e \(prices.count) preços lidos de "
                           + "\(binary.lastPathComponent) (\(elapsed))")
                 onUpdate?(cache.catalog)
             }

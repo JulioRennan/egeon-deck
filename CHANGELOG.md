@@ -11,7 +11,7 @@ citados entre parênteses.
 
 ### Adicionado
 
-- Consumo de tokens e custo por bancada: a barra lateral mostra quanto cada bancada já custou; no canvas, uma barra informativa sob a barra de ações mostra o custo, e o clique abre o detalhe — para onde foi o dinheiro (entrada, saída, cache escrito e cache lido), cada agente e cada modelo, e a tabela de preços; no chat, cada resposta diz quanto aquele turno custou e cada agente mostra o que já gastou. Os preços vêm da tabela oficial e podem ser ajustados em `pricing.json` (ADR-085).
+- Consumo de tokens e custo por bancada: a barra lateral mostra quanto cada bancada já custou; no canvas, uma barra informativa sob a barra de ações mostra o custo, e o clique abre o detalhe — para onde foi o dinheiro (entrada, saída, cache escrito e cache lido), cada agente e cada modelo, e a tabela de preços; no chat, cada resposta diz quanto aquele turno custou e cada agente mostra o que já gastou. Os preços vêm do próprio Claude Code instalado e se atualizam com ele; o custo fica no preço do dia em que foi gasto — preço novo só vale dali para frente; exceções à mão em `pricing.json` (ADR-085).
 - "Sobre o Egeon Deck", no topo do menu do app: mostra a versão instalada e o commit de que ela foi construída.
 
 ### Alterado

@@ -19,6 +19,8 @@ struct ModelCatalog: Codable, Equatable {
         let efforts: [String]
         /// O que o CLI usa quando não se passa `--effort` — o "auto".
         let defaultEffort: String?
+        /// A faixa de preço que o CLI atribui ao modelo (`tier_4_20_…`).
+        var pricing: String? = nil
 
         /// `claude-opus-5-5` → [5, 5]; `claude-3-5-haiku` → [3, 5]. Data de
         /// snapshot (`20251001`) não é versão.
@@ -30,6 +32,10 @@ struct ModelCatalog: Codable, Equatable {
     }
 
     let models: [Model]
+    /// Preço por chave de tarifa (`PriceTable.key`), quando o CLI traz. Nil é
+    /// cache de antes da leitura de preços — pede releitura; vazio é "o
+    /// binário não tem tabela".
+    var prices: [String: ModelPrice]? = nil
 
     /// Ordem do menu: as famílias que se usa no dia a dia primeiro.
     static let familyOrder = ["fable", "opus", "sonnet", "haiku", "mythos"]

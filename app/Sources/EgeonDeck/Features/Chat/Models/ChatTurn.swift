@@ -202,7 +202,7 @@ struct ChatTurn: Equatable, Codable {
         // decodifica como prosa vazia e sai aqui.
         parts = (try c.decodeIfPresent([ChatPart].self, forKey: .parts) ?? [])
             .filter { if case .text("") = $0 { return false } else { return true } }
-        usage = try c.decodeIfPresent(UsageByPrice.self, forKey: .usage) ?? [:]
+        usage = (try c.decodeIfPresent(UsageByPrice.self, forKey: .usage) ?? [:]).settled(.current)
     }
 
     func encode(to encoder: Encoder) throws {

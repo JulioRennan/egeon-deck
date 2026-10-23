@@ -56,7 +56,7 @@ struct ChatCost: Equatable {
 
     init?(_ usage: UsageByPrice) {
         guard !usage.isEmpty else { return nil }
-        text = UsageText.cost(usage, prices: UsageStore.shared.prices)
+        text = UsageText.cost(usage, prices: PriceTable.current)
         detail = "Este turno: " + UsageText.breakdown(usage.totalUsage)
     }
 }

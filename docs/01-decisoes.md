@@ -4677,16 +4677,31 @@ cache lido — e o modelo; os subagentes têm transcript próprio em
 - **O passado entra na primeira contagem**: a trilha carimba a conversa de cada
   turno (`conversa <8 primeiros>`, ADR-036); os transcripts com esse prefixo em
   `~/.claude*/projects/*/` entram no registro novo, de antes de cada `/clear`.
-- **Preço** (`PriceTable`): a tabela oficial da API de primeira parte
-  (2026-10-06) embutida, com `pricing.json` por cima — nasce com a tabela,
-  editável, e vale na próxima leitura, sem reiniciar. Escrita de cache a 1,25×
-  (5 min) e 2× (1 h) da entrada; o cache lido vem da tabela (não é fração
-  fixa: 0,05× no Opus 5.5, 0,025× no Fable 5.1). Uma chave por **tarifa**, não
-  por modelo: modo rápido (`speed: "fast"`) é `#fast`, 2×; o Haiku 5.5 com
-  prompt acima de 100K é `#long`. A requisição é classificada na leitura,
-  porque depois só sobra a soma; o dólar é calculado na hora de mostrar —
-  corrigir um preço refaz o histórico. Modelo fora da tabela soma tokens e
-  marca o custo com `+`, em vez de inventar preço.
+- **Preço** (`PriceTable`), em três camadas: a tabela oficial da API de
+  primeira parte (2026-10-06) embutida, como reserva; por cima, o **catálogo
+  do Claude Code instalado** — o binário traz `pricing_tiers` (entrada, saída,
+  cache 5 min e 1 h, cache lido, `long_prompt`) e cada modelo aponta a sua
+  faixa; é a fonte do `/cost` dele, e atualiza quando ele atualiza, sem
+  internet nem release do Egeon (`ClaudeModelRegistry.prices`, no mesmo cache
+  do catálogo de modelos); e, por cima de tudo, o `pricing.json` — **só
+  exceções**, nasce vazio. A cópia inteira da tabela que a primeira versão
+  semeava, intocada, não vale e vira `{}`: congelaria os preços para sempre.
+  CI/CD que raspasse a página de preços foi descartado: só atualizaria a cada
+  release, lendo HTML. O catálogo é formato interno: se mudar, a embutida
+  segura e o log diz. Escrita de cache a 1,25× (5 min) e 2× (1 h) da entrada
+  quando a faixa não diz; o cache lido vem da tabela (não é fração fixa). Uma
+  chave por **tarifa**, não por modelo: modo rápido (`speed: "fast"`) é
+  `#fast`, 2×; prompt acima do limite da faixa (`above_prompt_tokens`) é
+  `#long`. A requisição é classificada na leitura, porque depois só sobra a
+  soma.
+- **O custo congela quando entra** (`Spend`): cada tarifa guarda os tokens E
+  os dólares pelo preço em vigor naquele momento. Preço novo — do Claude Code
+  atualizado ou do `pricing.json` — vale **dali para frente**; o passado não
+  se recalcula, nem no registro da bancada nem no custo do turno no chat.
+  Token que entra sem preço conhecido fica pendente (o custo leva `+`) e
+  congela na primeira tabela que tiver o modelo. O registro do formato
+  anterior (só tokens) é congelado na primeira leitura com a tabela da época —
+  o valor que já se via.
 - **Onde aparece**: na barra lateral só a soma, na ponta da linha do
   cronômetro; no canvas, a barra de ações sobe para o topo e, logo embaixo,
   uma **barra informativa** num vidro menor com o cronômetro (que saiu de

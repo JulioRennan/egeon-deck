@@ -37,6 +37,11 @@ struct UsageLedger: Codable, Equatable {
         cursors[path] = cursor
     }
 
+    /// Congela o que entrou sem preço, se a tabela já o tiver.
+    mutating func settle(_ prices: PriceTable) {
+        byNode = byNode.mapValues { $0.settled(prices) }
+    }
+
     init() {}
 
     init(from decoder: Decoder) throws {

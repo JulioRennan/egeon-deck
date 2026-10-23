@@ -16,6 +16,8 @@ enum ClaudeModelRegistry {
         pattern: #"^\{id:"(claude-[a-z0-9-]+)",family:"([a-z0-9]+)",display_name:"([^"]+)""#)
     private static let capabilities = try! NSRegularExpression(pattern: #"capabilities:\[([^\]]*)\]"#)
     private static let defaultEffort = try! NSRegularExpression(pattern: #"default_effort:"([a-z]+)""#)
+    private static let pricing = try! NSRegularExpression(pattern: #"pricing:"([A-Za-z0-9_]+)""#)
+    private static let field = try! NSRegularExpression(pattern: #"([a-z0-9_]+):(-?[0-9.]+(?:e[+-]?[0-9]+)?)"#)
     /// Até onde uma entrada vai: a de hoje tem ~1,3 KB.
     private static let window = 4096
 
@@ -63,8 +65,90 @@ enum ClaudeModelRegistry {
             .flatMap { Range($0.range(at: 1), in: body) }
             .map { String(body[$0]) }
 
+        let tier = pricing.firstMatch(in: body, range: bodyRange)
+            .flatMap { Range($0.range(at: 1), in: body) }
+            .map { String(body[$0]) }
+
         return ModelCatalog.Model(id: String(text[id]), family: String(text[family]),
                                   label: String(text[label]), efforts: efforts,
-                                  defaultEffort: efforts.isEmpty ? nil : fallback)
+                                  defaultEffort: efforts.isEmpty ? nil : fallback, pricing: tier)
+    }
+
+    /// Os preços que o `/cost` do CLI usa: `pricing_tiers:{tier:{input:…}}`
+    /// em US$ por milhão, e cada modelo apontando para a sua faixa. A faixa
+    /// pode ter `long_prompt:{above_prompt_tokens:…}` — vira a tarifa `#long`.
+    static func prices(binary data: Data, models: [ModelCatalog.Model]) -> [String: ModelPrice] {
+        guard let start = data.range(of: Data("pricing_tiers:{".utf8)),
+              let text = String(data: data[start.upperBound..<min(start.upperBound + 16_384, data.endIndex)],
+                                encoding: .isoLatin1) else { return [:] }
+        return prices(tiers: tiers(in: text), models: models)
+    }
+
+    static func prices(tiers: [String: [String: Double]], models: [ModelCatalog.Model]) -> [String: ModelPrice] {
+        var out: [String: ModelPrice] = [:]
+        for model in models {
+            guard let name = model.pricing, let tier = tiers[name],
+                  let price = price(tier, prefix: "", name: model.label) else { continue }
+            out[model.id] = price
+            if let above = tier["long.above_prompt_tokens"],
+               var long = self.price(tier, prefix: "long.", name: "\(model.label) (prompt > \(Int(above) / 1000)K)") {
+                long.longAbove = Int(above)
+                out[model.id + "#long"] = long
+            }
+        }
+        return out
+    }
+
+    private static func price(_ tier: [String: Double], prefix: String, name: String) -> ModelPrice? {
+        guard let input = tier[prefix + "input"], let output = tier[prefix + "output"],
+              let read = tier[prefix + "cache_read"] else { return nil }
+        return ModelPrice(name: name, input: input, output: output, cacheRead: read,
+                          cacheWrite5m: tier[prefix + "cache_write_5m"], cacheWrite1h: tier[prefix + "cache_write_1h"])
+    }
+
+    /// As faixas, do texto logo depois de `pricing_tiers:{`. Os campos de
+    /// `long_prompt` vêm com o prefixo `long.`.
+    static func tiers(in text: String) -> [String: [String: Double]] {
+        var out: [String: [String: Double]] = [:]
+        let chars = Array(text.unicodeScalars)
+        var i = 0
+        while i < chars.count {
+            // Fim do objeto das faixas.
+            if chars[i] == "}" { break }
+            var name = ""
+            while i < chars.count, chars[i] != ":" { name.unicodeScalars.append(chars[i]); i += 1 }
+            name = name.trimmingCharacters(in: CharacterSet(charactersIn: ", "))
+            guard i + 1 < chars.count, chars[i + 1] == "{" else { break }
+            i += 2
+            var depth = 1
+            var body = ""
+            while i < chars.count, depth > 0 {
+                if chars[i] == "{" { depth += 1 }
+                if chars[i] == "}" { depth -= 1 }
+                if depth > 0 { body.unicodeScalars.append(chars[i]) }
+                i += 1
+            }
+            var main = body
+            var long = ""
+            if let range = body.range(of: "long_prompt:{"), let close = body[range.upperBound...].firstIndex(of: "}") {
+                long = String(body[range.upperBound..<close])
+                main = String(body[..<range.lowerBound]) + String(body[body.index(after: close)...])
+            }
+            var fields = numbers(in: main)
+            for (key, value) in numbers(in: long) { fields["long." + key] = value }
+            if !name.isEmpty, !fields.isEmpty { out[name] = fields }
+            if i < chars.count, chars[i] == "," { i += 1 }
+        }
+        return out
+    }
+
+    private static func numbers(in text: String) -> [String: Double] {
+        var out: [String: Double] = [:]
+        for match in field.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let key = Range(match.range(at: 1), in: text), let value = Range(match.range(at: 2), in: text),
+                  let number = Double(text[value]) else { continue }
+            out[String(text[key])] = number
+        }
+        return out
     }
 }

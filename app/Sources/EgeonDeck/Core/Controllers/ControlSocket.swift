@@ -798,7 +798,7 @@ final class ControlSocket {
                     }
                     let nodes = ledger.byNode.mapValues { byPrice -> [String: Any] in
                         ["cost": store.prices.cost(byPrice).dollars,
-                         "models": byPrice.mapValues(tokens)]
+                         "models": byPrice.mapValues { tokens($0.tokens) }]
                     }
                     benches.append(["workbench": name, "id": id, "cost": store.prices.cost(ledger.total).dollars,
                                     "files": ledger.cursors.count, "nodes": nodes])

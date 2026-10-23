@@ -13,6 +13,8 @@ final class UsageTests: XCTestCase {
         """
     }
 
+    private func unpriced(_ tokens: TokenUsage) -> Spend { Spend(tokens: tokens, pending: tokens) }
+
     func testEntriesCountEachMessageOnce() {
         let jsonl = [line(id: "a", write1h: 30), line(id: "a", write1h: 30), line(id: "b", read: 500),
                      #"{"type":"user","message":{"content":"x"}}"#,
@@ -36,12 +38,12 @@ final class UsageTests: XCTestCase {
                                                 cacheWrite1h: 1_000_000, cacheRead: 1_000_000))
         XCTAssertEqual(prices.key(for: opus), "claude-opus-5-5")
         // 4 + 20 + 5 (1,25×) + 8 (2×) + 0,20
-        XCTAssertEqual(prices.cost([prices.key(for: opus): opus.usage]).dollars, 37.2, accuracy: 0.0001)
+        XCTAssertEqual(prices.cost([prices.key(for: opus): unpriced(opus.usage)]).dollars, 37.2, accuracy: 0.0001)
 
         var fast = opus
         fast.fast = true
         XCTAssertEqual(prices.key(for: fast), "claude-opus-5-5#fast")
-        XCTAssertEqual(prices.cost(["claude-opus-5-5#fast": opus.usage]).dollars, 74.4, accuracy: 0.0001)
+        XCTAssertEqual(prices.cost(["claude-opus-5-5#fast": unpriced(opus.usage)]).dollars, 74.4, accuracy: 0.0001)
 
         let short = UsageEntry(id: "2", model: "claude-haiku-5-5", usage: TokenUsage(input: 90_000))
         let long = UsageEntry(id: "3", model: "claude-haiku-5-5", usage: TokenUsage(input: 1_000, cacheRead: 150_000))
@@ -49,7 +51,7 @@ final class UsageTests: XCTestCase {
         XCTAssertEqual(prices.key(for: long), "claude-haiku-5-5#long")
 
         XCTAssertEqual(PriceTable.canonical("claude-haiku-4-5-20251001"), "claude-haiku-4-5")
-        let unknown = prices.cost(["claude-futuro-9": TokenUsage(input: 5)])
+        let unknown = prices.cost(["claude-futuro-9": unpriced(TokenUsage(input: 5))])
         XCTAssertTrue(unknown.unpriced)
         XCTAssertEqual(unknown.dollars, 0)
     }
@@ -118,5 +120,74 @@ final class UsageTests: XCTestCase {
         XCTAssertEqual(UsageText.dollars(0.004), "< US$ 0,01")
         XCTAssertEqual(UsageText.dollars(1234.5), "US$ 1.234,50")
         XCTAssertEqual(UsageText.tokens(17_080_000), "17,08M")
+    }
+
+    func testPriceChangeOnlyCountsFromThenOn() {
+        let before = PriceTable(models: PriceTable.builtIn)
+        var after = before
+        after.models["claude-opus-5-5"]?.output = 40
+        var usage: UsageByPrice = [:]
+        let entry = UsageEntry(id: "1", model: "claude-opus-5-5", usage: TokenUsage(output: 1_000_000))
+        usage.add(entry, prices: before)
+        XCTAssertEqual(after.cost(usage).dollars, 20, accuracy: 0.0001)
+        usage.add(entry, prices: after)
+        XCTAssertEqual(after.cost(usage).dollars, 60, accuracy: 0.0001)
+        XCTAssertEqual(usage.settled(after), usage)
+    }
+
+    func testTokensWithoutPriceFreezeWhenThePriceArrives() {
+        var usage: UsageByPrice = [:]
+        usage.add(UsageEntry(id: "1", model: "claude-futuro-9", usage: TokenUsage(output: 1_000_000)),
+                  prices: PriceTable(models: PriceTable.builtIn))
+        XCTAssertTrue(PriceTable(models: PriceTable.builtIn).cost(usage).unpriced)
+
+        var known = PriceTable(models: PriceTable.builtIn)
+        known.models["claude-futuro-9"] = ModelPrice(name: "Futuro", input: 1, output: 3, cacheRead: 0.1)
+        let settled = usage.settled(known)
+        XCTAssertEqual(settled["claude-futuro-9"]?.pending, TokenUsage())
+        known.models["claude-futuro-9"]?.output = 99
+        XCTAssertEqual(known.cost(settled).dollars, 3, accuracy: 0.0001)
+    }
+
+    func testLegacyLedgerReadsTokensAsPending() throws {
+        let old = #"{"byNode":{"dev":{"claude-opus-5-5":{"output":1000000}}},"cursors":{}}"#
+        var ledger = try JSONDecoder().decode(UsageLedger.self, from: Data(old.utf8))
+        XCTAssertEqual(ledger.byNode["dev"]?["claude-opus-5-5"]?.pending.output, 1_000_000)
+        ledger.settle(PriceTable(models: PriceTable.builtIn))
+        let spend = try XCTUnwrap(ledger.byNode["dev"]?["claude-opus-5-5"])
+        XCTAssertEqual(spend.cost.output, 20, accuracy: 0.0001)
+        XCTAssertTrue(spend.pending.isEmpty)
+        let again = try JSONDecoder().decode(UsageLedger.self, from: JSONEncoder().encode(ledger))
+        XCTAssertEqual(again, ledger)
+    }
+
+    func testPricesFromTheClaudeCodeCatalog() {
+        let blob = #"tier_4_20_cache_read_0_20:{input:4,output:20,cache_write_5m:5,cache_write_1h:8,cache_read:0.2,web_search:0.01},haiku_55:{input:0.1,output:0.5,cache_write_5m:0.125,cache_write_1h:0.2,cache_read:0.01,web_search:0.01,long_prompt:{above_prompt_tokens:1e5,input:0.5,output:2.5,cache_write_5m:0.625,cache_write_1h:1,cache_read:0.05}}},models:[{id:"claude-opus-5-5""#
+        let tiers = ClaudeModelRegistry.tiers(in: blob)
+        XCTAssertEqual(Set(tiers.keys), ["tier_4_20_cache_read_0_20", "haiku_55"])
+        let models = [
+            ModelCatalog.Model(id: "claude-opus-5-5", family: "opus", label: "Opus 5.5", efforts: [],
+                               defaultEffort: nil, pricing: "tier_4_20_cache_read_0_20"),
+            ModelCatalog.Model(id: "claude-haiku-5-5", family: "haiku", label: "Haiku 5.5", efforts: [],
+                               defaultEffort: nil, pricing: "haiku_55"),
+        ]
+        let prices = ClaudeModelRegistry.prices(tiers: tiers, models: models)
+        XCTAssertEqual(prices["claude-opus-5-5"],
+                       ModelPrice(name: "Opus 5.5", input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8))
+        XCTAssertEqual(prices["claude-haiku-5-5#long"]?.input, 0.5)
+        XCTAssertEqual(prices["claude-haiku-5-5#long"]?.longAbove, 100_000)
+        XCTAssertEqual(prices["claude-haiku-5-5#long"]?.name, "Haiku 5.5 (prompt > 100K)")
+
+        // O pedaço da entrada de modelo que aponta a faixa.
+        let entry = #"{id:"claude-opus-5-5",family:"opus",display_name:"Opus 5.5",pricing:"tier_4_20_cache_read_0_20",capabilities:["effort"],default_effort:"medium"}"#
+        XCTAssertEqual(ClaudeModelRegistry.parse(entry: entry)?.pricing, "tier_4_20_cache_read_0_20")
+    }
+
+    func testCatalogOverBuiltInAndFileOverBoth() {
+        let catalog = ["claude-sonnet-5-5": ModelPrice(name: "Sonnet 5.5", input: 2, output: 10, cacheRead: 0.1)]
+        let table = PriceTable.load(catalog: catalog)
+        XCTAssertEqual(table.models["claude-sonnet-5-5"]?.cacheRead, 0.1)
+        XCTAssertEqual(table.origin["claude-sonnet-5-5"], .claudeCode)
+        XCTAssertEqual(table.origin["claude-opus-4-6"], .builtIn)
     }
 }

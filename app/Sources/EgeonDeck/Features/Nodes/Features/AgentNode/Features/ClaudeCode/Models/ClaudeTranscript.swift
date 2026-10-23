@@ -87,7 +87,7 @@ enum ClaudeTranscript {
                 guard !turns.isEmpty else { continue }
                 // Uma linha por bloco, o mesmo uso em todas: conta o id uma vez.
                 if let usage = ClaudeUsage.entry(fromMessage: message), countedUsage.insert(usage.id).inserted {
-                    turns[turns.count - 1].usage.add(usage, prices: PriceTable.classifier)
+                    turns[turns.count - 1].usage.add(usage, prices: PriceTable.current)
                 }
                 guard let blocks = message["content"] as? [[String: Any]] else { continue }
                 for block in blocks {

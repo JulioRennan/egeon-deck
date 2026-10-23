@@ -20,7 +20,7 @@ final class UsageStore {
 
     /// O que a tela lê. Só a fila principal escreve.
     private(set) var ledgers: [String: UsageLedger] = [:]
-    private(set) var prices = PriceTable.load()
+    var prices: PriceTable { PriceTable.current }
 
     private var working: [String: UsageLedger] = [:]
     private let queue = DispatchQueue(label: "\(Flavor.current.identifier).usage", qos: .utility)
@@ -34,14 +34,25 @@ final class UsageStore {
         timer?.tolerance = 2
     }
 
-    /// O `pricing.json` editado à mão vale na próxima leitura, sem reiniciar.
+    /// O `pricing.json` editado à mão e o Claude Code atualizado valem na
+    /// próxima leitura, sem reiniciar — para o que entrar dali em diante.
     private var pricesStamp: Date?
+    private var catalogPrices: [String: ModelPrice]?
 
-    private func reloadPricesIfEdited() -> Bool {
+    private func reloadPricesIfChanged() -> Bool {
         let stamp = (try? FileManager.default.attributesOfItem(atPath: PriceTable.file.path))?[.modificationDate] as? Date
-        guard stamp != pricesStamp else { return false }
+        let catalog = ClaudeModelCatalog.installedPrices()
+        guard stamp != pricesStamp || catalog != catalogPrices else { return false }
+        let first = catalogPrices == nil
         pricesStamp = stamp
-        prices = PriceTable.load()
+        catalogPrices = catalog
+        let next = PriceTable.load(catalog: catalog)
+        guard next != PriceTable.current else { return false }
+        PriceTable.current = next
+        let counted = Dictionary(grouping: next.origin.values, by: { $0 }).mapValues(\.count)
+        Log.write("consumo: tabela de preços \(first ? "carregada" : "mudou, vale daqui para frente") — "
+                  + "Claude Code \(counted[.claudeCode] ?? 0), embutida \(counted[.builtIn] ?? 0), "
+                  + "pricing.json \(counted[.file] ?? 0)")
         return true
     }
 
@@ -49,7 +60,7 @@ final class UsageStore {
 
     /// Chamar da fila principal.
     func refresh() {
-        if reloadPricesIfEdited(), !ledgers.isEmpty {
+        if reloadPricesIfChanged(), !ledgers.isEmpty {
             NotificationCenter.default.post(name: Self.didChange, object: nil)
         }
         guard !busy, let all = sources?() else { return }
@@ -60,6 +71,7 @@ final class UsageStore {
             for (workbench, list) in all {
                 var ledger = working[workbench] ?? load(workbench, sources: list, prices: prices)
                 let before = ledger
+                ledger.settle(prices)
                 for source in list {
                     for file in ClaudeUsage.files(for: URL(fileURLWithPath: source.transcript)) {
                         read(file, node: source.node, into: &ledger, prices: prices)
@@ -112,6 +124,8 @@ final class UsageStore {
            let ledger = try? JSONDecoder().decode(UsageLedger.self, from: data) {
             return ledger
         }
+        // Lido no fim de `refresh`, com o resto: o `settle` congela o que
+        // entrou sem preço — e o formato de antes, que só tinha tokens.
         var ledger = UsageLedger()
         let current = Set(sources.map(\.transcript))
         for (node, transcript) in pastTranscripts(workbench) where !current.contains(transcript.path) {

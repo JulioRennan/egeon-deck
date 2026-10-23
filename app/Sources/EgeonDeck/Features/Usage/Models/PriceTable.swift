@@ -11,6 +11,8 @@ struct ModelPrice: Codable, Equatable {
     /// Escrita de cache: 1,25× a entrada no de 5 minutos, 2× no de 1 hora.
     var cacheWrite5m: Double? = nil
     var cacheWrite1h: Double? = nil
+    /// Só na tarifa `#long`: a partir de quantos tokens de prompt ela vale.
+    var longAbove: Int? = nil
 
     func cost(_ usage: TokenUsage) -> Double { split(usage).total }
 
@@ -30,12 +32,12 @@ struct ModelPrice: Codable, Equatable {
         ModelPrice(name: name + suffix, input: input * factor, output: output * factor,
                    cacheRead: cacheRead * factor,
                    cacheWrite5m: cacheWrite5m.map { $0 * factor },
-                   cacheWrite1h: cacheWrite1h.map { $0 * factor })
+                   cacheWrite1h: cacheWrite1h.map { $0 * factor }, longAbove: longAbove)
     }
 }
 
 /// Dólares por tarifa.
-struct TariffCost: Equatable {
+struct TariffCost: Codable, Equatable {
     var input = 0.0
     var output = 0.0
     var cacheWrite = 0.0
@@ -49,17 +51,24 @@ struct TariffCost: Equatable {
     }
 }
 
-/// A tabela de preços: a embutida, com o que estiver em `pricing.json` por
-/// cima (ADR-085). O custo é calculado na hora de mostrar, não guardado —
-/// corrigir um preço refaz o histórico inteiro.
+/// A tabela de preços (ADR-085), em camadas: a embutida, o catálogo do Claude
+/// Code instalado por cima (atualiza com ele) e o `pricing.json` por cima de
+/// tudo — só as exceções que você quiser forçar.
+///
+/// O preço é aplicado quando o gasto ENTRA, não na hora de mostrar: tabela que
+/// muda vale dali para frente (`Spend`).
 ///
 /// Uma chave por TARIFA, não por modelo: o modo rápido custa o dobro e o Haiku
 /// 5.5 muda de preço com prompt acima de 100K — a requisição precisa ser
 /// classificada quando é lida, porque depois só sobra a soma.
 struct PriceTable: Equatable {
-    var models: [String: ModelPrice]
+    enum Origin: String { case builtIn, claudeCode, file }
 
-    /// Tabela oficial da Anthropic, API de primeira parte, em 2026-10-06.
+    var models: [String: ModelPrice]
+    var origin: [String: Origin] = [:]
+
+    /// Tabela oficial da Anthropic, API de primeira parte, em 2026-10-06. É a
+    /// reserva: vale para o que o catálogo do Claude Code não trouxer.
     static let builtIn: [String: ModelPrice] = [
         "claude-fable-5-1": ModelPrice(name: "Fable 5.1", input: 10, output: 50, cacheRead: 0.25),
         "claude-mythos-5-1": ModelPrice(name: "Mythos 5.1", input: 10, output: 50, cacheRead: 0.25),
@@ -75,7 +84,7 @@ struct PriceTable: Equatable {
         "claude-sonnet-4-6": ModelPrice(name: "Sonnet 4.6", input: 3, output: 15, cacheRead: 0.3),
         "claude-haiku-5-5": ModelPrice(name: "Haiku 5.5", input: 0.1, output: 0.5, cacheRead: 0.01),
         "claude-haiku-5-5#long": ModelPrice(name: "Haiku 5.5 (prompt > 100K)", input: 0.5, output: 2.5,
-                                            cacheRead: 0.05),
+                                            cacheRead: 0.05, longAbove: 100_000),
         "claude-haiku-4-5": ModelPrice(name: "Haiku 4.5", input: 1, output: 5, cacheRead: 0.1),
     ]
 
@@ -84,33 +93,64 @@ struct PriceTable: Equatable {
     /// A partir daqui o prompt do Haiku 5.5 sai na faixa cara.
     static let longPromptThreshold = 100_000
 
-    /// Só para classificar a requisição na tarifa (rápido, prompt longo) na
-    /// leitura; o preço em vigor vem do `load()` na hora de mostrar.
-    static let classifier = PriceTable(models: builtIn)
-
     static var file: URL { Flavor.current.config("pricing.json") }
 
-    static func load() -> PriceTable {
-        var models = builtIn
-        if let data = try? Data(contentsOf: file),
-           let custom = try? JSONDecoder().decode([String: ModelPrice].self, from: data) {
-            models.merge(custom) { _, mine in mine }
-        }
-        return PriceTable(models: models)
+    /// As três camadas juntas. `catalog` é o que o Claude Code instalado traz.
+    static func load(catalog: [String: ModelPrice] = [:]) -> PriceTable {
+        var table = PriceTable(models: builtIn, origin: builtIn.mapValues { _ in .builtIn })
+        table.overlay(catalog, as: .claudeCode)
+        table.overlay(fileOverrides(), as: .file)
+        return table
     }
 
-    /// O arquivo nasce com a tabela embutida, para ser editado à mão.
-    static func seedFileIfMissing() {
-        guard !FileManager.default.fileExists(atPath: file.path) else { return }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try? encoder.encode(builtIn).write(to: file, options: .atomic)
+    private mutating func overlay(_ layer: [String: ModelPrice], as source: Origin) {
+        for (key, price) in layer {
+            models[key] = price
+            origin[key] = source
+        }
     }
+
+    private static func fileOverrides() -> [String: ModelPrice] {
+        guard let data = try? Data(contentsOf: file),
+              let custom = try? JSONDecoder().decode([String: ModelPrice].self, from: data) else { return [:] }
+        // A versão anterior semeava o arquivo com a tabela inteira — e aí ele
+        // congelaria os preços por cima de qualquer atualização. Cópia
+        // intacta da embutida não é escolha sua: não vale.
+        return isSeedCopy(custom) ? [:] : custom
+    }
+
+    /// A cópia que a versão anterior semeou — sem o `longAbove`, que ela não
+    /// tinha.
+    static func isSeedCopy(_ custom: [String: ModelPrice]) -> Bool {
+        func plain(_ table: [String: ModelPrice]) -> [String: ModelPrice] {
+            table.mapValues { var price = $0; price.longAbove = nil; return price }
+        }
+        return plain(custom) == plain(builtIn)
+    }
+
+    /// O arquivo nasce vazio — é o lugar das exceções. A cópia antiga da
+    /// tabela inteira, intocada, é trocada pelo vazio.
+    static func seedFileIfMissing() {
+        let data = try? Data(contentsOf: file)
+        if let data, !((try? JSONDecoder().decode([String: ModelPrice].self, from: data)).map(isSeedCopy) ?? false) {
+            return
+        }
+        try? Data("{}\n".utf8).write(to: file, options: .atomic)
+    }
+
+    /// A tabela em vigor, para quem lê fora da fila principal (o leitor do
+    /// transcript, o histórico do chat). Quem a troca é o `UsageStore`.
+    static var current: PriceTable {
+        get { currentLock.withLock { currentTable } }
+        set { currentLock.withLock { currentTable = newValue } }
+    }
+    private static let currentLock = NSLock()
+    private static var currentTable = PriceTable.load()
 
     func key(for entry: UsageEntry) -> String {
         let model = Self.canonical(entry.model)
         if entry.fast { return model + "#fast" }
-        if models[model + "#long"] != nil, entry.usage.prompt > Self.longPromptThreshold {
+        if let long = models[model + "#long"], entry.usage.prompt > long.longAbove ?? Self.longPromptThreshold {
             return model + "#long"
         }
         return model
@@ -126,11 +166,15 @@ struct PriceTable: Equatable {
         return nil
     }
 
+    /// O custo congelado, mais o pendente pelo preço de agora — quando já
+    /// houver um. `unpriced`: sobrou token sem preço nenhum.
     func cost(_ usage: UsageByPrice) -> (dollars: Double, unpriced: Bool) {
         var dollars = 0.0
         var unpriced = false
-        for (key, tokens) in usage where !tokens.isEmpty {
-            if let price = price(for: key) { dollars += price.cost(tokens) } else { unpriced = true }
+        for (key, spend) in usage {
+            dollars += spend.cost.total
+            guard !spend.pending.isEmpty else { continue }
+            if let price = price(for: key) { dollars += price.cost(spend.pending) } else { unpriced = true }
         }
         return (dollars, unpriced)
     }
@@ -138,7 +182,7 @@ struct PriceTable: Equatable {
     /// Sem o que não tem preço.
     func split(_ usage: UsageByPrice) -> TariffCost {
         usage.reduce(TariffCost()) { total, item in
-            total + (price(for: item.key)?.split(item.value) ?? TariffCost())
+            total + item.value.cost + (price(for: item.key)?.split(item.value.pending) ?? TariffCost())
         }
     }
 

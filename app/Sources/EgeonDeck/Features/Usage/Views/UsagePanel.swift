@@ -179,9 +179,7 @@ private final class UsagePanelView: NSView {
             }
         }
 
-        var byModel: UsageByPrice = [:]
-        for (key, usage) in total { byModel[key, default: TokenUsage()] += usage }
-        let models = byModel.map { (key: $0.key, usage: $0.value, cost: prices.cost([$0.key: $0.value]).dollars) }
+        let models = total.map { (key: $0.key, usage: $0.value, cost: prices.cost([$0.key: $0.value]).dollars) }
             .sorted { $0.cost > $1.cost }
         if !models.isEmpty {
             y += 8
@@ -190,7 +188,7 @@ private final class UsagePanelView: NSView {
             for model in models {
                 let row = BarRow(color: Self.familyColor(model.key), name: prices.name(for: model.key), tag: nil,
                                  amount: UsageText.cost([model.key: model.usage], prices: prices),
-                                 fraction: model.cost / top, detail: Self.detail(model.usage))
+                                 fraction: model.cost / top, detail: Self.detail(model.usage.tokens))
                 row.frame = NSRect(x: pad, y: y, width: inner, height: BarRow.height)
                 addSubview(row)
                 y += BarRow.height + 6
@@ -215,16 +213,23 @@ private final class UsagePanelView: NSView {
         y += 30
 
         if showsPrices {
-            let card = priceCard(used: Set(byModel.keys), width: inner)
+            let card = priceCard(used: Set(total.keys), width: inner)
             card.frame.origin = NSPoint(x: pad, y: y)
             addSubview(card)
             y += card.frame.height + 10
         }
 
-        let foot = label("Modo rápido custa 2× · editável em "
-                         + PriceTable.file.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"),
+        let sources = Set(prices.origin.values)
+        let origin = sources.contains(.claudeCode) ? "Preços do Claude Code instalado" : "Preços da tabela embutida"
+        let foot = label(origin + (sources.contains(.file) ? " · ✎ = seu pricing.json" : "")
+                         + " · modo rápido custa 2×", size: 10, alpha: 0.32)
+        place(foot, x: pad, y: &y, width: inner, gap: 2)
+        let rule = label("Custo no preço do dia do gasto: tabela nova vale daqui para frente.",
                          size: 10, alpha: 0.32)
-        place(foot, x: pad, y: &y, width: inner, gap: 0)
+        place(rule, x: pad, y: &y, width: inner, gap: 2)
+        let file = label("Exceções em " + PriceTable.file.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"),
+                         size: 10, alpha: 0.32)
+        place(file, x: pad, y: &y, width: inner, gap: 0)
         y += 16
 
         let size = NSSize(width: Self.width, height: y)
@@ -281,7 +286,8 @@ private final class UsagePanelView: NSView {
             let alpha: CGFloat = lit ? 0.92 : 0.42
             let values = [price.input, price.output, price.cacheWrite5m ?? price.input * 1.25,
                           price.cacheWrite1h ?? price.input * 2, price.cacheRead]
-            cells.append([label((lit ? "● " : "") + price.name, size: 11, weight: lit ? .semibold : .regular, alpha: alpha)]
+            let mark = (lit ? "● " : "") + (prices.origin[key] == .file ? "✎ " : "")
+            cells.append([label(mark + price.name, size: 11, weight: lit ? .semibold : .regular, alpha: alpha)]
                          + values.map { label(money($0), size: 11, alpha: alpha, mono: true) })
         }
         let grid = NSGridView(views: cells)
