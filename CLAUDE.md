@@ -242,7 +242,10 @@ app/Sources/EgeonDeck/
   `[Unreleased]`, na seção certa (`Adicionado` · `Alterado` · `Corrigido` ·
   `Removido`), uma linha do ponto de vista de quem usa, com o ADR entre
   parênteses. Refactor, teste e docs internos não entram. Formato Keep a
-  Changelog, versões SemVer: no release, `[Unreleased]` vira `[X.Y.Z] - data`,
+  Changelog, versões SemVer. **Versão só sobe com tag lançada a pedido**:
+  sem pedido explícito de release/nova versão, tudo fica em `[Unreleased]` —
+  nada de seção `[X.Y.Z]`, bump no `make.sh` ou tag por conta própria
+  ("subir no changelog" é registrar em `[Unreleased]`). No release, `[Unreleased]` vira `[X.Y.Z] - data`,
   a versão do `app/make.sh` (`CFBundleShortVersionString`) acompanha, a tag é
   `vX.Y.Z` e os links de comparação no rodapé são atualizados.
 - **Decisões viram ADR** em `docs/01-decisoes.md` — leia antes de propor rota
