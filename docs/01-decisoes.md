@@ -4770,7 +4770,8 @@ igual e o nome só se lê quando se para para ler.
   subindo até o `CanvasContainer`. Alerta laranja ganha do foco.
 - **A bancada selecionada na barra lateral** usa a cor dela no fundo, na
   pastilha e no aro (`AttentionRing.focusColor`), no lugar do azul do sistema,
-  que era o mesmo para todas.
+  que era o mesmo para todas. A bolinha de "de pé" (e o aro da pastilha no
+  trilho) também: verde ali se confundia com o "terminou" dos badges.
 
 **Fora, por ora.** Ponto da cor na aba, borda do composer no
 chat, trocar a cor à mão.

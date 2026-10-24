@@ -378,7 +378,7 @@ final class SidebarRow: NSView {
         // O aro parado de "está de pé" sai quando a borda de parada assume: as
         // duas na mesma pastilha viravam um contorno grosso e borrado.
         tile.layer?.borderWidth = (isLive && ringTone == nil) ? 2 : 0
-        tile.layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.75).cgColor
+        tile.layer?.borderColor = accent.withAlphaComponent(0.75).cgColor
         // O foco vence o aviso na linha: a bancada em foco está na tela, e os
         // cards dela no canvas já giram o aviso; o badge segue dizendo o estado.
         rowRing.focusColor = accent
@@ -386,7 +386,9 @@ final class SidebarRow: NSView {
         tileRing.tone = isCompact ? ringTone : nil
         initial.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.7)
 
-        dot.layer?.backgroundColor = (isLive ? NSColor.systemGreen : NSColor(calibratedWhite: 1, alpha: 0.22)).cgColor
+        // "De pé" na cor da bancada: verde é "terminou" nos badges (ADR-024), e
+        // a bolinha verde na frente do nome se confundia com ele (ADR-086).
+        dot.layer?.backgroundColor = (isLive ? accent : NSColor(calibratedWhite: 1, alpha: 0.22)).cgColor
     }
 
     override func resetCursorRects() { HandCursor.fill(self) }
