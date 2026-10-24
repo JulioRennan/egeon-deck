@@ -247,7 +247,8 @@ app/Sources/EgeonDeck/
   nada de seção `[X.Y.Z]`, bump no `make.sh` ou tag por conta própria
   ("subir no changelog" é registrar em `[Unreleased]`). No release, `[Unreleased]` vira `[X.Y.Z] - data`,
   a versão do `app/make.sh` (`CFBundleShortVersionString`) acompanha, a tag é
-  `vX.Y.Z` e os links de comparação no rodapé são atualizados.
+  `vX.Y.Z`, os links de comparação no rodapé são atualizados e `./app/release.sh vX.Y.Z`
+  publica a release no GitHub (zips da tag + `EgeonDeck.zip`, o que o botão do site baixa).
 - **Decisões viram ADR** em `docs/01-decisoes.md` — leia antes de propor rota
   para editor, portal de janela, tmux ou detecção de ociosidade: já custaram
   protótipo.

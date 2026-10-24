@@ -13,6 +13,7 @@ citados entre parênteses.
 
 - Consumo de tokens e custo por bancada: a barra lateral mostra quanto cada bancada já custou; no canvas, uma barra informativa sob a barra de ações mostra o custo, e o clique abre o detalhe — para onde foi o dinheiro (entrada, saída, cache escrito e cache lido), cada agente e cada modelo, e a tabela de preços; no chat, cada resposta diz quanto aquele turno custou e cada agente mostra o que já gastou. Os preços vêm do próprio Claude Code instalado e se atualizam com ele; o custo fica no preço do dia em que foi gasto — preço novo só vale dali para frente; exceções à mão em `pricing.json` (ADR-085).
 - Cada bancada ganha uma cor sozinha, a menos usada entre as que existem: uma sombra esmaecida dessa cor contorna o canvas por dentro e um ponto dela acompanha o nome da bancada na barra de cima, que ficou maior, o card em que você está digitando e a bancada selecionada na barra lateral levam essa cor na borda, e a bolinha de "de pé" da barra lateral deixou de ser verde e passou a ser essa cor — dá para saber em que bancada você está antes de ler o nome (ADR-086).
+- A última versão fica sempre no mesmo endereço, `releases/latest/download/EgeonDeck.zip`: toda release passa a trazer esse zip de nome fixo, além dos dois com a versão no nome.
 - "Sobre o Egeon Deck", no topo do menu do app: mostra a versão instalada e o commit de que ela foi construída.
 
 ### Alterado

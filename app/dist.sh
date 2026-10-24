@@ -59,6 +59,9 @@ rm -f "$ZIP"
 # `ditto` e não `zip`: preserva os metadados do bundle e a assinatura de código,
 # que o zip comum embaralha — e assinatura embaralhada é app que não abre.
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+# Nome fixo, sem versão: é ele que `releases/latest/download/EgeonDeck.zip`
+# entrega, e é por esse endereço que o botão do site baixa sempre a última.
+if [ "$MODO" = universal ]; then cp "$ZIP" "$SAIDA/EgeonDeck.zip"; fi
 
 echo
 echo "pronto: $ZIP  ($(du -h "$ZIP" | cut -f1))"

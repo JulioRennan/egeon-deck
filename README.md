@@ -30,20 +30,28 @@ com o repositório — o zip é de uma versão marcada.
 
 ### Baixar
 
-Cada release traz dois zips, e a diferença é só o que vai dentro do executável:
+A última versão, sempre no mesmo endereço:
+
+```bash
+curl -fL -o /tmp/EgeonDeck.zip \
+  https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip
+ditto -x -k /tmp/EgeonDeck.zip /tmp/egeon-zip
+ditto /tmp/egeon-zip/EgeonDeck.app "/Applications/Egeon Deck.app"
+xattr -dr com.apple.quarantine "/Applications/Egeon Deck.app"
+```
+
+O zip traz `EgeonDeck.app`; em `/Applications` ele vira `Egeon Deck.app`, o nome
+que o `install.sh` também usa. Cada release traz ainda dois zips com a versão no
+nome, e a diferença é só o que vai dentro do executável:
 
 | arquivo | para quem |
 |---|---|
+| `EgeonDeck.zip` | a última versão, universal — é o que o endereço acima entrega |
 | `EgeonDeck-<versão>-universal.zip` | qualquer Mac — Apple Silicon e Intel |
 | `EgeonDeck-<versão>-arm.zip` | só Apple Silicon, 1,4 MB menor |
 
 Universal **não** é mais lento: o binário carrega as duas fatias e o macOS executa só
 a nativa. O que dobra é o tamanho do executável, não o tempo de nada.
-
-```bash
-unzip EgeonDeck-v1.0.0-universal.zip -d /Applications
-xattr -dr com.apple.quarantine "/Applications/Egeon Deck.app"
-```
 
 O `xattr` não é opcional. O bundle vai assinado ad-hoc e sem notarização; o macOS põe
 quarentena em tudo que veio da internet e recusa abrir, dizendo que o app está

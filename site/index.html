@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Egeon Deck — a bancada dos seus agentes</title>
+<meta name="description" content="Egeon Deck é um canvas infinito para macOS onde cada nó é um terminal, um agente de IA ou um navegador. Vários agentes em paralelo, cada um com o seu papel, conversando entre si.">
+<meta property="og:image" content="assets/icon.png">
+<link rel="icon" href="assets/icon-256.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="nav">
+  <a class="brand" href="#topo"><img src="assets/icon-256.png" alt=""><span>Egeon Deck</span></a>
+  <nav>
+    <a href="#canvas">Canvas</a>
+    <a href="#maestro">Maestro</a>
+    <a href="#bancadas">Bancadas</a>
+    <a href="#nativo">Nativo</a>
+    <a href="#codigo">Código aberto</a>
+  </nav>
+  <a class="btn small" href="https://github.com/JulioRennan/egeon-deck">GitHub</a>
+</header>
+
+<main id="topo">
+
+<!-- 1. Abertura -->
+<section class="hero">
+  <img class="hero-icon" src="assets/icon-256.png" alt="Ícone do Egeon Deck">
+  <h1>Seus agentes numa bancada.<br><span class="accent">Você na regência.</span></h1>
+  <p class="lead">Um canvas infinito para macOS onde cada nó é uma ferramenta de verdade: terminal, agente de IA, navegador. Vários agentes em paralelo, cada um com o seu papel, conversando entre si e avisando quando precisam de você.</p>
+  <div class="ctas">
+    <a class="btn" href="https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip">Baixar para Mac</a>
+    <a class="btn ghost" href="#instalar">Peça para seu agente instalar</a>
+  </div>
+  <p class="meta">macOS · Swift nativo · Claude Code por inteiro; Codex, Gemini e OpenCode como terminal endereçável · grátis e AGPL-3.0</p>
+  <figure class="shot hero-shot">
+    <video autoplay muted loop playsinline poster="assets/shot-canvas.png">
+      <source src="assets/egeon.mp4" type="video/mp4">
+    </video>
+  </figure>
+</section>
+
+<!-- 2. Problema × solução -->
+<section class="band">
+  <p class="eyebrow">O problema</p>
+  <h2>Um agente ajuda.<br>Cinco são uma equipe.</h2>
+  <p class="sub">E equipe precisa de mesa. Cinco abas de terminal soltas viram você copiando resposta de uma janela para outra, sem saber quem terminou e quem está esperando uma permissão há vinte minutos.</p>
+  <div class="versus">
+    <div class="card dim">
+      <h3>Sem o Egeon</h3>
+      <p class="big">Você é o carteiro.</p>
+      <ul>
+        <li>Copia e cola a resposta de um agente no prompt do outro.</li>
+        <li>Descobre que alguém parou só quando vai olhar.</li>
+        <li>Cada janela num canto, cada uma numa pasta.</li>
+        <li>O que foi feito some no próximo <code>/clear</code>.</li>
+        <li>A conta chega no fim do mês, sem dizer de quem.</li>
+      </ul>
+    </div>
+    <div class="card lit">
+      <h3>Com o Egeon</h3>
+      <p class="big">Você é o regente.</p>
+      <ul>
+        <li>Agentes se acionam sozinhos com <code>egeon send</code>.</li>
+        <li>Quem precisa de você acende em laranja, na hora.</li>
+        <li>Terminal, agente e navegador lado a lado, no mesmo canvas.</li>
+        <li>Cada turno vira uma linha na trilha da bancada.</li>
+        <li>Custo por agente, por turno e por bancada.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Os comandos entre agentes (no lugar do mural de depoimentos) -->
+<section class="band">
+  <p class="eyebrow">Como eles conversam</p>
+  <h2>Uma linha de comando entre os agentes.</h2>
+  <p class="sub">Cada terminal tem um endereço, como <code>loja/front</code> ou <code>loja/revisor</code>. O agente consulta quem pode acionar, manda o pedido e espera a volta. Quem falou vem do processo, nunca do texto.</p>
+  <div class="term">
+    <div class="term-bar"><i></i><i></i><i></i><span>loja/front</span></div>
+<pre><span class="p">$</span> egeon peers
+<span class="o">{"peers":[{"cli":"Claude Code","address":"loja/revisor"},
+          {"cli":"Claude Code","address":"loja/back"}]}</span>
+<span class="p">$</span> egeon send loja/revisor &lt;&lt;'MB'
+  terminei a vitrine; revisa o diff de web/src antes do commit?
+MB
+<span class="o">{"ok":true,"detail":"enfileirado para loja/revisor; 1 na fila; envio 1/2"}</span>
+<span class="p">$</span> egeon trace &lt;&lt;'MB'
+  pedido: vitrine com filtro. entrega: web/src/Vitrine.tsx, revisão pedida
+MB</pre>
+  </div>
+</section>
+
+<!-- 4. Funcionalidades -->
+<section id="canvas" class="band">
+  <p class="eyebrow">O que tem no canvas</p>
+  <h2>Tudo de trabalho. Nada de enfeite.</h2>
+
+  <article class="feature">
+    <div class="text">
+      <h3>Cada card é o próprio terminal.</h3>
+      <p>Não é um chat que finge ser terminal. Claude Code, Codex, um <code>zsh</code> comum ou um navegador, cada um num card que você arrasta, redimensiona e enquadra com zoom nítido.</p>
+    </div>
+    <figure class="shot">
+      <img src="assets/shot-canvas.png" alt="Canvas com quatro agentes e um navegador" loading="lazy">
+      <figcaption><code>[[ED:ok]]</code> é o marcador com que o agente avisa que terminou. As linhas em inglês são do próprio Claude Code.</figcaption>
+    </figure>
+  </article>
+
+  <article class="feature flip">
+    <div class="text">
+      <h3>Dê a cada agente um papel. E regras.</h3>
+      <p>Papel é quem o terminal é; regra é como se trabalha. A regra da bancada vale para todos os agentes dela: "não commite sem me perguntar" se escreve uma vez.</p>
+      <div class="chips"><span class="lead-chip">maestro</span><span>front</span><span>back</span><span>revisor</span></div>
+    </div>
+    <figure class="shot narrow"><img src="assets/shot-roles.png" alt="Coluna de agentes do chat, cada um com o seu papel e o quanto já gastou" loading="lazy"></figure>
+  </article>
+
+  <article class="feature">
+    <div class="text">
+      <h3>Quem fala com quem, desenhado.</h3>
+      <p>Uma aresta entre dois cards diz que um pode acionar o outro, e quantas vezes, para dois agentes não ficarem num pingue-pongue sem fim. Quem chamou fica com a ampulheta "aguardando revisor" até a resposta voltar.</p>
+    </div>
+    <figure class="shot"><img src="assets/shot-edges.png" alt="Arestas entre agentes no canvas" loading="lazy"></figure>
+  </article>
+
+  <article class="feature flip">
+    <div class="text">
+      <h3>Canvas ou chat. Os mesmos agentes.</h3>
+      <p>⌥⌘2 e a bancada vira uma conversa: cada agente com a sua cor, cada turno uma bolha, passos recolhidos, diffs lado a lado e o arquivo lido com realce. É o mesmo terminal; trocar de vista não reinicia nada.</p>
+    </div>
+    <figure class="shot narrow-l"><img src="assets/shot-thread.png" alt="Thread do chat: o resumo do maestro e a resposta do back, cada um com a sua cor e o custo do turno" loading="lazy"></figure>
+  </article>
+
+  <article class="feature">
+    <div class="text">
+      <h3>Permissão sem caçar a janela.</h3>
+      <p>O agente pediu para rodar um comando? O pedido aparece numa faixa acima do composer, com Permitir e Negar. Pergunta de múltipla escolha vira botões. O diálogo do terminal continua valendo, se você preferir.</p>
+    </div>
+    <figure class="mock" aria-label="Ilustração da faixa de permissão acima do composer">
+      <div class="mock-ask">
+        <p><b>loja/back</b> quer usar <b>Bash</b></p>
+        <code>node --test api/src/rotas.test.ts</code>
+        <div class="mock-btns"><span class="ok">Permitir</span><span>Sempre</span><span>Negar</span></div>
+      </div>
+      <div class="mock-composer"><span>PARA</span> back · loja/back<em>Prompt para loja/back…</em></div>
+    </figure>
+  </article>
+
+  <article class="feature flip">
+    <div class="text">
+      <h3>Modelo e esforço, por agente.</h3>
+      <p>O revisor em Opus com esforço alto, o front em Sonnet no rápido. A lista de modelos vem de dentro do Claude Code instalado, então o modelo novo aparece assim que ele atualiza. Trocar retoma a conversa onde estava.</p>
+    </div>
+    <figure class="shot"><img src="assets/shot-model.png" alt="Faixa de modelo e esforço no cabeçalho dos cards" loading="lazy"></figure>
+  </article>
+
+  <article class="feature">
+    <div class="text">
+      <h3>Um navegador no canvas.</h3>
+      <p>O preview do que os agentes estão construindo, ao lado deles, com perfil de navegação próprio por card. Arraste uma imagem para um terminal e ela vira anexo no Claude Code. Fale, e a voz entra pelo próprio CLI.</p>
+    </div>
+    <figure class="shot narrow"><img src="assets/shot-web.png" alt="Card de navegador mostrando o preview do projeto" loading="lazy"></figure>
+  </article>
+
+  <p class="note">Chat, permissões, consumo e modelo por agente são do Claude Code hoje. Os outros CLIs entram como terminal com endereço: recebem prompt, papel e regras, e conversam pelo <code>egeon</code>.</p>
+</section>
+
+<!-- 5. Maestro (no lugar das Bandas) -->
+<section id="maestro" class="band split">
+  <div class="text">
+    <p class="eyebrow">Maestro</p>
+    <h2>Peça uma equipe.<br>O maestro monta.</h2>
+    <p class="sub">Marque um agente como maestro e ele ganha a bancada: decide quantos agentes, o papel, o modelo e as regras de cada um, e quem fala com quem. E aplica tudo de uma vez, num plano validado inteiro antes de mexer em qualquer coisa.</p>
+    <ul class="ticks">
+      <li>Alcança todos, e todos o alcançam, sem aresta desenhada.</li>
+      <li>Aprova os pedidos rotineiros do time; o destrutivo continua com você.</li>
+      <li>Não reinicia agente no meio de um turno.</li>
+      <li>Cada mudança vai para a trilha.</li>
+    </ul>
+  </div>
+  <div class="term">
+    <div class="term-bar"><i></i><i></i><i></i><span>loja/maestro</span></div>
+<pre><span class="p">$</span> egeon apply &lt;&lt;'JSON'
+{ "nodes": [
+    { "id": "front", "role": "vitrine em React",
+      "model": "sonnet" },
+    { "id": "back", "role": "API de pedidos",
+      "model": "sonnet" },
+    { "id": "revisor", "role": "revisa antes do commit",
+      "model": "opus", "effort": "high" } ],
+  "edges": [
+    { "from": "front", "to": "revisor", "both": true },
+    { "from": "back", "to": "revisor", "both": true } ] }
+JSON</pre>
+  </div>
+</section>
+
+<!-- 6. Worktrees (no lugar dos Andares) -->
+<section class="band split flip">
+  <div class="text">
+    <p class="eyebrow">Worktrees</p>
+    <h2>Cada frente na sua branch.</h2>
+    <p class="sub">Duas frentes no mesmo repositório sem uma pisar na outra: a bancada inteira numa worktree nova, ou só aquele agente que vai tentar um caminho arriscado. O que não está no git (<code>.env</code>, <code>node_modules</code>) vai junto.</p>
+  </div>
+  <div class="term">
+    <div class="term-bar"><i></i><i></i><i></i><span>onde cada um trabalha</span></div>
+<pre><span class="o"># a bancada principal</span>
+~/egeon-demo/loja                        <span class="p">main</span>
+<span class="o"># a bancada inteira numa branch nova</span>
+~/egeon-demo/worktrees/loja/feat-busca   <span class="p">feat/busca</span>
+<span class="o"># só o front, tentando outro caminho</span>
+~/egeon-demo/worktrees/loja/spike-ssr    <span class="p">spike/ssr</span></pre>
+  </div>
+</section>
+
+<!-- 7. Bancadas, workspaces e cor -->
+<section id="bancadas" class="band split">
+  <div class="text">
+    <p class="eyebrow">Bancadas</p>
+    <h2>Mude de frente sem perder o fio.</h2>
+    <p class="sub">Workspace, projeto, bancada. Cada bancada guarda os seus nós, as suas abas e a sua conversa. Fechar a aba não encerra nada: os agentes seguem trabalhando, e a bancada volta pela barra lateral.</p>
+    <div class="facts">
+      <div>
+        <h3>Uma cor por bancada</h3>
+        <p>Escolhida sozinha, sem repetir. Uma sombra dela contorna o canvas, então você sabe onde está antes de ler o nome.</p>
+        <span class="swatches" title="cores das bancadas"><i style="--c:#ecc873"></i><i style="--c:#4a8fff"></i><i style="--c:#ff73b3"></i><i style="--c:#40d1f2"></i><small>cores das bancadas</small></span>
+      </div>
+      <div>
+        <h3>Avisos que se leem de longe</h3>
+        <p>Girando em laranja quem precisa de você, verde quem terminou, ampulheta quem segue em segundo plano. As abertas ficam numa faixa no topo; na lateral, as que estão de pé.</p>
+      </div>
+    </div>
+  </div>
+  <figure class="shot narrow glow"><img src="assets/shot-sidebar.png" alt="Barra lateral com o workspace Duck Coder e três bancadas coloridas" loading="lazy"></figure>
+</section>
+
+<!-- 8. Consumo -->
+<section class="band split">
+  <div class="text">
+    <p class="eyebrow">Consumo</p>
+    <h2>Quanto cada agente custou, por turno.</h2>
+    <p class="sub">O Egeon lê o uso que o próprio CLI registra (entrada, saída, cache) e mostra quanto cada bancada, cada agente e cada turno custou, ao centavo. Os preços vêm do Claude Code instalado, e o custo fica no preço do dia em que foi gasto.</p>
+  </div>
+  <figure class="shot narrow-l"><img src="assets/shot-usage.png" alt="Painel de consumo por agente e por modelo" loading="lazy"></figure>
+</section>
+
+<!-- 9. Trilha e processos -->
+<section class="band">
+  <p class="eyebrow">Trilha e processos</p>
+  <h2>A memória da bancada.</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Trilha</h3>
+      <p>Ao fim de cada turno o agente escreve uma ou duas linhas: o que foi pedido, o que entregou. O app carimba quem, com que CLI e modelo, e guarda num arquivo por bancada, para você auditar amanhã.</p>
+    </div>
+    <div class="card">
+      <h3>Processos</h3>
+      <p>Tudo que um nó abre carrega a marca dele. Fechou o nó, a árvore inteira vai junto; o processo que ficou órfão há mais de uma hora é encerrado sozinho. ⌥⌘P mostra o que é de quem.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 10. Nativo -->
+<section id="nativo" class="band">
+  <p class="eyebrow">Feito para Mac</p>
+  <h2>Nativo do canvas ao socket.</h2>
+  <div class="grid3">
+    <div class="card"><h3>Swift e AppKit</h3><p>Sem Electron e sem runtime no meio. O terminal é o SwiftTerm, dentro do próprio app.</p></div>
+    <div class="card"><h3>pty direto</h3><p>O app segura o terminal, sem tmux no meio. Fechar o card encerra o que ele abriu.</p></div>
+    <div class="card"><h3>Dirigível</h3><p>Um socket local para scripts, e o comando <code>egeon</code> para os agentes.</p></div>
+  </div>
+</section>
+
+<!-- 11. Privacidade -->
+<section class="band">
+  <p class="eyebrow">Privacidade</p>
+  <h2>Seu trabalho fica na sua máquina.</h2>
+  <p class="sub">Não tem conta para criar nem telemetria: o app não manda nada para fora. A configuração inteira mora em <code>~/.egeon</code>, em arquivos que dá para editar à mão, e cada agente usa a assinatura do CLI que você já tem.</p>
+  <p class="note">Os agentes de terceiros (Claude Code, Codex…) seguem as políticas deles; o Egeon não intercepta esse tráfego.</p>
+</section>
+
+<!-- 12. Código aberto (no lugar dos preços) -->
+<section id="codigo" class="band">
+  <p class="eyebrow">Código aberto</p>
+  <h2>Grátis, e o código é seu também.</h2>
+  <div class="grid2 plans">
+    <div class="card">
+      <h3>Baixar</h3>
+      <p class="price">R$ 0</p>
+      <ul><li>O app pronto, para Apple Silicon e Intel, macOS 14 ou mais novo.</li><li>Bancadas, agentes e workspaces sem limite.</li></ul>
+      <a class="btn" href="https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip">Baixar para Mac</a>
+    </div>
+    <div class="card">
+      <h3>Compilar</h3>
+      <p class="price">AGPL-3.0</p>
+<pre class="inline">git clone https://github.com/JulioRennan/egeon-deck
+cd egeon-deck/app &amp;&amp; ./install.sh</pre>
+      <a class="btn ghost" href="https://github.com/JulioRennan/egeon-deck">Ver no GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- 12b. Instalar pelo agente -->
+<section id="instalar" class="band">
+  <p class="eyebrow">Instalar</p>
+  <h2>Ou peça para o seu agente instalar.</h2>
+  <p class="sub">Cole o texto abaixo no Claude Code, no Codex ou no CLI que você já usa. Ele confere o que precisa ter no Mac, baixa a última versão, instala e verifica se o app subiu, e pergunta antes de qualquer coisa que mexa no que você já tem.</p>
+  <div class="prompt">
+    <div class="term-bar"><i></i><i></i><i></i><span>prompt de instalação</span><button class="copy" type="button" data-copy="prompt-instalar">Copiar</button></div>
+    <pre id="prompt-instalar">Instale o Egeon Deck neste Mac. É um app macOS de código aberto (AGPL-3.0), um canvas para dirigir agentes de IA em paralelo: https://github.com/JulioRennan/egeon-deck
+
+Antes de instalar, confira e me conte o que encontrou:
+1. macOS 14 (Sonoma) ou mais novo: `sw_vers -productVersion`. Se for menor, pare aqui e me avise.
+2. Arquitetura: `uname -m`. O zip é universal e serve para arm64 e x86_64.
+3. Pelo menos um CLI de agente instalado: `command -v claude codex gemini opencode`. O Egeon abre sem eles, mas o nó de agente precisa de um. Se não houver nenhum, me pergunte qual eu quero antes de instalar qualquer coisa.
+4. Se já existe uma versão: `defaults read "/Applications/Egeon Deck.app/Contents/Info" CFBundleShortVersionString`. Se existir e o app estiver aberto, me avise antes de continuar: fechar o Egeon encerra os agentes que estão rodando nele.
+
+Instalação:
+5. Baixe a última versão: `curl -fL -o /tmp/EgeonDeck.zip https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip`
+6. Descompacte com ditto, que preserva a assinatura: `rm -rf /tmp/egeon-zip &amp;&amp; ditto -x -k /tmp/EgeonDeck.zip /tmp/egeon-zip`
+7. Se houver uma versão antiga, feche o app (`osascript -e 'tell application id "dev.duckcoder.egeondeck" to quit'`) e apague o bundle antigo. Depois copie com o nome certo: `ditto /tmp/egeon-zip/EgeonDeck.app "/Applications/Egeon Deck.app"`
+8. Tire a quarentena: `xattr -dr com.apple.quarantine "/Applications/Egeon Deck.app"`. O app é assinado ad-hoc e não é notarizado; sem isso o macOS diz que ele está "danificado", o que não é verdade.
+9. Abra: `open "/Applications/Egeon Deck.app"`
+
+Conferência (espere uns 5 segundos depois de abrir):
+10. O app responde no socket local: `curl -s --unix-socket ~/.egeon/sock http://eg/targets` devolve um JSON.
+11. O comando dos agentes existe: `ls ~/.egeon/bin/egeon`
+12. Me diga a versão instalada (passo 4 de novo) e qualquer aviso que o macOS mostrar.
+
+Não use sudo sem me perguntar. Não apague nem edite ~/.egeon: se a pasta já existe, é a minha configuração.</pre>
+  </div>
+</section>
+
+<!-- 13. Fechamento -->
+<section class="band final">
+  <img class="hero-icon" src="assets/icon-256.png" alt="">
+  <h2>Monte a bancada.<br><span class="accent">Solte os agentes.</span></h2>
+  <a class="btn" href="https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip">Baixar para Mac</a>
+</section>
+
+</main>
+
+<footer>
+  <div class="brand"><img src="assets/icon-256.png" alt=""><span>Egeon Deck</span></div>
+  <p>Um canvas infinito para dirigir agentes de IA em paralelo.</p>
+  <nav>
+    <a href="https://github.com/JulioRennan/egeon-deck">GitHub</a>
+    <a href="https://github.com/JulioRennan/egeon-deck/blob/main/CHANGELOG.md">Changelog</a>
+    <a href="https://github.com/JulioRennan/egeon-deck/blob/main/docs/01-decisoes.md">Decisões</a>
+    <a href="https://github.com/JulioRennan/egeon-deck/blob/main/LICENSE">Licença</a>
+  </nav>
+</footer>
+
+<script>
+  // Copiar o prompt: o texto vem do <pre>, que é o que a pessoa leu.
+  document.querySelectorAll("[data-copy]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var text = document.getElementById(button.dataset.copy).innerText;
+      navigator.clipboard.writeText(text).then(function () {
+        button.textContent = "Copiado";
+        setTimeout(function () { button.textContent = "Copiar"; }, 1600);
+      });
+    });
+  });
+</script>
+</body>
+</html>
