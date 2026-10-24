@@ -49,7 +49,10 @@ final class WorkbenchShell: NSView {
     private var canvasFrames: [String: NSRect] = [:]
 
     /// Que bancada a barra de cima anuncia.
-    func setWorkbench(name: String, path: String) { bar.setWorkbench(name: name, path: path) }
+    func setWorkbench(name: String, path: String, color: WorkbenchColor?) {
+        bar.setWorkbench(name: name, path: path, color: color)
+        canvas.glow.color = color?.nsColor
+    }
     /// Na barra informativa do canvas e na coluna do chat — o título ficou só
     /// com o nome da bancada.
     func showClock(_ clock: WorkbenchClock, phases: Set<WorkbenchClock.Phase>) {

@@ -164,4 +164,35 @@ final class ProcessTableTests: XCTestCase {
         let floor = try JSONDecoder().decode(ReapPolicy.self, from: Data(#"{"intervalMinutes":0}"#.utf8))
         XCTAssertEqual(floor.intervalMinutes, 1)
     }
+
+    func testRelaunchLoopWithoutReadableMarkIsAdoptedByItsChildren() {
+        let all = [
+            raw(1, 0, "launchd"),
+            raw(100, 1, "EgeonDeck"),
+            // O laço: pai morto, ambiente ilegível; o filho renasce a cada queda.
+            raw(200, 1, "bash", at: 0),
+            raw(201, 200, "aws", at: 90_000, mark("3614/claude")),
+            raw(202, 201, "session-manager-plugin", at: 90_001),
+            // App solto no launchd com filho marcado não é adotado.
+            RawProcess(pid: 300, ppid: 1, started: t0, name: "Docker",
+                       command: "/Applications/Docker.app/Contents/MacOS/Docker"),
+            raw(301, 300, "helper", mark("3614/claude")),
+            // Pai sem marca que ainda tem pai vivo (um terminal seu) não é órfão.
+            raw(400, 1, "Terminal", at: 0, ["__CFBundleIdentifier": "com.apple.Terminal"]),
+            raw(401, 400, "zsh"),
+            raw(402, 401, "node", mark("3614/claude")),
+        ]
+        let found = ProcessTable.classify(all, app: 100, deck: "egeon")
+        let orphans = Set(found.filter(\.orphan).map(\.pid))
+        XCTAssertTrue(orphans.isSuperset(of: [200, 201, 202]))
+        XCTAssertFalse(orphans.contains(300))
+        XCTAssertFalse(orphans.contains(400))
+        XCTAssertFalse(orphans.contains(401))
+        XCTAssertEqual(found.first { $0.pid == 200 }?.node, "3614/claude")
+
+        // A idade é a da família: o filho de 10 minutos sai com o laço de um dia.
+        let now = t0.addingTimeInterval(90_600)
+        let victims = Set(ReapPolicy().victims(in: found, now: now).map(\.pid))
+        XCTAssertTrue(victims.isSuperset(of: [200, 201, 202]))
+    }
 }

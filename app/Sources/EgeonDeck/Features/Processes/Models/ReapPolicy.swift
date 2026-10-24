@@ -49,9 +49,23 @@ struct ReapPolicy: Codable, Equatable {
             guard spared.insert(pid).inserted else { continue }
             stack += children[pid] ?? []
         }
+        // A idade é a da família: o filho que um laço relança nasce de novo a
+        // cada queda e nunca chegaria à idade mínima sozinho.
+        let orphans = Dictionary(processes.filter(\.orphan).map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
+        func familyStart(_ process: EgeonProcess) -> Date {
+            var oldest = process.started
+            var current = process
+            var hops = 0
+            while current.ppid > 1, let parent = orphans[current.ppid], hops < 64 {
+                oldest = min(oldest, parent.started)
+                current = parent
+                hops += 1
+            }
+            return oldest
+        }
         return processes.filter {
             $0.orphan && !spared.contains($0.pid)
-                && now.timeIntervalSince($0.started) >= minAgeMinutes * 60
+                && now.timeIntervalSince(familyStart($0)) >= minAgeMinutes * 60
         }
     }
 }

@@ -72,6 +72,8 @@ final class CanvasContainer: NSView {
     /// Embaixo da barra de ações, num vidro menor: o tempo e o custo da
     /// bancada (ADR-085). Ler não é agir — por isso não divide a barra.
     let infoBar = CanvasInfoBar()
+    /// A cor da bancada, esmaecida por dentro da borda (ADR-086).
+    let glow = CanvasGlow(frame: .zero)
     private lazy var infoPanel = GlassPanel(content: infoBar, radius: 11)
 
     /// De qual template esta bancada nasceu. Repassado à barra, que decide se
@@ -174,6 +176,9 @@ final class CanvasContainer: NSView {
         scroll.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 1)
         scroll.drawsBackground = true
         addSubview(scroll)
+        // Em cima dos nós, para a sombra não sumir atrás de um terminal encostado
+        // na borda; embaixo das barras, que continuam limpas.
+        addSubview(glow)
 
         // Ordem importa: o overlay tapa o scroll para capturar o clique de
         // criação (senão o terminal engoliria), e a barra vem por cima dele
@@ -483,6 +488,7 @@ final class CanvasContainer: NSView {
         super.layout()
         scroll.frame = bounds
         overlay.frame = bounds
+        glow.frame = bounds
 
         // No topo do canvas, e a informativa logo embaixo. O container não é
         // flipped: o topo é `maxY`.

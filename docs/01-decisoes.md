@@ -4466,6 +4466,13 @@ falso em nome do `dev` com o `maestro2` aprovando: `ls -la src` permitido em
 13 s com o gancho recebendo `allow`; `rm -rf ~/Documents && git push --force`
 negado em 5 s, com o motivo mandado ao `dev`.
 
+**Revisão (2026-10-24).** A caixa "Aprova permissões do time" saiu: todo
+maestro aprova. Era um segundo sim para a mesma confiança — quem você fez
+maestro já cria, reconfigura e reinicia o time —, e esquecer de marcar só
+deixava o time parado esperando você. Continua sendo poder que só você dá
+(ligando o maestro), o plano segue recusando `approvesPermissions`, e a chave
+`approvesTeam` antiga é ignorada na leitura.
+
 ## ADR-081 — Vigia de página publicada não é trabalho de fundo
 
 **Contexto.** A ampulheta do Claude Code vem do `background_tasks` do `Stop`
@@ -4582,6 +4589,12 @@ Monitor de Atividade não aceita coluna nem rótulo de fora.
   `processes.json` (`enabled`, `intervalMinutes`, `minAgeMinutes`) ajusta. A
   janela mostra a última limpeza; `POST /processes/reap[?dry=1]` roda agora, ou
   só diz quem levaria.
+- **Laço que relança** (`while true; do aws ssm …; sleep 5; done`): o filho
+  renasce a cada queda, então a idade dele nunca chegava a 1 h, e o `bash` do
+  laço — o dono — às vezes não deixa ler a marca. Um túnel ficou 26 h de pé
+  assim. Agora o pai sem marca legível, solto no launchd e que não é app
+  (outro Egeon, bundle de fora, executável de `.app`) é adotado como órfão pela
+  família, e a idade que conta é a do mais velho dela.
 - **App aberto por `open` não é órfão.** O macOS passa o ambiente de quem
   pediu para o app que abre — o Docker Desktop que um agente subiu chegava
   marcado, e a limpeza o teria levado. O `__CFBundleIdentifier` separa: o
@@ -4730,3 +4743,34 @@ centavo com a conta feita à parte sobre o transcript (US$ 0,6007, 595.189
 tokens); um prompt de teste apareceu como "US$ 0,25 · 20:06" no cabeçalho e
 somou na lateral, na pastilha e na coluna; editar `pricing.json` mudou o custo
 em 10 s e voltou ao restaurar.
+
+## ADR-086 — Cada bancada tem uma cor, e o canvas a mostra na borda
+
+**Contexto.** Com várias bancadas abertas, o nome na barra de cima (13pt) não
+bastava: você mandava trabalho para a bancada errada porque o canvas de todas é
+igual e o nome só se lê quando se para para ler.
+
+**Decisão.**
+- **Cor por bancada** (`WorkbenchColor`, campo `color` no `workbenches.json`),
+  escolhida sozinha: na criação, a **menos usada** entre as bancadas que
+  existem, no empate a primeira da paleta; bancada de antes ganha a sua ao
+  carregar, na ordem da lista. Gravada, e não tirada de um hash do id: com
+  sete cores e seis abas, o hash repete cor em quase toda combinação.
+- **Paleta sem laranja, verde e vermelho** — já falam de estado nos badges e
+  anéis (ADR-024). Sete cores: azul, violeta, rosa, ciano, índigo, areia e
+  magenta. Passando de sete bancadas, a cor repete, e o nome continua valendo.
+- **No canvas, só a borda**: uma sombra da cor esmaecida por dentro das bordas
+  (`CanvasGlow`), por cima dos nós e embaixo das barras, sem receber clique. O
+  fundo tingido inteiro foi descartado: mexe no meio, onde estão os terminais,
+  e a cor tem de agir de canto de olho.
+- **Na barra de cima**, um ponto da cor antes do nome, e o nome maior (16pt
+  bold).
+- **O card com o foco do teclado** troca a borda pela cor da bancada (2pt),
+  só no canvas: o `NodeView` observa o `firstResponder` da janela e acha a cor
+  subindo até o `CanvasContainer`. Alerta laranja ganha do foco.
+- **A bancada selecionada na barra lateral** usa a cor dela no fundo, na
+  pastilha e no aro (`AttentionRing.focusColor`), no lugar do azul do sistema,
+  que era o mesmo para todas.
+
+**Fora, por ora.** Ponto da cor na aba, borda do composer no
+chat, trocar a cor à mão.

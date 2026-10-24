@@ -324,13 +324,55 @@ class NodeView: NSView {
     func setAlert(_ on: Bool) {
         guard on != isAlerting else { return }
         isAlerting = on
-        layer?.borderWidth = on ? max(2, restingBorder.width) : restingBorder.width
-        // Apagada por baixo do giro: cheia, o traço laranja sumia sobre ela.
-        layer?.borderColor = on
-            ? NSColor.systemOrange.withAlphaComponent(0.35).cgColor
-            : accent.withAlphaComponent(restingBorder.alpha).cgColor
+        restyleBorder()
         ring.tone = on ? .asking : nil
         if on { ring.layout() }
+    }
+
+    /// O card em que você está digitando leva a cor da bancada na borda — a
+    /// mesma da sombra do canvas (ADR-086). Só no canvas: no chat o card
+    /// emprestado não está dentro de nenhuma moldura colorida.
+    private var responderWatch: NSKeyValueObservation?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        responderWatch = window?.observe(\.firstResponder) { [weak self] _, _ in
+            self?.restyleBorder()
+        }
+        restyleBorder()
+    }
+
+    private var holdsFocus: Bool {
+        var view = window?.firstResponder as? NSView
+        while let current = view {
+            if current === self { return true }
+            view = current.superview
+        }
+        return false
+    }
+
+    private var benchColor: NSColor? {
+        var view = superview
+        while let current = view {
+            if let canvas = current as? CanvasContainer { return canvas.glow.color }
+            view = current.superview
+        }
+        return nil
+    }
+
+    /// Alerta ganha de foco: quem espera você é mais urgente do que onde você está.
+    private func restyleBorder() {
+        if isAlerting {
+            layer?.borderWidth = max(2, restingBorder.width)
+            // Apagada por baixo do giro: cheia, o traço laranja sumia sobre ela.
+            layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.35).cgColor
+        } else if holdsFocus, let color = benchColor {
+            layer?.borderWidth = max(2, restingBorder.width)
+            layer?.borderColor = color.withAlphaComponent(0.95).cgColor
+        } else {
+            layer?.borderWidth = restingBorder.width
+            layer?.borderColor = accent.withAlphaComponent(restingBorder.alpha).cgColor
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }

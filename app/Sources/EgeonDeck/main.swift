@@ -118,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Log.reset()
         configs = WorkbenchStore.load()
+        WorkbenchColor.assignMissing(&configs)
         workspaces = WorkspaceStore.load() ?? []
         agents = AgentStore.load()
         Log.write("Egeon Deck iniciando — \(configs.count) bancadas, "
@@ -758,7 +759,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // e você monta pela barra.
         if config.nodes.isEmpty { config.nodes = [] }
 
-        configs.append(config)
+        configs.append(config.colored(among: configs))
         reconcileWorkspaces()
         Log.write("bancada \"\(config.name)\" criada em \(config.path)"
                   + (template.map { " a partir do template \"\($0)\"" } ?? " vazia"))
@@ -875,7 +876,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             project: projectID)
         if config.nodes.isEmpty { config.nodes = [] }
 
-        configs.append(config)
+        configs.append(config.colored(among: configs))
         reconcileWorkspaces()
         schedulePersist()
         activate(configs.count - 1)
@@ -983,7 +984,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         config.rules = origin?.rules
         config.view = origin?.view
 
-        configs.append(config)
+        configs.append(config.colored(among: configs))
         reconcileWorkspaces()
         // Ela já nasce com projeto: a conciliação não muda nada e não redesenha.
         reloadSidebar()
@@ -1081,7 +1082,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 project: origin.project,
                 edges: origin.edges,
                 view: origin.view)
-            configs.append(config)
+            configs.append(config.colored(among: configs))
             alvo = configs.count - 1
             reloadSidebar()
             activate(alvo)
@@ -2769,7 +2770,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.write("bancada \(id): cronômetro zerado")
         }
         guard let index = index(ofID: id) else { return }
-        shell.setWorkbench(name: configs[index].name, path: configs[index].path)
+        shell.setWorkbench(name: configs[index].name, path: configs[index].path,
+                           color: configs[index].color)
 
         wireChat(shell.chat, id: id)
 

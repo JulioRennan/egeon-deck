@@ -13,7 +13,6 @@ final class MaestroPermissionsTests: XCTestCase {
         var maestro = NodeConfig(type: .agent, id: "maestro")
         maestro.agent = "claude"
         maestro.maestro = true
-        maestro.approvesTeam = true
         var revisor = NodeConfig(type: .agent, id: "revisor")
         revisor.agent = "claude"
         bench = WorkbenchConfig(name: "deck", path: "/tmp", nodes: [maestro, revisor])
@@ -52,15 +51,12 @@ final class MaestroPermissionsTests: XCTestCase {
             trace: { [unowned self] address, text in traced.append("\(address): \(text)") }))
     }
 
-    func testApproverIsTheFlaggedMaestroAndNeverTheAsker() {
+    func testApproverIsTheMaestroAndNeverTheAsker() {
         XCTAssertEqual(MaestroPermissions.approver(for: open[0], in: bench)?.id, "maestro")
         XCTAssertNil(MaestroPermissions.approver(for: open[1], in: bench), "o próprio pedido")
         XCTAssertNil(MaestroPermissions.approver(for: open[2], in: bench), "outra bancada")
         XCTAssertNil(MaestroPermissions.approver(for: open[3], in: bench), "pergunta ao usuário")
 
-        bench.nodes[0].approvesTeam = nil
-        XCTAssertNil(MaestroPermissions.approver(for: open[0], in: bench), "sem a autorização")
-        bench.nodes[0].approvesTeam = true
         bench.nodes[0].maestro = nil
         XCTAssertNil(MaestroPermissions.approver(for: open[0], in: bench), "deixou de ser maestro")
     }
@@ -97,9 +93,9 @@ final class MaestroPermissionsTests: XCTestCase {
                        "pergunta ao usuário")
         XCTAssertEqual(c.answerPermission("p7", answer: .allow, caller: "deck/maestro").status, 404)
 
-        bench.nodes[0].approvesTeam = nil
+        bench.nodes[0].maestro = nil
         XCTAssertEqual(c.answerPermission("p1", answer: .allow, caller: "deck/maestro").status, 403,
-                       "maestro sem a autorização")
+                       "deixou de ser maestro")
         XCTAssertEqual(c.permissions(caller: "deck/maestro").status, 403)
         XCTAssertEqual(answered, [])
         XCTAssertEqual(traced, [])
@@ -120,13 +116,14 @@ final class MaestroPermissionsTests: XCTestCase {
         let plan = Data(#"{"nodes":[{"id":"revisor","approvesPermissions":true}]}"#.utf8)
         guard case .failure = MaestroPlan.parse(plan) else { return XCTFail("o plano aceitou") }
 
-        // O componente leva a autorização, mas só junto com o maestro.
+        // Vem com o maestro, sem caixa à parte: o componente maestro aprova.
         var template = NodeTemplateStore.capture(from: bench.nodes[0], name: "regente")
-        XCTAssertEqual(template.approvesTeam, true)
         XCTAssertEqual(NodeTemplateStore.instantiate(template, id: "m").approvesTeamPermissions, true)
         template.maestro = nil
-        XCTAssertNil(NodeTemplateStore.instantiate(template, id: "m").approvesTeam)
-        let data = try JSONEncoder().encode(template)
-        XCTAssertNil(try JSONDecoder().decode(NodeTemplate.self, from: data).approvesTeam)
+        XCTAssertFalse(NodeTemplateStore.instantiate(template, id: "m").approvesTeamPermissions)
+
+        // A chave antiga, de quando era caixa à parte, é só ignorada.
+        let old = Data(#"{"type":"agent","id":"m","maestro":true,"approvesTeam":false}"#.utf8)
+        XCTAssertTrue(try JSONDecoder().decode(NodeConfig.self, from: old).approvesTeamPermissions)
     }
 }

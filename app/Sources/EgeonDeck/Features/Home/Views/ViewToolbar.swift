@@ -98,6 +98,7 @@ final class ViewToolbar: NSView {
     /// `fullSizeContentView`, os botões da janela ficam sempre em cima dela — o
     /// título nasce depois deles.
     private static let titleInset: CGFloat = 82
+    private static let swatchSide: CGFloat = 10
 
     private var buttons: [ViewMode: ModeButton] = [:]
     /// Fundo da dupla de modos. Um trilho atrás dos dois, como abas: sem ele os
@@ -106,6 +107,8 @@ final class ViewToolbar: NSView {
     private let pill = NSView()
     private let hint = NSTextField(labelWithString: "")
     private let title = NSTextField(labelWithString: "")
+    /// A cor da bancada, a mesma da sombra do canvas (ADR-086).
+    private let swatch = NSView()
     private var path = ""
 
     override init(frame frameRect: NSRect) {
@@ -127,10 +130,15 @@ final class ViewToolbar: NSView {
 
         // Qual bancada está na tela. Repetido da barra lateral de propósito: lá é
         // uma lista e o que diz a ativa é um realce; aqui é afirmação.
-        title.font = .systemFont(ofSize: 13, weight: .semibold)
-        title.textColor = NSColor(calibratedWhite: 1, alpha: 0.92)
+        title.font = .systemFont(ofSize: 16, weight: .bold)
+        title.textColor = NSColor(calibratedWhite: 1, alpha: 0.95)
         title.lineBreakMode = .byTruncatingTail
         addSubview(title)
+
+        swatch.wantsLayer = true
+        swatch.layer?.cornerRadius = Self.swatchSide / 2
+        swatch.isHidden = true
+        addSubview(swatch)
 
 
         hint.font = .systemFont(ofSize: 10)
@@ -141,8 +149,10 @@ final class ViewToolbar: NSView {
     }
 
     /// Que bancada a barra está anunciando.
-    func setWorkbench(name: String, path: String) {
+    func setWorkbench(name: String, path: String, color: WorkbenchColor?) {
         title.stringValue = name
+        swatch.isHidden = color == nil
+        swatch.layer?.backgroundColor = color?.nsColor.cgColor
         self.path = path
         needsLayout = true
     }
@@ -179,10 +189,14 @@ final class ViewToolbar: NSView {
             x += width + padding
         }
 
-        let esquerda = max(0, pill.frame.minX - Self.titleInset - margem)
+        let side = Self.swatchSide
+        swatch.frame = NSRect(x: Self.titleInset, y: ((linha - side) / 2).rounded(),
+                              width: side, height: side)
+        let tituloX = Self.titleInset + (swatch.isHidden ? 0 : side + 8)
+        let esquerda = max(0, pill.frame.minX - tituloX - margem)
         // Sozinho: o cronômetro foi para o canvas e o chat, junto do custo.
-        title.frame = NSRect(x: Self.titleInset, y: ((linha - 16) / 2).rounded(),
-                             width: esquerda, height: 16)
+        title.frame = NSRect(x: tituloX, y: ((linha - 20) / 2).rounded(),
+                             width: esquerda, height: 20)
 
         let direita = max(0, bounds.width - pill.frame.maxX - margem * 2)
         hint.frame = NSRect(x: pill.frame.maxX + margem, y: (linha - 13) / 2,

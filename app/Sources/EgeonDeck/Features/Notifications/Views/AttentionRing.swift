@@ -72,6 +72,11 @@ final class AttentionRing {
 
     var isOn: Bool { tone != nil }
 
+    /// O foco na cor da bancada, em vez da de destaque do sistema (ADR-086).
+    var focusColor: NSColor? {
+        didSet { if tone == .focus { paint(.focus) } }
+    }
+
     /// O tom de uma bancada: laranja vence verde, porque um pede coisa e o
     /// outro só informa.
     static func tone(for summary: ActivitySummary) -> Tone? {
@@ -133,7 +138,7 @@ final class AttentionRing {
     }
 
     private func paint(_ tone: Tone) {
-        let color = tone.color
+        let color = tone == .focus ? (focusColor ?? tone.color) : tone.color
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // Parado, o foco é só o aro — então cheio, para se ver de longe.

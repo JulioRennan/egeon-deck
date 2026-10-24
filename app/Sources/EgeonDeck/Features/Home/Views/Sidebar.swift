@@ -40,6 +40,9 @@ final class SidebarRow: NSView {
     var onClear: ((Int) -> Void)?
 
     var isSelected = false { didSet { needsDisplay = true; restyle() } }
+    /// A bancada selecionada se pinta com a cor dela, a mesma da sombra do
+    /// canvas (ADR-086) — o azul do sistema era igual para todas.
+    private let accent: NSColor
     /// Bancada já materializada (terminais rodando).
     var isLive = false { didSet { restyle() } }
     /// Apagando as worktrees da bancada em segundo plano: o badge vira
@@ -85,6 +88,7 @@ final class SidebarRow: NSView {
         self.index = index
         self.name = config.name
         self.pathExists = config.exists
+        accent = config.color?.nsColor ?? .controlAccentColor
         workspaceBadge = workspace.map { _ in WorkspaceBadge(side: Self.workspaceBadgeSide) }
         super.init(frame: .zero)
         if let workspace, let workspaceBadge {
@@ -358,7 +362,7 @@ final class SidebarRow: NSView {
             // de quem parou — azul, e mais rápida. O fio parado sai: o aro da
             // borda girando faz as vezes dele.
             layer?.backgroundColor = isSelected
-                ? NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor
+                ? accent.withAlphaComponent(0.16).cgColor
                 : NSColor(calibratedWhite: 1, alpha: 0.045).cgColor
             layer?.borderWidth = isSelected ? 0 : 1
             layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
@@ -369,7 +373,7 @@ final class SidebarRow: NSView {
             : isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.72)
 
         tile.layer?.backgroundColor = isSelected
-            ? NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor
+            ? accent.withAlphaComponent(0.85).cgColor
             : NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
         // O aro parado de "está de pé" sai quando a borda de parada assume: as
         // duas na mesma pastilha viravam um contorno grosso e borrado.
@@ -377,6 +381,7 @@ final class SidebarRow: NSView {
         tile.layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.75).cgColor
         // O foco vence o aviso na linha: a bancada em foco está na tela, e os
         // cards dela no canvas já giram o aviso; o badge segue dizendo o estado.
+        rowRing.focusColor = accent
         rowRing.tone = isCompact ? nil : (isSelected ? .focus : ringTone)
         tileRing.tone = isCompact ? ringTone : nil
         initial.textColor = isSelected ? .white : NSColor(calibratedWhite: 1, alpha: 0.7)

@@ -58,6 +58,9 @@ struct WorkbenchConfig: Codable {
     /// coisas: a ordem das abas não muda quando você troca de aba.
     var tabActive: Bool?
 
+    /// Escolhida sozinha ao nascer, a menos usada (ADR-086).
+    var color: WorkbenchColor?
+
     var viewMode: ViewMode { view ?? .canvas }
 
     static func newID() -> String {
@@ -66,7 +69,7 @@ struct WorkbenchConfig: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, path, nodes, template, project, edges, rules, view
-        case tabOrder, tabActive
+        case tabOrder, tabActive, color
     }
 
     /// Escrito à mão só por causa do `id`: o decoder sintetizado exige a chave
@@ -84,13 +87,17 @@ struct WorkbenchConfig: Codable {
         view = try c.decodeIfPresent(ViewMode.self, forKey: .view)
         tabOrder = try c.decodeIfPresent(Int.self, forKey: .tabOrder)
         tabActive = try c.decodeIfPresent(Bool.self, forKey: .tabActive)
+        // Pelo texto: cor que saiu da paleta não pode derrubar a lista inteira —
+        // vira nula e ganha outra no carregar.
+        color = (try? c.decodeIfPresent(String.self, forKey: .color))
+            .flatMap(WorkbenchColor.init(rawValue:))
     }
 
     init(id: String = WorkbenchConfig.newID(), name: String, path: String, nodes: [NodeConfig],
          template: String? = nil, project: String? = nil, edges: [EdgeConfig]? = nil,
          rules: String? = nil,
          view: ViewMode? = nil, tabOrder: Int? = nil,
-         tabActive: Bool? = nil) {
+         tabActive: Bool? = nil, color: WorkbenchColor? = nil) {
         self.id = id
         self.name = name
         self.path = path
@@ -102,6 +109,7 @@ struct WorkbenchConfig: Codable {
         self.view = view
         self.tabOrder = tabOrder
         self.tabActive = tabActive
+        self.color = color
     }
 
     var edgeList: [EdgeConfig] { edges ?? [] }

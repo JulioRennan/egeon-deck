@@ -360,8 +360,8 @@ enum MaestroGuide {
 
         ## Permissões do time
 
-        Se o usuário te deu esse poder, `egeon bench` mostra
-        `"approvesPermissions": true` no seu nó. Aí, quando um agente da
+        Como maestro, você responde as permissões do time (`egeon bench` mostra
+        `"approvesPermissions": true` no seu nó): quando um agente da
         bancada pede permissão para uma ferramenta (Bash, Edit, Write…), você
         recebe uma mensagem `[ED] pedido de permissão de <nome>` com o comando
         e o id do pedido.

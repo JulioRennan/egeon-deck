@@ -80,6 +80,27 @@ enum ProcessTable {
             walk(process.pid, node: node, orphan: true)
         }
 
+        // O laço que relança o filho (`while true; do aws ssm …; done`) é o
+        // dono da árvore, mas a marca dele às vezes não se lê; só os filhos a
+        // mostram, e eles renascem a cada queda — encerrar só eles não para
+        // nada. Pai sem marca legível, solto no launchd, que não é app, vira
+        // órfão junto com a família.
+        let byPid = Dictionary(all.map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
+        for index in result.indices where result[index].orphan {
+            var chain: [RawProcess] = []
+            var parent = byPid[result[index].ppid]
+            while let candidate = parent, !seen.contains(candidate.pid), candidate.pid > 1,
+                  ProcessMark.node(in: candidate.environment) == nil, !isApp(candidate) {
+                chain.append(candidate)
+                parent = byPid[candidate.ppid]
+            }
+            guard let top = chain.last, top.ppid == 1 else { continue }
+            for process in chain.reversed() where seen.insert(process.pid).inserted {
+                result.append(EgeonProcess(pid: process.pid, ppid: process.ppid, started: process.started,
+                                           command: process.command, node: result[index].node, orphan: true))
+            }
+        }
+
         // O `zsh -lc` de um agente leva o system prompt na linha de comando, e
         // o kernel corta o buffer antes de chegar ao ambiente — nem o `ps -E` o
         // lê. Os filhos dele têm a marca; de baixo para cima, o pai a pega
@@ -90,6 +111,15 @@ enum ProcessTable {
             if let node = result[index].node { byParent[result[index].ppid] = node }
         }
         return result
+    }
+
+    /// App de pé por conta própria: outro Egeon, bundle que não é o nosso, ou
+    /// executável de dentro de um `.app`.
+    private static func isApp(_ process: RawProcess) -> Bool {
+        if process.name == appName { return true }
+        if let bundle = process.environment[ProcessMark.bundleVariable],
+           !bundle.hasPrefix(ProcessMark.bundlePrefix) { return true }
+        return process.command.contains(".app/Contents/MacOS/")
     }
 }
 

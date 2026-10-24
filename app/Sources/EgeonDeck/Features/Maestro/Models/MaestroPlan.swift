@@ -191,7 +191,7 @@ extension MaestroPlan.Node: Decodable {
         if extra.contains(.approvesPermissions),
            (try? extra.decode(Bool.self, forKey: .approvesPermissions)) == true {
             throw MaestroPlan.UnknownKeys(path: "nó '\(id)'", keys: ["approvesPermissions"],
-                                          expected: ["— só o usuário dá isso, no formulário"])
+                                          expected: ["— vem com o maestro, que só o usuário liga no formulário"])
         }
         try PlanKeys.check(decoder, Keys.self, path: "nó '\(id)'",
                            ignoring: ReadOnly.allCases.map(\.rawValue))

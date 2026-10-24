@@ -58,8 +58,7 @@ final class MaestroController {
         return .success((bench, node))
     }
 
-    static let notApprover = "você não aprova permissões do time — quem dá isso é o usuário, no "
-        + "formulário do maestro (⚙ no card → \"Aprova permissões do time\")"
+    static let notApprover = "só o maestro da bancada responde permissões do time"
 
     // MARK: - Permissões do time
 
