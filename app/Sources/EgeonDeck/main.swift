@@ -199,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.onRemove = { [weak self] index in self?.confirmRemoveWorkbench(index) }
         sidebar.onEditRules = { [weak self] index in self?.editWorkbenchRules(index) }
         sidebar.onClear = { [weak self] index in self?.confirmClearWorkbench(index) }
+        sidebar.onRecolor = { [weak self] index, color in self?.recolorWorkbench(index, to: color) }
         root = RootView(sidebar: sidebar)
         window.contentView = root
 
@@ -288,6 +289,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let tab = Sidebar.Tab(rawValue: raw) else { return nil }
             self.root.sidebar.show(tab: tab)
             return self.root.sidebar.tab.rawValue
+        }
+        AppControl.recolorWorkbench = { [weak self] name, raw in
+            guard let self, let id = WorkbenchLookup.id(ofName: name, in: self.configs),
+                  let index = self.index(ofID: id)
+            else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
+            guard let color = WorkbenchColor(named: raw) else {
+                return ["ok": false, "error": "cor desconhecida '\(raw)'",
+                        "palette": WorkbenchColor.allCases.map(\.rawValue)]
+            }
+            self.recolorWorkbench(index, to: color)
+            return ["ok": true, "workbench": name, "color": color.rawValue]
+        }
+        AppControl.showPalette = { [weak self] in
+            guard let self, let id = self.activeID else { return }
+            self.shells[id]?.showPalette()
         }
         AppControl.collapseSidebar = { [weak self] state in
             guard let self else { return false }
@@ -1530,6 +1546,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         schedulePersist()
     }
 
+    /// A cor automática é só o ponto de partida (ADR-086): escolhida à mão,
+    /// fica — inclusive repetida, se é o que você quer.
+    private func recolorWorkbench(_ index: Int, to color: WorkbenchColor) {
+        guard index >= 0, index < configs.count, configs[index].color != color else { return }
+        configs[index].color = color
+        shell(at: index)?.setWorkbench(name: configs[index].name, path: configs[index].path,
+                                       color: color)
+        reloadSidebar()
+        Log.write("bancada \"\(configs[index].name)\": cor \(color.rawValue)")
+        schedulePersist()
+    }
+
     /// Bancadas apagando worktrees agora, por id. A barra mostra "removendo…",
     /// a cortina cobre o shell, e a bancada não reabre por baixo do `rm`.
     private var removing: Set<String> = []
@@ -2765,6 +2793,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         shell.tabs.onClose = { [weak self] in self?.closeTab($0) }
         shell.tabs.onReorder = { [weak self] order in self?.reorderTabs(order) }
+        shell.onPickColor = { [weak self] color in
+            guard let self, let index = self.index(ofID: id) else { return }
+            self.recolorWorkbench(index, to: color)
+        }
         shell.onResetClock = {
             WorkbenchClocks.shared.reset(id)
             Log.write("bancada \(id): cronômetro zerado")

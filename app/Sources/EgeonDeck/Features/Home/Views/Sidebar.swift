@@ -38,11 +38,13 @@ final class SidebarRow: NSView {
     var onEditRules: ((Int) -> Void)?
     /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
     var onClear: ((Int) -> Void)?
+    var onRecolor: ((Int, WorkbenchColor) -> Void)?
 
     var isSelected = false { didSet { needsDisplay = true; restyle() } }
     /// A bancada selecionada se pinta com a cor dela, a mesma da sombra do
     /// canvas (ADR-086) — o azul do sistema era igual para todas.
     private let accent: NSColor
+    private let color: WorkbenchColor?
     /// Bancada já materializada (terminais rodando).
     var isLive = false { didSet { restyle() } }
     /// Apagando as worktrees da bancada em segundo plano: o badge vira
@@ -89,6 +91,7 @@ final class SidebarRow: NSView {
         self.name = config.name
         self.pathExists = config.exists
         accent = config.color?.nsColor ?? .controlAccentColor
+        color = config.color
         workspaceBadge = workspace.map { _ in WorkspaceBadge(side: Self.workspaceBadgeSide) }
         super.init(frame: .zero)
         if let workspace, let workspaceBadge {
@@ -121,7 +124,7 @@ final class SidebarRow: NSView {
         toolTip = (config.path as NSString).abbreviatingWithTildeInPath
 
         dot.wantsLayer = true
-        dot.layer?.cornerRadius = 3
+        dot.layer?.cornerRadius = 5
 
         // Monoespaçado porque o conteúdo é spinner: com fonte proporcional cada
         // quadro do braille tem uma largura, e o rótulo treme a cada troca.
@@ -191,7 +194,7 @@ final class SidebarRow: NSView {
 
         // Mesma coluna de texto que o cabeçalho do projeto (`SidebarGroupRow`):
         // dentro do tile, a bancada tem de ler como item da mesma lista.
-        dot.frame = NSRect(x: 15, y: 14, width: 6, height: 6)
+        dot.frame = NSRect(x: 13, y: 12, width: 10, height: 10)
         var textX: CGFloat = 32
         if let workspaceBadge {
             let side = Self.workspaceBadgeSide
@@ -416,6 +419,10 @@ final class SidebarRow: NSView {
                      action: #selector(duplicateFromMenu), keyEquivalent: "")
         menu.addItem(withTitle: "Regras da bancada…",
                      action: #selector(rulesFromMenu), keyEquivalent: "")
+        let recolor = NSMenuItem(title: "Cor da bancada…", action: #selector(recolorFromMenu),
+                                 keyEquivalent: "")
+        recolor.image = color?.dot
+        menu.addItem(recolor)
         menu.addItem(.separator())
         // Varrer para baixo do tapete: os agentes esquecem a conversa e o chat
         // vai para o arquivo. Mora aqui, com as outras ações da bancada, e não
@@ -435,6 +442,16 @@ final class SidebarRow: NSView {
     @objc private func removeFromMenu() { onRemove?(index) }
     @objc private func rulesFromMenu() { onEditRules?(index) }
     @objc private func clearFromMenu() { onClear?(index) }
+    /// A grade abre ao lado da linha: o menu de contexto já fechou quando a ação
+    /// roda, e submenu de 24 cores seria uma lista de nomes.
+    @objc private func recolorFromMenu() {
+        // Sem `weak self`: a barra se remonta a cada badge, e a linha que abriu
+        // a grade pode já ter saído quando a cor é escolhida.
+        guard let recolor = onRecolor else { return }
+        let index = index
+        WorkbenchColorPalette.show(current: color, relativeTo: bounds, of: self,
+                                   edge: .maxX) { recolor(index, $0) }
+    }
 }
 
 /// Cabeçalho de workspace ou de projeto na árvore da barra (ADR-043).
@@ -984,6 +1001,7 @@ final class Sidebar: NSView {
     var onEditRules: ((Int) -> Void)?
     /// "Limpar a bancada": `clear` em todo agente e o chat arquivado (ADR-037).
     var onClear: ((Int) -> Void)?
+    var onRecolor: ((Int, WorkbenchColor) -> Void)?
 
     init(workspaces: [WorkspaceConfig], configs: [WorkbenchConfig]) {
         super.init(frame: .zero)
@@ -1054,6 +1072,7 @@ final class Sidebar: NSView {
             row.onRemove = { [weak self] in self?.onRemove?($0) }
             row.onEditRules = { [weak self] in self?.onEditRules?($0) }
             row.onClear = { [weak self] in self?.onClear?($0) }
+            row.onRecolor = { [weak self] in self?.onRecolor?($0, $1) }
             rows.append(row)
             return row
         }
@@ -1135,6 +1154,7 @@ final class Sidebar: NSView {
             row.onRemove = { [weak self] in self?.onRemove?($0) }
             row.onEditRules = { [weak self] in self?.onEditRules?($0) }
             row.onClear = { [weak self] in self?.onClear?($0) }
+            row.onRecolor = { [weak self] in self?.onRecolor?($0, $1) }
             rows.append(row)
             activeRows[index] = row
             activeLayer.addSubview(row)

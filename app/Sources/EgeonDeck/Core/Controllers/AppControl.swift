@@ -73,6 +73,10 @@ enum AppControl {
     static var toggleSidebar: (() -> Bool)?
     /// Troca a aba da barra (`all`/`active`, ADR-082); devolve a aba em vigor.
     static var sidebarTab: ((String) -> String?)?
+    /// Troca a cor de uma bancada pelo nome — o menu da paleta, dirigível de fora.
+    static var recolorWorkbench: ((_ workbench: String, _ color: String) -> [String: Any])?
+    /// Abre a grade da paleta na bancada ativa, como o clique na bolinha.
+    static var showPalette: (() -> Void)?
     /// /processes?show=1 — abre a janela "Processos" (ADR-083).
     static var showProcesses: (() -> Void)?
     /// Id e nome de cada bancada, na ordem da lista — `/usage` precisa dos dois.

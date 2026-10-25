@@ -122,6 +122,9 @@ enum ClaudeHooks {
             t=d.get("background_tasks") or []
             q+="&bg="+str(len(t)+len(d.get("session_crons") or []))
             q+="&bgw="+str(sum(1 for x in t if isinstance(x,dict) and x.get("type")=="monitor" and "(auto-armed on publish)" in (x.get("description") or "")))
+            n=[str((x.get("type") or "")+": "+(x.get("description") or x.get("command") or ""))[:80] for x in t if isinstance(x,dict)]
+            n+=["cron: "+str(c.get("prompt") or c.get("cron") or "")[:60] for c in (d.get("session_crons") or []) if isinstance(c,dict)]
+            q+="&bgd="+u.quote(" | ".join(n),safe="")
         m=d.get("last_assistant_message")
         if isinstance(m,str) and m:
             q+="&last="+u.quote(m[-400:],safe="")

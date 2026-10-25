@@ -52,6 +52,7 @@ final class WorkbenchShell: NSView {
     func setWorkbench(name: String, path: String, color: WorkbenchColor?) {
         bar.setWorkbench(name: name, path: path, color: color)
         canvas.glow.color = color?.nsColor
+        nodes.forEach { $0.restyleBorder() }
     }
     /// Na barra informativa do canvas e na coluna do chat — o título ficou só
     /// com o nome da bancada.
@@ -75,6 +76,11 @@ final class WorkbenchShell: NSView {
             canvas.infoBar.usage.onClick = newValue
             chat.onUsage = newValue
         }
+    }
+    func showPalette() { bar.showPalette() }
+    var onPickColor: ((WorkbenchColor) -> Void)? {
+        get { bar.onPickColor }
+        set { bar.onPickColor = newValue }
     }
     var onResetClock: (() -> Void)? {
         get { canvas.infoBar.clock.onReset }

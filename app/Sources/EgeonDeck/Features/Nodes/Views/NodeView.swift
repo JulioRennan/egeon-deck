@@ -361,7 +361,8 @@ class NodeView: NSView {
     }
 
     /// Alerta ganha de foco: quem espera você é mais urgente do que onde você está.
-    private func restyleBorder() {
+    /// Chamado de fora quando a bancada troca de cor.
+    func restyleBorder() {
         if isAlerting {
             layer?.borderWidth = max(2, restingBorder.width)
             // Apagada por baixo do giro: cheia, o traço laranja sumia sobre ela.

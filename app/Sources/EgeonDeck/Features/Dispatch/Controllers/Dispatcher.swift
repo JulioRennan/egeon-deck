@@ -135,6 +135,10 @@ final class Target {
     /// Vizinhos acionados que ainda não responderam (ADR-067). Sobrevive à
     /// entrada nova: a resposta de um não resolve a espera pelos outros.
     fileprivate var awaitingPeers = PeerWait()
+    /// Os vizinhos que pediram algo a este terminal e ainda não tiveram a volta.
+    /// Sobrevive a você interromper qualquer um dos dois: é o que reconhece a
+    /// resposta mesmo depois que a espera de quem pediu foi zerada.
+    fileprivate var owedReplies = PeerWait()
     /// O turno fechou esperando vizinho: o card fica em "aguardando" até a
     /// lista esvaziar ou entrar coisa nova. Latch pelo mesmo motivo do
     /// `inBackground`.
@@ -612,6 +616,7 @@ final class Target {
         }
         if let background = report.background { via += ", \(background) de fundo" }
         if report.watchers > 0 { via += ", \(report.watchers) vigia\(report.watchers > 1 ? "s" : "") de página" }
+        if !report.tasks.isEmpty { via += " (" + report.tasks.joined(separator: "; ") + ")" }
         let outcome = StopOutcome.decide(marker: closing, background: report.background,
                                          awaitingPeers: !awaitingPeers.isEmpty)
         // Depois de assentar: as releituras acima são o que garante que a
@@ -996,7 +1001,10 @@ final class Dispatcher {
         guard old != new, let target = targets.removeValue(forKey: old) else { return }
         target.address = new
         targets[new] = target
-        for other in targets.values { other.awaitingPeers.renamed(old, to: new) }
+        for other in targets.values {
+            other.awaitingPeers.renamed(old, to: new)
+            other.owedReplies.renamed(old, to: new)
+        }
         PermissionDesk.shared.renamed(old, to: new)
         Log.write("dispatcher: alvo \(old) → \(new)")
     }
@@ -1155,10 +1163,17 @@ final class Dispatcher {
         // manda, isto é a volta (ADR-058), e quem responde não aguarda nada.
         // Comando também não: `/clear` não tem resposta, e quem o mandou
         // ficaria aguardando para sempre.
-        let isReply = destination.awaitingPeers.peers.contains(sender)
+        let isReply = PeerWait.isReply(destinationAwaits: destination.awaitingPeers,
+                                       senderOwes: origin.owedReplies,
+                                       sender: sender, destination: destination.address)
         if !toShell, !request.isSlashCommand {
             origin.handedOff = true
-            if !isReply { origin.awaitingPeers.sent(to: destination.address) }
+            if isReply {
+                origin.owedReplies.resolved(destination.address)
+            } else {
+                origin.awaitingPeers.sent(to: destination.address)
+                destination.owedReplies.sent(to: sender)
+            }
         }
         destination.peerAnswered(sender)
         let budget = "envio \(sends)/" + (edge.maxSends.map(String.init) ?? "∞")

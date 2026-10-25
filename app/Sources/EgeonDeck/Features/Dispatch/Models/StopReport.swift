@@ -24,13 +24,18 @@ struct StopReport: Equatable {
         self.lastMessage = lastMessage
     }
 
-    /// Lido da query de `/activity`: `bg`, `bgw` (vigias, contidos em `bg`) e
-    /// `last`.
+    /// O que é cada tarefa de fundo, como o CLI descreve — só para o log
+    /// dizer o que segura a ampulheta.
+    var tasks: [String] = []
+
+    /// Lido da query de `/activity`: `bg`, `bgw` (vigias, contidos em `bg`),
+    /// `bgd` (descrições, separadas por ` | `) e `last`.
     init(query: [String: String]) {
         let watchers = query["bgw"].flatMap(Int.init) ?? 0
         self.watchers = watchers
         self.background = query["bg"].flatMap(Int.init).map { max(0, $0 - watchers) }
         self.lastMessage = query["last"].flatMap { $0.isEmpty ? nil : $0 }
+        self.tasks = (query["bgd"] ?? "").components(separatedBy: " | ").filter { !$0.isEmpty }
     }
 }
 
@@ -53,12 +58,16 @@ enum StopOutcome: Equatable {
     /// - **a pergunta vence a ampulheta.** Um servidor de dev em background ou
     ///   um `/loop` agendado ficam de pé a sessão inteira; se a pergunta
     ///   perdesse para eles, nenhuma pergunta daquele agente tocaria de novo.
-    /// - **o payload vence o marcador no resto.** Com `background` relatado, a
-    ///   ampulheta é fato do CLI; um `[[ED:wait]]` sem nada rodando é engano do
-    ///   modelo, e a falta dele com um comando de fundo de pé também.
+    /// - **`[[ED:ok]]` vence a contagem de fundo.** Servidor de dev, túnel,
+    ///   `http.server` ficam de pé a sessão inteira e nunca acordam o agente;
+    ///   contados, o card ficava na ampulheta para sempre depois de um "terminei
+    ///   e não dependo de você" — e quem esperava por ele não era liberado.
+    /// - **o payload vence o marcador no resto.** Um `[[ED:wait]]` sem nada
+    ///   rodando é engano do modelo; sem marcador, o que o CLI conta decide.
     static func decide(marker: HookEvent.Marker?, background: Int?, awaitingPeers: Bool) -> StopOutcome {
         if awaitingPeers { return .awaiting }
         if marker == .ask { return .asked }
+        if marker == .ok { return .finished }
         if let background {
             return background > 0 ? .background : .finished
         }
@@ -97,6 +106,18 @@ struct PeerWait: Equatable {
     /// A bancada mudou de nome: o endereço do vizinho mudou junto.
     mutating func renamed(_ old: String, to new: String) {
         peers = peers.map { $0 == old ? new : $0 }
+    }
+
+    /// Esta mensagem de `sender` para `destination` é a volta de um pedido, e
+    /// não um pedido novo (ADR-058)?
+    ///
+    /// Dois lados, porque um só falha: a lista de quem pediu (`awaiting`) é
+    /// zerada quando VOCÊ fala com ele no meio, e a resposta do vizinho chegava
+    /// como pedido novo — quem respondeu ficava "aguardando" para sempre. Quem
+    /// recebeu o pedido guarda que deve a volta (`owed`), e isso você não apaga.
+    static func isReply(destinationAwaits awaiting: PeerWait, senderOwes owed: PeerWait,
+                        sender: String, destination: String) -> Bool {
+        awaiting.peers.contains(sender) || owed.peers.contains(destination)
     }
 
     /// Os nomes sem a bancada — no card todos são da mesma.

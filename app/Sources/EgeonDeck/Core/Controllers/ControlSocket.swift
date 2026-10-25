@@ -509,6 +509,22 @@ final class ControlSocket {
             respond(fd, status: ok ? "200 OK" : "400 Bad Request",
                     json: payload ?? ["ok": false, "error": "app sem árvore"])
 
+        case ("GET", _, _) where route.contains("/workbench/color"):
+            // /workbench/color?name=<bancada>&color=<cor> — a paleta (ADR-086);
+            // ?show=1 abre a grade na bancada ativa, como o clique na bolinha.
+            let query = Self.query(in: route)
+            if query["show"] == "1" {
+                DispatchQueue.main.async { AppControl.showPalette?() }
+                respond(fd, status: "200 OK", json: ["ok": AppControl.showPalette != nil])
+                return
+            }
+            let payload = DispatchQueue.main.sync {
+                AppControl.recolorWorkbench?(query["name"] ?? "", query["color"] ?? "")
+            }
+            let ok = payload?["ok"] as? Bool ?? false
+            respond(fd, status: ok ? "200 OK" : "400 Bad Request",
+                    json: payload ?? ["ok": false, "error": "app sem bancadas"])
+
         case ("GET", _, _) where route.contains("/tabs"):
             // /tabs[?close=<bancada>][?move=<bancada>&to=<n>] — as bancadas
             // abertas, na ordem da faixa, com os badges; `close` fecha a aba sem

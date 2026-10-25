@@ -98,7 +98,7 @@ final class ViewToolbar: NSView {
     /// `fullSizeContentView`, os botões da janela ficam sempre em cima dela — o
     /// título nasce depois deles.
     private static let titleInset: CGFloat = 82
-    private static let swatchSide: CGFloat = 10
+    private static let swatchSide: CGFloat = 16
 
     private var buttons: [ViewMode: ModeButton] = [:]
     /// Fundo da dupla de modos. Um trilho atrás dos dois, como abas: sem ele os
@@ -107,9 +107,12 @@ final class ViewToolbar: NSView {
     private let pill = NSView()
     private let hint = NSTextField(labelWithString: "")
     private let title = NSTextField(labelWithString: "")
-    /// A cor da bancada, a mesma da sombra do canvas (ADR-086).
-    private let swatch = NSView()
+    /// A cor da bancada, a mesma da sombra do canvas (ADR-086). Clique abre a
+    /// paleta.
+    private let swatch = HandView()
     private var path = ""
+    private var color: WorkbenchColor?
+    var onPickColor: ((WorkbenchColor) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -137,9 +140,12 @@ final class ViewToolbar: NSView {
 
         swatch.wantsLayer = true
         swatch.layer?.cornerRadius = Self.swatchSide / 2
+        // Aro claro: sem ele, as cores escuras da paleta somem no fundo da barra.
+        swatch.layer?.borderWidth = 1.5
+        swatch.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.18).cgColor
+        swatch.toolTip = "Cor da bancada"
         swatch.isHidden = true
         addSubview(swatch)
-
 
         hint.font = .systemFont(ofSize: 10)
         hint.textColor = NSColor(calibratedWhite: 1, alpha: 0.35)
@@ -151,6 +157,7 @@ final class ViewToolbar: NSView {
     /// Que bancada a barra está anunciando.
     func setWorkbench(name: String, path: String, color: WorkbenchColor?) {
         title.stringValue = name
+        self.color = color
         swatch.isHidden = color == nil
         swatch.layer?.backgroundColor = color?.nsColor.cgColor
         self.path = path
@@ -192,7 +199,7 @@ final class ViewToolbar: NSView {
         let side = Self.swatchSide
         swatch.frame = NSRect(x: Self.titleInset, y: ((linha - side) / 2).rounded(),
                               width: side, height: side)
-        let tituloX = Self.titleInset + (swatch.isHidden ? 0 : side + 8)
+        let tituloX = Self.titleInset + (swatch.isHidden ? 0 : side + 10)
         let esquerda = max(0, pill.frame.minX - tituloX - margem)
         // Sozinho: o cronômetro foi para o canvas e o chat, junto do custo.
         title.frame = NSRect(x: tituloX, y: ((linha - 20) / 2).rounded(),
@@ -220,6 +227,11 @@ final class ViewToolbar: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 
     override func mouseDown(with event: NSEvent) {
+        // A bolinha não é controle; o clique nela chega aqui, à barra.
+        if !swatch.isHidden, swatch.frame.insetBy(dx: -4, dy: -4).contains(convert(event.locationInWindow, from: nil)) {
+            showPalette()
+            return
+        }
         guard event.clickCount == 2 else {
             // `performDrag` roda o laço de arrasto do próprio AppKit — com snap às
             // bordas e a outros monitores, que um `setFrameOrigin` à mão não tem.
@@ -235,6 +247,11 @@ final class ViewToolbar: NSView {
         }
     }
 
+
+    func showPalette() {
+        WorkbenchColorPalette.show(current: color, relativeTo: swatch.bounds, of: swatch,
+                                   edge: .minY) { [weak self] in self?.onPickColor?($0) }
+    }
 
     /// Rótulo é texto, não botão: sobre o nome e o cronômetro da bancada o clique tem
     /// de continuar sendo clique na barra. `NSTextField` é `NSControl` e responde

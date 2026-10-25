@@ -21,7 +21,8 @@ final class StopReportTests: XCTestCase {
 
         let withShell = StopReport(query: ["bg": "26", "bgw": "25"])
         XCTAssertEqual(withShell.background, 1)
-        XCTAssertEqual(StopOutcome.decide(marker: .ok, background: withShell.background,
+        // Um shell de fundo de verdade pesa quando o agente não disse nada.
+        XCTAssertEqual(StopOutcome.decide(marker: nil, background: withShell.background,
                                           awaitingPeers: false), .background)
 
         XCTAssertEqual(StopReport(query: ["bg": "2"]).background, 2, "gancho antigo, sem bgw")
@@ -41,11 +42,54 @@ final class StopReportTests: XCTestCase {
         XCTAssertEqual(StopOutcome.decide(marker: nil, background: 3, awaitingPeers: true), .awaiting)
     }
 
-    // O payload vence o marcador nos dois sentidos.
-    func testBackgroundCountBeatsMarker() {
-        XCTAssertEqual(StopOutcome.decide(marker: .ok, background: 1, awaitingPeers: false), .background)
+    // `[[ED:wait]]` sem nada rodando é engano do modelo; sem marcador, a
+    // contagem do CLI decide.
+    func testBackgroundCountDecidesWaitAndSilence() {
         XCTAssertEqual(StopOutcome.decide(marker: .wait, background: 0, awaitingPeers: false), .finished)
+        XCTAssertEqual(StopOutcome.decide(marker: .wait, background: 2, awaitingPeers: false), .background)
+        XCTAssertEqual(StopOutcome.decide(marker: nil, background: 1, awaitingPeers: false), .background)
+        XCTAssertEqual(StopOutcome.decide(marker: nil, background: 0, awaitingPeers: false), .finished)
         XCTAssertEqual(StopOutcome.decide(marker: .ask, background: 0, awaitingPeers: false), .asked)
+    }
+
+    // Visto na bancada: um servidor de fundo de pé a sessão inteira ("1 de
+    // fundo" desde a manhã) deixava o card na ampulheta depois de todo
+    // `[[ED:ok]]`, e quem esperava por ele nunca era liberado.
+    func testOkBeatsLongLivedBackground() {
+        XCTAssertEqual(StopOutcome.decide(marker: .ok, background: 1, awaitingPeers: false), .finished)
+        XCTAssertEqual(StopOutcome.decide(marker: .ok, background: 5, awaitingPeers: false), .finished)
+        // Mas quem acionou vizinho continua aguardando, com ok ou sem.
+        XCTAssertEqual(StopOutcome.decide(marker: .ok, background: 1, awaitingPeers: true), .awaiting)
+    }
+
+    func testBackgroundTasksAreDescribedForTheLog() {
+        let report = StopReport(query: ["bg": "2", "bgd": "shell: python3 -m http.server | cron: /loop deploy"])
+        XCTAssertEqual(report.tasks, ["shell: python3 -m http.server", "cron: /loop deploy"])
+        XCTAssertEqual(StopReport(query: ["bg": "0", "bgd": ""]).tasks, [])
+    }
+
+    // A volta de um pedido é resposta, e quem responde não fica aguardando.
+    func testReplyIsRecognizedFromEitherSide() {
+        var asked = PeerWait()      // o que `a` espera
+        var owed = PeerWait()       // o que `b` deve
+        asked.sent(to: "deck/b"); owed.sent(to: "deck/a")
+        XCTAssertTrue(PeerWait.isReply(destinationAwaits: asked, senderOwes: owed,
+                                       sender: "deck/b", destination: "deck/a"))
+
+        // Você falou com `a` no meio: a espera dele foi zerada, mas `b` ainda
+        // deve a volta — e a volta continua sendo resposta. Era o "aguardando
+        // claude" eterno do vizinho que respondeu.
+        asked.clear()
+        XCTAssertTrue(PeerWait.isReply(destinationAwaits: asked, senderOwes: owed,
+                                       sender: "deck/b", destination: "deck/a"))
+
+        // Respondido, a próxima mensagem de `b` para `a` é pedido novo.
+        owed.resolved("deck/a")
+        XCTAssertFalse(PeerWait.isReply(destinationAwaits: asked, senderOwes: owed,
+                                        sender: "deck/b", destination: "deck/a"))
+        // E a quem não pediu nada, nunca é resposta.
+        XCTAssertFalse(PeerWait.isReply(destinationAwaits: PeerWait(), senderOwes: PeerWait(),
+                                        sender: "deck/b", destination: "deck/c"))
     }
 
     // Servidor de dev ou `/loop` de pé a sessão inteira não podem calar a

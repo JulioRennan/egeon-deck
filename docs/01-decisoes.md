@@ -4032,6 +4032,32 @@ em 4 s e saiu da lista antes do `Stop` do planejador; cleber com `sleep 25` em
 background e `[[ED:ok]]` de propósito — `em segundo plano … ok no payload, 1 de
 fundo`, depois `terminou … 0 de fundo` quando o comando acordou o agente.
 
+**Revisão (2026-10-24).** Duas correções, vistas numa bancada com dois
+agentes presos na ampulheta:
+- **`[[ED:ok]]` vence a contagem de fundo.** Servidor de dev, túnel ou
+  `http.server` ficam de pé a sessão inteira e nunca acordam o agente: com
+  "1 de fundo" desde a manhã, todo `ok` virava "em segundo plano", e quem
+  esperava por esse agente não era liberado (só `terminou` libera). O preço é o
+  contrário do caso acima: agente que esquece o `[[ED:wait]]` com trabalho de
+  fundo de verdade mostra "terminou" e volta a "trabalhando" quando acorda. Sem
+  marcador, a contagem continua decidindo; `[[ED:wait]]` sem nada rodando
+  continua sendo "terminou".
+- **A resposta é reconhecida pelos dois lados.** Quem recebe um pedido guarda
+  que deve a volta (`owedReplies`). A lista de quem pediu é zerada quando você
+  fala com ele no meio, e só por ela a resposta do vizinho chegava como pedido
+  novo: quem respondeu ficava "aguardando" o outro para sempre.
+- O gancho manda também o que é cada tarefa de fundo (`bgd`), e o log diz o que
+  segura a ampulheta: `1 de fundo (shell: Start local HTTP server on port 8791)`.
+
+Verificação: `StopReportTests`; no DEV, dez cenários na bancada de
+demonstração — ok simples; `ok` com servidor de fundo (terminou); `wait` com
+`sleep 20` (segundo plano, acorda, terminou); pedido e resposta; você
+interrompe quem pediu e o vizinho responde depois (quem respondeu termina sem
+aguardar); vizinho encerra sem responder (quem pediu é liberado), inclusive com
+servidor de fundo; duas esperas ao mesmo tempo (⏳2 na aba e na lateral);
+`sleep 20` calado em primeiro plano (trabalhando o tempo todo); `ask` com
+servidor de fundo (precisa de você).
+
 ## ADR-068 — Permissão respondida pelo chat, pelo gancho `PermissionRequest`
 
 **Revê o ADR-029** ("pedido de permissão não entra no chat"). O motivo de lá
@@ -4774,4 +4800,21 @@ igual e o nome só se lê quando se para para ler.
   trilho) também: verde ali se confundia com o "terminou" dos badges.
 
 **Fora, por ora.** Ponto da cor na aba, borda do composer no
-chat, trocar a cor à mão.
+chat.
+
+**Revisão (2026-10-25) — a cor se troca à mão.**
+- A bolinha do título cresceu (16pt, com aro claro) e **o clique nela abre a
+  paleta**; na barra lateral, "Cor da bancada…" no menu de contexto abre a
+  mesma grade ao lado da linha. **Grade num popover, não menu**: com 24
+  cores, uma lista de nomes obriga a ler, e o submenu abria ao passar o mouse
+  — a escolha tem de ser um clique de propósito.
+- **Paleta de 24 cores**: os tons 400 do Material, na ordem do círculo
+  cromático, mais as sete de antes (que continuam lendo do disco). O nome
+  aparece embaixo da grade ao passar o mouse; a atual leva um aro.
+- **A escolha automática continua nas sete** (`WorkbenchColor.automatic`), sem
+  laranja, verde e vermelho. Escolhida à mão vale qualquer uma, inclusive
+  repetida — a restrição era contra o app pôr numa bancada uma cor que parece
+  aviso, não contra você.
+- A bolinha de "de pé" na barra lateral foi de 6 para 10pt.
+- `GET /workbench/color?name=<bancada>&color=<cor>` troca de fora (nome do
+  caso ou o rótulo, sem acento nem caixa); `?show=1` abre a grade na ativa.
