@@ -4444,7 +4444,7 @@ do CLI: projeto, depois o seu, depois o embutido.
 - Abre só com `/` no começo da mensagem e até o primeiro espaço
   (`SlashParser`); `/` no meio do texto é caminho de arquivo.
 - Começo do nome vence "contém", e `plugin:` não atrapalha: `/ralph` acha
-  `ralph-loop:ralph-loop`, e `/cancel` acha `ralph-loop:cancel-ralph`. Oito linhas; o resto aparece filtrando.
+  `ralph-loop:ralph-loop`, e `/cancel` acha `ralph-loop:cancel-ralph`. Oito linhas; o resto aparece filtrando (a lista rola desde o ADR-087).
 - Tab ou Enter completa — Tab, que fora da lista alterna o destinatário, com a
   lista aberta é completar, como no terminal.
 - Só para nó de Claude Code: shell e outro CLI não abrem lista.
@@ -4818,3 +4818,55 @@ chat.
 - A bolinha de "de pé" na barra lateral foi de 6 para 10pt.
 - `GET /workbench/color?name=<bancada>&color=<cor>` troca de fora (nome do
   caso ou o rótulo, sem acento nem caixa); `?show=1` abre a grade na ativa.
+
+## ADR-087 — `/` no chat: tudo o que o CLI oferece, não só o que está em disco
+
+**Contexto.** A lista do ADR-079 deixava de fora metade do `/` do terminal: as
+skills que vêm dentro do Claude Code (`/simplify`, `/loop`, `/code-review`,
+`/debug`), as skills e os plugins sincronizados da conta do claude.ai
+(`anthropic-skills:*`, `skills/synced/` e `plugins/synced/`), as skills dos pais
+até a raiz do repositório e quase todos os embutidos — a lista nossa tinha 23,
+o binário tem mais de 90. E mostrava oito linhas: o resto só aparecia filtrando.
+
+**Decisão.** Somar às fontes do ADR-079 mais três, sem chamar o CLI:
+
+- **A `skill_listing` do transcript do nó** — o anexo em que o CLI registra as
+  skills que a sessão carregou de fato, com os nomes finais. É a fonte mais
+  fiel, mas é a lista do MODELO: traz quem tem `user-invocable: false` (a
+  `egeon`) e não traz quem só roda digitada (`disableModelInvocation`).
+- **O binário**, lido junto com o catálogo de modelos e no mesmo cache
+  (`ClaudeCommandRegistry`, ADR-064): os embutidos (objeto com
+  `type:"local"`/`local-jsx`/`prompt`, achado pelo `type:` e não pelo começo,
+  porque a ordem dos campos varia), com os apelidos (`/cost` → `/usage`) e o
+  `isHidden`/`isEnabled:()=>!1`; e as skills do binário (`menuDescription`),
+  das quais só as que rodam só digitadas entram quando há transcript — as
+  outras, se estão ligadas, já vieram pela `skill_listing`. O cache tem versão:
+  leitura que muda relê o binário.
+- **O disco ampliado** — `.claude/` do diretório e de cada pai até a raiz do
+  repositório, subpasta de `commands/` como `pasta:nome`, `SKILL.md` na raiz de
+  plugin, `enabledPlugins` do projeto, instalação de plugin de projeto só quando
+  o projeto é este, e o sincronizado do claude.ai (a geração `~gN` do manifesto).
+
+O que o disco ou o binário marcam como oculto sai também da `skill_listing`. A
+lista nossa de embutidos fica como legenda em português e como reserva enquanto
+o binário não foi lido. A lista mostra dez linhas e **rola** — seta ou roda do
+mouse, com uma barra fina à direita — em vez de cortar.
+
+A lista tem uma **barra de busca** no topo, que soma com o que se digita depois
+da barra na caixa. A caixa só filtra pelo nome e para no primeiro espaço — é o
+comando que vai para o terminal —, então "achar pela descrição" e "várias
+palavras" ficam com a barra: cada palavra tem de aparecer no nome, num apelido
+ou na descrição, sem caixa nem acento, e quem casa pelo nome vem antes. O
+teclado continua na caixa; a barra pega o foco no clique ou no ⌘F, setas e
+Enter/Tab funcionam nela como na caixa, e Esc devolve o teclado à caixa. Busca
+sem resultado deixa a lista aberta, dizendo que não achou — sumir levaria a
+barra junto. `GET /chat?target=<bancada>&search=<texto>` escreve nela por fora.
+
+Fica de fora o prompt de servidor MCP (`/mcp__servidor__prompt`): só existe com
+o servidor conectado, e conectar não é papel da lista.
+
+**Verificação.** `SlashCommandTests` (binário falso com os formatos achados,
+`skill_listing` com `isInitial` e acréscimo, catálogo com sincronizados, pais do
+repositório, oculto no disco e escolha de instalação). Com os dados reais
+(`~/.claude-personal`, Claude Code 2.1.310): 153 comandos, que batem com a
+`skill_listing` da sessão mais os embutidos; leitura em 8 ms.

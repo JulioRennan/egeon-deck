@@ -175,6 +175,10 @@ enum AppControl {
     /// build (ADR-003).
     static var chatExpandStep: ((_ workbench: String, _ blockId: String) -> Void)?
 
+    /// Escreve na barra de busca da lista de `/` aberta — digitar nela por
+    /// fora esbarra na mesma Acessibilidade.
+    static var chatSlashSearch: ((_ workbench: String, _ text: String) -> Void)?
+
     /// Escreve na caixa do chat, sem enviar ou enviando, e devolve o estado.
     /// Tecla sintética exige Acessibilidade, que a assinatura ad-hoc perde a
     /// cada build (ADR-003) — sem esta rota o composer não se verifica de fora.

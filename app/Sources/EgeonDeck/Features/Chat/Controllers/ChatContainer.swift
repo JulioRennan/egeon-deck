@@ -209,6 +209,19 @@ final class ChatContainer: NSView {
         composer.popupCommand = { [weak self] selector in
             self?.handlePopupCommand(selector) ?? false
         }
+        popup.onSearch = { [weak self] _ in
+            guard let self, self.popupMode == .slash else { return }
+            self.slashChanged(self.slashQuery)
+        }
+        popup.onSearchCommand = { [weak self] selector in
+            guard let self else { return false }
+            // Esc na barra devolve o teclado à caixa; o segundo, lá, fecha.
+            if selector == #selector(NSResponder.cancelOperation(_:)) {
+                self.composer.focus()
+                return true
+            }
+            return self.handlePopupCommand(selector)
+        }
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
         addSubview(composer)
 
@@ -707,7 +720,9 @@ final class ChatContainer: NSView {
         let all = participants?() ?? []
         let popupInfo: [String: Any] = popupMode == .none ? ["mode": "none"] : [
             "mode": popupMode == .mention ? "mention" : popupMode == .slash ? "slash" : "switcher",
-            "items": popup.items.map(\.name)
+            "items": popup.items.map(\.name),
+            "search": popup.searchText,
+            "searchFocused": popup.searchHasFocus
         ]
         return [
             "focus": focusedId ?? "",
@@ -789,7 +804,11 @@ final class ChatContainer: NSView {
     }
 
     private func closePopup() {
-        if popupMode == .slash { slashCatalog = nil }
+        if popupMode == .slash {
+            slashCatalog = nil
+            if popup.searchHasFocus { composer.focus() }
+            popup.clearSearch()
+        }
         popupMode = .none
         popup.isHidden = true
     }
@@ -839,41 +858,70 @@ final class ChatContainer: NSView {
     /// Lida do disco quando a lista abre, e guardada enquanto ela fica aberta:
     /// filtrar a cada tecla não precisa reler as skills.
     private var slashCatalog: [SlashCommand]?
-    /// Quantas linhas a lista mostra — o resto aparece filtrando.
-    private static let slashRows = 8
+    /// Quantas linhas a lista mostra de uma vez — o resto rola, por seta ou
+    /// roda do mouse.
+    private static let slashRows = 10
+    /// O que vem depois da barra na caixa — a barra de busca refiltra com ele.
+    private var slashQuery: String?
 
     private func slashChanged(_ query: String?) {
+        slashQuery = query
         guard let query, let target = composer.target else {
             slashCatalog = nil
             if popupMode == .slash { closePopup() }
             return
         }
+        if popupMode != .slash { popup.clearSearch() }
         if slashCatalog == nil { slashCatalog = slashCommands?(target) ?? [] }
-        let found = SlashCommand.matching(slashCatalog ?? [], query: query)
-        guard !found.isEmpty else {
+        let search = popup.searchText.trimmingCharacters(in: .whitespaces)
+        let found = SlashCommand.searching(SlashCommand.matching(slashCatalog ?? [], query: query), text: search)
+        // Sem resultado pela caixa, a lista some, como no terminal; pela barra
+        // ela fica, dizendo que não achou — sumir levaria a barra junto.
+        guard !found.isEmpty || !search.isEmpty else {
             if popupMode == .slash { closePopup() }
             return
         }
         popupMode = .slash
-        let shown = Array(found.prefix(Self.slashRows))
-        let items = shown.map { command -> ChatListPopup.Item in
+        let items = found.map { command -> ChatListPopup.Item in
             let (glyph, color): (String, NSColor) = switch command.source {
             case .builtin: ("/", NSColor(calibratedWhite: 0.6, alpha: 1))
+            case .bundled: ("✦", .systemOrange)
             case .user: ("★", .systemYellow)
             case .project: ("◆", .systemTeal)
             case .plugin: ("⬢", .systemPurple)
             }
-            return .init(name: command.name, detail: command.detail, color: color, glyph: glyph)
+            let name = command.aliases.isEmpty ? command.name
+                : "\(command.name) (\(command.aliases.joined(separator: ", ")))"
+            return .init(name: name, detail: command.detail, color: color, glyph: glyph)
         }
-        let more = found.count > shown.count ? " · \(found.count) no total, digite para filtrar" : ""
-        popup.show(items, title: "COMANDOS DE \(target.id.uppercased()) — Tab ou Enter completa\(more)")
+        let more = found.count > Self.slashRows ? " · \(found.count), role ou busque" : ""
+        let title = found.isEmpty ? "NENHUM COMANDO COM “\(search.uppercased())”"
+            : "COMANDOS DE \(target.id.uppercased()) — Tab ou Enter completa\(more)"
+        popup.show(items, title: title, visibleRows: Self.slashRows, searchable: true)
         popup.onChoose = { [weak self] index in
-            guard index < shown.count else { return }
-            self?.composer.insertSlash(shown[index].name)
-            self?.closePopup()
+            guard let self, index < found.count else { return }
+            self.composer.insertSlash(found[index].name)
+            self.closePopup()
+            self.composer.focus()
         }
         popup.isHidden = false
         needsLayout = true
+    }
+
+    /// ⌘F com a lista de comandos aberta vai para a barra de busca dela.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if popupMode == .slash, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "f" {
+            popup.focusSearch()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    /// Escreve na barra de busca da lista aberta, como a rota `/chat?search=`.
+    func searchSlash(_ text: String) {
+        guard popupMode == .slash else { return }
+        popup.setSearch(text)
     }
 
     private func handlePopupCommand(_ selector: Selector) -> Bool {

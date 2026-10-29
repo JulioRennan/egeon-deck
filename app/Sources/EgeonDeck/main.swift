@@ -470,6 +470,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return ["ok": ok, "tree": AppControl.workspacesSnapshot?() ?? [:]]
         }
+        AppControl.chatSlashSearch = { [weak self] name, text in
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
+            else { return }
+            self.shell(at: index)?.chat.searchSlash(text)
+        }
         AppControl.chatExpandStep = { [weak self] name, blockId in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return }
@@ -3007,7 +3012,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   let node = config.nodes.first(where: { $0.id == participant.id }),
                   let profile = node.agent.flatMap({ self.agents[$0] }) else { return [] }
             return ClaudeSlashCatalog.commands(profile: profile, nodeConfig: node.config,
-                                               cwd: config.directory(for: node)) ?? []
+                                               cwd: config.directory(for: node),
+                                               transcript: node.transcript) ?? []
         }
         chat.historyFile = { [weak self] in
             guard let self, self.config(ofID: id) != nil else { return nil }

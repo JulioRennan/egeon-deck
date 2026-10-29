@@ -16,6 +16,7 @@ citados entre parênteses.
 - A cor da bancada se troca à mão: o clique na bolinha ao lado do nome (agora maior) ou "Cor da bancada…" no menu de contexto da barra lateral abre uma paleta de 24 cores em grade, com o nome de cada uma ao passar o mouse; a bolinha de "de pé" da barra lateral também cresceu (ADR-086).
 - A última versão fica sempre no mesmo endereço, `releases/latest/download/EgeonDeck.zip`: toda release passa a trazer esse zip de nome fixo, além dos dois com a versão no nome.
 - "Sobre o Egeon Deck", no topo do menu do app: mostra a versão instalada e o commit de que ela foi construída.
+- O `/` no chat lista tudo o que o Claude Code oferece no terminal: os comandos embutidos (mais de 90, com os apelidos — `/cost` acha o `/usage`), as skills que vêm com ele (`/simplify`, `/loop`, `/code-review`, `/debug`…), as skills e os plugins da sua conta do claude.ai (`anthropic-skills:*`) e as skills das pastas acima do terminal até a raiz do repositório. A lista rola com a seta ou a roda do mouse, em vez de parar em oito linhas, e tem uma barra de busca no topo (clique ou ⌘F) que procura no nome e na descrição, com várias palavras em qualquer ordem — "pdf" acha também o que só cita PDF na descrição (ADR-087).
 
 ### Alterado
 

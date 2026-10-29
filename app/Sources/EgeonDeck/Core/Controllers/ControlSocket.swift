@@ -652,12 +652,14 @@ final class ControlSocket {
             // /chat?target=ws[&scroll=top|bottom][&focus=id][&expand=bloco] — o
             // modo chat da bancada, como dados; `scroll` rola a thread, `focus`
             // escolhe o participante antes de responder e `expand` abre ou
-            // recolhe um passo pelo id que o retrato lista em `blocks`.
+            // recolhe um passo pelo id que o retrato lista em `blocks`;
+            // `search` escreve na barra de busca da lista de `/` aberta.
             let query = Self.query(in: route)
             let target = query["target"] ?? ""
             let payload = DispatchQueue.main.sync {
                 if let id = query["focus"] { AppControl.chatFocus?(target, id) }
                 if let id = query["expand"] { AppControl.chatExpandStep?(target, id) }
+                if let text = query["search"] { AppControl.chatSlashSearch?(target, text) }
                 if let edge = query["scroll"] { AppControl.chatScroll?(target, edge) }
                 return AppControl.chatState?(target) ?? nil
             }
