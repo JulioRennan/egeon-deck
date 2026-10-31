@@ -96,7 +96,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key>      <string>$BUNDLE_ID</string>
   <key>CFBundleExecutable</key>      <string>EgeonDeck</string>
   <key>CFBundlePackageType</key>     <string>APPL</string>
-  <key>CFBundleShortVersionString</key> <string>1.7.0</string>
+  <key>CFBundleShortVersionString</key> <string>1.7.1</string>
   <key>CFBundleVersion</key>         <string>$BUILD</string>
   <!-- Sem isto o que o AppKit desenha sozinho (o "Version" do painel Sobre)
        sai em inglês: o app não tem .lproj, e vale a região de desenvolvimento. -->
