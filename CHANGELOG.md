@@ -9,6 +9,8 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-30
+
 ### Adicionado
 
 - O app avisa ao abrir quando há versão nova e atualiza com um clique; o menu ganhou "Procurar atualizações…" e "Atualizar automaticamente", que baixa sozinho e troca o app só quando você fechar, para nunca derrubar agentes. Cada versão vem com assinatura própria, conferida antes de instalar (ADR-089).
@@ -296,7 +298,8 @@ Primeira versão para passar adiante (tag `v0`).
 - Aviso de "terminou" e "precisa de você" vindo do gancho do CLI.
 - Socket de controle em `~/.egeon/sock`.
 
-[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.3.0...v1.4.0
