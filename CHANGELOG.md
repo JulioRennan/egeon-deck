@@ -9,6 +9,10 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Sem nenhuma bancada, o aviso "Nenhuma bancada" não fica mais escrito por cima do workspace na barra lateral: aparece abaixo dele.
+
 ## [1.7.0] - 2026-10-30
 
 ### Adicionado

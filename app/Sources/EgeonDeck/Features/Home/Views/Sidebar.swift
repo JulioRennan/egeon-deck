@@ -1207,7 +1207,6 @@ final class Sidebar: NSView {
         }
         scroll.frame = NSRect(x: 0, y: currentHeaderHeight, width: bounds.width,
                               height: max(0, bounds.height - currentHeaderHeight))
-        emptyLabel.frame = NSRect(x: 16, y: 8, width: bounds.width - 32, height: 56)
 
         treeLayer.isHidden = tab != .all
         activeLayer.isHidden = tab != .active
@@ -1216,7 +1215,11 @@ final class Sidebar: NSView {
         case .all:    y = isCompact ? layoutRail() : layoutCards()
         case .active: y = layoutActive()
         }
-        list.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(y + 8, scroll.bounds.height))
+        // Depois do que a aba desenhou, e não num ponto fixo: sem bancada nenhuma
+        // os workspaces continuam na aba Todas, e o aviso cairia em cima deles.
+        emptyLabel.frame = NSRect(x: 16, y: y + 8, width: bounds.width - 32, height: 56)
+        let bottom = emptyLabel.isHidden ? y : emptyLabel.frame.maxY
+        list.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(bottom + 8, scroll.bounds.height))
         let resized = treeLayer.frame != list.bounds
         treeLayer.frame = list.bounds
         activeLayer.frame = list.bounds
