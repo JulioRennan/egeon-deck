@@ -179,6 +179,20 @@ enum AppControl {
     /// fora esbarra na mesma Acessibilidade.
     static var chatSlashSearch: ((_ workbench: String, _ text: String) -> Void)?
 
+    /// Mexe numa fila de prompts por fora e devolve como ela ficou — os
+    /// cliques do card exigem Acessibilidade, como tudo o mais.
+    /// As tarefas das filas ligadas a um agente (`egeon tasks`).
+    static var agentTasks: ((_ address: String) -> [[String: Any]])?
+
+    /// O agente marca, pergunta ou comenta uma tarefa (`egeon task`). Devolve
+    /// o erro, ou nil.
+    static var agentTask: ((_ address: String, _ action: String, _ task: String, _ text: String) -> String?)?
+
+    /// Procura e instala atualização por fora, e devolve o estado.
+    static var updateControl: ((_ query: [String: String]) -> [String: Any])?
+
+    static var queueControl: ((_ address: String, _ query: [String: String]) -> [String: Any]?)?
+
     /// Escreve na caixa do chat, sem enviar ou enviando, e devolve o estado.
     /// Tecla sintética exige Acessibilidade, que a assinatura ad-hoc perde a
     /// cada build (ADR-003) — sem esta rota o composer não se verifica de fora.

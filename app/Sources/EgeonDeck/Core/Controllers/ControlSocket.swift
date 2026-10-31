@@ -459,6 +459,33 @@ final class ControlSocket {
             }
             respond(fd, status: outcome.status, json: outcome.json)
 
+        case ("GET", _, _) where route.hasPrefix("/tasks"):
+            // /tasks — as tarefas das filas ligadas a quem chama (`egeon tasks`).
+            let outcome = DispatchQueue.main.sync { () -> (String, [String: Any]) in
+                guard let origin = Dispatcher.shared.target(callingOn: fd) else {
+                    return ("403 Forbidden", ["ok": false, "error": "esta conexão não veio de um terminal"])
+                }
+                return ("200 OK", ["ok": true, "tasks": AppControl.agentTasks?(origin.address) ?? []])
+            }
+            respond(fd, status: outcome.0, json: outcome.1)
+
+        case ("POST", _, _) where route.hasPrefix("/task?"):
+            // /task?action=done|ask|note&id=<tarefa> — corpo é o texto. Quem
+            // mexe sai do processo, como no `/trace`: a tarefa diz quem marcou.
+            let query = Self.query(in: route)
+            let text = String(decoding: body, as: UTF8.self)
+            let outcome = DispatchQueue.main.sync { () -> (String, [String: Any]) in
+                guard let origin = Dispatcher.shared.target(callingOn: fd) else {
+                    return ("403 Forbidden", ["ok": false, "error": "esta conexão não veio de um terminal"])
+                }
+                if let error = AppControl.agentTask?(origin.address, query["action"] ?? "",
+                                                     query["id"] ?? "", text) {
+                    return ("400 Bad Request", ["ok": false, "error": error])
+                }
+                return ("200 OK", ["ok": true])
+            }
+            respond(fd, status: outcome.0, json: outcome.1)
+
         case ("POST", _, _) where route.contains("/workbench/clear"):
             // /workbench/clear?target=<bancada> — o botão de limpar, sem o
             // diálogo: `/clear` em todo agente e a conversa arquivada (ADR-037).
@@ -665,6 +692,26 @@ final class ControlSocket {
             }
             respond(fd, status: payload == nil ? "404 Not Found" : "200 OK",
                     json: payload ?? ["ok": false, "error": "bancada desconhecida '\(target)'"])
+
+        case ("GET", _, _) where route.hasPrefix("/update"):
+            // /update[?check=1][&feed=url, só no dev][&prompt=1][&install=1][&auto=0|1]
+            // — a atualização do app por fora, e o estado dela.
+            let query = Self.query(in: route)
+            let payload = DispatchQueue.main.sync { AppControl.updateControl?(query) ?? [:] }
+            respond(fd, status: "200 OK", json: payload)
+
+        case ("GET", _, _) where route.contains("/queue"):
+            // /queue?target=ws/id[&add=título[&notes=][&image=caminho]]
+            // [&send=next|<item>][&done=<item>][&open=<item>][&remove=<item>]
+            // [&reply=<item>&text=][&auto=0|1][&to=<nó>]
+            // [&clear=done]
+            // — a fila de prompts por fora,
+            // e como ela ficou.
+            let query = Self.query(in: route)
+            let target = query["target"] ?? ""
+            let payload = DispatchQueue.main.sync { AppControl.queueControl?(target, query) ?? nil }
+            respond(fd, status: payload == nil ? "404 Not Found" : "200 OK",
+                    json: payload ?? ["ok": false, "error": "fila desconhecida '\(target)'"])
 
         case ("GET", _, _) where route.contains("/peek"):
             // /peek?target=ws/id[&lines=n] — mostra o que o terminal realmente

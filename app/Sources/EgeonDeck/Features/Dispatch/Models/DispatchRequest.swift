@@ -11,6 +11,11 @@ struct DispatchRequest: Codable {
     /// Sobrepõe o modo do perfil: "bracketed-paste" ou "plain".
     /// Existe porque shell e TUI de agente reagem diferente ao mesmo texto.
     var inject: String?
+    /// Imagens que vão anexadas, em caminho absoluto. Cada uma é colada sozinha
+    /// antes do texto: o Claude Code só troca caminho de imagem por anexo
+    /// (`[Image #1]`) quando o paste é SÓ o caminho — no meio do texto ele
+    /// fica texto, e o agente nem a vê.
+    var images: [String]?
 
     /// Quem mandou, quando quem mandou é outro terminal. Ausente = veio de você,
     /// pelo chat ou pelo socket.

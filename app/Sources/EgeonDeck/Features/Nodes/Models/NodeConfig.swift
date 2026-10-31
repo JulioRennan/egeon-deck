@@ -5,6 +5,7 @@ enum NodeKind: String, Codable {
     case shell    // terminal comum
     case agent    // terminal com IA
     case web      // navegador no canvas, com perfil próprio
+    case queue    // fila de prompts, mandados um a um ao agente ligado
 }
 
 struct NodeConfig: Codable {

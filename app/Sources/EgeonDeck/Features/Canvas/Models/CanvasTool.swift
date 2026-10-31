@@ -6,6 +6,7 @@ enum CanvasTool: String, CaseIterable {
     case cursor
     case terminal
     case web
+    case queue
     /// Ligar um terminal a outro: arrastar da origem até o destino.
 
     var symbols: [String] {
@@ -15,6 +16,7 @@ enum CanvasTool: String, CaseIterable {
         case .cursor:   return ["cursorarrow", "arrow.up.left"]
         case .terminal: return ["apple.terminal", "terminal", "chevron.left.forwardslash.chevron.right"]
         case .web:      return ["globe", "network"]
+        case .queue:    return ["checklist", "list.bullet.rectangle", "list.bullet"]
         }
     }
 
@@ -23,6 +25,7 @@ enum CanvasTool: String, CaseIterable {
         case .cursor:   return "Cursor — arrastar o canvas, mover nós (⌘V)"
         case .terminal: return "Terminal — clique ou arraste no canvas (⌘T)"
         case .web:      return "Web — clique ou arraste no canvas (⌘W)"
+        case .queue:    return "Fila de prompts — anote pedidos com print e mande um a um ao agente ligado"
         }
     }
 
@@ -32,6 +35,7 @@ enum CanvasTool: String, CaseIterable {
         case .cursor: return nil
         case .terminal:      return .shell
         case .web:           return .web
+        case .queue:         return .queue
         }
     }
 
@@ -42,9 +46,13 @@ enum CanvasTool: String, CaseIterable {
         case .cursor: return ""
         case .terminal:      return "sh"
         case .web:           return "web"
+        case .queue:         return "fila"
         }
     }
 
     /// Tamanho de quem só clica, sem arrastar.
-    var defaultNodeSize: NSSize { NSSize(width: 720, height: 460) }
+    /// A fila é uma coluna de anotações, não uma tela de terminal.
+    var defaultNodeSize: NSSize {
+        self == .queue ? NSSize(width: 540, height: 700) : NSSize(width: 720, height: 460)
+    }
 }

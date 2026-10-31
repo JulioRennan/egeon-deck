@@ -8,10 +8,11 @@
 # erro que só aparece na máquina de quem baixou. Serve também para publicar
 # tags antigas que ficaram sem release.
 #
-# Sobe três arquivos: os dois com a versão no nome (histórico) e o
+# Sobe quatro arquivos: os dois com a versão no nome (histórico), o
 # `EgeonDeck.zip`, de nome fixo — é o que `releases/latest/download/EgeonDeck.zip`
-# entrega, e por onde o botão do site baixa sempre a última. Release que já
-# existe tem os arquivos substituídos e o texto atualizado.
+# entrega, e por onde o botão do site baixa sempre a última — e a assinatura dele,
+# sem a qual o atualizador do app recusa a versão (ADR-089). Release que já existe
+# tem os arquivos substituídos e o texto atualizado.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -22,6 +23,8 @@ TITULO="${2:-}"
 
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { echo "erro: a tag $TAG não existe" >&2; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "erro: gh sem login (gh auth login)" >&2; exit 1; }
+# Antes do build: descobrir que falta a chave depois de compilar custa minutos.
+swift tools/release-key.swift public >/dev/null || { echo "erro: sem a chave de release no Keychain (tools/release-key.swift)" >&2; exit 1; }
 
 # O texto da versão no CHANGELOG da tag: da seção [X.Y.Z] até a próxima.
 NOTAS="$(mktemp)"
@@ -39,7 +42,8 @@ git worktree add --detach "$OBRA" "$TAG" >/dev/null
 SAIDA="$OBRA/app/dist"
 # Tag antiga não tem o `cp` do nome fixo no dist.sh dela.
 cp "$SAIDA/EgeonDeck-$TAG-universal.zip" "$SAIDA/EgeonDeck.zip"
-ARQUIVOS=("$SAIDA/EgeonDeck-$TAG-universal.zip" "$SAIDA/EgeonDeck-$TAG-arm.zip" "$SAIDA/EgeonDeck.zip")
+swift tools/release-key.swift sign "$SAIDA/EgeonDeck.zip" >/dev/null
+ARQUIVOS=("$SAIDA/EgeonDeck-$TAG-universal.zip" "$SAIDA/EgeonDeck-$TAG-arm.zip" "$SAIDA/EgeonDeck.zip" "$SAIDA/EgeonDeck.zip.sig")
 
 if gh release view "$TAG" >/dev/null 2>&1; then
   gh release upload "$TAG" "${ARQUIVOS[@]}" --clobber

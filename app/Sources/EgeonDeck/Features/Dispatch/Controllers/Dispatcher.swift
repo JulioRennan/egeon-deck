@@ -18,7 +18,7 @@ final class Target {
 
     /// `notice` é o aviso que vai antes de um comando com `/`: entra na fila,
     /// mas não conta como mensagem do remetente — comando e aviso são um envio só.
-    private var queue: [(prompt: String, mode: String?, chain: [String], notice: Bool)] = []
+    private var queue: [(prompt: String, mode: String?, chain: [String], notice: Bool, images: [String])] = []
 
     /// Por onde passou a mensagem que este terminal está atendendo agora.
     ///
@@ -35,9 +35,13 @@ final class Target {
     /// A TUI escreveu alguma coisa? Antes disso não existe leitor de stdin.
     private var sawOutput = false
     /// Última entrega aguardando confirmação.
-    private var unconfirmed: (prompt: String, mode: String?, sentAt: Date, attempts: Int)?
+    private var unconfirmed: (prompt: String, mode: String?, images: [String], sentAt: Date, attempts: Int)?
     /// Texto já colado, Enter ainda não enviado — ver `flushSubmit`.
     private var pendingSubmit: (config: InjectConfig, pastedAt: Date)?
+    /// O que ainda falta colar antes do Enter: com imagem, a entrega é uma
+    /// colagem por imagem e a do texto por último, cada uma depois de a TUI
+    /// assentar a anterior — juntas, viram um paste só e a imagem não anexa.
+    private var pendingPastes: [String] = []
 
     // MARK: Estado visível (carregando / precisa de você)
 
@@ -225,8 +229,9 @@ final class Target {
         return Array(visible.suffix(lines))
     }
 
-    func enqueue(_ prompt: String, mode: String? = nil, chain: [String] = [], notice: Bool = false) {
-        queue.append((prompt, mode, chain, notice))
+    func enqueue(_ prompt: String, mode: String? = nil, chain: [String] = [], notice: Bool = false,
+                 images: [String] = []) {
+        queue.append((prompt, mode, chain, notice, images))
         Log.write("dispatch[\(address)]: enfileirado (\(queue.count) na fila)")
     }
 
@@ -871,8 +876,8 @@ final class Target {
         // A cadeia da mensagem entregue passa a ser a deste terminal: é dela que
         // sai a contagem se ele acionar alguém em seguida.
         chain = item.chain
-        inject(item.prompt, mode: item.mode, into: view)
-        unconfirmed = (item.prompt, item.mode, Date(), 1)
+        inject(item.prompt, mode: item.mode, images: item.images, into: view)
+        unconfirmed = (item.prompt, item.mode, item.images, Date(), 1)
         Log.write("dispatch[\(address)]: entregue (\(queue.count) restando)")
     }
 
@@ -904,13 +909,13 @@ final class Target {
         pending.attempts += 1
         pending.sentAt = Date()
         unconfirmed = pending
-        inject(pending.prompt, mode: pending.mode, into: view)
+        inject(pending.prompt, mode: pending.mode, images: pending.images, into: view)
         Log.write("dispatch[\(address)]: sem reação, reenviando "
                   + "(tentativa \(pending.attempts))")
     }
 
     /// `TerminalView.send` exige main thread — ele afirma isso em debug.
-    private func inject(_ prompt: String, mode: String?, into view: MBTerminalView) {
+    private func inject(_ prompt: String, mode: String?, images: [String] = [], into view: MBTerminalView) {
         // Terminal sem perfil é shell: `plain`. Bracketed paste só faz sentido
         // em TUI que ativa o modo; o zsh daqui devolve os marcadores literais
         // (`^[[200~`) e o comando nunca executa.
@@ -919,9 +924,13 @@ final class Target {
         if config.mode == "bracketed-paste" {
             // Sem bracketed paste, cada \n do prompt vira um submit separado
             // na TUI e a mensagem chega picada (ADR-007).
-            view.send(txt: "\u{1b}[200~" + prompt + "\u{1b}[201~")
+            var pieces = images + (prompt.isEmpty ? [] : [prompt])
+            if pieces.isEmpty { pieces = [prompt] }
+            view.send(txt: Self.paste(pieces.removeFirst()))
+            pendingPastes = pieces
         } else {
-            view.send(txt: prompt)
+            // Sem paste não há anexo: o caminho vai no texto, e o agente abre.
+            view.send(txt: (images + (prompt.isEmpty ? [] : [prompt])).joined(separator: " "))
         }
 
         // O Enter não sai junto nem em um prazo fixo: depois de receber o texto a
@@ -950,11 +959,18 @@ final class Target {
             return
         }
 
+        if !pendingPastes.isEmpty {
+            view.send(txt: Self.paste(pendingPastes.removeFirst()))
+            pendingSubmit = (pending.config, Date())
+            return
+        }
         view.send(txt: pending.config.submit)
         pendingSubmit = nil
         Log.write(String(format: "dispatch[%@]: enter enviado %.0fms após o texto",
                          address, sincePaste * 1000))
     }
+
+    private static func paste(_ text: String) -> String { "\u{1b}[200~" + text + "\u{1b}[201~" }
 
     /// Quanto tempo de pty quieto indica que a TUI terminou de renderizar.
     private static let quietBeforeSubmit: TimeInterval = 0.3
@@ -1098,8 +1114,11 @@ final class Dispatcher {
 
         // Não partiu de um terminal: é você, cadeia nova, entrega direto.
         guard let origin else {
-            guard let prompt = request.buildPrompt() else { throw DispatchError.emptyPrompt }
-            destination.enqueue(prompt, mode: request.inject)
+            let images = request.images ?? []
+            guard let prompt = request.buildPrompt() ?? (images.isEmpty ? nil : "") else {
+                throw DispatchError.emptyPrompt
+            }
+            destination.enqueue(prompt, mode: request.inject, images: images)
             return "enfileirado para \(destination.address); \(destination.pending) na fila"
         }
 

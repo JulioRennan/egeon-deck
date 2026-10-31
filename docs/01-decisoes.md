@@ -4870,3 +4870,123 @@ o servidor conectado, e conectar não é papel da lista.
 repositório, oculto no disco e escolha de instalação). Com os dados reais
 (`~/.claude-personal`, Claude Code 2.1.310): 153 comandos, que batem com a
 `skill_listing` da sessão mais os embutidos; leitura em 8 ms.
+
+## ADR-088 — Fila de prompts: um nó para anotar de uma vez e mandar um a um
+
+**Contexto.** Revisando um app, os problemas aparecem em rajada — dez de uma
+vez, cada um com um print —, mas o agente só trabalha bem um pedido por turno.
+Mandar tudo junto vira um turno gigante e mal resolvido; mandar um por um exige
+lembrar o resto e voltar ao terminal a cada fim de turno. O Maestri resolve o
+"anotar" com nó de nota; faltava o "mandar na ordem".
+
+**Decisão.** Um tipo de nó novo, `queue` (Fila de prompts), criado pela barra
+do canvas:
+
+- **Lista que expande, como no Things — não chat.** A primeira versão tinha
+  caixa de escrever embaixo e itens como bolhas, e parecia chat; foi recusada.
+  Cada tarefa é uma linha (bolinha de estado + título); o clique abre ali mesmo
+  um cartão com o título editável, as **notas** (texto livre, cresce com o
+  conteúdo) e os prints, e recolhe com Esc ou clique fora — uma aberta por vez.
+  A última linha, "Nova tarefa…", está sempre lá: escrever e dar Enter põe na
+  lista e deixa a linha pronta para a próxima; Enter no título de uma aberta cria
+  outra logo abaixo. Tarefa recolhida em branco some. A bolinha marca e desmarca
+  feita à mão. O prompt é o título e, separadas por uma linha, as notas.
+- **Prints.** ⌘V nas notas cola print (a imagem do pasteboard vira PNG) e
+  arrastar arquivo de imagem também vale (na aberta, ou vira tarefa nova); tudo é copiado para
+  `workbenches/<bancada>/queues/<nó>/` com o `queue.json` ao lado — o
+  `workbenches.json` não guarda item nenhum, e remover o card apaga a pasta.
+- **Destino pela aresta.** A fila tem a porta `+` do terminal; arrastar até o
+  agente cria a ligação, e ela manda para quem está ligado (seletor quando há
+  mais de um). Quem manda é você, não um agente: o envio vai como o do chat
+  (`from: nil`), sem envelope nem guarda de cadeia — a aresta só diz para quem.
+- **Manual e automático.** Cada item tem enviar; a chave "Automático" manda o
+  próximo quando o agente fecha o turno. Fechar o turno é *trabalhou e voltou a
+  ficar parado* (`waiting`/`ready` depois de ver `working`), não o primeiro
+  silêncio; pergunta (`asking`) não fecha — mandar por cima atropelaria a
+  resposta. Entrega que nunca fez o agente trabalhar fecha sozinha em 2 min,
+  para a fila não travar (`QueueRunner`).
+- **Imagem chega como anexo.** O Claude Code só troca caminho de imagem por
+  `[Image #N]` quando o paste é SÓ o caminho; no meio do texto ele fica texto e o
+  agente nem vê a imagem (testado: 0 anexos). O `Dispatcher` ganhou
+  `DispatchRequest.images`: cada imagem é colada sozinha, a seguinte só depois
+  de a TUI assentar a anterior (o mesmo silêncio que já segura o Enter), o texto
+  por último e então o Enter. Em perfil sem bracketed paste os caminhos vão no
+  texto.
+- **Estado da tarefa:** pendente (○), com o agente (◐, com hora e destino),
+  feita (✓). **Arrastar reordena**: na linha recolhida, clique abre e arrasto
+  move — decide o quanto o cursor andou —, e as outras abrem o vão onde ela cai.
+  Com o cartão aberto, clique em qualquer parte dele é escrever (vai para as
+  notas, que têm três linhas de altura mínima), nunca fechar: na primeira versão
+  o clique no vazio do cartão subia até o fundo da lista e recolhia a tarefa no
+  meio da edição. Menu de contexto sobe, desce, volta para pendente e apaga;
+  "tirar o que já foi" limpa a lista.
+
+- **Cada tarefa é uma thread com o agente.** O prompt da tarefa termina com
+  `[ED] tarefa <id curto> da fila <nome>` e os comandos dela, e o `egeon` ganhou
+  `tasks` (as tarefas das filas ligadas a quem chama), `task done <id>` (marca
+  feita), `task ask <id>` (pergunta) e `task note <id>` (comenta) — quem fala é
+  identificado pelo processo, como no `trace`, e só alcança fila ligada a ele.
+  A pergunta entra na thread, a bolinha vira "?" laranja e a fila **não anda**
+  enquanto ela está aberta: o turno fechou por você, não pela tarefa
+  (`QueueRunner`). No cartão, embaixo dos prints, a thread em ordem (quem
+  perguntou, comentou ou marcou, e você) e o campo de responder: resposta a
+  tarefa que já foi vai ao agente como prompt, com o id e o título; comentário
+  em tarefa que ainda não foi segue junto quando ela for. Marcar feita pelo
+  agente vale mais que o fim de turno — este continua só como reserva para quem
+  não marca.
+
+Fica de fora do modo chat: a fila é ferramenta de canvas, e no chat o composer
+já é a caixa de prompt.
+
+**Verificação.** `PromptQueueTests` (destino, ordem, a regra do automático com
+pergunta, morte e entrega perdida, o controller com disco temporário: envio,
+falha, imagem em caminho absoluto e apagada com o item, arestas mudando). No
+DEV, pela rota `GET /queue?target=<bancada>/<nó>[&add=][&image=][&send=next|<id>]
+[&done=][&open=][&remove=][&reply=&text=][&auto=0|1][&to=][&clear=done]`: item com print entregue ao `dev` como
+`[Image #2]` e descrito por ele; no automático, três itens em sequência, o
+terceiro segurado durante um `sleep 6`; foto do card pelo `/shot`. Thread: o
+`claude` do DEV perguntou pela tarefa, o usuário respondeu no card, e ele
+comentou e marcou feita — tudo na thread, com a fila esperando a resposta.
+
+## ADR-089 — Atualização pelo próprio app: avisa ao abrir, e nunca reinicia sozinho
+
+**Contexto.** Quem baixa o app fica na versão daquele dia até lembrar de voltar ao
+site. Atualizar tem duas travas próprias daqui: fechar o app mata os terminais
+(ADR-010), e sem assinatura da Apple nada garante de onde veio o que se baixa.
+
+**Decisão.** Módulo `Update`, feito à mão sobre a release do GitHub, sem Sparkle: o
+Sparkle exigiria embutir framework no bundle que o `make.sh` monta e manter um feed,
+e a release já é o feed.
+
+- **Avisa ao abrir.** Com versão nova, um aviso em folha (não trava os terminais)
+  mostra as novidades, quantos agentes reiniciar encerra e o que o clique autoriza,
+  com "Atualizar e reiniciar", "Depois" e a caixa de atualizar automaticamente. O
+  menu do app tem "Procurar atualizações…", cujo título acompanha o estado, e
+  "Atualizar automaticamente". Consulta ao abrir e a cada 6 h; depois de aberto, só
+  o menu muda (`UpdatePolicy`). Só no estável.
+- **Automático quer dizer: baixa sozinho e troca quando você fechar.** Reiniciar
+  por conta própria derrubaria agentes no meio do trabalho. Desligado por padrão.
+- **Assinatura própria.** Cada `EgeonDeck.zip` sobe com `EgeonDeck.zip.sig`,
+  Ed25519 pelo CryptoKit: a privada fica no Keychain de quem publica
+  (`tools/release-key.swift`, e o `release.sh` recusa sem ela), a pública vai no
+  app. Sem isso, uma conta do GitHub invadida viraria código rodando em toda
+  máquina. Hash publicado no mesmo lugar não protegeria disso.
+- **O que mais se confere antes de trocar** (`UpdateInstaller`): o bundle id, versão
+  maior que a instalada (senão um zip antigo legítimo serviria de downgrade) e a
+  assinatura de código.
+- **A troca é outro processo.** O novo espera ao lado como `<destino>.novo`, sem
+  `.app` no nome para não virar segunda cópia no Spotlight; um script espera o app
+  sair e faz os dois `mv` do `install.sh`, devolvendo o antigo se o segundo falhar,
+  e tira a quarentena (o clique no aviso ou a opção ligada são a autorização). App
+  translocado ou em pasta sem escrita não tenta: diz o que fazer.
+- **Fica de fora:** quem está em versão sem atualizador instala uma vez à mão; não há
+  volta automática se a versão nova não abrir; e, sem certificado estável da Apple,
+  o macOS pode pedir de novo as permissões depois de trocar. A chave perdida obriga a
+  uma nova instalação manual de todos, por isso o `export` para o cofre de senhas.
+
+**Verificação.** `AppUpdateTests`: versões, leitura da release, política, e com
+bundle assinado de verdade o zip adulterado, chave errada, versão antiga, outro app e
+código adulterado recusados; o script real troca, espera o processo sair e não deixa
+sobra. No DEV, com release falsa servida localmente (`GET /update?check=1&feed=`, só
+no dev) e assinada com a chave real: clique em "Atualizar e reiniciar" trocou e
+reabriu; com o automático, baixou sem reiniciar, trocou ao fechar e não reabriu.

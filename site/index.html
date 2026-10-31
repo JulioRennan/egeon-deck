@@ -34,6 +34,7 @@
     <a class="btn" href="https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip">Baixar para Mac</a>
     <a class="btn ghost" href="#instalar">Peça para seu agente instalar</a>
   </div>
+  <p class="meta">Baixou pelo botão? <a href="#liberar">Falta um passo para o macOS abrir o app.</a></p>
   <p class="meta" data-latest hidden></p>
   <p class="meta">macOS · Swift nativo · Claude Code por inteiro; Codex, Gemini e OpenCode como terminal endereçável · grátis e AGPL-3.0</p>
   <figure class="shot hero-shot">
@@ -294,6 +295,8 @@ JSON</pre>
       <ul><li>O app pronto, para Apple Silicon e Intel, macOS 14 ou mais novo.</li><li>Bancadas, agentes e workspaces sem limite.</li></ul>
       <a class="btn" href="https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip">Baixar para Mac</a>
       <p class="meta" data-latest hidden></p>
+      <p class="meta" id="liberar">O app ainda não tem assinatura da Apple, e sem este passo o macOS diz que ele está "danificado", o que não é verdade. Mova o app para Aplicativos e rode uma vez no Terminal:</p>
+<pre class="inline">xattr -dr com.apple.quarantine /Applications/EgeonDeck.app</pre>
     </div>
     <div class="card">
       <h3>Compilar</h3>

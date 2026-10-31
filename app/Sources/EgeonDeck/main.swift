@@ -7,6 +7,7 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
+    private let updates = UpdateController()
     var root: RootView!
 
     var configs: [WorkbenchConfig] = []
@@ -137,6 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShellHook.install()
 
         buildMenu()
+        setUpUpdates()
 
         let screen = Self.startupScreen()
         // O dev abre menor e lembra o tamanho: ele sobe a cada rebuild, e uma
@@ -470,6 +472,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return ["ok": ok, "tree": AppControl.workspacesSnapshot?() ?? [:]]
         }
+        AppControl.queueControl = { [weak self] address, query in
+            let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
+            guard let self, parts.count == 2,
+                  let index = self.configs.firstIndex(where: { $0.name == parts[0] }),
+                  let node = self.shell(at: index)?.nodes
+                      .compactMap({ $0 as? QueueNode }).first(where: { $0.nodeID == parts[1] })
+            else { return nil }
+            let queue = node.controller
+            var result: [String: Any] = [:]
+            if let title = query["add"] {
+                let images = query["image"].flatMap { queue.store.importImage(at: URL(fileURLWithPath: $0)) }
+                result["added"] = queue.add(title: title, notes: query["notes"] ?? "",
+                                            images: images.map { [$0] } ?? []).id
+            }
+            if let id = query["done"] { queue.toggleDone(id) }
+            if let id = query["open"] { node.open(id) }
+            if let id = query["remove"] { queue.remove(id) }
+            if let id = query["reply"] { result["error"] = queue.reply(id, text: query["text"] ?? "") ?? "" }
+            if let auto = query["auto"] { queue.setAuto(auto == "1") }
+            if let target = query["to"] { queue.setTarget(target) }
+            if let id = query["send"] {
+                result["error"] = (id == "next" ? queue.sendNext() : queue.send(id)) ?? ""
+            }
+            if query["clear"] == "done" { queue.clearDone() }
+            return result.merging(queue.snapshot()) { mine, _ in mine }
+        }
+        // As filas que mandam para este agente — é delas que ele marca, pergunta
+        // e comenta tarefas.
+        func queues(reaching address: String) -> [QueueController] {
+            let parts = address.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let index = configs.firstIndex(where: { $0.name == parts[0] }),
+                  let shell = shell(at: index) else { return [] }
+            return shell.nodes.compactMap { ($0 as? QueueNode)?.controller }
+                .filter { $0.targets.contains { $0.id == parts[1] } }
+        }
+        AppControl.agentTasks = { address in
+            queues(reaching: address).flatMap { $0.tasks() }
+        }
+        AppControl.agentTask = { address, action, task, text in
+            let author = String(address.split(separator: "/").last ?? "")
+            let reaching = queues(reaching: address)
+            guard !reaching.isEmpty else { return "nenhuma fila está ligada a você" }
+            // A mesma tarefa não existe em duas filas: o id é um UUID.
+            guard let queue = reaching.first(where: { $0.queue.index(matching: task) != nil }) else {
+                return "tarefa \(task) não existe nas filas ligadas a você (veja `egeon tasks`)"
+            }
+            return queue.agent(author, action, task: task, text: text)
+        }
         AppControl.chatSlashSearch = { [weak self] name, text in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return }
@@ -600,6 +650,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recordTabOrder()
         WorkbenchStore.save(configs)
         WorkbenchClocks.shared.flush()
+        updates.applicationWillTerminate()
 
         control.stop()
     }
@@ -2627,6 +2678,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return web
 
+        case .queue:
+            return QueueNode(frame: frame, address: address, title: title,
+                             controller: queueController(workbenchID: config.id, nodeID: node.id))
+
         case .shell, .agent:
             let profile = node.agent.flatMap { agents[$0] }
             if node.type == .agent && profile == nil {
@@ -2664,6 +2719,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return terminal
         }
+    }
+
+    /// A fila de um nó, com o mundo por closures: quem está ligado sai das
+    /// arestas da bancada, o estado e o envio saem do Dispatcher. Tudo lido na
+    /// hora pelo id da bancada — renomear não quebra nada.
+    private func queueController(workbenchID: String, nodeID: String) -> QueueController {
+        QueueController(
+            store: QueueStore(workbenchID: workbenchID, nodeID: nodeID),
+            name: nodeID,
+            linked: { [weak self] in
+                guard let config = self?.config(ofID: workbenchID) else { return [] }
+                return config.edgeList.filter { $0.from == nodeID }.compactMap { edge in
+                    guard let node = config.nodes.first(where: { $0.id == edge.to }),
+                          node.type == .agent || node.type == .shell else { return nil }
+                    return QueueController.Linked(id: node.id, label: node.id, agent: node.type == .agent)
+                }
+            },
+            activity: { [weak self] id in
+                guard let config = self?.config(ofID: workbenchID) else { return nil }
+                return Dispatcher.shared.target("\(config.name)/\(id)")?.activity
+            },
+            dispatch: { [weak self] id, text, images in
+                guard let config = self?.config(ofID: workbenchID) else { return "bancada sumiu" }
+                var request = DispatchRequest(target: "\(config.name)/\(id)")
+                request.text = text
+                request.images = images
+                do {
+                    // Quem manda é você — a fila só guardou o que você anotou.
+                    _ = try Dispatcher.shared.dispatch(request, from: nil)
+                    return nil
+                } catch {
+                    return "\(error)"
+                }
+            })
     }
 
     private func build(_ index: Int) -> WorkbenchShell {
@@ -3872,6 +3961,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuItem.state = OrphanReaper.shared.policy.enabled ? .on : .off
             return true
         }
+        if menuItem.action == #selector(updateMenuClicked) {
+            menuItem.title = updates.menuTitle
+            return updates.menuEnabled
+        }
+        if menuItem.action == #selector(toggleAutoUpdate) {
+            menuItem.state = updates.auto ? .on : .off
+            return true
+        }
         if menuItem.action == #selector(toggleSidebarCollapsed) {
             menuItem.state = root.isCollapsed ? .on : .off
             return true
@@ -3939,6 +4036,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showProcesses() { ProcessesWindow.shared.present() }
 
+    private func setUpUpdates() {
+        updates.onPrompt = { [weak self] update in self?.promptUpdate(update) }
+        updates.onMessage = { [weak self] title, text in
+            guard let self, let window = self.window, window.attachedSheet == nil else { return }
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = text
+            alert.beginSheetModal(for: window)
+        }
+        AppControl.updateControl = { [weak self] query in
+            guard let self else { return [:] }
+            if let auto = query["auto"] { self.updates.auto = auto == "1" }
+            // Outro endereço de consulta só no dev: é por onde a rota testa com
+            // uma release falsa. A assinatura continua valendo.
+            let feed = Flavor.current.isDev ? query["feed"].flatMap(URL.init(string:)) : nil
+            if query["check"] == "1" { self.updates.check(.periodic, feed: feed ?? UpdateController.feed) }
+            if query["prompt"] == "1" { self.updates.menuClicked() }
+            if query["install"] == "1" { self.updates.installAvailable() }
+            return self.updates.snapshot()
+        }
+        updates.start()
+    }
+
+    private func promptUpdate(_ update: AvailableUpdate) {
+        guard let window else { return }
+        let agents = Dispatcher.shared.addresses
+            .filter { Dispatcher.shared.target($0)?.profile != nil }.count
+        NSApp.activate(ignoringOtherApps: true)
+        UpdatePrompt.show(update, agents: agents, auto: updates.auto, in: window) { [weak self] accepted, auto in
+            guard let self else { return }
+            if auto != self.updates.auto { self.updates.auto = auto }
+            if accepted { self.updates.updateAndRestart(update) }
+        }
+    }
+
+    @objc func updateMenuClicked() { updates.menuClicked() }
+
+    @objc func toggleAutoUpdate() { updates.auto.toggle() }
+
     @objc func toggleOrphanReaper() {
         OrphanReaper.shared.setEnabled(!OrphanReaper.shared.policy.enabled)
     }
@@ -3960,6 +4096,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // chain, e dentro de uma caixa de texto elas são início e fim da linha —
         // `validateMenuItem` devolve a tecla nesse caso.
         appMenu.addItem(withTitle: "Sobre o \(Flavor.current.displayName)", action: #selector(showAbout),
+                        keyEquivalent: "")
+        appMenu.addItem(withTitle: "Procurar atualizações…", action: #selector(updateMenuClicked),
+                        keyEquivalent: "")
+        appMenu.addItem(withTitle: "Atualizar automaticamente", action: #selector(toggleAutoUpdate),
                         keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Aba à direita", action: #selector(nextWorkbench),

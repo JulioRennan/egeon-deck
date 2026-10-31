@@ -36,6 +36,8 @@ app/Sources/EgeonDeck/
 │   ├── Trace/           trilha da bancada — TraceEntry, TraceLog, ShellHook
 │   ├── Usage/           consumo e custo — registro por bancada, tabela de preços,
 │                        pastilha e detalhe (ADR-085)
+│   ├── Update/          atualização do app — versão, assinatura, troca do bundle,
+│   │                    aviso ao abrir e menu (ADR-089)
 │   ├── Workbench/       WorkbenchConfig, Store, WorkbenchTemplate, worktree
 │   └── Workspace/       workspace → projeto: WorkspaceConfig, Store, Tree,
 │                        pastilha (imagem/inicial) e formulário (ADR-043)
@@ -68,7 +70,7 @@ app/Sources/EgeonDeck/
   workspace (`members`): a pasta dele é `projects/<id>/` com um link por repo,
   e em worktree vira `worktrees/<multi>/<branch>/<repo>`.
 - **Bancada** — uma frente de trabalho: pasta + nós abertos sobre ela.
-- **Nó** — um card: `shell` · `agent` · `web` (o `editor`, VSCode, saiu — ADR-076). `NodeConfig` é a
+- **Nó** — um card: `shell` · `agent` · `web` · `queue` (a fila de prompts, ADR-088; o `editor`, VSCode, saiu — ADR-076). `NodeConfig` é a
   montagem; conversa nunca é copiada junto (`withoutConversation`).
 - **Endereço** — `bancada/id` (ex. `deck/revisor`); estável. A bancada tem
   ainda um `id` próprio (8 hex) que sobrevive a rename e não se repete — é por
@@ -134,7 +136,8 @@ app/Sources/EgeonDeck/
 ## Funcionalidades, por cima
 
 - Agentes conversam via `egeon peers` / `egeon send` — topologia consultada em
-  tempo real; quem falou vem do pid do socket, nunca do texto. `egeon status` diz
+  tempo real; quem falou vem do pid do socket, nunca do texto. `egeon tasks` / `egeon task done|ask|note <id>`
+  marcam, perguntam e comentam nas tarefas de uma fila de prompts (ADR-088). `egeon status` diz
   ao agente quem ELE é (endereço, papel, bancada) e `egeon peek <endereço>` lê a
   tela do vizinho sem interromper — só de quem ele já pode acionar. No Claude
   Code o app publica uma **skill** (`ClaudeSkill` → `skills/egeon/SKILL.md` no
@@ -202,6 +205,10 @@ app/Sources/EgeonDeck/
   informativa (`CanvasInfoBar`: cronômetro e custo — o clique abre o detalhe);
   chat: os dois embaixo da coluna, custo por agente e por turno no cabeçalho.
   `GET /usage[?show=1][&prices=1]`.
+- **Atualização** (ADR-089) — avisa ao abrir, com menu "Procurar atualizações…" e
+  "Atualizar automaticamente" (baixa sozinho, troca ao fechar; nunca reinicia por
+  conta própria). Só instala zip assinado pela chave de release, que mora no Keychain
+  (`tools/release-key.swift`) e sem a qual o `release.sh` não publica. `GET /update`.
 - Drag & drop de arquivo → paste no terminal (imagem vira anexo no Claude Code).
 - Voz pelo CLI dentro do pty (mic atribuído ao bundle do app).
 

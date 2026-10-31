@@ -40,6 +40,8 @@ app/Sources/EgeonDeck/
 │   ├── Trace/                  trilha da bancada: TraceEntry, TraceLog
 │   ├── Usage/                  consumo e custo (ADR-085): TokenUsage, PriceTable,
 │   │                           UsageLedger (puro), UsageStore, pastilha e painel
+│   ├── Update/                 atualização do app (ADR-089): AppVersion, AvailableUpdate,
+│   │                           UpdatePolicy (puro), UpdateInstaller, UpdateController
 │   ├── Workbench/              WorkbenchConfig, Store, Template, worktree
 │   └── Workspace/              workspace → projeto: Config, Store (conciliação),
 │                               Tree (a árvore da barra), pastilha e formulário

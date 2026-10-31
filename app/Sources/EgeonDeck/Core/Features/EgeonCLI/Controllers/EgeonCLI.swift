@@ -46,6 +46,10 @@ enum EgeonCLI {
         #   egeon peek <endereço>    o que ele mostra agora, sem interromper
         #   egeon trace [texto]      registra na trilha da bancada (texto ou stdin)
         #   egeon status             quem você é e como está este terminal
+        #   egeon tasks              as tarefas das filas ligadas a você
+        #   egeon task done <id> [nota]   marca a tarefa como feita
+        #   egeon task ask <id>      pergunta sobre a tarefa (texto no stdin)
+        #   egeon task note <id>     comenta na tarefa (texto no stdin)
         #   egeon ps [--orphans]     processos lançados pelo Egeon, e os órfãos
         #   egeon ps --kill [pid…]   encerra os órfãos (ou os pids dados)
         #
@@ -104,6 +108,22 @@ enum EgeonCLI {
             ;;
           status)
             api GET /status
+            ;;
+          tasks)
+            api GET /tasks
+            ;;
+          task)
+            [ $# -ge 3 ] || { echo "uso: egeon task done|ask|note <id> [texto, ou no stdin]" >&2; exit 2; }
+            action="$2" id="$3"
+            shift 3
+            if [ $# -ge 1 ]; then
+                printf '%s' "$*" | api POST "/task?action=$(enc "$action")&id=$(enc "$id")" --data-binary @-
+            elif [ "$action" = done ]; then
+                # Marcar não pede texto: sem isto, o curl ficaria esperando o stdin.
+                printf '' | api POST "/task?action=done&id=$(enc "$id")" --data-binary @-
+            else
+                api POST "/task?action=$(enc "$action")&id=$(enc "$id")" --data-binary @-
+            fi
             ;;
           ps)
             case "${2:-}" in

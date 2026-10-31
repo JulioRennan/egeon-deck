@@ -34,7 +34,7 @@ enum MaestroLayout {
         let maestros = nodes.filter(\.isMaestro)
         let workers = nodes.filter { $0.type == .agent && !$0.isMaestro }
         let shells = nodes.filter { $0.type == .shell }
-        let others = nodes.filter { $0.type == .web }
+        let others = nodes.filter { $0.type == .web || $0.type == .queue }
 
         let ids = Set(workers.map(\.id))
         let linked = edges.contains { ids.contains($0.from) && ids.contains($0.to) }

@@ -183,6 +183,27 @@ enum ClaudeSkill {
         demais, e o corte chega justamente na hora em que você teria algo útil a
         dizer.
 
+        ## Tarefas de uma fila
+
+        Prompt que termina com `[ED] tarefa <id> da fila <nome>` veio de uma
+        **fila de prompts**: a lista de tarefas que o usuário anotou e vai
+        mandando uma a uma. Cada tarefa é uma thread que ele lê no card da fila:
+
+            egeon tasks                     as tarefas das filas ligadas a você
+            egeon task done <id> [nota]     marca a tarefa como feita
+            egeon task ask <id> <<'MB'      pergunta sobre ela — aparece na tarefa
+            (a pergunta)
+            MB
+            egeon task note <id> <<'MB'     comenta nela: achado, decisão, o que fez
+            (o comentário)
+            MB
+
+        **Ao concluir, marque**: é o que fecha a tarefa e deixa a fila mandar a
+        próxima. Com dúvida que só o usuário resolve, **pergunte pela tarefa**
+        (`ask`) e encerre o turno com o marcador de pergunta: a pergunta fica
+        na thread dela, a fila espera, e a resposta volta para você como prompt
+        com o id da tarefa.
+
         A topologia muda enquanto você trabalha — consulte na hora, não confie no
         que viu no começo da conversa. Endereço fora da lista é recusado, e uma
         cadeia longa demais de agentes falando entre si também: quando isso

@@ -9,6 +9,16 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- O app avisa ao abrir quando há versão nova e atualiza com um clique; o menu ganhou "Procurar atualizações…" e "Atualizar automaticamente", que baixa sozinho e troca o app só quando você fechar, para nunca derrubar agentes. Cada versão vem com assinatura própria, conferida antes de instalar (ADR-089).
+- O site explica, junto do botão de baixar, o passo para o macOS abrir o app, que ainda não tem assinatura da Apple.
+- Fila de prompts, um tipo de nó novo na barra do canvas: uma lista de tarefas como no Things — cada tarefa é uma linha, e o clique abre ali mesmo para editar o título, escrever as notas e colar prints (⌘V, ou arrastar a imagem); "Nova tarefa…" no fim anota várias seguidas, uma por Enter; arrastar a linha muda a ordem. Ligue a fila a um agente arrastando o `+` da borda até ele e mande um a um — pelo botão de cada item ou no automático, que manda o próximo quando o agente termina o turno e espera enquanto ele pergunta algo a você. As imagens chegam ao Claude Code como anexo de verdade, não como caminho no texto. Cada tarefa é uma thread com o agente: ele marca a tarefa como feita, pergunta ou comenta por ela (`egeon task done|ask|note`), a pergunta aparece no cartão com a bolinha laranja e a fila espera você responder ali mesmo (ADR-088).
+
+### Corrigido
+
+- O build não roda mais `npm run dev` sem querer na pasta em que é feito.
+
 ## [1.6.0] - 2026-10-30
 
 ### Adicionado

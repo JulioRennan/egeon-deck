@@ -26,7 +26,7 @@ enum MaestroLinks {
                 case .shell:
                     // Shell não responde: a volta seria uma seta morta.
                     add(EdgeConfig(from: maestro.id, to: node.id, maxSends: nil), to: &edges)
-                case .web:
+                case .web, .queue:
                     break
                 }
             }
