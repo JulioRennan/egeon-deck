@@ -2,9 +2,9 @@ import AppKit
 
 // MARK: - Nó de fila
 
-/// A fila de prompts como lista de tarefas: uma linha por tarefa, e o clique
-/// abre ali mesmo o cartão com o título, as notas e os prints — como no
-/// Things. Você anota tudo de uma vez e manda uma por uma ao agente ligado por
+/// A fila de prompts como lista de tarefas: cada tarefa é um texto corrido, e o
+/// clique deixa editar ali mesmo, com os prints e a thread embaixo — como no
+/// Things, sem separar título de corpo. Você anota tudo de uma vez e manda uma por uma ao agente ligado por
 /// aresta, à mão ou sozinha a cada fim de turno dele.
 final class QueueNode: NodeView {
     let controller: QueueController
@@ -78,7 +78,14 @@ final class QueueNode: NodeView {
         content.addSubview(listScroll)
         list.onClickEmpty = { [weak self] in self?.collapse() }
 
-        newRow.onCreate = { [weak self] title in self?.create(title: title) }
+        newRow.onCreate = { [weak self] text in self?.create(text: text) }
+        newRow.onPasteImages = { [weak self] text, pasted in
+            guard let self else { return }
+            let id = self.controller.add(text: text).id
+            self.attach(pasted, to: id)
+            self.expand(id)
+        }
+        newRow.onResize = { [weak self] in self?.needsLayout = true }
         list.addSubview(newRow)
 
         addSubview(port)
@@ -166,11 +173,16 @@ final class QueueNode: NodeView {
         row.onReopen = { [weak self] in self?.controller.reopen(id) }
         row.onRemove = { [weak self] in self?.controller.remove(id) }
         row.onMove = { [weak self] offset in self?.controller.move(id, by: offset) }
-        row.onEdit = { [weak self] title, notes in self?.controller.update(id, title: title, notes: notes) }
+        row.onEdit = { [weak self] text in self?.controller.update(id, text: text) }
         row.onAttach = { [weak self] pasted in self?.attach(pasted, to: id) }
         row.onDetach = { [weak self] image in self?.controller.detach(image, from: id) }
         row.onReply = { [weak self] text in self?.report(self?.controller.reply(id, text: text)) }
-        row.onCommitTitle = { [weak self] in self?.create(title: "", after: id) }
+        // Enter em tarefa em branco é parar de anotar, não abrir outra em branco.
+        row.onCommit = { [weak self] in
+            guard let self else { return }
+            let blank = self.controller.queue.index(of: id).map { self.controller.queue.items[$0].isEmpty } ?? true
+            if blank { self.collapse() } else { self.create(text: "", after: id) }
+        }
         row.onCollapse = { [weak self] in self?.collapse() }
         row.onResize = { [weak self] in self?.needsLayout = true }
         row.onDragMove = { [weak self] y in self?.dragMoved(id, to: y) }
@@ -215,6 +227,14 @@ final class QueueNode: NodeView {
         needsLayout = true
     }
 
+    /// Escreve na linha de baixo por fora, sem pôr na lista — para conferir a
+    /// quebra de linha, já que digitar exige Acessibilidade.
+    func setDraft(_ text: String) {
+        newRow.setText(text.trimmingCharacters(in: .whitespaces))
+        layoutSubtreeIfNeeded()
+        list.scrollToVisible(newRow.frame)
+    }
+
     /// Abre a tarefa por fora — a rota `/queue?open=` faz o clique.
     func open(_ id: String) { expand(id) }
 
@@ -228,7 +248,7 @@ final class QueueNode: NodeView {
         layoutSubtreeIfNeeded()
         if let row = rows[id] {
             list.scrollToVisible(row.frame)
-            row.focusTitle()
+            row.focusEditor()
         }
     }
 
@@ -237,16 +257,16 @@ final class QueueNode: NodeView {
         expanded = nil
         rows[id]?.setExpanded(false)
         controller.dropIfEmpty(id)
-        window?.makeFirstResponder(newRow.field)
+        newRow.focus()
         needsLayout = true
     }
 
     /// Enter na linha de baixo põe a tarefa na lista e deixa a linha pronta
     /// para a próxima — anotar dez seguidas é digitar e dar Enter dez vezes.
-    /// Enter no título de uma tarefa aberta abre uma nova logo abaixo dela.
-    private func create(title: String, after: String? = nil) {
-        let item = controller.add(title: title, after: after)
-        if after != nil || title.isEmpty { expand(item.id) }
+    /// Enter numa tarefa aberta abre uma nova logo abaixo dela.
+    private func create(text: String, after: String? = nil) {
+        let item = controller.add(text: text, after: after)
+        if after != nil || text.isEmpty { expand(item.id) }
     }
 
     private func attach(_ pasted: QueueStore.Pasted, to id: String) {
@@ -291,10 +311,10 @@ final class QueueNode: NodeView {
     }
 
     /// Na tarefa aberta, o print entra nela; sem nenhuma aberta, vira tarefa
-    /// nova já aberta, para você dar o título.
+    /// nova já aberta, para você escrever.
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let pasted = QueueStore.images(in: sender.draggingPasteboard) else { return false }
-        let id = expanded ?? controller.add(title: "").id
+        let id = expanded ?? controller.add(text: "").id
         attach(pasted, to: id)
         expand(id)
         return true
@@ -354,8 +374,9 @@ final class QueueNode: NodeView {
         if let drag = dragging, drag.target >= slot, let dragged = rows[drag.id] {
             rowY += dragged.height(for: rowWidth)
         }
-        newRow.frame = NSRect(x: 6, y: rowY, width: rowWidth, height: QueueRow.collapsedHeight)
-        rowY += QueueRow.collapsedHeight + 12
+        let newHeight = newRow.height(for: rowWidth)
+        newRow.frame = NSRect(x: 6, y: rowY, width: rowWidth, height: newHeight)
+        rowY += newHeight + 12
         list.frame = NSRect(x: 0, y: 0, width: listScroll.contentSize.width,
                             height: max(rowY, listScroll.contentSize.height))
 
@@ -436,24 +457,24 @@ private final class StatusDot: NSView {
 
 // MARK: - Tarefa
 
-/// Uma tarefa: recolhida é a bolinha e o título; aberta é um cartão com o
-/// título editável, as notas, os prints e o enviar.
-private final class QueueRow: NSView, NSTextFieldDelegate {
+/// Uma tarefa: recolhida é a bolinha e o começo do texto; aberta, o mesmo texto
+/// fica editável no mesmo lugar, com os prints, a thread e o enviar embaixo.
+private final class QueueRow: NSView {
     var onExpand: (() -> Void)?
     var onToggleDone: (() -> Void)?
     var onSend: (() -> Void)?
     var onReopen: (() -> Void)?
     var onRemove: (() -> Void)?
     var onMove: ((Int) -> Void)?
-    var onEdit: ((String, String) -> Void)?
+    var onEdit: ((String) -> Void)?
     var onAttach: ((QueueStore.Pasted) -> Void)?
     var onDetach: ((String) -> Void)?
     /// Você escreveu na thread da tarefa.
     var onReply: ((String) -> Void)?
-    /// Enter no título: a próxima tarefa nasce logo abaixo.
-    var onCommitTitle: (() -> Void)?
+    /// Enter no texto: a próxima tarefa nasce logo abaixo.
+    var onCommit: (() -> Void)?
     var onCollapse: (() -> Void)?
-    /// A altura mudou (as notas cresceram) — o nó refaz o layout.
+    /// A altura mudou (o texto cresceu) — o nó refaz o layout.
     var onResize: (() -> Void)?
     /// Arrastando a linha recolhida: a altura do cursor na lista.
     var onDragMove: ((CGFloat) -> Void)?
@@ -466,29 +487,33 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
     private let store: QueueStore
 
     private let dot = StatusDot()
-    private let titleLabel = NSTextField(labelWithString: "")
+    private let preview = NSTextField(wrappingLabelWithString: "")
     private let badge = NSTextField(labelWithString: "")
-    private let titleField = NSTextField()
-    private let notes = QueueNotesView()
-    private let notesPlaceholder = NSTextField(labelWithString: "Notas — onde acontece, passos, o esperado.  ⌘V cola print")
+    private let editor = QueueEditor()
+    private let placeholder = NSTextField(labelWithString: "Escreva o pedido…  ⌘V cola print  ·  ⇧Enter quebra linha")
     /// Cada print e a proporção dele — a miniatura mantém o formato da tela.
     private var thumbs: [(view: NSView, aspect: CGFloat)] = []
     private let meta = NSTextField(labelWithString: "")
     private let thread = ThreadView()
-    private let replyField = NSTextField()
+    private let reply = QueueEditor()
+    private let replyHint = NSTextField(labelWithString: "")
     private let sendButton = HandButton(title: "Enviar", target: nil, action: nil)
     private let removeButton = ToolbarButton(symbols: ["trash", "xmark"], tooltip: "Apagar a tarefa", size: 28)
     private var press: NSPoint?
     private var dragged = false
 
-    private static let titleFont = NSFont.systemFont(ofSize: 15)
-    private static let notesFont = NSFont.systemFont(ofSize: 14)
+    /// A mesma na linha e na edição, e no mesmo lugar: abrir a tarefa não pode
+    /// fazer o texto que você está lendo pular.
+    private static let textFont = NSFont.systemFont(ofSize: 15)
+    private static let textTop: CGFloat = 10
+    private static let replyFont = NSFont.systemFont(ofSize: 14)
+    private static let replyMinHeight: CGFloat = 30
     /// Altura do print aberto: grande o bastante para ler a tela que ele
     /// mostra, sem abrir o arquivo.
     private static let thumbHeight: CGFloat = 200
     /// Três linhas: o espaço de escrever existe antes de haver o que escrever,
     /// e o clique nele é edição, não "clique fora".
-    private static let notesMinHeight: CGFloat = 58
+    private static let editorMinHeight: CGFloat = 58
 
     init(item: QueueItem, store: QueueStore) {
         self.item = item
@@ -500,45 +525,27 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
         dot.onClick = { [weak self] in self?.onToggleDone?() }
         addSubview(dot)
 
-        titleLabel.font = Self.titleFont
-        titleLabel.lineBreakMode = .byTruncatingTail
-        addSubview(titleLabel)
+        preview.font = Self.textFont
+        // Selecionável, o rótulo ficaria com o clique que abre a tarefa.
+        preview.isSelectable = false
+        addSubview(preview)
 
         badge.font = .systemFont(ofSize: 12)
         badge.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
         badge.alignment = .right
         addSubview(badge)
 
-        titleField.font = .systemFont(ofSize: 16, weight: .semibold)
-        titleField.textColor = NSColor(calibratedWhite: 0.95, alpha: 1)
-        titleField.isBordered = false
-        titleField.drawsBackground = false
-        titleField.focusRingType = .none
-        titleField.placeholderString = "Nova tarefa"
-        titleField.lineBreakMode = .byTruncatingTail
-        titleField.usesSingleLineMode = true
-        titleField.cell?.isScrollable = true
-        titleField.delegate = self
-        addSubview(titleField)
+        editor.style(font: Self.textFont)
+        editor.onChange = { [weak self] in self?.textChanged() }
+        editor.onPasteImages = { [weak self] pasted in self?.onAttach?(pasted) }
+        editor.onEscape = { [weak self] in self?.onCollapse?() }
+        editor.onCommit = { [weak self] in self?.onCommit?() }
+        addSubview(editor)
 
-        notes.font = Self.notesFont
-        notes.textColor = NSColor(calibratedWhite: 0.78, alpha: 1)
-        notes.insertionPointColor = .white
-        notes.drawsBackground = false
-        notes.isRichText = false
-        notes.importsGraphics = false
-        notes.allowsUndo = true
-        notes.textContainerInset = .zero
-        notes.textContainer?.lineFragmentPadding = 0
-        notes.isVerticallyResizable = false
-        notes.onChange = { [weak self] in self?.notesChanged() }
-        notes.onPasteImages = { [weak self] pasted in self?.onAttach?(pasted) }
-        notes.onEscape = { [weak self] in self?.onCollapse?() }
-        addSubview(notes)
-
-        notesPlaceholder.font = Self.notesFont
-        notesPlaceholder.textColor = NSColor(calibratedWhite: 0.38, alpha: 1)
-        addSubview(notesPlaceholder)
+        placeholder.font = NSFont.systemFont(ofSize: 14)
+        placeholder.textColor = NSColor(calibratedWhite: 0.38, alpha: 1)
+        placeholder.lineBreakMode = .byTruncatingTail
+        addSubview(placeholder)
 
         meta.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         meta.textColor = NSColor(calibratedWhite: 0.45, alpha: 1)
@@ -557,20 +564,21 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
         addSubview(removeButton)
 
         addSubview(thread)
-        replyField.font = .systemFont(ofSize: 14)
-        replyField.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
-        replyField.isBordered = false
-        replyField.drawsBackground = true
-        replyField.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1)
-        replyField.focusRingType = .none
-        replyField.usesSingleLineMode = true
-        replyField.cell?.isScrollable = true
-        replyField.wantsLayer = true
-        replyField.layer?.cornerRadius = 6
-        replyField.delegate = self
-        addSubview(replyField)
+        reply.style(font: Self.replyFont)
+        reply.drawsBackground = true
+        reply.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1)
+        reply.textContainerInset = NSSize(width: 8, height: 6)
+        reply.wantsLayer = true
+        reply.layer?.cornerRadius = 6
+        reply.onChange = { [weak self] in self?.replyChanged() }
+        reply.onCommit = { [weak self] in self?.sendReply() }
+        reply.onEscape = { [weak self] in self?.onCollapse?() }
+        reply.onPasteImages = { [weak self] pasted in self?.onAttach?(pasted) }
+        addSubview(reply)
+        replyHint.font = Self.replyFont
+        replyHint.lineBreakMode = .byTruncatingTail
+        addSubview(replyHint)
 
-        titleField.nextKeyView = notes
         apply(item, texts: true)
         setExpanded(false)
     }
@@ -590,7 +598,7 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
 
     private var isEditing: Bool {
         guard let responder = window?.firstResponder else { return false }
-        return responder === notes || (responder as? NSText)?.delegate === titleField
+        return responder === editor
     }
 
     private func apply(_ item: QueueItem, texts: Bool) {
@@ -598,24 +606,21 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
         dot.status = item.status
         dot.awaiting = item.awaiting
         let done = item.status == .done
-        titleLabel.stringValue = item.title.isEmpty ? (item.notes.isEmpty ? "Sem título" : item.notes) : item.title
-        titleLabel.textColor = item.title.isEmpty
+        preview.stringValue = item.prompt.isEmpty ? "Tarefa em branco" : item.prompt
+        preview.textColor = item.prompt.isEmpty
             ? NSColor(calibratedWhite: 0.45, alpha: 1)
             : NSColor(calibratedWhite: done ? 0.5 : 0.92, alpha: 1)
         var marks: [String] = []
         if item.awaiting { marks.append("? pergunta") }
         if !item.thread.isEmpty { marks.append("💬 \(item.thread.count)") }
         if !item.images.isEmpty { marks.append("▣ \(item.images.count)") }
-        if !item.notes.isEmpty, !item.title.isEmpty { marks.append("≡") }
         if item.status == .sent, let to = item.sentTo { marks.append("→ \(to)") }
         badge.stringValue = marks.joined(separator: "  ")
         badge.textColor = item.awaiting ? .systemOrange : NSColor(calibratedWhite: 0.45, alpha: 1)
-        let placeholder = item.awaiting ? "Responder a pergunta…"
+        replyHint.stringValue = item.awaiting ? "Responder a pergunta…"
             : item.sentTo.map { "Responder ao \($0)…" } ?? "Comentar — vai junto quando enviar"
-        replyField.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
-            .foregroundColor: item.awaiting ? NSColor.systemOrange.withAlphaComponent(0.8)
-                                            : NSColor(calibratedWhite: 0.4, alpha: 1),
-            .font: NSFont.systemFont(ofSize: 14)])
+        replyHint.textColor = item.awaiting ? NSColor.systemOrange.withAlphaComponent(0.8)
+                                            : NSColor(calibratedWhite: 0.4, alpha: 1)
         if thread.messages != item.thread {
             thread.set(item.thread)
             thread.isHidden = !isExpanded || item.thread.isEmpty
@@ -624,11 +629,8 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
         meta.stringValue = Self.meta(for: item)
         meta.isHidden = !isExpanded || meta.stringValue.isEmpty
         sendButton.title = item.status == .pending ? "Enviar" : "Enviar de novo"
-        if texts {
-            titleField.stringValue = item.title
-            if notes.string != item.notes { notes.string = item.notes }
-        }
-        notesPlaceholder.isHidden = !notes.string.isEmpty || !isExpanded
+        if texts, editor.string != item.text { editor.string = item.text }
+        placeholder.isHidden = !editor.string.isEmpty || !isExpanded
         if thumbs.count != item.images.count { rebuildThumbs() }
         needsLayout = true
     }
@@ -706,11 +708,12 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
         layer?.backgroundColor = open ? NSColor(calibratedWhite: 1, alpha: 0.06).cgColor : nil
         layer?.borderWidth = open ? 1 : 0
         layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.1).cgColor
-        titleLabel.isHidden = open
+        preview.isHidden = open
         badge.isHidden = open
-        for view in [titleField, notes, sendButton, removeButton, replyField] as [NSView] { view.isHidden = !open }
+        for view in [editor, sendButton, removeButton, reply] as [NSView] { view.isHidden = !open }
+        replyHint.isHidden = !open || !reply.string.isEmpty
         thread.isHidden = !open || thread.messages.isEmpty
-        notesPlaceholder.isHidden = !open || !notes.string.isEmpty
+        placeholder.isHidden = !open || !editor.string.isEmpty
         meta.isHidden = !open || meta.stringValue.isEmpty
         thumbs.forEach { $0.view.isHidden = !open }
         if !open, isEditing { window?.makeFirstResponder(nil) }
@@ -718,19 +721,18 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
         needsLayout = true
     }
 
-    func focusTitle() {
-        window?.makeFirstResponder(titleField)
-        titleField.currentEditor()?.selectedRange = NSRange(location: titleField.stringValue.utf16.count, length: 0)
+    func focusEditor() {
+        window?.makeFirstResponder(editor)
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
     }
 
     /// Recolhida: clique abre, arrasto reordena — os dois começam no mesmo
     /// mouseDown, e quem decide é o quanto o cursor andou. Aberta: o clique em
     /// qualquer parte do cartão é escrever, nunca fechar — o vazio dele leva o
-    /// cursor para o fim das notas.
+    /// cursor para o fim do texto.
     override func mouseDown(with event: NSEvent) {
         guard !isExpanded else {
-            window?.makeFirstResponder(notes)
-            notes.setSelectedRange(NSRange(location: (notes.string as NSString).length, length: 0))
+            focusEditor()
             return
         }
         press = event.locationInWindow
@@ -758,46 +760,23 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
 
     // MARK: Edição
 
-    func controlTextDidChange(_ notification: Notification) {
-        guard notification.object as? NSTextField === titleField else { return }
-        onEdit?(titleField.stringValue, notes.string)
+    private func replyChanged() {
+        replyHint.isHidden = !reply.string.isEmpty
+        needsLayout = true
+        onResize?()
     }
 
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        if control === replyField {
-            switch selector {
-            case #selector(NSResponder.insertNewline(_:)):
-                let text = replyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !text.isEmpty {
-                    replyField.stringValue = ""
-                    onReply?(text)
-                }
-                return true
-            case #selector(NSResponder.cancelOperation(_:)):
-                onCollapse?()
-                return true
-            default:
-                return false
-            }
-        }
-        switch selector {
-        case #selector(NSResponder.insertNewline(_:)):
-            onCommitTitle?()
-            return true
-        case #selector(NSResponder.cancelOperation(_:)):
-            onCollapse?()
-            return true
-        case #selector(NSResponder.moveDown(_:)), #selector(NSResponder.insertTab(_:)):
-            window?.makeFirstResponder(notes)
-            return true
-        default:
-            return false
-        }
+    private func sendReply() {
+        let text = reply.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        reply.string = ""
+        replyChanged()
+        onReply?(text)
     }
 
-    private func notesChanged() {
-        notesPlaceholder.isHidden = !notes.string.isEmpty
-        onEdit?(titleField.stringValue, notes.string)
+    private func textChanged() {
+        placeholder.isHidden = !editor.string.isEmpty
+        onEdit?(editor.string)
         needsLayout = true
         onResize?()
     }
@@ -826,19 +805,33 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
 
     // MARK: Medidas
 
-    private func notesHeight(for width: CGFloat) -> CGFloat {
-        guard let layout = notes.layoutManager, let container = notes.textContainer else { return Self.notesMinHeight }
-        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-        layout.ensureLayout(for: container)
-        return max(Self.notesMinHeight, ceil(layout.usedRect(for: container).height) + 4)
+    private func editorHeight(for width: CGFloat) -> CGFloat {
+        max(Self.editorMinHeight, editor.height(forWidth: width) + 4)
     }
 
+    private func replyHeight(for width: CGFloat) -> CGFloat {
+        max(Self.replyMinHeight, reply.height(forWidth: width))
+    }
+
+    private var badgeWidth: CGFloat { badge.stringValue.isEmpty ? 0 : min(140, ceil(badge.intrinsicContentSize.width)) }
+
+    private func previewHeight(for width: CGFloat) -> CGFloat {
+        // Pela célula, que é quem desenha: altura medida à parte ficava um nada
+        // curta, e o rótulo escondia a última linha inteira.
+        let bounds = NSRect(x: 0, y: 0, width: max(1, width), height: .greatestFiniteMagnitude)
+        return ceil(preview.cell?.cellSize(forBounds: bounds).height ?? 20)
+    }
+
+    private func previewWidth(_ rowWidth: CGFloat) -> CGFloat { rowWidth - Self.textX - badgeWidth - 22 }
+
     func height(for width: CGFloat) -> CGFloat {
-        guard isExpanded else { return Self.collapsedHeight }
-        var height: CGFloat = 8 + 28 + 8 + notesHeight(for: Self.inner(width))
+        guard isExpanded else {
+            return max(Self.collapsedHeight, Self.textTop * 2 + previewHeight(for: previewWidth(width)))
+        }
+        var height = Self.textTop + editorHeight(for: Self.inner(width))
         if let bottom = thumbFrames(width: Self.inner(width)).map(\.maxY).max() { height += 12 + bottom }
         if !thread.messages.isEmpty { height += 14 + thread.height(for: Self.inner(width)) }
-        return height + 12 + 32 + 10 + 30 + 10
+        return height + 12 + replyHeight(for: Self.inner(width)) + 2 + 10 + 30 + 10
     }
 
     private static let textX: CGFloat = 42
@@ -848,23 +841,23 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
     override func layout() {
         super.layout()
         dot.frame = NSRect(x: 11, y: 10, width: 20, height: 20)
-        let badgeWidth: CGFloat = isExpanded ? 0 : min(140, ceil(badge.intrinsicContentSize.width))
         badge.frame = NSRect(x: bounds.width - badgeWidth - 12, y: 12, width: badgeWidth, height: 16)
-        titleLabel.frame = NSRect(x: Self.textX, y: 10, width: bounds.width - Self.textX - badgeWidth - 22, height: 20)
+        preview.frame = NSRect(x: Self.textX, y: Self.textTop, width: previewWidth(bounds.width),
+                               height: previewHeight(for: previewWidth(bounds.width)))
 
         let inner = Self.inner(bounds.width)
-        titleField.frame = NSRect(x: Self.textX - 2, y: 7, width: inner + 4, height: 26)
-        notes.frame = NSRect(x: Self.textX, y: 44, width: inner, height: notesHeight(for: inner))
-        notesPlaceholder.frame = NSRect(x: Self.textX, y: 44, width: inner, height: 19)
+        editor.frame = NSRect(x: Self.textX, y: Self.textTop, width: inner, height: editorHeight(for: inner))
+        placeholder.frame = NSRect(x: Self.textX, y: Self.textTop, width: inner, height: 19)
         layoutThumbs()
-        let thumbsBottom = thumbs.filter { !$0.view.isHidden }.map(\.view.frame.maxY).max() ?? notes.frame.maxY
+        let thumbsBottom = thumbs.filter { !$0.view.isHidden }.map(\.view.frame.maxY).max() ?? editor.frame.maxY
         var y = thumbsBottom + 14
         if !thread.messages.isEmpty {
             let height = thread.height(for: inner)
             thread.frame = NSRect(x: Self.textX, y: y, width: inner, height: height)
             y += height + 12
         }
-        replyField.frame = NSRect(x: Self.textX, y: y, width: inner, height: 30)
+        reply.frame = NSRect(x: Self.textX, y: y, width: inner, height: replyHeight(for: inner))
+        replyHint.frame = NSRect(x: Self.textX + 8, y: y + 6, width: inner - 16, height: 18)
 
         let footer = bounds.height - 42
         sendButton.sizeToFit()
@@ -876,7 +869,7 @@ private final class QueueRow: NSView, NSTextFieldDelegate {
     }
 
     private func layoutThumbs() {
-        let top = notes.frame.maxY + 12
+        let top = editor.frame.maxY + 12
         for (thumb, frame) in zip(thumbs, thumbFrames(width: Self.inner(bounds.width))) {
             thumb.view.frame = frame.offsetBy(dx: Self.textX, dy: top)
             thumb.view.isHidden = !isExpanded
@@ -1017,12 +1010,37 @@ private final class ThumbRemoveButton: NSView {
     }
 }
 
-/// O corpo da tarefa: texto puro, e print colado vira anexo dela em vez de um
-/// borrão de RTF no meio das notas.
-private final class QueueNotesView: NSTextView {
+/// O texto da tarefa: puro, e print colado vira anexo dela em vez de um borrão de
+/// RTF no meio. Enter é a próxima tarefa e ⇧Enter quebra linha, como no composer.
+private final class QueueEditor: NSTextView {
     var onChange: (() -> Void)?
+    var onCommit: (() -> Void)?
     var onPasteImages: ((QueueStore.Pasted) -> Void)?
     var onEscape: (() -> Void)?
+
+    func style(font: NSFont) {
+        self.font = font
+        textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
+        insertionPointColor = .white
+        drawsBackground = false
+        isRichText = false
+        importsGraphics = false
+        allowsUndo = true
+        textContainerInset = .zero
+        textContainer?.lineFragmentPadding = 0
+        isVerticallyResizable = false
+    }
+
+    /// A altura do texto nessa largura. Conta a linha vazia depois de uma quebra
+    /// final: sem ela, o cursor some ao dar ⇧Enter no fim.
+    func height(forWidth width: CGFloat) -> CGFloat {
+        guard let layout = layoutManager, let container = textContainer else { return 0 }
+        let inset = textContainerInset
+        container.containerSize = NSSize(width: max(1, width - inset.width * 2), height: .greatestFiniteMagnitude)
+        layout.ensureLayout(for: container)
+        let used = max(layout.usedRect(for: container).maxY, layout.extraLineFragmentRect.maxY)
+        return ceil(used) + inset.height * 2
+    }
 
     override func paste(_ sender: Any?) {
         if let pasted = QueueStore.images(in: .general) { onPasteImages?(pasted) }
@@ -1035,6 +1053,12 @@ private final class QueueNotesView: NSTextView {
     }
 
     override func cancelOperation(_ sender: Any?) { onEscape?() }
+
+    override func keyDown(with event: NSEvent) {
+        // Com acento em composição, o Enter confirma o caractere.
+        guard event.keyCode == 36 || event.keyCode == 76, !hasMarkedText() else { return super.keyDown(with: event) }
+        if event.modifierFlags.contains(.shift) { insertNewlineIgnoringFieldEditor(nil) } else { onCommit?() }
+    }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         QueueStore.images(in: sender.draggingPasteboard) == nil ? super.draggingEntered(sender) : .copy
@@ -1051,48 +1075,78 @@ private final class QueueNotesView: NSTextView {
 
 // MARK: - Nova tarefa
 
-/// A última linha, sempre lá: escreve e dá Enter, e a tarefa entra na lista.
-private final class QueueNewRow: NSView, NSTextFieldDelegate {
+/// A última linha, sempre lá: escreve — o texto quebra sozinho e a linha cresce —
+/// e dá Enter, e a tarefa entra na lista.
+private final class QueueNewRow: NSView {
     var onCreate: ((String) -> Void)?
-    let field = NSTextField()
+    /// Print colado aqui nasce como tarefa aberta, com o que já estava escrito.
+    var onPasteImages: ((String, QueueStore.Pasted) -> Void)?
+    var onResize: (() -> Void)?
+
+    private let editor = QueueEditor()
+    private let hint = NSTextField(labelWithString: "Nova tarefa…")
     private let dot = StatusDot()
+
+    private static let font = NSFont.systemFont(ofSize: 15)
+    private static let textX: CGFloat = 42
+    private static let textTop: CGFloat = 10
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         dot.alphaValue = 0.45
         addSubview(dot)
-        field.font = NSFont.systemFont(ofSize: 15)
-        field.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
-        field.isBordered = false
-        field.drawsBackground = false
-        field.focusRingType = .none
-        field.placeholderAttributedString = NSAttributedString(
-            string: "Nova tarefa…",
-            attributes: [.foregroundColor: NSColor(calibratedWhite: 0.4, alpha: 1), .font: NSFont.systemFont(ofSize: 15)])
-        field.usesSingleLineMode = true
-        field.cell?.isScrollable = true
-        field.delegate = self
-        addSubview(field)
+        editor.style(font: Self.font)
+        editor.onChange = { [weak self] in self?.changed() }
+        editor.onCommit = { [weak self] in self?.commit() }
+        editor.onEscape = { [weak self] in self?.window?.makeFirstResponder(nil) }
+        editor.onPasteImages = { [weak self] pasted in
+            guard let self else { return }
+            let text = self.editor.string
+            self.setText("")
+            self.onPasteImages?(text, pasted)
+        }
+        addSubview(editor)
+        hint.font = Self.font
+        hint.textColor = NSColor(calibratedWhite: 0.4, alpha: 1)
+        addSubview(hint)
     }
 
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
 
-    override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(field) }
+    func focus() { window?.makeFirstResponder(editor) }
 
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
-        let title = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !title.isEmpty else { return true }
-        field.stringValue = ""
-        onCreate?(title)
-        return true
+    func setText(_ text: String) {
+        editor.string = text
+        changed()
     }
+
+    func height(for width: CGFloat) -> CGFloat {
+        max(QueueRow.collapsedHeight, Self.textTop * 2 + editor.height(forWidth: width - Self.textX - 14))
+    }
+
+    private func changed() {
+        hint.isHidden = !editor.string.isEmpty
+        needsLayout = true
+        onResize?()
+    }
+
+    private func commit() {
+        let text = editor.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        setText("")
+        onCreate?(text)
+    }
+
+    override func mouseDown(with event: NSEvent) { focus() }
 
     override func layout() {
         super.layout()
         dot.frame = NSRect(x: 11, y: 10, width: 20, height: 20)
-        field.frame = NSRect(x: 40, y: 10, width: bounds.width - 48, height: 21)
+        let width = bounds.width - Self.textX - 14
+        editor.frame = NSRect(x: Self.textX, y: Self.textTop, width: width,
+                              height: max(bounds.height - Self.textTop * 2, editor.height(forWidth: width)))
+        hint.frame = NSRect(x: Self.textX, y: Self.textTop, width: width, height: 20)
     }
 }
 

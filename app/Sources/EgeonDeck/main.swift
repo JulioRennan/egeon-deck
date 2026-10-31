@@ -481,13 +481,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { return nil }
             let queue = node.controller
             var result: [String: Any] = [:]
-            if let title = query["add"] {
+            if let text = query["add"] {
                 let images = query["image"].flatMap { queue.store.importImage(at: URL(fileURLWithPath: $0)) }
-                result["added"] = queue.add(title: title, notes: query["notes"] ?? "",
-                                            images: images.map { [$0] } ?? []).id
+                result["added"] = queue.add(text: text, images: images.map { [$0] } ?? []).id
             }
             if let id = query["done"] { queue.toggleDone(id) }
             if let id = query["open"] { node.open(id) }
+            if let draft = query["draft"] { node.setDraft(draft) }
             if let id = query["remove"] { queue.remove(id) }
             if let id = query["reply"] { result["error"] = queue.reply(id, text: query["text"] ?? "") ?? "" }
             if let auto = query["auto"] { queue.setAuto(auto == "1") }

@@ -20,8 +20,8 @@ struct QueueMessage: Codable, Equatable {
     var at: Date
 }
 
-/// Uma tarefa da fila: o título, as notas e os prints — juntos, o prompt — e
-/// a thread do que o agente e você disseram sobre ela.
+/// Uma tarefa da fila: um texto corrido e os prints — juntos, o prompt — e a
+/// thread do que o agente e você disseram sobre ela.
 struct QueueItem: Codable, Equatable {
     enum Status: String, Codable {
         /// Anotado, ainda não foi.
@@ -33,10 +33,8 @@ struct QueueItem: Codable, Equatable {
     }
 
     var id: String
-    /// A linha que aparece recolhida.
-    var title: String
-    /// O corpo, visto só com a tarefa aberta: detalhes, passos, onde acontece.
-    var notes: String
+    /// Um texto só, como numa nota: não há título separado do corpo.
+    var text: String
     /// Nomes dos arquivos na pasta da fila — relativos, para a pasta da
     /// bancada mudar de lugar sem quebrar nada.
     var images: [String]
@@ -49,11 +47,9 @@ struct QueueItem: Codable, Equatable {
     /// O agente perguntou e você ainda não respondeu: a fila não anda.
     var awaiting = false
 
-    init(id: String = UUID().uuidString, title: String, notes: String = "", images: [String] = [],
-         status: Status = .pending) {
+    init(id: String = UUID().uuidString, text: String, images: [String] = [], status: Status = .pending) {
         self.id = id
-        self.title = title
-        self.notes = notes
+        self.text = text
         self.images = images
         self.status = status
     }
@@ -61,10 +57,13 @@ struct QueueItem: Codable, Equatable {
     /// O id curto que o agente digita (`egeon task done 3f9a2c`).
     var shortID: String { String(id.lowercased().prefix(6)) }
 
-    /// O que o agente recebe: o título e, separadas por uma linha, as notas.
-    var prompt: String {
-        [title, notes].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }.joined(separator: "\n\n")
+    /// O que o agente recebe.
+    var prompt: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// A primeira linha, curta: como a resposta na thread diz de que tarefa fala.
+    var headline: String {
+        let line = prompt.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        return line.count > 60 ? String(line.prefix(60)) + "…" : line
     }
 
     /// Sem texto e sem imagem não há o que mandar.
@@ -72,13 +71,23 @@ struct QueueItem: Codable, Equatable {
 }
 
 extension QueueItem {
+    /// Como a v1.7 gravava a tarefa, antes de ela virar um texto só.
+    private enum LegacyKeys: String, CodingKey { case title, notes }
+
     /// Thread e pergunta chegaram depois das tarefas: arquivo de antes não tem
-    /// as chaves, e o `Decodable` sintetizado recusaria a tarefa inteira.
+    /// as chaves, e o `Decodable` sintetizado recusaria a tarefa inteira. Título e
+    /// notas antigos viram o texto, com a linha em branco que o prompt já levava.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
-        title = try c.decode(String.self, forKey: .title)
-        notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        if let current = try c.decodeIfPresent(String.self, forKey: .text) {
+            text = current
+        } else {
+            let old = try decoder.container(keyedBy: LegacyKeys.self)
+            text = try [old.decodeIfPresent(String.self, forKey: .title),
+                        old.decodeIfPresent(String.self, forKey: .notes)]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+        }
         images = try c.decodeIfPresent([String].self, forKey: .images) ?? []
         status = try c.decodeIfPresent(Status.self, forKey: .status) ?? .pending
         sentTo = try c.decodeIfPresent(String.self, forKey: .sentTo)

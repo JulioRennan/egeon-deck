@@ -701,8 +701,8 @@ final class ControlSocket {
             respond(fd, status: "200 OK", json: payload)
 
         case ("GET", _, _) where route.contains("/queue"):
-            // /queue?target=ws/id[&add=título[&notes=][&image=caminho]]
-            // [&send=next|<item>][&done=<item>][&open=<item>][&remove=<item>]
+            // /queue?target=ws/id[&add=texto[&image=caminho]]
+            // [&send=next|<item>][&done=<item>][&open=<item>][&draft=texto][&remove=<item>]
             // [&reply=<item>&text=][&auto=0|1][&to=<nó>]
             // [&clear=done]
             // — a fila de prompts por fora,

@@ -66,8 +66,8 @@ final class QueueController {
     /// uma tarefa aberta cria a próxima ali, como no Things. Vazia é permitida:
     /// ela nasce para você escrever, e some se ficar vazia (`dropIfEmpty`).
     @discardableResult
-    func add(title: String, notes: String = "", images: [String] = [], after: String? = nil) -> QueueItem {
-        let item = QueueItem(title: title, notes: notes, images: images)
+    func add(text: String, images: [String] = [], after: String? = nil) -> QueueItem {
+        let item = QueueItem(text: text, images: images)
         if let after, let index = queue.index(of: after) {
             queue.items.insert(item, at: index + 1)
         } else {
@@ -77,11 +77,9 @@ final class QueueController {
         return item
     }
 
-    func update(_ id: String, title: String, notes: String) {
-        guard let index = queue.index(of: id),
-              queue.items[index].title != title || queue.items[index].notes != notes else { return }
-        queue.items[index].title = title
-        queue.items[index].notes = notes
+    func update(_ id: String, text: String) {
+        guard let index = queue.index(of: id), queue.items[index].text != text else { return }
+        queue.items[index].text = text
         changed()
     }
 
@@ -216,9 +214,8 @@ final class QueueController {
     /// O que o agente vê com `egeon tasks`: as tarefas desta fila, curtas.
     func tasks() -> [[String: Any]] {
         queue.items.filter { !$0.isEmpty }.map { item in
-            var out: [String: Any] = ["id": item.shortID, "title": item.title,
+            var out: [String: Any] = ["id": item.shortID, "text": item.text,
                                       "status": item.status.rawValue, "fila": name]
-            if !item.notes.isEmpty { out["notes"] = item.notes }
             if item.awaiting { out["awaiting"] = true }
             if !item.thread.isEmpty {
                 out["thread"] = item.thread.map { ["from": $0.author ?? "você", "kind": $0.kind.rawValue, "text": $0.text] }
@@ -256,7 +253,7 @@ final class QueueController {
     }
 
     /// Você escreveu na thread. Tarefa que já foi a um agente leva a resposta
-    /// a ele — com o título, para ele saber do que se trata; a que ainda não
+    /// a ele — com a primeira linha, para ele saber do que se trata; a que ainda não
     /// foi só guarda o comentário, que segue junto quando ela for.
     @discardableResult
     func reply(_ id: String, text: String) -> String? {
@@ -264,7 +261,7 @@ final class QueueController {
         guard let index = queue.index(of: id), !text.isEmpty else { return nil }
         let item = queue.items[index]
         if let agent = item.sentTo {
-            let prompt = "Sobre a tarefa \(item.shortID) “\(item.title)” da fila \(name):\n\n\(text)"
+            let prompt = "Sobre a tarefa \(item.shortID) “\(item.headline)” da fila \(name):\n\n\(text)"
             if let error = dispatch(agent, prompt, []) { return error }
             queue.items[index].status = .sent
             queue.items[index].doneAt = nil
@@ -323,7 +320,7 @@ final class QueueController {
             "destination": destination ?? "",
             "targets": targets.map(\.id),
             "items": queue.items.map { item -> [String: Any] in
-                ["id": item.id, "title": item.title, "notes": item.notes, "images": item.images.count,
+                ["id": item.id, "text": item.text, "images": item.images.count,
                  "status": item.status.rawValue, "sentTo": item.sentTo ?? ""]
             },
         ]

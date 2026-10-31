@@ -9,6 +9,10 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Alterado
+
+- Na fila de prompts, cada tarefa agora é um texto corrido, sem título e notas separados, e o texto quebra sozinho em todo lugar, inclusive em "Nova tarefa…" e na resposta da thread: a lista mostra o texto inteiro, o clique deixa editar ali mesmo, Enter cria a próxima e ⇧Enter quebra linha; tarefas antigas têm título e notas juntados (ADR-088).
+
 ## [1.7.1] - 2026-10-31
 
 ### Corrigido

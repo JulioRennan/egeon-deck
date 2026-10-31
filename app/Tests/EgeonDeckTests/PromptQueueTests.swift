@@ -13,7 +13,7 @@ final class PromptQueueTests: XCTestCase {
     }
 
     func testMoveStaysInsideTheList() {
-        var queue = PromptQueue(items: ["a", "b", "c"].map { QueueItem(id: $0, title: $0) })
+        var queue = PromptQueue(items: ["a", "b", "c"].map { QueueItem(id: $0, text: $0) })
         queue.move("a", by: -1)
         XCTAssertEqual(queue.items.map(\.id), ["a", "b", "c"])
         queue.move("a", by: 1)
@@ -23,7 +23,7 @@ final class PromptQueueTests: XCTestCase {
     }
 
     func testDragMoveCountsOnlyTheRowsThatStayed() {
-        var queue = PromptQueue(items: ["a", "b", "c", "d"].map { QueueItem(id: $0, title: $0) })
+        var queue = PromptQueue(items: ["a", "b", "c", "d"].map { QueueItem(id: $0, text: $0) })
         // "a" solto depois de "c": entre as que ficaram (b, c, d), posição 2.
         queue.move("a", to: 2)
         XCTAssertEqual(queue.items.map(\.id), ["b", "c", "a", "d"])
@@ -34,8 +34,8 @@ final class PromptQueueTests: XCTestCase {
     }
 
     func testRunnerWaitsForWorkThenFinishesAndSendsNextOnlyInAuto() {
-        var queue = PromptQueue(items: [QueueItem(id: "1", title: "um", status: .sent),
-                                        QueueItem(id: "2", title: "dois")])
+        var queue = PromptQueue(items: [QueueItem(id: "1", text: "um", status: .sent),
+                                        QueueItem(id: "2", text: "dois")])
         queue.items[0].sentAt = Date()
         // Parado logo depois do envio, sem ter trabalhado: ainda não é o fim.
         XCTAssertEqual(QueueRunner.step(queue: queue, activity: .waiting, sawWork: false), .init())
@@ -52,7 +52,7 @@ final class PromptQueueTests: XCTestCase {
     }
 
     func testRunnerGivesUpOnLostDelivery() {
-        var queue = PromptQueue(items: [QueueItem(id: "1", title: "um", status: .sent)])
+        var queue = PromptQueue(items: [QueueItem(id: "1", text: "um", status: .sent)])
         let sent = Date()
         queue.items[0].sentAt = sent
         let later = sent.addingTimeInterval(QueueRunner.lostAfter + 1)
@@ -61,7 +61,7 @@ final class PromptQueueTests: XCTestCase {
     }
 
     func testRunnerStartsAutoWhenIdleAndNothingInFlight() {
-        let queue = PromptQueue(items: [QueueItem(id: "1", title: "um")], auto: true)
+        let queue = PromptQueue(items: [QueueItem(id: "1", text: "um")], auto: true)
         XCTAssertEqual(QueueRunner.step(queue: queue, activity: .ready, sawWork: false),
                        .init(finish: nil, send: "1"))
     }
@@ -99,10 +99,10 @@ final class PromptQueueTests: XCTestCase {
     func testAutoWalksTheQueueOneTurnAtATime() throws {
         let world = World()
         let queue = controller(world)
-        queue.add(title: "primeiro")
-        queue.add(title: "segundo", notes: "com detalhe")
+        queue.add(text: "primeiro")
+        queue.add(text: "segundo\n\ncom detalhe")
         // A tarefa em branco é a que você está escrevendo: não é a próxima.
-        let blank = queue.add(title: "  ")
+        let blank = queue.add(text: "  ")
 
         queue.setAuto(true)
         XCTAssertEqual(world.bodies, ["primeiro"])
@@ -130,7 +130,7 @@ final class PromptQueueTests: XCTestCase {
         let world = World()
         world.linked = []
         let queue = controller(world)
-        let item = queue.add(title: "pedido")
+        let item = queue.add(text: "pedido")
         XCTAssertNotNil(queue.send(item.id))
         XCTAssertEqual(queue.queue.items.first?.status, .pending)
 
@@ -147,8 +147,8 @@ final class PromptQueueTests: XCTestCase {
     func testSendingOverAnInFlightItemClosesIt() {
         let world = World()
         let queue = controller(world)
-        let first = queue.add(title: "um")
-        let second = queue.add(title: "dois")
+        let first = queue.add(text: "um")
+        let second = queue.add(text: "dois")
         queue.send(first.id)
         queue.send(second.id)
         XCTAssertEqual(queue.queue.items.map(\.status), [.done, .sent])
@@ -158,7 +158,7 @@ final class PromptQueueTests: XCTestCase {
         let world = World()
         let queue = controller(world)
         let name = try XCTUnwrap(queue.store.saveImage(png: Data([0x89, 0x50, 0x4E, 0x47])))
-        let item = queue.add(title: "", images: [name])
+        let item = queue.add(text: "", images: [name])
         queue.send(item.id)
         XCTAssertEqual(world.sent.first?.images, [queue.store.url(of: name).path])
         XCTAssertTrue(FileManager.default.fileExists(atPath: queue.store.url(of: name).path))
@@ -182,21 +182,21 @@ final class PromptQueueTests: XCTestCase {
     func testEnterAfterAnOpenTaskInsertsBelowItAndBlankOnesGoAway() {
         let world = World()
         let queue = controller(world)
-        let a = queue.add(title: "a")
-        queue.add(title: "c")
-        let b = queue.add(title: "", after: a.id)
-        XCTAssertEqual(queue.queue.items.map(\.title), ["a", "", "c"])
+        let a = queue.add(text: "a")
+        queue.add(text: "c")
+        let b = queue.add(text: "", after: a.id)
+        XCTAssertEqual(queue.queue.items.map(\.text), ["a", "", "c"])
         XCTAssertEqual(queue.queue.pendingCount, 2)
         queue.dropIfEmpty(a.id)
         XCTAssertEqual(queue.queue.items.count, 3)
         queue.dropIfEmpty(b.id)
-        XCTAssertEqual(queue.queue.items.map(\.title), ["a", "c"])
+        XCTAssertEqual(queue.queue.items.map(\.text), ["a", "c"])
     }
 
     func testCheckboxMarksDoneByHandAndBack() {
         let world = World()
         let queue = controller(world)
-        let item = queue.add(title: "resolvi sozinho")
+        let item = queue.add(text: "resolvi sozinho")
         queue.toggleDone(item.id)
         XCTAssertEqual(queue.queue.items.first?.status, .done)
         XCTAssertTrue(world.sent.isEmpty)
@@ -207,7 +207,7 @@ final class PromptQueueTests: XCTestCase {
     func testAttachAndDetachImages() throws {
         let world = World()
         let queue = controller(world)
-        let item = queue.add(title: "com print")
+        let item = queue.add(text: "com print")
         let name = try XCTUnwrap(queue.store.saveImage(png: Data([1, 2, 3])))
         queue.attach([name], to: item.id)
         XCTAssertEqual(queue.queue.items.first?.images, [name])
@@ -221,13 +221,13 @@ final class PromptQueueTests: XCTestCase {
     func testFooterOnlyGoesToAgentsAndCarriesTheShortID() {
         let world = World()
         let queue = controller(world)
-        let item = queue.add(title: "conserta o toast")
+        let item = queue.add(text: "conserta o toast")
         queue.send(item.id)
         XCTAssertTrue(world.sent[0].text.hasSuffix(queue.footer(for: item)))
         XCTAssertTrue(world.sent[0].text.contains("egeon task done \(item.shortID)"))
 
         world.linked = [.init(id: "sh", label: "sh", agent: false)]
-        let other = queue.add(title: "ls")
+        let other = queue.add(text: "ls")
         queue.send(other.id)
         XCTAssertEqual(world.sent[1].text, "ls")
     }
@@ -235,7 +235,7 @@ final class PromptQueueTests: XCTestCase {
     func testAgentTicksAsksAndNotesByShortID() {
         let world = World()
         let queue = controller(world)
-        let item = queue.add(title: "toast atrás do header")
+        let item = queue.add(text: "toast atrás do header")
         XCTAssertNotNil(queue.agent("dev", "done", task: "zzzz", text: ""))
         XCTAssertNotNil(queue.agent("dev", "ask", task: item.shortID, text: "  "))
 
@@ -254,8 +254,8 @@ final class PromptQueueTests: XCTestCase {
     func testOpenQuestionHoldsTheQueueUntilYouReply() {
         let world = World()
         let queue = controller(world)
-        let first = queue.add(title: "primeira")
-        queue.add(title: "segunda")
+        let first = queue.add(text: "primeira")
+        queue.add(text: "segunda")
         queue.setAuto(true)
         world.activity = .working
         queue.tick()
@@ -285,7 +285,7 @@ final class PromptQueueTests: XCTestCase {
     func testCommentBeforeSendingGoesWithTheTask() {
         let world = World()
         let queue = controller(world)
-        let item = queue.add(title: "logo pixelado")
+        let item = queue.add(text: "logo pixelado")
         queue.reply(item.id, text: "só no retina")
         XCTAssertTrue(world.sent.isEmpty)
         queue.send(item.id)
@@ -293,9 +293,30 @@ final class PromptQueueTests: XCTestCase {
     }
 
     func testOldFileWithoutThreadStillLoads() throws {
-        let json = #"{"items":[{"id":"abc123","title":"t","notes":"","images":[],"status":"pending"}],"auto":false}"#
+        let json = #"{"items":[{"id":"abc123","title":"t","notes":"corpo","images":[],"status":"pending"},{"id":"d","title":"só título","notes":"","images":[],"status":"done"}],"auto":false}"#
         let queue = try JSONDecoder().decode(PromptQueue.self, from: Data(json.utf8))
+        // Título e notas da v1.7 viram um texto só, e o prompt não muda.
+        XCTAssertEqual(queue.items.map(\.text), ["t\n\ncorpo", "só título"])
+        let saved = String(decoding: try JSONEncoder().encode(queue), as: UTF8.self)
+        XCTAssertFalse(saved.contains("\"title\""))
         XCTAssertEqual(queue.items.first?.thread, [])
         XCTAssertEqual(queue.items.first?.awaiting, false)
+    }
+
+    func testHeadlineIsTheFirstLineShortened() {
+        XCTAssertEqual(QueueItem(text: "\n  primeira linha\nsegunda").headline, "primeira linha")
+        let long = QueueItem(text: String(repeating: "x", count: 80)).headline
+        XCTAssertEqual(long.count, 61)
+        XCTAssertTrue(long.hasSuffix("…"))
+    }
+
+    func testReplySaysWhichTaskByItsFirstLine() {
+        let world = World()
+        let queue = controller(world)
+        let item = queue.add(text: "Toast atrás do header\nSó no Safari, nas páginas logadas.")
+        queue.send(item.id)
+        queue.reply(item.id, text: "é o z-index")
+        XCTAssertTrue(world.sent[1].text.contains("“Toast atrás do header”"))
+        XCTAssertFalse(world.sent[1].text.contains("Só no Safari"))
     }
 }

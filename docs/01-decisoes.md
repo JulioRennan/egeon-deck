@@ -4884,13 +4884,16 @@ do canvas:
 
 - **Lista que expande, como no Things — não chat.** A primeira versão tinha
   caixa de escrever embaixo e itens como bolhas, e parecia chat; foi recusada.
-  Cada tarefa é uma linha (bolinha de estado + título); o clique abre ali mesmo
-  um cartão com o título editável, as **notas** (texto livre, cresce com o
-  conteúdo) e os prints, e recolhe com Esc ou clique fora — uma aberta por vez.
-  A última linha, "Nova tarefa…", está sempre lá: escrever e dar Enter põe na
-  lista e deixa a linha pronta para a próxima; Enter no título de uma aberta cria
-  outra logo abaixo. Tarefa recolhida em branco some. A bolinha marca e desmarca
-  feita à mão. O prompt é o título e, separadas por uma linha, as notas.
+  Cada tarefa é **um texto corrido**: título e notas separados também foram
+  recusados, porque o pedido é uma coisa só. Recolhida mostra o texto inteiro, com
+  as quebras dele — campo de uma linha que rola de lado também foi recusado, e
+  "Nova tarefa…" e a resposta da thread quebram sozinhos e crescem. O clique deixa o mesmo texto editável no mesmo lugar e com a mesma fonte, com os
+  prints e a thread embaixo, e recolhe com Esc ou clique fora — uma aberta por vez.
+  A última linha, "Nova tarefa…", está sempre lá (⌘V nela nasce tarefa com print):
+  escrever e dar Enter põe na lista e deixa a linha pronta para a próxima; Enter numa aberta cria outra logo
+  abaixo, e ⇧Enter quebra linha, como no composer. Tarefa recolhida em branco some.
+  A bolinha marca e desmarca feita à mão. Arquivo da v1.7 tem título e notas
+  juntados na leitura, e a resposta na thread cita a primeira linha do texto.
 - **Prints.** ⌘V nas notas cola print (a imagem do pasteboard vira PNG) e
   arrastar arquivo de imagem também vale (na aberta, ou vira tarefa nova); tudo é copiado para
   `workbenches/<bancada>/queues/<nó>/` com o `queue.json` ao lado — o
@@ -4930,7 +4933,7 @@ do canvas:
   enquanto ela está aberta: o turno fechou por você, não pela tarefa
   (`QueueRunner`). No cartão, embaixo dos prints, a thread em ordem (quem
   perguntou, comentou ou marcou, e você) e o campo de responder: resposta a
-  tarefa que já foi vai ao agente como prompt, com o id e o título; comentário
+  tarefa que já foi vai ao agente como prompt, com o id e a primeira linha; comentário
   em tarefa que ainda não foi segue junto quando ela for. Marcar feita pelo
   agente vale mais que o fim de turno — este continua só como reserva para quem
   não marca.
