@@ -9,6 +9,8 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-30
+
 ### Adicionado
 
 - Consumo de tokens e custo por bancada: a barra lateral mostra quanto cada bancada já custou; no canvas, uma barra informativa sob a barra de ações mostra o custo, e o clique abre o detalhe — para onde foi o dinheiro (entrada, saída, cache escrito e cache lido), cada agente e cada modelo, e a tabela de preços; no chat, cada resposta diz quanto aquele turno custou e cada agente mostra o que já gastou. Os preços vêm do próprio Claude Code instalado e se atualizam com ele; o custo fica no preço do dia em que foi gasto — preço novo só vale dali para frente; exceções à mão em `pricing.json` (ADR-085).
@@ -284,7 +286,8 @@ Primeira versão para passar adiante (tag `v0`).
 - Aviso de "terminou" e "precisa de você" vindo do gancho do CLI.
 - Socket de controle em `~/.egeon/sock`.
 
-[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.2.0...v1.3.0
