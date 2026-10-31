@@ -10,11 +10,16 @@ enum WorkbenchStore {
     private static let legacyURL = URL(fileURLWithPath:
         Flavor.current.config("sessions.json").path)
 
-    static func load() -> [WorkbenchConfig] {
-        if let list = decode(configURL) { return list }
-        if let list = decode(legacyURL) {
+    static func load() -> [WorkbenchConfig] { load(from: configURL, legacy: legacyURL) }
+
+    static func load(from config: URL, legacy: URL) -> [WorkbenchConfig] {
+        // O antigo só vale quando o novo nunca existiu. Lista vazia é o estado de
+        // quem apagou a última bancada: cair no antigo traria de volta bancadas
+        // que já saíram, com os agentes delas subindo sozinhos.
+        if FileManager.default.fileExists(atPath: config.path) { return decode(config) ?? [] }
+        if let list = decode(legacy) {
             Log.write("bancadas: lidas do sessions.json antigo; "
-                      + "a próxima gravação vai para \(configURL.lastPathComponent)")
+                      + "a próxima gravação vai para \(config.lastPathComponent)")
             return list
         }
 
@@ -25,8 +30,7 @@ enum WorkbenchStore {
 
     private static func decode(_ url: URL) -> [WorkbenchConfig]? {
         guard let data = try? Data(contentsOf: url),
-              let list = try? JSONDecoder().decode([WorkbenchConfig].self, from: data),
-              !list.isEmpty else { return nil }
+              let list = try? JSONDecoder().decode([WorkbenchConfig].self, from: data) else { return nil }
         // Arquivo gravado antes do rename traz `sessionId`/`sessionStarted`. Sem
         // absorver aqui, todo agente perderia a conversa no primeiro arranque desta
         // versão — o terminal subiria limpo em vez de retomar.

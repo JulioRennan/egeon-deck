@@ -11,6 +11,7 @@ citados entre parênteses.
 
 ### Corrigido
 
+- Apagar a última bancada não traz mais de volta, na próxima abertura, as bancadas de um arquivo antigo (`sessions.json`), com os agentes delas subindo sozinhos.
 - Sem nenhuma bancada, o aviso "Nenhuma bancada" não fica mais escrito por cima do workspace na barra lateral: aparece abaixo dele.
 
 ## [1.7.0] - 2026-10-30
