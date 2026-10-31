@@ -227,6 +227,16 @@ final class QueueNode: NodeView {
         needsLayout = true
     }
 
+    /// Emprestado ao painel do chat: sem X, que apagaria a fila, e sem a porta, que
+    /// arrastaria uma aresta para um canvas coberto.
+    func setDocked(_ docked: Bool) {
+        setRemovable(!docked)
+        port.isHidden = docked
+    }
+
+    /// O chat mostra a fila: o teclado já vai para onde se anota.
+    func focusNewTask() { newRow.focus() }
+
     /// Escreve na linha de baixo por fora, sem pôr na lista — para conferir a
     /// quebra de linha, já que digitar exige Acessibilidade.
     func setDraft(_ text: String) {
@@ -314,7 +324,9 @@ final class QueueNode: NodeView {
     /// nova já aberta, para você escrever.
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let pasted = QueueStore.images(in: sender.draggingPasteboard) else { return false }
-        let id = expanded ?? controller.add(text: "").id
+        // Aberta e já enviada não recebe print: vira tarefa nova.
+        let open = expanded.flatMap { id in controller.queue.items.first { $0.id == id && !$0.isLocked }?.id }
+        let id = open ?? controller.add(text: "").id
         attach(pasted, to: id)
         expand(id)
         return true
@@ -628,11 +640,21 @@ private final class QueueRow: NSView {
         }
         meta.stringValue = Self.meta(for: item)
         meta.isHidden = !isExpanded || meta.stringValue.isEmpty
-        sendButton.title = item.status == .pending ? "Enviar" : "Enviar de novo"
-        if texts, editor.string != item.text { editor.string = item.text }
+        sendButton.title = "Enviar"
+        if (texts || item.isLocked), editor.string != item.text { editor.string = item.text }
         placeholder.isHidden = !editor.string.isEmpty || !isExpanded
+        applyLock()
         if thumbs.count != item.images.count { rebuildThumbs() }
         needsLayout = true
+    }
+
+    /// Enviada, o texto fica para ler e copiar, e sem enviar: só a thread segue.
+    private func applyLock() {
+        editor.isEditable = !item.isLocked
+        editor.textColor = NSColor(calibratedWhite: item.isLocked ? 0.72 : 0.92, alpha: 1)
+        sendButton.isHidden = !isExpanded || item.isLocked
+        removeButton.isHidden = !isExpanded || item.status == .sent
+        thumbs.forEach { ($0.view as? ThumbHolder)?.remove?.isHidden = item.isLocked }
     }
 
     private static let clock: DateFormatter = {
@@ -678,6 +700,7 @@ private final class QueueRow: NSView {
             addSubview(holder)
             return (holder, size.height > 0 ? size.width / size.height : 1)
         }
+        applyLock()
         layoutThumbs()
         onResize?()
     }
@@ -710,7 +733,8 @@ private final class QueueRow: NSView {
         layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.1).cgColor
         preview.isHidden = open
         badge.isHidden = open
-        for view in [editor, sendButton, removeButton, reply] as [NSView] { view.isHidden = !open }
+        for view in [editor, reply] as [NSView] { view.isHidden = !open }
+        applyLock()
         replyHint.isHidden = !open || !reply.string.isEmpty
         thread.isHidden = !open || thread.messages.isEmpty
         placeholder.isHidden = !open || !editor.string.isEmpty
@@ -722,6 +746,11 @@ private final class QueueRow: NSView {
     }
 
     func focusEditor() {
+        // Enviada, o que se escreve é a resposta na thread.
+        if item.isLocked {
+            window?.makeFirstResponder(reply)
+            return
+        }
         window?.makeFirstResponder(editor)
         editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
     }
@@ -793,13 +822,17 @@ private final class QueueRow: NSView {
         func add(_ title: String, _ handler: @escaping () -> Void) {
             menu.addItem(ClosureMenuItem(title: title, handler: handler))
         }
-        if item.status == .pending { add("Enviar agora") { [weak self] in self?.onSend?() } }
-        else { add("Voltar para pendente") { [weak self] in self?.onReopen?() } }
-        menu.addItem(.separator())
+        if !item.isLocked {
+            if item.status == .pending { add("Enviar agora") { [weak self] in self?.onSend?() } }
+            else { add("Voltar para pendente") { [weak self] in self?.onReopen?() } }
+            menu.addItem(.separator())
+        }
         add("Mover para cima") { [weak self] in self?.onMove?(-1) }
         add("Mover para baixo") { [weak self] in self?.onMove?(1) }
-        menu.addItem(.separator())
-        add("Apagar") { [weak self] in self?.onRemove?() }
+        if item.status != .sent {
+            menu.addItem(.separator())
+            add("Apagar") { [weak self] in self?.onRemove?() }
+        }
         return menu
     }
 
@@ -1043,6 +1076,7 @@ private final class QueueEditor: NSTextView {
     }
 
     override func paste(_ sender: Any?) {
+        guard isEditable else { return }
         if let pasted = QueueStore.images(in: .general) { onPasteImages?(pasted) }
         else { pasteAsPlainText(sender) }
     }
@@ -1056,7 +1090,9 @@ private final class QueueEditor: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         // Com acento em composição, o Enter confirma o caractere.
-        guard event.keyCode == 36 || event.keyCode == 76, !hasMarkedText() else { return super.keyDown(with: event) }
+        guard isEditable, event.keyCode == 36 || event.keyCode == 76, !hasMarkedText() else {
+            return super.keyDown(with: event)
+        }
         if event.modifierFlags.contains(.shift) { insertNewlineIgnoringFieldEditor(nil) } else { onCommit?() }
     }
 

@@ -4915,6 +4915,12 @@ do canvas:
   de a TUI assentar a anterior (o mesmo silêncio que já segura o Enter), o texto
   por último e então o Enter. Em perfil sem bracketed paste os caminhos vão no
   texto.
+- **Enviada, a tarefa não muda mais.** Texto e prints são o registro do que foi
+  pedido: editar depois faria a lista dizer uma coisa e o agente ter recebido outra.
+  Daí em diante só a thread: a resposta chega ao agente, e é ela que reabre uma
+  tarefa feita. Saíram "Enviar de novo" e "Voltar para pendente" de tarefa enviada,
+  e tarefa com o agente não se apaga. A trava mora no `QueueController`, não na tela:
+  rota e arrasto passam por ela. Tarefa feita à mão, que nunca foi, segue editável.
 - **Estado da tarefa:** pendente (○), com o agente (◐, com hora e destino),
   feita (✓). **Arrastar reordena**: na linha recolhida, clique abre e arrasto
   move — decide o quanto o cursor andou —, e as outras abrem o vão onde ela cai.
@@ -4938,8 +4944,18 @@ do canvas:
   agente vale mais que o fim de turno — este continua só como reserva para quem
   não marca.
 
-Fica de fora do modo chat: a fila é ferramenta de canvas, e no chat o composer
-já é a caixa de prompt.
+- **No modo chat, o mesmo card, ao lado da conversa.** A coluna tem a seção Filas,
+  com o resumo (o que está pendente, com quem, ou a pergunta em laranja), e o clique
+  abre a fila num painel em altura cheia, como o painel de threads do Slack, emprestando
+  o card como já se faz com o terminal. Primeiro ela tomou o lugar da thread, e o
+  composer saía; foi recusado, porque o ponto é acompanhar o agente enquanto anota.
+  Thread e composer só encolhem, e a divisória entre os dois arrasta: a largura
+  fica guardada para todas as bancadas, com limite mínimo para os dois lados, e duplo
+  clique volta ao padrão. Faixa acima do composer (Traycer) foi descartada:
+  o usuário quis a lista do canvas tal como está, e dois desenhos da mesma lista dariam
+  duas coisas para manter. No painel o X do card vira "fechar painel", porque ali
+  apagaria a fila; o painel reabre ao voltar do canvas. "+ Nova fila" cria o nó já
+  ligado ao agente em foco, sem voltar ao canvas.
 
 **Verificação.** `PromptQueueTests` (destino, ordem, a regra do automático com
 pergunta, morte e entrega perdida, o controller com disco temporário: envio,

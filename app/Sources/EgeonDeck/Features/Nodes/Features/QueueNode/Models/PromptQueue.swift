@@ -57,6 +57,10 @@ struct QueueItem: Codable, Equatable {
     /// O id curto que o agente digita (`egeon task done 3f9a2c`).
     var shortID: String { String(id.lowercased().prefix(6)) }
 
+    /// Já foi a um agente: o texto e os prints são o registro do que foi pedido, e
+    /// a partir daqui a conversa segue pela thread.
+    var isLocked: Bool { sentAt != nil }
+
     /// O que o agente recebe.
     var prompt: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 

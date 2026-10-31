@@ -78,19 +78,24 @@ final class QueueController {
     }
 
     func update(_ id: String, text: String) {
-        guard let index = queue.index(of: id), queue.items[index].text != text else { return }
+        guard let index = queue.index(of: id), !queue.items[index].isLocked,
+              queue.items[index].text != text else { return }
         queue.items[index].text = text
         changed()
     }
 
     func attach(_ images: [String], to id: String) {
-        guard let index = queue.index(of: id), !images.isEmpty else { return }
+        guard let index = queue.index(of: id), !queue.items[index].isLocked, !images.isEmpty else {
+            // Quem salvou o print aqui não tem mais onde pô-lo.
+            store.remove(images: images)
+            return
+        }
         queue.items[index].images += images
         changed()
     }
 
     func detach(_ image: String, from id: String) {
-        guard let index = queue.index(of: id) else { return }
+        guard let index = queue.index(of: id), !queue.items[index].isLocked else { return }
         Log.write("fila: print \(image) tirado da tarefa \(id.prefix(8))")
         queue.items[index].images.removeAll { $0 == image }
         store.remove(images: [image])
@@ -113,8 +118,9 @@ final class QueueController {
         changed()
     }
 
+    /// Tarefa com o agente não sai da lista: ele ainda pode marcá-la e perguntar.
     func remove(_ id: String) {
-        guard let index = queue.index(of: id) else { return }
+        guard let index = queue.index(of: id), queue.items[index].status != .sent else { return }
         Log.write("fila: tarefa \(id.prefix(8)) apagada (\(queue.items[index].images.count) print(s))")
         store.remove(images: queue.items[index].images)
         queue.items.remove(at: index)
@@ -133,9 +139,10 @@ final class QueueController {
         changed()
     }
 
-    /// Volta para pendente — para mandar de novo.
+    /// Volta para pendente a que você marcou à mão. A que já foi a um agente não
+    /// volta: quem a reabre é a resposta na thread.
     func reopen(_ id: String) {
-        guard let index = queue.index(of: id) else { return }
+        guard let index = queue.index(of: id), !queue.items[index].isLocked else { return }
         queue.items[index].status = .pending
         queue.items[index].sentAt = nil
         queue.items[index].sentTo = nil
@@ -175,6 +182,7 @@ final class QueueController {
         guard let destination else { return blocker }
         guard let index = queue.index(of: id) else { return "item sumiu" }
         let item = queue.items[index]
+        guard !item.isLocked else { return "esta tarefa já foi enviada: continue pela thread" }
         guard !item.isEmpty else { return "tarefa vazia" }
         let agent = linked().first { $0.id == destination }?.agent ?? false
         // Comentário seu feito antes de mandar segue junto: é parte do pedido.

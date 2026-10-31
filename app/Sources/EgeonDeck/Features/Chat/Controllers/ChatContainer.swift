@@ -23,6 +23,25 @@ final class ChatContainer: NSView {
     /// Devolve o card ao canvas coberto quando o chat para de mostrá-lo.
     var releaseTerminal: ((NSView) -> Void)?
     private var shownTerminal: NSView?
+    /// A fila aberta ao lado da conversa. O card é emprestado como o do terminal,
+    /// mas não toma o lugar da thread: dá para acompanhar o agente e anotar junto.
+    private var shownQueue: String?
+    private var queueView: NSView?
+    /// A que estava aberta ao sair do modo chat: volta aberta ao voltar.
+    private var parkedQueue: String?
+    private let queueSplit = ChatSplitHandle()
+    private static let panelWidthKey = "chatQueuePanelWidth"
+    /// A largura que você arrastou; vale para todas as bancadas. Nil é o padrão.
+    private var preferredPanelWidth: CGFloat? = {
+        let saved = UserDefaults.standard.double(forKey: ChatContainer.panelWidthKey)
+        return saved > 0 ? CGFloat(saved) : nil
+    }()
+    private let queueClose = ToolbarButton(symbols: ["sidebar.right", "xmark"],
+                                           tooltip: "Fechar o painel (a fila continua na bancada)", size: 28)
+    /// As filas da bancada, para a coluna.
+    var queues: (() -> [ChatQueue])?
+    /// Cria uma fila ligada ao agente dado e devolve o id dela.
+    var createQueue: ((_ agent: String?) -> String?)?
     /// Os pedidos de permissão abertos desta bancada, e quem responde (ADR-068).
     var permissions: (() -> [PermissionAsk])?
     var answerPermission: ((String, PermissionAnswer) -> Bool)?
@@ -181,6 +200,23 @@ final class ChatContainer: NSView {
         layer?.backgroundColor = NSColor(srgbRed: 0.043, green: 0.055, blue: 0.082,
                                          alpha: 1).cgColor
 
+        column.onPickQueue = { [weak self] id in self?.toggleQueue(id) }
+        queueClose.onClick = { [weak self] in
+            guard let self, let id = self.shownQueue else { return }
+            self.toggleQueue(id)
+        }
+        queueClose.isHidden = true
+        addSubview(queueClose)
+        queueSplit.isHidden = true
+        // Medido a partir da borda direita, que é onde o painel está preso.
+        queueSplit.onDrag = { [weak self] x in
+            guard let self else { return }
+            let content = max(0, self.bounds.width - (16 + 264 + 16) - 16 - 16)
+            self.setQueuePanelWidth(ChatQueue.panelWidth(content: content, preferred: self.bounds.width - 16 - x - 8))
+        }
+        queueSplit.onReset = { [weak self] in self?.setQueuePanelWidth(nil) }
+        addSubview(queueSplit)
+        column.onNewQueue = { [weak self] in self?.newQueueClicked() }
         column.onPick = { [weak self] participant in
             self?.focus(on: participant.id)
             self?.composer.focus()
@@ -261,7 +297,10 @@ final class ChatContainer: NSView {
         if !userChoseFocus || !alive.contains(where: { $0.id == focusedId }) {
             focusedId = (alive.first { $0.isAgent } ?? alive.first)?.id
         }
-        column.update(all, focused: focusedId)
+        let queueList = queues?() ?? []
+        // A fila saiu da bancada com o painel aberto.
+        if let shownQueue, !queueList.contains(where: { $0.id == shownQueue }) { leaveQueue() }
+        column.update(all, focused: focusedId, queues: queueList, shownQueue: shownQueue)
         let byAddress = Dictionary(all.map { ($0.address, $0) }, uniquingKeysWith: { a, _ in a })
         let asks = (permissions?() ?? []).map { ask in
             (ask: ask, name: byAddress[ask.address]?.id ?? ask.address,
@@ -281,6 +320,10 @@ final class ChatContainer: NSView {
     /// Escolhe o participante por fora (`/chat?focus=id`) — o clique na coluna
     /// não é dirigível sem Acessibilidade.
     func focusFromOutside(_ id: String) {
+        if queues?().contains(where: { $0.id == id }) == true {
+            showQueue(id)
+            return
+        }
         guard (participants?() ?? []).contains(where: { $0.id == id }) else { return }
         focus(on: id)
     }
@@ -635,6 +678,80 @@ final class ChatContainer: NSView {
         needsLayout = true
     }
 
+    private func showQueue(_ id: String) {
+        guard let view = terminalView?(id) else { return }
+        if queueView !== view { leaveQueue() }
+        queueView = view
+        shownQueue = id
+        (view as? QueueNode)?.setDocked(true)
+        addSubview(view, positioned: .below, relativeTo: popup)
+        addSubview(queueClose, positioned: .above, relativeTo: view)
+        addSubview(queueSplit, positioned: .above, relativeTo: view)
+        queueClose.isHidden = false
+        queueSplit.isHidden = false
+        needsLayout = true
+        refresh()
+        layoutSubtreeIfNeeded()
+        (view as? QueueNode)?.focusNewTask()
+    }
+
+    /// Fecha o painel; o card volta para o canvas, e a fila segue na bancada.
+    func leaveQueue() {
+        guard let view = queueView else { return }
+        queueView = nil
+        shownQueue = nil
+        queueClose.isHidden = true
+        queueSplit.isHidden = true
+        (view as? QueueNode)?.setDocked(false)
+        view.removeFromSuperview()
+        releaseTerminal?(view)
+        needsLayout = true
+    }
+
+    /// Saindo do modo chat: o card volta ao canvas, e o painel reabre na volta.
+    func parkQueue() {
+        // Toda troca de modo passa aqui, inclusive a que entra no chat, com o
+        // painel ainda fechado: sem esta guarda, ela apagaria o que foi guardado.
+        guard let shownQueue else { return }
+        parkedQueue = shownQueue
+        leaveQueue()
+    }
+
+    func restoreQueue() {
+        guard let id = parkedQueue else { return }
+        parkedQueue = nil
+        if queues?().contains(where: { $0.id == id }) == true { showQueue(id) }
+    }
+
+    /// Grava a largura escolhida, ou volta ao padrão com nil. Também pela rota
+    /// `/chat?panel=`, já que arrastar exige Acessibilidade.
+    func setQueuePanelWidth(_ width: CGFloat?) {
+        preferredPanelWidth = width
+        if let width {
+            UserDefaults.standard.set(Double(width), forKey: Self.panelWidthKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.panelWidthKey)
+        }
+        needsLayout = true
+    }
+
+    private func toggleQueue(_ id: String) {
+        if shownQueue == id {
+            leaveQueue()
+            refresh()
+            composer.focus()
+        } else {
+            showQueue(id)
+        }
+    }
+
+    /// O clique em "+ Nova fila", também pela rota `/chat?newqueue=1`.
+    func newQueueClicked() {
+        let agents = (participants?() ?? []).filter(\.isAgent)
+        let agent = agents.first { $0.id == focusedId } ?? agents.first
+        if let id = createQueue?(agent?.id) { showQueue(id) }
+    }
+
     /// De volta à thread; o card volta para o canvas. O shell chama isto ao
     /// sair do modo chat, para o card não ficar preso aqui.
     func leaveTerminal() {
@@ -727,6 +844,9 @@ final class ChatContainer: NSView {
         return [
             "focus": focusedId ?? "",
             "viewing": shownTerminal == nil ? "thread" : (focusedId ?? ""),
+            "queuePanel": shownQueue ?? "",
+            "queuePanelWidth": queueView?.frame.width ?? 0,
+            "queues": (queues?() ?? []).map { ["id": $0.id, "summary": $0.summary] },
             "participants": all.map { p -> [String: Any] in
                 ["id": p.id, "address": p.address, "agent": p.isAgent,
                  "activity": "\(p.activity)", "role": p.role ?? ""]
@@ -966,7 +1086,17 @@ final class ChatContainer: NSView {
         column.frame = NSRect(x: pad, y: 10, width: 264, height: bounds.height - 10 - pad)
 
         let contentX = pad + 264 + pad
-        let contentWidth = max(0, bounds.width - contentX - pad)
+        let fullWidth = max(0, bounds.width - contentX - pad)
+        let panelWidth = queueView == nil ? 0
+            : ChatQueue.panelWidth(content: max(0, fullWidth - pad), preferred: preferredPanelWidth)
+        let contentWidth = queueView == nil ? fullWidth : max(0, fullWidth - panelWidth - pad)
+        if let queueView {
+            queueView.frame = NSRect(x: contentX + contentWidth + pad, y: 10, width: panelWidth,
+                                     height: bounds.height - 10 - pad)
+            queueClose.frame = NSRect(x: queueView.frame.maxX - 40, y: queueView.frame.minY + 9, width: 28, height: 28)
+            queueSplit.frame = NSRect(x: contentX + contentWidth, y: 10, width: pad,
+                                      height: bounds.height - 10 - pad)
+        }
         let wasAtBottom = thread.isAtBottom
         let composerHeight = composer.desiredHeight
         composer.frame = NSRect(x: contentX,
@@ -1014,6 +1144,46 @@ final class ChatContainer: NSView {
         }
     }
 
+}
+
+/// A divisória entre a conversa e a fila: arrasta para mudar a largura, duplo
+/// clique volta ao padrão. Ocupa o vão inteiro entre os dois, porque um fio de 1pt
+/// é difícil de acertar com o mouse; o fio só acende quando o cursor chega.
+private final class ChatSplitHandle: NSView {
+    /// Onde o cursor está, em x do pai.
+    var onDrag: ((CGFloat) -> Void)?
+    var onReset: (() -> Void)?
+    private var lit = false { didSet { needsDisplay = true } }
+
+    override var isFlipped: Bool { true }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { lit = true }
+    override func mouseExited(with event: NSEvent) { lit = false }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 { onReset?() }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let superview else { return }
+        lit = true
+        onDrag?(superview.convert(event.locationInWindow, from: nil).x)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard lit else { return }
+        NSColor.systemTeal.withAlphaComponent(0.6).setFill()
+        NSBezierPath(roundedRect: NSRect(x: bounds.midX - 1, y: bounds.midY - 24, width: 2, height: 48),
+                     xRadius: 1, yRadius: 1).fill()
+    }
 }
 
 /// O botão redondo de "voltar ao fim", com o chevron do sistema centrado —

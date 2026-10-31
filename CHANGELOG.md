@@ -9,9 +9,15 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-31
+
+### Adicionado
+
+- A fila de prompts também no modo chat: a coluna ganhou a seção Filas, com o que está pendente e a pergunta em laranja; o clique abre a mesma lista num painel ao lado da conversa, com o composer funcionando e uma divisória para ajustar a largura, e "+ Nova fila" cria uma já ligada ao agente em foco (ADR-088).
+
 ### Alterado
 
-- Na fila de prompts, cada tarefa agora é um texto corrido, sem título e notas separados, e o texto quebra sozinho em todo lugar, inclusive em "Nova tarefa…" e na resposta da thread: a lista mostra o texto inteiro, o clique deixa editar ali mesmo, Enter cria a próxima e ⇧Enter quebra linha; tarefas antigas têm título e notas juntados (ADR-088).
+- Na fila de prompts, cada tarefa agora é um texto corrido, sem título e notas separados, e o texto quebra sozinho em todo lugar, inclusive em "Nova tarefa…" e na resposta da thread: a lista mostra o texto inteiro, o clique deixa editar ali mesmo, Enter cria a próxima e ⇧Enter quebra linha; depois de enviada, a tarefa não muda mais, e a conversa segue pela thread; tarefas antigas têm título e notas juntados (ADR-088).
 
 ## [1.7.1] - 2026-10-31
 

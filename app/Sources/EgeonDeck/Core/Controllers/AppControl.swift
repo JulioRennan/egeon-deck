@@ -191,6 +191,12 @@ enum AppControl {
     /// Procura e instala atualização por fora, e devolve o estado.
     static var updateControl: ((_ query: [String: String]) -> [String: Any])?
 
+    /// O "+ Nova fila" da coluna do chat, por fora.
+    static var chatNewQueue: ((_ workbench: String) -> Void)?
+
+    /// A largura do painel da fila no chat, por fora; nil volta ao padrão.
+    static var chatQueuePanel: ((_ workbench: String, _ width: CGFloat?) -> Void)?
+
     static var queueControl: ((_ address: String, _ query: [String: String]) -> [String: Any]?)?
 
     /// Escreve na caixa do chat, sem enviar ou enviando, e devolve o estado.

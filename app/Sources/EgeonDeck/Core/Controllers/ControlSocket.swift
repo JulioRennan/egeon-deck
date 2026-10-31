@@ -687,6 +687,10 @@ final class ControlSocket {
                 if let id = query["focus"] { AppControl.chatFocus?(target, id) }
                 if let id = query["expand"] { AppControl.chatExpandStep?(target, id) }
                 if let text = query["search"] { AppControl.chatSlashSearch?(target, text) }
+                if query["newqueue"] == "1" { AppControl.chatNewQueue?(target) }
+                if let panel = query["panel"] {
+                    AppControl.chatQueuePanel?(target, Double(panel).map { CGFloat($0) })
+                }
                 if let edge = query["scroll"] { AppControl.chatScroll?(target, edge) }
                 return AppControl.chatState?(target) ?? nil
             }

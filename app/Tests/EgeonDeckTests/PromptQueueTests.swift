@@ -163,6 +163,10 @@ final class PromptQueueTests: XCTestCase {
         XCTAssertEqual(world.sent.first?.images, [queue.store.url(of: name).path])
         XCTAssertTrue(FileManager.default.fileExists(atPath: queue.store.url(of: name).path))
 
+        // Com o agente, a tarefa não sai da lista; feita, sai com o print.
+        queue.remove(item.id)
+        XCTAssertEqual(queue.queue.items.count, 1)
+        XCTAssertNil(queue.agent("dev", "done", task: item.shortID, text: ""))
         queue.remove(item.id)
         XCTAssertFalse(FileManager.default.fileExists(atPath: queue.store.url(of: name).path))
     }
@@ -318,5 +322,89 @@ final class PromptQueueTests: XCTestCase {
         queue.reply(item.id, text: "é o z-index")
         XCTAssertTrue(world.sent[1].text.contains("“Toast atrás do header”"))
         XCTAssertFalse(world.sent[1].text.contains("Só no Safari"))
+    }
+
+    // MARK: Coluna do chat
+
+    func testChatSummarySaysWhatTheQueueNeeds() {
+        var queue = PromptQueue()
+        XCTAssertEqual(ChatQueue(id: "fila", queue: queue).summary, "nada pendente")
+        queue.items = [QueueItem(text: "a")]
+        XCTAssertEqual(ChatQueue(id: "fila", queue: queue).summary, "1 pendente")
+        queue.items.append(QueueItem(text: "b"))
+        // A tarefa em branco é a que você está escrevendo: não conta.
+        queue.items.append(QueueItem(text: "  "))
+        XCTAssertEqual(ChatQueue(id: "fila", queue: queue).summary, "2 pendentes")
+        queue.items[0].status = .sent
+        queue.items[0].sentTo = "dev"
+        XCTAssertEqual(ChatQueue(id: "fila", queue: queue).summary, "1 pendente · com dev")
+        queue.items[1].status = .done
+        XCTAssertEqual(ChatQueue(id: "fila", queue: queue).summary, "com dev")
+        queue.items[0].awaiting = true
+        let asking = ChatQueue(id: "fila", queue: queue)
+        XCTAssertTrue(asking.asking)
+        XCTAssertEqual(asking.summary, "? pergunta")
+    }
+
+    func testDraggedWidthHoldsWithinLimits() {
+        XCTAssertEqual(ChatQueue.panelWidth(content: 1000, preferred: 550), 550)
+        // Nem o painel some, nem a conversa.
+        XCTAssertEqual(ChatQueue.panelWidth(content: 1000, preferred: 100), ChatQueue.minPanel)
+        XCTAssertEqual(ChatQueue.panelWidth(content: 1000, preferred: 950), 600)
+        // A escolha sobrevive à janela encolher: volta quando ela crescer.
+        XCTAssertEqual(ChatQueue.panelWidth(content: 800, preferred: 550), 400)
+        XCTAssertEqual(ChatQueue.panelWidth(content: 1200, preferred: 550), 550)
+    }
+
+    func testPanelLeavesRoomForTheConversation() {
+        XCTAssertEqual(ChatQueue.panelWidth(content: 1000), 420)
+        XCTAssertEqual(ChatQueue.panelWidth(content: 1600), 672)
+        // Estreita: a thread fica com 400 antes de o painel chegar ao que pede.
+        XCTAssertEqual(ChatQueue.panelWidth(content: 780), 380)
+        XCTAssertEqual(ChatQueue.panelWidth(content: 500), 300)
+    }
+
+    func testSentTaskOnlyMovesOnThroughTheThread() throws {
+        let world = World()
+        let queue = controller(world)
+        let item = queue.add(text: "original")
+        let kept = try XCTUnwrap(queue.store.saveImage(png: Data([1])))
+        queue.attach([kept], to: item.id)
+        XCTAssertFalse(queue.queue.items[0].isLocked)
+        queue.update(item.id, text: "antes de enviar")
+        queue.send(item.id)
+        XCTAssertTrue(queue.queue.items[0].isLocked)
+
+        queue.update(item.id, text: "mudou depois")
+        XCTAssertEqual(queue.queue.items[0].text, "antes de enviar")
+        let late = try XCTUnwrap(queue.store.saveImage(png: Data([2])))
+        queue.attach([late], to: item.id)
+        XCTAssertEqual(queue.queue.items[0].images, [kept])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: queue.store.url(of: late).path), "print sem dono não fica")
+        queue.detach(kept, from: item.id)
+        XCTAssertEqual(queue.queue.items[0].images, [kept])
+        XCTAssertNotNil(queue.send(item.id))
+        XCTAssertEqual(world.sent.count, 1)
+
+        // Feita: não volta a pendente nem se reenvia. A resposta na thread é que reabre.
+        XCTAssertNil(queue.agent("dev", "done", task: item.shortID, text: ""))
+        queue.reopen(item.id)
+        queue.toggleDone(item.id)
+        XCTAssertEqual(queue.queue.items[0].status, .done)
+        XCTAssertNil(queue.reply(item.id, text: "faltou o Safari"))
+        XCTAssertEqual(queue.queue.items[0].status, .sent)
+        XCTAssertEqual(queue.queue.items[0].text, "antes de enviar")
+        XCTAssertEqual(world.sent.count, 2)
+    }
+
+    func testTaskDoneByHandCanStillBeEdited() {
+        let world = World()
+        let queue = controller(world)
+        let item = queue.add(text: "resolvi sozinho")
+        queue.toggleDone(item.id)
+        queue.update(item.id, text: "resolvi sozinho, com nota")
+        XCTAssertEqual(queue.queue.items[0].text, "resolvi sozinho, com nota")
+        queue.toggleDone(item.id)
+        XCTAssertEqual(queue.queue.items[0].status, .pending)
     }
 }

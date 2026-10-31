@@ -520,6 +520,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return queue.agent(author, action, task: task, text: text)
         }
+        AppControl.chatQueuePanel = { [weak self] name, width in
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name }) else { return }
+            self.shell(at: index)?.chat.setQueuePanelWidth(width)
+        }
+        AppControl.chatNewQueue = { [weak self] name in
+            guard let self, let index = self.configs.firstIndex(where: { $0.name == name }) else { return }
+            self.shell(at: index)?.chat.newQueueClicked()
+        }
         AppControl.chatSlashSearch = { [weak self] name, text in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return }
@@ -3085,6 +3093,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return ChatParticipant.from(nodes: config.nodes, workbench: config.name) {
                 Dispatcher.shared.target($0)?.activity
             }
+        }
+        chat.queues = { [weak self] in
+            guard let self, let index = self.index(ofID: id), let shell = self.shell(at: index) else { return [] }
+            return shell.nodes.compactMap { $0 as? QueueNode }
+                .map { ChatQueue(id: $0.nodeID, queue: $0.controller.queue) }
+        }
+        chat.createQueue = { [weak self] agent in
+            guard let self, let index = self.index(ofID: id), let shell = self.shell(at: index) else { return nil }
+            let queue = self.nextID(prefix: CanvasTool.queue.idPrefix, in: self.configs[index])
+            self.place(.queue, rect: shell.canvas.spawnRect(size: CanvasTool.queue.defaultNodeSize), index: index)
+            // Já ligada, para funcionar sem voltar ao canvas desenhar a aresta.
+            if let agent { self.edgeController(for: index)?.add(EdgeConfig(from: queue, to: agent)) }
+            return queue
         }
         chat.permissions = { [weak self] in
             guard let self, let config = self.config(ofID: id) else { return [] }

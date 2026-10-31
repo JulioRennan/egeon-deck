@@ -265,6 +265,7 @@ final class WorkbenchShell: NSView {
         // WKWebView não recarrega. É o que permite trocar de modo com agentes
         // trabalhando.
         chat.leaveTerminal()
+        chat.parkQueue()
         nodes.forEach { $0.removeFromSuperview() }
 
         switch mode {
@@ -291,6 +292,7 @@ final class WorkbenchShell: NSView {
             }
             addSubview(chat, positioned: .below, relativeTo: bannerPanel)
             chat.refresh()
+            chat.restoreQueue()
         }
 
         needsLayout = true

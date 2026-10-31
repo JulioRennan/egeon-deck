@@ -531,6 +531,13 @@ class NodeView: NSView {
         "O nó sai do canvas e do workbenches.json."
     }
 
+    /// No painel do chat, o X some: ali o gesto esperado é fechar o painel, e o X
+    /// apagaria o nó. Quem empresta o card põe o próprio botão de fechar.
+    func setRemovable(_ removable: Bool) {
+        closeButton.isHidden = !removable
+        needsLayout = true
+    }
+
     /// Chamado antes de sair da hierarquia. Solta o que não morre sozinho:
     /// processo de pty, carga de webview, registro em índice global.
     func prepareForRemoval() {}
