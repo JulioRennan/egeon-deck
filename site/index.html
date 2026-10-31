@@ -34,6 +34,7 @@
     <a class="btn" href="https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip">Baixar para Mac</a>
     <a class="btn ghost" href="#instalar">Peça para seu agente instalar</a>
   </div>
+  <p class="meta" data-latest hidden></p>
   <p class="meta">macOS · Swift nativo · Claude Code por inteiro; Codex, Gemini e OpenCode como terminal endereçável · grátis e AGPL-3.0</p>
   <figure class="shot hero-shot">
     <video autoplay muted loop playsinline poster="assets/shot-canvas.png">
@@ -292,6 +293,7 @@ JSON</pre>
       <p class="price">R$ 0</p>
       <ul><li>O app pronto, para Apple Silicon e Intel, macOS 14 ou mais novo.</li><li>Bancadas, agentes e workspaces sem limite.</li></ul>
       <a class="btn" href="https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip">Baixar para Mac</a>
+      <p class="meta" data-latest hidden></p>
     </div>
     <div class="card">
       <h3>Compilar</h3>
@@ -307,7 +309,7 @@ cd egeon-deck/app &amp;&amp; ./install.sh</pre>
 <section id="instalar" class="band">
   <p class="eyebrow">Instalar</p>
   <h2>Ou peça para o seu agente instalar.</h2>
-  <p class="sub">Cole o texto abaixo no Claude Code, no Codex ou no CLI que você já usa. Ele confere o que precisa ter no Mac, baixa a última versão, instala e verifica se o app subiu, e pergunta antes de qualquer coisa que mexa no que você já tem.</p>
+  <p class="sub">Cole o texto abaixo no Claude Code, no Codex ou no CLI que você já usa. Ele confere o que precisa ter no Mac, pede sua autorização para liberar o app no macOS (ele ainda não tem assinatura da Apple), baixa a última versão, instala e verifica se o app subiu. Também pergunta antes de qualquer coisa que mexa no que você já tem.</p>
   <div class="prompt">
     <div class="term-bar"><i></i><i></i><i></i><span>prompt de instalação</span><button class="copy" type="button" data-copy="prompt-instalar">Copiar</button></div>
     <pre id="prompt-instalar">Instale o Egeon Deck neste Mac. É um app macOS de código aberto (AGPL-3.0), um canvas para dirigir agentes de IA em paralelo: https://github.com/JulioRennan/egeon-deck
@@ -318,17 +320,20 @@ Antes de instalar, confira e me conte o que encontrou:
 3. Pelo menos um CLI de agente instalado: `command -v claude codex gemini opencode`. O Egeon abre sem eles, mas o nó de agente precisa de um. Se não houver nenhum, me pergunte qual eu quero antes de instalar qualquer coisa.
 4. Se já existe uma versão: `defaults read "/Applications/Egeon Deck.app/Contents/Info" CFBundleShortVersionString`. Se existir e o app estiver aberto, me avise antes de continuar: fechar o Egeon encerra os agentes que estão rodando nele.
 
-Instalação:
-5. Baixe a última versão: `curl -fL -o /tmp/EgeonDeck.zip https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip`
-6. Descompacte com ditto, que preserva a assinatura: `rm -rf /tmp/egeon-zip &amp;&amp; ditto -x -k /tmp/EgeonDeck.zip /tmp/egeon-zip`
-7. Se houver uma versão antiga, feche o app (`osascript -e 'tell application id "dev.duckcoder.egeondeck" to quit'`) e apague o bundle antigo. Depois copie com o nome certo: `ditto /tmp/egeon-zip/EgeonDeck.app "/Applications/Egeon Deck.app"`
-8. Tire a quarentena: `xattr -dr com.apple.quarantine "/Applications/Egeon Deck.app"`. O app é assinado ad-hoc e não é notarizado; sem isso o macOS diz que ele está "danificado", o que não é verdade.
-9. Abra: `open "/Applications/Egeon Deck.app"`
+Autorização obrigatória, antes de baixar qualquer coisa:
+5. O Egeon Deck ainda não tem assinatura da Apple: é assinado ad-hoc e não é notarizado. Para abrir, ele precisa passar por cima da verificação do Gatekeeper, removendo a marca de quarentena do macOS, e isso vale só para este app. Me explique isso com as suas palavras, pergunte se eu autorizo e espere a minha resposta. Pergunte mesmo que o seu modo de permissões deixe executar sem perguntar, e não decida por mim. Se eu não autorizar, pare aqui sem baixar nada e me diga que, sem isso, o macOS pode recusar abrir o app dizendo que ele está "danificado", o que não é verdade.
+
+Instalação, só depois do meu sim:
+6. Baixe a última versão: `curl -fL -o /tmp/EgeonDeck.zip https://github.com/JulioRennan/egeon-deck/releases/latest/download/EgeonDeck.zip`
+7. Descompacte com ditto, que preserva a assinatura: `rm -rf /tmp/egeon-zip &amp;&amp; ditto -x -k /tmp/EgeonDeck.zip /tmp/egeon-zip`
+8. Se houver uma versão antiga, feche o app (`osascript -e 'tell application id "dev.duckcoder.egeondeck" to quit'`) e apague o bundle antigo. Depois copie com o nome certo: `ditto /tmp/egeon-zip/EgeonDeck.app "/Applications/Egeon Deck.app"`
+9. Com a minha autorização, tire a quarentena. Este passo é obrigatório, mesmo que o arquivo pareça não ter a marca: `xattr -dr com.apple.quarantine "/Applications/Egeon Deck.app"`. Confira em seguida: `xattr -r "/Applications/Egeon Deck.app" | grep com.apple.quarantine` não pode imprimir nada. Outros atributos, como com.apple.provenance, podem ficar.
+10. Abra: `open "/Applications/Egeon Deck.app"`
 
 Conferência (espere uns 5 segundos depois de abrir):
-10. O app responde no socket local: `curl -s --unix-socket ~/.egeon/sock http://eg/targets` devolve um JSON.
-11. O comando dos agentes existe: `ls ~/.egeon/bin/egeon`
-12. Me diga a versão instalada (passo 4 de novo) e qualquer aviso que o macOS mostrar.
+11. O app responde no socket local: `curl -s --unix-socket ~/.egeon/sock http://eg/targets` devolve um JSON.
+12. O comando dos agentes existe: `ls ~/.egeon/bin/egeon`
+13. Me diga a versão instalada (passo 4 de novo) e qualquer aviso que o macOS mostrar.
 
 Não use sudo sem me perguntar. Não apague nem edite ~/.egeon: se a pasta já existe, é a minha configuração.</pre>
   </div>
@@ -355,6 +360,23 @@ Não use sudo sem me perguntar. Não apague nem edite ~/.egeon: se a pasta já e
 </footer>
 
 <script>
+  // A versão vem da release publicada, a mesma que o botão baixa: número escrito
+  // aqui ficaria velho a cada release. Se a API falhar (o limite é por IP), a
+  // linha só não aparece — o download não depende dela.
+  fetch("https://api.github.com/repos/JulioRennan/egeon-deck/releases/latest")
+    .then(function (response) { return response.ok ? response.json() : Promise.reject(); })
+    .then(function (release) {
+      var date = new Date(release.published_at).toLocaleDateString("pt-BR");
+      document.querySelectorAll("[data-latest]").forEach(function (line) {
+        var link = document.createElement("a");
+        link.href = release.html_url;
+        link.textContent = "o que há de novo";
+        line.append("Última versão: " + release.tag_name + ", de " + date + " · ", link);
+        line.hidden = false;
+      });
+    })
+    .catch(function () {});
+
   // Copiar o prompt: o texto vem do <pre>, que é o que a pessoa leu.
   document.querySelectorAll("[data-copy]").forEach(function (button) {
     button.addEventListener("click", function () {

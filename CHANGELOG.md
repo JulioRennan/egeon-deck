@@ -15,11 +15,13 @@ citados entre parênteses.
 - Cada bancada ganha uma cor sozinha, a menos usada entre as que existem: uma sombra esmaecida dessa cor contorna o canvas por dentro e um ponto dela acompanha o nome da bancada na barra de cima, que ficou maior, o card em que você está digitando e a bancada selecionada na barra lateral levam essa cor na borda, e a bolinha de "de pé" da barra lateral deixou de ser verde e passou a ser essa cor — dá para saber em que bancada você está antes de ler o nome (ADR-086).
 - A cor da bancada se troca à mão: o clique na bolinha ao lado do nome (agora maior) ou "Cor da bancada…" no menu de contexto da barra lateral abre uma paleta de 24 cores em grade, com o nome de cada uma ao passar o mouse; a bolinha de "de pé" da barra lateral também cresceu (ADR-086).
 - A última versão fica sempre no mesmo endereço, `releases/latest/download/EgeonDeck.zip`: toda release passa a trazer esse zip de nome fixo, além dos dois com a versão no nome.
+- O site mostra a última versão publicada e a data dela, lidas da própria release, ao lado do botão de baixar.
 - "Sobre o Egeon Deck", no topo do menu do app: mostra a versão instalada e o commit de que ela foi construída.
 - O `/` no chat lista tudo o que o Claude Code oferece no terminal: os comandos embutidos (mais de 90, com os apelidos — `/cost` acha o `/usage`), as skills que vêm com ele (`/simplify`, `/loop`, `/code-review`, `/debug`…), as skills e os plugins da sua conta do claude.ai (`anthropic-skills:*`) e as skills das pastas acima do terminal até a raiz do repositório. A lista rola com a seta ou a roda do mouse, em vez de parar em oito linhas, e tem uma barra de busca no topo (clique ou ⌘F) que procura no nome e na descrição, com várias palavras em qualquer ordem — "pdf" acha também o que só cita PDF na descrição (ADR-087).
 
 ### Alterado
 
+- O prompt de instalação do site agora pede sua autorização, antes de baixar qualquer coisa, para liberar o app da verificação do macOS, e só então remove a quarentena e confere se ela saiu: o app ainda não tem assinatura da Apple.
 - A barra de ações do canvas passou para o topo, e embaixo dela uma barra informativa com o cronômetro e o custo da bancada; no chat os dois ficam embaixo da coluna de participantes. O cronômetro saiu de baixo do título, e o clique nele continua oferecendo zerar (ADR-085).
 - O maestro sempre responde os pedidos de permissão dos outros terminais da bancada; a caixa "Aprova permissões do time" saiu do formulário (ADR-080).
 
