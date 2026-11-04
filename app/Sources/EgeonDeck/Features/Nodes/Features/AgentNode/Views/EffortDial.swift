@@ -1,8 +1,13 @@
 import AppKit
 
-/// O esforço do agente no cabeçalho do card: um slider com uma marca por nível
-/// — a primeira é o auto, o padrão do modelo — e o nome do nível ao lado. Arrastar, clicar
-/// na trilha ou rolar em cima dele ajustam.
+/// O esforço do agente no cabeçalho do card: um slider com uma marca por nível,
+/// o nome do nível ao lado e a pílula "auto". Arrastar, clicar na trilha ou rolar
+/// em cima dele ajustam.
+///
+/// Auto é interruptor, não marca da trilha: como primeira marca, ele deixava a
+/// barra vazia enquanto o modelo rodava em `high`, e não dava para saber de olhar
+/// se o nó estava em auto ou num nível (ADR-090). Em auto a barra mostra, apagada,
+/// o nível que o modelo usa; mexer nela escolhe um nível e desliga o auto.
 ///
 /// A escolha só vale quando a mão para (debounce de 1s, e nunca com o botão
 /// ainda apertado): cada troca reinicia o processo, e passar
@@ -16,19 +21,22 @@ final class EffortDial: NSView {
 
     private let levels: [String]
     private let tint: NSColor
-    /// 0 é o padrão do CLI; daí em diante, `levels[position - 1]`.
-    private var position: Int
-    private let committed: Int
+    /// Índice em `levels`; nil é o auto.
+    private var selection: Int?
+    private let committed: String?
     private var commitTimer: Timer?
     private var scrollAccumulator: CGFloat = 0
 
     private let slider = NSSlider()
     private let label = NSTextField(labelWithString: "")
+    private let autoButton = HandButton.pill(title: "auto")
 
     private static let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
     private static let sliderWidth: CGFloat = 96
     /// Do texto do nível ao slider.
     static let textToSlider: CGFloat = 5
+    private static let sliderToAuto: CGFloat = 8
+    private static let autoHeight: CGFloat = 14
     private static let height: CGFloat = 18
     /// Quanto de rolagem vale um nível. Trackpad manda deltas em pontos, aos
     /// punhados; roda de mouse manda linhas, uma por clique.
@@ -49,19 +57,17 @@ final class EffortDial: NSView {
         }
         self.levels = levels
         self.tint = tint
-        self.position = current.flatMap { levels.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
-        self.committed = position
+        self.selection = current.flatMap { levels.firstIndex(of: $0) }
+        self.committed = selection.map { levels[$0] }
         super.init(frame: .zero)
 
         slider.controlSize = .mini
         slider.minValue = 0
-        slider.maxValue = Double(max(levels.count, 1))
-        slider.numberOfTickMarks = max(levels.count + 1, 2)
+        slider.maxValue = Double(max(levels.count - 1, 1))
+        slider.numberOfTickMarks = max(levels.count, 2)
         slider.allowsTickMarkValuesOnly = true
         slider.tickMarkPosition = .below
-        slider.trackFillColor = tint
         slider.isContinuous = true
-        slider.integerValue = position
         slider.target = self
         slider.action = #selector(sliderMoved)
         slider.isEnabled = !levels.isEmpty
@@ -70,6 +76,10 @@ final class EffortDial: NSView {
         label.font = Self.font
         label.lineBreakMode = .byClipping
         addSubview(label)
+
+        autoButton.target = self
+        autoButton.action = #selector(toggleAuto)
+        if !levels.isEmpty { addSubview(autoButton) }
         refresh()
     }
 
@@ -77,13 +87,15 @@ final class EffortDial: NSView {
 
     deinit { commitTimer?.invalidate() }
 
-    var value: String? { position > 0 && position <= levels.count ? levels[position - 1] : nil }
+    var value: String? { selection.map { levels[$0] } }
 
-    private var pending: Bool { position != committed }
+    var isAuto: Bool { selection == nil }
+
+    private var pending: Bool { value != committed }
 
     var isUsable: Bool { !levels.isEmpty }
 
-    private var autoText: String { autoLevel.map { "auto (\($0))" } ?? "auto" }
+    private var autoIndex: Int? { autoLevel.flatMap { levels.firstIndex(of: $0) } }
 
     /// O nível fica à ESQUERDA do slider e ocupa só a largura do texto atual.
     /// Reservar a do nome mais comprido deixava um buraco antes do vizinho; e,
@@ -93,7 +105,9 @@ final class EffortDial: NSView {
         ceil((label.stringValue as NSString).size(withAttributes: [.font: Self.font]).width) + 2
     }
 
-    var preferredWidth: CGFloat { textWidth + Self.textToSlider + Self.sliderWidth }
+    private var autoWidth: CGFloat { isUsable ? Self.sliderToAuto + autoButton.pillWidth : 0 }
+
+    var preferredWidth: CGFloat { textWidth + Self.textToSlider + Self.sliderWidth + autoWidth }
 
     override var fittingSize: NSSize { NSSize(width: preferredWidth, height: Self.height) }
     override var intrinsicContentSize: NSSize { fittingSize }
@@ -101,10 +115,13 @@ final class EffortDial: NSView {
 
     override func layout() {
         super.layout()
-        let text = max(0, bounds.width - Self.sliderWidth - Self.textToSlider)
-        label.frame = NSRect(x: 0, y: (bounds.height - 13) / 2, width: text, height: 13)
-        slider.frame = NSRect(x: bounds.width - Self.sliderWidth, y: 0,
-                              width: Self.sliderWidth, height: bounds.height)
+        let sliderX = bounds.width - autoWidth - Self.sliderWidth
+        label.frame = NSRect(x: 0, y: (bounds.height - 13) / 2,
+                             width: max(0, sliderX - Self.textToSlider), height: 13)
+        slider.frame = NSRect(x: sliderX, y: 0, width: Self.sliderWidth, height: bounds.height)
+        autoButton.frame = NSRect(x: bounds.width - autoButton.pillWidth,
+                                  y: (bounds.height - Self.autoHeight) / 2,
+                                  width: autoButton.pillWidth, height: Self.autoHeight)
     }
 
     override func resetCursorRects() { HandCursor.fill(self, when: isUsable) }
@@ -119,7 +136,7 @@ final class EffortDial: NSView {
         while abs(scrollAccumulator) >= step {
             let direction = scrollAccumulator > 0 ? 1 : -1
             scrollAccumulator -= CGFloat(direction) * step
-            move(to: position + direction)
+            move(to: (selection ?? autoIndex ?? 0) + direction)
         }
     }
 
@@ -127,10 +144,20 @@ final class EffortDial: NSView {
         move(to: slider.integerValue)
     }
 
+    /// Desligar parte do nível que o auto já usava: nada muda de fato até você
+    /// mexer. Sem saber qual é, o do meio, longe dos dois extremos caros.
+    @objc func toggleAuto() {
+        choose(isAuto ? autoIndex ?? (levels.count - 1) / 2 : nil)
+    }
+
     private func move(to target: Int) {
-        let clamped = min(max(target, 0), levels.count)
-        guard clamped != position else { return }
-        position = clamped
+        let clamped = min(max(target, 0), levels.count - 1)
+        guard clamped != selection else { return }
+        choose(clamped)
+    }
+
+    private func choose(_ next: Int?) {
+        selection = next
         refresh()
         commitTimer?.invalidate()
         commitTimer = Timer.scheduledTimer(withTimeInterval: Self.settleDelay,
@@ -160,7 +187,8 @@ final class EffortDial: NSView {
                 onResize?()
             }
         }
-        if slider.integerValue != position { slider.integerValue = position }
+        let shown = selection ?? autoIndex ?? 0
+        if slider.integerValue != shown { slider.integerValue = shown }
         guard isUsable else {
             label.stringValue = "sem esforço"
             label.textColor = NSColor(calibratedWhite: 1, alpha: 0.3)
@@ -168,10 +196,45 @@ final class EffortDial: NSView {
             slider.toolTip = toolTip
             return
         }
-        label.stringValue = (value ?? autoText) + (pending ? "…" : "")
-        label.textColor = pending ? tint : NSColor(calibratedWhite: 0.62, alpha: 1)
-        toolTip = "Esforço: \(value ?? autoText) — arraste ou role para ajustar; a primeira "
-            + "marca é o auto, o padrão do modelo. Trocar reinicia o terminal; a conversa continua"
+        label.stringValue = (value ?? autoLevel ?? "") + (pending ? "…" : "")
+        label.textColor = pending ? tint : NSColor(calibratedWhite: isAuto ? 0.45 : 0.62, alpha: 1)
+        slider.trackFillColor = isAuto ? NSColor(calibratedWhite: 0.5, alpha: 1) : tint
+        slider.alphaValue = isAuto ? 0.5 : 1
+        autoButton.paintPill(on: isAuto, tint: tint)
+        autoButton.toolTip = isAuto
+            ? "Auto ligado: o modelo decide o esforço. Clique para fixar um nível"
+            : "Auto desligado: clique para voltar ao padrão do modelo"
+        toolTip = isAuto
+            ? "Esforço: auto\(autoLevel.map { " (\($0))" } ?? "") — arraste ou role para fixar um nível. "
+                + "Trocar reinicia o terminal; a conversa continua"
+            : "Esforço: \(value ?? "") — arraste ou role para ajustar. "
+                + "Trocar reinicia o terminal; a conversa continua"
         slider.toolTip = toolTip
+    }
+}
+
+/// Interruptor em forma de pílula: o texto é o rótulo, e ligado ganha o fundo.
+extension HandButton {
+    static func pill(title: String) -> HandButton {
+        let button = HandButton(title: title, target: nil, action: nil)
+        button.isBordered = false
+        button.font = .systemFont(ofSize: 9, weight: .semibold)
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 4
+        return button
+    }
+
+    var pillWidth: CGFloat {
+        ceil((title as NSString).size(withAttributes: [.font: font as Any]).width) + 8
+    }
+
+    func paintPill(on: Bool, tint: NSColor, available: Bool = true) {
+        isEnabled = available
+        let color = !available ? NSColor(calibratedWhite: 1, alpha: 0.25)
+            : on ? tint : NSColor(calibratedWhite: 0.62, alpha: 1)
+        attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: font as Any, .foregroundColor: color
+        ])
+        layer?.backgroundColor = on && available ? tint.withAlphaComponent(0.18).cgColor : NSColor.clear.cgColor
     }
 }

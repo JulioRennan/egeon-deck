@@ -131,6 +131,8 @@ enum AppControl {
 
     /// "Limpar a conversa" do chat da bancada: arquiva o `chat.jsonl` e começa
     /// outro. Devolve o payload da rota.
+    /// Manda o comando de limpar a um agente só. Devolve o erro, ou nil.
+    static var clearNode: ((_ target: String) -> String?)?
     static var clearChat: ((_ workbench: String) -> [String: Any])?
 
     /// "Limpar a bancada": o `clear` do perfil em todo agente que tem um e,

@@ -203,6 +203,15 @@ final class TerminalNode: NodeView {
         set { modelRow?.modelResolver = newValue }
     }
 
+    var contextResolver: (() -> (tokens: Int, requested: String?)?)? {
+        get { modelRow?.contextResolver }
+        set { modelRow?.contextResolver = newValue }
+    }
+    var onRequestClear: (() -> Void)? {
+        get { modelRow?.onClear }
+        set { modelRow?.onClear = newValue }
+    }
+
     /// `profile == nil` → terminal comum. Com perfil, é um "terminal com IA":
     /// mesma mecânica de pty, o que muda é saber injetar prompt e medir ociosidade.
     /// `hooked` diz se esta linha de comando leva o `--settings` com os nossos
@@ -233,7 +242,8 @@ final class TerminalNode: NodeView {
         if profile != nil { statusLabel.addGestureRecognizer(retryClick) }
         titleLabel.toolTip = address + (profile.map { " · \($0.displayName)" } ?? "")
         body.addSubview(term)
-        if let profile, profile.offersModelChoice(catalog: catalog, current: model) || profile.offersEfforts {
+        if let profile, profile.offersModelChoice(catalog: catalog, current: model) || profile.offersEfforts
+            || profile.clear != nil {
             let row = ModelRow(profile: profile, catalog: catalog, model: model, effort: effort,
                                ultracode: ultracode, tint: accent)
             row.onChoice = { [weak self] choice in

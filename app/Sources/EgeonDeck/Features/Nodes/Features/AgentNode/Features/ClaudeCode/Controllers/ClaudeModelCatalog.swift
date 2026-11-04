@@ -63,6 +63,7 @@ enum ClaudeModelCatalog {
         // Cache de antes da leitura de preços ou de comandos relê uma vez.
         if let memo, memo.binary == binary.path, memo.size == stamp.size,
            memo.modified == stamp.modified, memo.catalog.prices != nil,
+           memo.catalog.schema == ModelCatalog.currentSchema,
            memo.commands?.version == ClaudeCommandRegistry.currentVersion {
             return memo
         }

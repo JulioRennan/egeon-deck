@@ -1,20 +1,29 @@
 import AppKit
 
-/// A faixa do cabeçalho do card de agente: modelo, esforço e ultracode.
+/// A faixa do cabeçalho do card de agente: modelo, esforço, ultracode, o contexto
+/// livre e o botão de limpar a conversa.
 ///
 /// Tudo o que ela mostra depende do modelo — o nome ("Opus 5.5"), os níveis
-/// do slider, o "auto (medium)", se o ultracode existe — e o modelo de fato só
+/// do slider, o nível do auto, se o ultracode existe — e o modelo de fato só
 /// se sabe depois do primeiro turno, pelo transcript. Por isso é uma view só,
 /// que se remonta quando o modelo em vigor muda, em vez de três controles
 /// soltos no `TerminalNode`.
 final class ModelRow: NSView {
     /// Você mexeu em algo. Quem atende reinicia o processo e mantém a conversa.
     var onChoice: ((ModelChoice) -> Void)?
+    /// Você pediu para limpar a conversa deste agente.
+    var onClear: (() -> Void)?
     /// A largura pedida mudou — o nome do modelo cresceu ou encolheu.
     var onResize: (() -> Void)?
     /// Quem sabe o modelo que respondeu — lê o transcript. A view não sabe onde
     /// a conversa é gravada.
     var modelResolver: (() -> String?)? {
+        didSet { refresh(force: true) }
+    }
+
+    /// Quantos tokens a conversa ocupa e o modelo pedido por quem configurou o
+    /// CLI. Nil enquanto não há resposta nesta conversa.
+    var contextResolver: (() -> (tokens: Int, requested: String?)?)? {
         didSet { refresh(force: true) }
     }
 
@@ -32,7 +41,20 @@ final class ModelRow: NSView {
     private var dial: EffortDial?
     /// O modelo por trás do slider montado agora — remonta quando muda.
     private var dialModel: String??
-    private let ultracodeButton = HandButton(title: "ultracode", target: nil, action: nil)
+    private let ultracodeButton = HandButton.pill(title: "ultracode")
+    private let contextCaption = ModelRow.caption("contexto")
+    private let contextIndicator = ContextIndicator()
+    private var contextReading: (tokens: Int, requested: String?)?
+    private let clearButton: HandButton = {
+        let image = NSImage(systemSymbolName: "bubbles.and.sparkles", accessibilityDescription: "Limpar a conversa")
+        let button = HandButton(title: "", target: nil, action: nil)
+        button.image = image?.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+        button.imagePosition = .imageOnly
+        button.isBordered = false
+        button.contentTintColor = NSColor(calibratedWhite: 0.62, alpha: 1)
+        return button
+    }()
+    private static let clearButtonWidth: CGFloat = 20
 
     private var literalModel: String?
     private var lastProbe = Date.distantPast
@@ -42,7 +64,6 @@ final class ModelRow: NSView {
     /// o botão do ultracode tem folga de pílula — o rótulo se alinha ao texto.
     private static let groupGap: CGFloat = 20
     private static let pickerInset: CGFloat = 5
-    private static let pillPadding: CGFloat = 4
     private static let captionHeight: CGFloat = 11
     private static let controlTop: CGFloat = 13
     private static let controlHeight: CGFloat = 17
@@ -67,13 +88,14 @@ final class ModelRow: NSView {
             addSubview(picker)
         }
 
-        ultracodeButton.isBordered = false
-        ultracodeButton.font = .systemFont(ofSize: 9, weight: .semibold)
         ultracodeButton.target = self
         ultracodeButton.action = #selector(toggleUltracode)
-        ultracodeButton.wantsLayer = true
-        ultracodeButton.layer?.cornerRadius = 4
         if profile.ultracode != nil, profile.offersEfforts { addSubview(ultracodeButton) }
+
+        clearButton.target = self
+        clearButton.action = #selector(clearPressed)
+        clearButton.toolTip = "Limpa a conversa deste agente com o \(profile.clear ?? "") do CLI. Pede confirmação"
+        if profile.clear != nil { addSubview(clearButton) }
 
         rebuildMenu()
         refresh(force: true)
@@ -106,6 +128,8 @@ final class ModelRow: NSView {
         if picker.superview === self { out.append((modelCaption, picker)) }
         if let dial, dial.superview === self { out.append((effortCaption, dial)) }
         if ultracodeButton.superview === self { out.append((nil, ultracodeButton)) }
+        if contextIndicator.superview === self { out.append((contextCaption, contextIndicator)) }
+        if clearButton.superview === self { out.append((nil, clearButton)) }
         return out
     }
 
@@ -123,9 +147,8 @@ final class ModelRow: NSView {
         switch view {
         case picker: return pickerWidth
         case let dial as EffortDial: return dial.preferredWidth
-        case ultracodeButton:
-            let text = (ultracodeButton.title as NSString).size(withAttributes: [.font: ultracodeButton.font as Any])
-            return ceil(text.width) + Self.pillPadding * 2
+        case ultracodeButton: return ultracodeButton.pillWidth
+        case clearButton: return Self.clearButtonWidth
         default: return ceil(view.fittingSize.width)
         }
     }
@@ -206,6 +229,10 @@ final class ModelRow: NSView {
         onChoice?(.ultracode(!ultracodeOn))
     }
 
+    @objc func clearPressed() {
+        onClear?()
+    }
+
     /// Nome para o título: o do catálogo; senão o id sem o prefixo do
     /// fornecedor, que é igual em todo item e só come largura.
     private func displayName(_ name: String) -> String {
@@ -227,11 +254,13 @@ final class ModelRow: NSView {
         if force || now.timeIntervalSince(lastProbe) >= 2 {
             lastProbe = now
             literalModel = modelResolver?()
+            contextReading = contextResolver?()
         }
         var resized = false
         if picker.superview === self { resized = refreshTitle() || resized }
         if profile.offersEfforts { resized = refreshDial() || resized }
         refreshUltracode()
+        resized = refreshContext() || resized
         if resized {
             needsLayout = true
             onResize?()
@@ -293,19 +322,38 @@ final class ModelRow: NSView {
         guard ultracodeButton.superview === self else { return }
         // Modelo sem esforço não tem ultracode ("isn't available on …").
         let available = effectiveModel.map { !$0.efforts.isEmpty } ?? true
-        ultracodeButton.isEnabled = available
-        let color = !available ? NSColor(calibratedWhite: 1, alpha: 0.25)
-            : ultracodeOn ? tint : NSColor(calibratedWhite: 0.62, alpha: 1)
-        ultracodeButton.attributedTitle = NSAttributedString(string: "ultracode", attributes: [
-            .font: ultracodeButton.font as Any, .foregroundColor: color
-        ])
-        ultracodeButton.layer?.backgroundColor = ultracodeOn && available
-            ? tint.withAlphaComponent(0.18).cgColor : NSColor.clear.cgColor
+        ultracodeButton.paintPill(on: ultracodeOn, tint: tint, available: available)
         ultracodeButton.toolTip = available
             ? "Ultracode \(ultracodeOn ? "ligado" : "desligado") — workflow dinâmico em toda "
                 + "tarefa, em qualquer esforço (precisa dos dynamic workflows ligados no /config). "
                 + "Trocar reinicia o terminal; a conversa continua"
             : "Este modelo não tem ultracode"
+    }
+
+    /// O que se mostra é o medidor para o modelo que respondeu, porque é a janela
+    /// dele que está em uso. Só o catálogo sabe o tamanho da janela: CLI sem ele
+    /// não ganha um "—" eterno, o grupo nem aparece.
+    private func refreshContext() -> Bool {
+        var resized = false
+        let available = catalog != nil
+        if available != (contextIndicator.superview === self) {
+            if available {
+                addSubview(contextCaption)
+                addSubview(contextIndicator)
+            } else {
+                contextCaption.removeFromSuperview()
+                contextIndicator.removeFromSuperview()
+            }
+            resized = true
+        }
+        guard available else { return resized }
+        let model = catalog?.model(for: literalModel) ?? catalog?.model(for: chosenModel)
+        let gauge = contextReading.flatMap {
+            ContextGauge(tokens: $0.tokens, requested: chosenModel ?? $0.requested, model: model)
+        }
+        let before = contextIndicator.text
+        contextIndicator.gauge = gauge
+        return resized || contextIndicator.text != before
     }
 
     private static func caption(_ text: String) -> NSTextField {

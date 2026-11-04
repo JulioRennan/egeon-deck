@@ -378,6 +378,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { return done(["ok": false, "error": "bancada desconhecida '\(name)'"]) }
             self.clearWorkbench(index, completion: done)
         }
+        AppControl.clearNode = { [weak self] target in
+            guard let self else { return "app encerrando" }
+            return self.clearNode(target)
+        }
         AppControl.clearChat = { [weak self] name in
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return ["ok": false, "error": "bancada desconhecida '\(name)'"] }
@@ -2720,6 +2724,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             terminal.modelResolver = { [weak self] in
                 self?.literalModel(workbench: config.name, nodeID: node.id, since: launched)
             }
+            terminal.contextResolver = { [weak self] in
+                self?.contextReading(workbench: config.name, nodeID: node.id)
+            }
+            terminal.onRequestClear = { [weak self] in
+                self?.confirmClearNode(workbench: config.name, nodeID: node.id)
+            }
             if index >= 0, node.conversationId != nil, !node.hasStartedConversation,
                let position = configs[index].nodes.firstIndex(where: { $0.id == node.id }) {
                 configs[index].nodes[position].conversationStarted = true
@@ -3153,6 +3163,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Limpar um agente
+
+    /// Pergunta antes, como a limpeza da bancada: o botão fica colado aos
+    /// controles de modelo, e o clique errado custaria o contexto do agente.
+    private func confirmClearNode(workbench: String, nodeID: String) {
+        let alert = NSAlert()
+        alert.messageText = "Limpar a conversa de \"\(nodeID)\"?"
+        alert.informativeText = "O agente esquece a conversa atual. O chat e a trilha da bancada "
+            + "continuam como estão."
+        alert.addButton(withTitle: "Limpar")
+        alert.addButton(withTitle: "Cancelar")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        if let error = clearNode("\(workbench)/\(nodeID)") {
+            Log.write("limpar[\(workbench)/\(nodeID)]: \(error)")
+        }
+    }
+
+    /// Pela fila do Dispatcher, como a limpeza da bancada: terminal ocupado
+    /// recebe quando ficar livre.
+    private func clearNode(_ target: String) -> String? {
+        let parts = target.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let config = configs.first(where: { $0.name == parts[0] }),
+              let node = config.nodes.first(where: { $0.id == parts[1] && $0.type == .agent })
+        else { return "agente desconhecido '\(target)'" }
+        guard let command = node.agent.flatMap({ agents[$0]?.clear }) else {
+            return "o CLI de '\(target)' não declara comando de limpar"
+        }
+        var request = DispatchRequest(target: config.address(of: node))
+        request.text = command
+        do {
+            _ = try Dispatcher.shared.dispatch(request, from: nil)
+            return nil
+        } catch {
+            return "\(error)"
+        }
+    }
+
     // MARK: - Limpar a bancada
 
     /// Pergunta antes: o `/clear` zera o contexto de cada agente, e não tem
@@ -3573,6 +3621,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cache do modelo literal por transcript: (mtime, modelo). O arquivo só é
     /// relido quando muda.
     private var literalModelCache: [String: (mtime: Date, since: Date?, model: String?)] = [:]
+    private var contextCache: [String: (mtime: Date, tokens: Int?)] = [:]
+
+    private func contextReading(workbench: String, nodeID: String) -> (tokens: Int, requested: String?)? {
+        guard let config = configs.first(where: { $0.name == workbench }),
+              let node = config.nodes.first(where: { $0.id == nodeID }),
+              let path = node.transcript, !path.isEmpty else { return nil }
+        let mtime = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]
+                     as? Date) ?? .distantPast
+        let tokens: Int?
+        if let cached = contextCache[path], cached.mtime == mtime {
+            tokens = cached.tokens
+        } else {
+            tokens = ClaudeTranscript.contextTokens(at: URL(fileURLWithPath: path))
+            contextCache[path] = (mtime, tokens)
+        }
+        guard let tokens else { return nil }
+        return (tokens, node.model ?? node.agent.flatMap { agents[$0] }?.defaultModelName(config: node.config))
+    }
 
     /// O modelo que está de fato respondendo neste nó: última linha de assistant
     /// do transcript; antes do primeiro turno, o `model` do settings.json da

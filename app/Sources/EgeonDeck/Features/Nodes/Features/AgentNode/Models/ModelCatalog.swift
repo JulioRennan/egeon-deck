@@ -21,6 +21,8 @@ struct ModelCatalog: Codable, Equatable {
         let defaultEffort: String?
         /// A faixa de preço que o CLI atribui ao modelo (`tier_4_20_…`).
         var pricing: String? = nil
+        /// O tamanho da janela de contexto, em tokens.
+        var contextWindow: Int? = nil
 
         /// `claude-opus-5-5` → [5, 5]; `claude-3-5-haiku` → [3, 5]. Data de
         /// snapshot (`20251001`) não é versão.
@@ -36,6 +38,10 @@ struct ModelCatalog: Codable, Equatable {
     /// cache de antes da leitura de preços — pede releitura; vazio é "o
     /// binário não tem tabela".
     var prices: [String: ModelPrice]? = nil
+    /// Campo novo no modelo não pede releitura sozinho: o binário não mudou, e o
+    /// cache continuaria valendo sem ele. Nil é cache de antes deste número.
+    var schema: Int? = ModelCatalog.currentSchema
+    static let currentSchema = 1
 
     /// Ordem do menu: as famílias que se usa no dia a dia primeiro.
     static let familyOrder = ["fable", "opus", "sonnet", "haiku", "mythos"]

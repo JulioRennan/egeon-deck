@@ -234,7 +234,11 @@ final class ControlSocket {
                 // Relatar a conversa também prova que o gancho chega aqui — e é
                 // isso que faz o terminal parar de depender de adivinhação sobre
                 // a tela já no primeiro turno (ADR-024).
-                target.hookReported(.prompt)
+                //
+                // `noturn` é o `/clear`: conversa nova sem turno nenhum. Contar como
+                // prompt deixaria o terminal "trabalhando" esperando um `Stop` que
+                // não vem, e a fila dele parada.
+                if query["noturn"] == nil { target.hookReported(.prompt) }
                 return true
             }
             if resolved {
@@ -485,6 +489,14 @@ final class ControlSocket {
                 return ("200 OK", ["ok": true])
             }
             respond(fd, status: outcome.0, json: outcome.1)
+
+        case ("POST", _, _) where route.contains("/node/clear"):
+            // /node/clear?target=ws/id — o botão de limpar do card, sem o diálogo.
+            // Responde no disparo: terminal ocupado recebe quando ficar livre.
+            let target = Self.query(in: route)["target"] ?? ""
+            let error = DispatchQueue.main.sync { AppControl.clearNode?(target) ?? nil }
+            respond(fd, status: error == nil ? "200 OK" : "404 Not Found",
+                    json: error.map { ["ok": false, "error": $0] } ?? ["ok": true, "target": target])
 
         case ("POST", _, _) where route.contains("/workbench/clear"):
             // /workbench/clear?target=<bancada> — o botão de limpar, sem o

@@ -9,6 +9,11 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Alterado
+
+- No cabeçalho do agente, "auto" agora é uma pílula ao lado da barra de esforço: ligada, a barra aparece apagada no nível que o modelo usa; mexer na barra fixa o nível e desliga o auto. Não se confunde mais auto com um nível escolhido (ADR-090).
+- No cabeçalho do agente, a faixa de modelo e esforço agora mostra o contexto em uso numa pizza com a porcentagem, que vai do verde ao vermelho conforme enche, e ganhou um ícone de limpeza, que limpa a conversa daquele agente depois de confirmar (ADR-091).
+
 ## [1.8.0] - 2026-10-31
 
 ### Adicionado

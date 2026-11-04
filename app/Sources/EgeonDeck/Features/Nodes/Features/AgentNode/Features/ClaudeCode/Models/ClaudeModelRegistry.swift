@@ -17,6 +17,8 @@ enum ClaudeModelRegistry {
     private static let capabilities = try! NSRegularExpression(pattern: #"capabilities:\[([^\]]*)\]"#)
     private static let defaultEffort = try! NSRegularExpression(pattern: #"default_effort:"([a-z]+)""#)
     private static let pricing = try! NSRegularExpression(pattern: #"pricing:"([A-Za-z0-9_]+)""#)
+    private static let contextWindow = try! NSRegularExpression(
+        pattern: #"context:\{(?:[^}]*,)?window:([0-9.]+(?:e[+-]?[0-9]+)?)"#)
     private static let field = try! NSRegularExpression(pattern: #"([a-z0-9_]+):(-?[0-9.]+(?:e[+-]?[0-9]+)?)"#)
     /// Até onde uma entrada vai: a de hoje tem ~1,3 KB.
     private static let window = 4096
@@ -69,9 +71,15 @@ enum ClaudeModelRegistry {
             .flatMap { Range($0.range(at: 1), in: body) }
             .map { String(body[$0]) }
 
+        let window = contextWindow.firstMatch(in: body, range: bodyRange)
+            .flatMap { Range($0.range(at: 1), in: body) }
+            .flatMap { Double(body[$0]) }
+            .map { Int($0) }
+
         return ModelCatalog.Model(id: String(text[id]), family: String(text[family]),
                                   label: String(text[label]), efforts: efforts,
-                                  defaultEffort: efforts.isEmpty ? nil : fallback, pricing: tier)
+                                  defaultEffort: efforts.isEmpty ? nil : fallback, pricing: tier,
+                                  contextWindow: window)
     }
 
     /// Os preços que o `/cost` do CLI usa: `pricing_tiers:{tier:{input:…}}`

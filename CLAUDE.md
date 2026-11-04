@@ -164,7 +164,8 @@ app/Sources/EgeonDeck/
   (`ClaudeModelCatalog`, cache em `claude-models.json`); sem ela, os apelidos
   do `agents.json`. Ultracode ocupa o `--effort`, e o nível vai por
   `CLAUDE_CODE_EFFORT_LEVEL`. Trocar reinicia o processo e retoma a conversa
-  (ADR-064).
+  (ADR-064). A mesma faixa mostra o contexto em uso, lido do transcript, e tem o
+  ícone de limpar só aquele agente (ADR-091).
 - **Maestro** (ADR-066) — nó de agente marcado no formulário (`NodeConfig.maestro`)
   ganha `egeon bench`/`models`/`plan`/`apply`: monta a própria bancada por um plano
   JSON declarativo (`MaestroPlan` → `MaestroPlanner` valida inteiro → 

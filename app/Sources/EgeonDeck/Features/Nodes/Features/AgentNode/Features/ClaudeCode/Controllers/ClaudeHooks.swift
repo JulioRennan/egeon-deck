@@ -131,8 +131,22 @@ enum ClaudeHooks {
         print(q)' 2>/dev/null)
             post "/activity?event=stop&$q"
             ;;
-          ask|start)
-            post "/activity?event=$event"
+          start)
+            # O `/clear` abre outra conversa sem passar pelo gancho de prompt, e até
+            # o próximo prompt o app seguiria apontando para a velha: o contexto
+            # livre mostraria o número de antes, e reiniciar a retomaria. Só esse
+            # caso: no arranque, quem decide a conversa ainda é o app.
+            q=$(printf '%s' "$payload" | /usr/bin/python3 -c \\
+              'import sys,json,urllib.parse as u
+        d=json.load(sys.stdin)
+        i=d.get("session_id") or ""
+        print("id="+u.quote(i)+"&transcript="+u.quote(d.get("transcript_path") or "") if i and d.get("source")=="clear" else "")' \\
+              2>/dev/null)
+            [ -z "$q" ] || post "/conversation?$q&noturn=1"
+            post "/activity?event=start"
+            ;;
+          ask)
+            post "/activity?event=ask"
             ;;
           failure)
             # O tipo do erro decide se o app tenta de novo; o detalhe é o que a

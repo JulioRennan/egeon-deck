@@ -3742,7 +3742,7 @@ abertos recebem o catálogo novo sem reiniciar. Atualizar o CLI atualiza o menu.
   apelidos do `agents.json` numa seção "sempre o mais recente".
 - **Slider de esforço:** os níveis do modelo em vigor (o pedido, senão o que
   respondeu por último); a primeira marca é o **auto**, com o padrão do modelo
-  entre parênteses. Modelo sem esforço deixa o slider desligado, "sem esforço".
+  entre parênteses (o auto virou pílula à parte no ADR-090). Modelo sem esforço deixa o slider desligado, "sem esforço".
   Trocar para um modelo que não tem o nível em vigor volta o nó ao auto.
 - **Ultracode** é interruptor à parte, não nível. O CLI o liga pela MESMA flag
   (`--effort ultracode`), então o nível vai por `CLAUDE_CODE_EFFORT_LEVEL` —
@@ -5009,3 +5009,60 @@ código adulterado recusados; o script real troca, espera o processo sair e não
 sobra. No DEV, com release falsa servida localmente (`GET /update?check=1&feed=`, só
 no dev) e assinada com a chave real: clique em "Atualizar e reiniciar" trocou e
 reabriu; com o automático, baixou sem reiniciar, trocou ao fechar e não reabriu.
+
+## ADR-090 — Auto do esforço é interruptor, não marca do slider
+
+**Problema.** O auto era a primeira marca do slider (ADR-064). A barra ficava
+vazia num modelo que rodava em `high`, o oposto do que acontecia, e o único sinal
+do modo era o texto "auto (high)" ao lado. De relance não dava para distinguir
+auto de um nível escolhido.
+
+**Decisão.** Auto vira a pílula "auto" à direita do slider, no desenho da pílula
+do ultracode, e o slider só tem níveis de verdade.
+
+- **Em auto**, a pílula fica acesa e a barra aparece apagada, cinza, na marca do
+  nível que o modelo usa, com o nome dele ao lado. A barra diz o nível real, e o
+  apagado e a pílula dizem que não foi você quem fixou.
+- **Mexer na barra** (arrastar, clicar ou rolar) fixa o nível e desliga o auto.
+- **Desligar pela pílula** fixa o nível que o auto já usava; sem saber qual é
+  (antes do primeiro turno, ou CLI sem catálogo), o do meio da lista.
+- A pílula e o slider ficam ancorados à direita: o texto do nível muda de largura
+  sem tirar nenhum dos dois de baixo do cursor.
+- O debounce de 1s vale para a pílula também: cada troca reinicia o processo.
+- Nada muda no que é gravado: `effort` nil continua sendo o auto.
+
+**Verificação.** `EffortDialTests`, e no DEV a faixa do card com a pílula ligada e
+desligada.
+
+## ADR-091 — Contexto em uso e limpar na faixa do agente
+
+**Problema.** Para saber quanto contexto um agente já usou, era preciso abrir o
+`/context` dele. E limpar a conversa de um agente só pedia digitar o comando: o
+botão que existia limpa a bancada inteira e arquiva o chat.
+
+**De onde vem o contexto.** Do `usage` da última resposta do modelo no transcript:
+entrada mais cache lido e escrito, sem a saída e sem subagentes. A janela vem da
+tabela do binário do Claude Code (`context:{window:…}`, ADR-064). O `[1m]` não vai
+para o transcript, então conta o modelo pedido no nó ou no `settings.json`; uso
+acima da janela do catálogo também significa a grande. O catálogo ganhou `schema`
+porque o campo novo não invalidava o cache sozinho: o binário é o mesmo.
+
+**Decisão.**
+
+- Grupo "contexto" com uma pizza e a porcentagem em uso, arredondada para cima
+  (`ContextIndicator`). Mostra o usado, não o livre: encher é o que a pizza desenha,
+  e a cor vai em gradação contínua do verde ao vermelho, sem degraus. Sem resposta
+  na conversa, ou logo depois de compactar, mostra o anel vazio e "—" em vez do
+  número velho.
+- CLI sem catálogo não mostra o grupo, porque não há janela para comparar.
+- Ícone de limpeza para todo perfil que declara `clear`. O comando vai pela fila do
+  Dispatcher e pede confirmação, porque o ícone fica colado aos controles de
+  modelo. `POST /node/clear?target=` faz o mesmo sem o diálogo.
+- O gancho `SessionStart` com `source=clear` agora relata a conversa nova. Antes
+  ela só era conhecida no prompt seguinte (ADR-014): o medidor mostraria o número
+  da conversa limpa, e reiniciar nesse intervalo retomaria a velha.
+- Limpar um agente não arquiva o chat nem a trilha: isso continua sendo da limpeza
+  da bancada (ADR-037/059), que é um período novo para todos.
+
+**Verificação.** `ContextGaugeTests` e `ContextTokensTests`; no DEV, o card antes e
+depois de `POST /node/clear`.

@@ -474,6 +474,31 @@ enum ClaudeTranscript {
         return nil
     }
 
+    /// Quantos tokens a conversa ocupa: o prompt da última resposta do modelo.
+    /// Subagente tem contexto próprio e não conta. Compactar invalida o número
+    /// até a próxima resposta, e nil é "não se sabe": mostrar o de antes diria
+    /// que o contexto segue cheio logo depois de esvaziar.
+    static func contextTokens(at url: URL, tailBytes: Int = 256 * 1024) -> Int? {
+        guard let text = tail(of: url, bytes: tailBytes) else { return nil }
+        return contextTokens(in: text)
+    }
+
+    static func contextTokens(in jsonl: String) -> Int? {
+        for line in jsonl.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
+            let boundary = line.contains("\"compact_boundary\"")
+            guard boundary || line.contains("\"type\":\"assistant\""),
+                  let data = Optional(Data(line.utf8)),
+                  let entry = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
+            if entry["type"] as? String == "system", entry["subtype"] as? String == "compact_boundary" {
+                return nil
+            }
+            guard entry["isSidechain"] as? Bool != true,
+                  let usage = ClaudeUsage.entry(fromLine: data)?.usage else { continue }
+            return usage.prompt
+        }
+        return nil
+    }
+
     /// Os marcadores do protocolo Egeon (`[[ED:ok]]`, `[[ED:ask]]`) são para o
     /// app, não para você ler na bolha.
     static func strippingMarkers(_ text: String) -> String {
