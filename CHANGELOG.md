@@ -9,12 +9,7 @@ citados entre parênteses.
 
 ## [Unreleased]
 
-### Alterado
-
-- No cabeçalho do agente, "auto" agora é uma pílula ao lado da barra de esforço: ligada, a barra aparece apagada no nível que o modelo usa; mexer na barra fixa o nível e desliga o auto. Não se confunde mais auto com um nível escolhido (ADR-090).
-- No cabeçalho do agente, a faixa de modelo e esforço agora mostra o contexto em uso numa pizza com a porcentagem, que vai do verde ao vermelho conforme enche, e ganhou um ícone de limpeza, que limpa a conversa daquele agente depois de confirmar (ADR-091).
-
-## [1.8.0] - 2026-10-31
+## [1.8.0] - 2026-11-04
 
 ### Adicionado
 
@@ -23,6 +18,8 @@ citados entre parênteses.
 ### Alterado
 
 - Na fila de prompts, cada tarefa agora é um texto corrido, sem título e notas separados, e o texto quebra sozinho em todo lugar, inclusive em "Nova tarefa…" e na resposta da thread: a lista mostra o texto inteiro, o clique deixa editar ali mesmo, Enter cria a próxima e ⇧Enter quebra linha; depois de enviada, a tarefa não muda mais, e a conversa segue pela thread; tarefas antigas têm título e notas juntados (ADR-088).
+- No cabeçalho do agente, "auto" agora é uma pílula ao lado da barra de esforço: ligada, a barra aparece apagada no nível que o modelo usa; mexer na barra fixa o nível e desliga o auto. Não se confunde mais auto com um nível escolhido (ADR-090).
+- No cabeçalho do agente, a faixa de modelo e esforço agora mostra o contexto em uso numa pizza com a porcentagem, que vai do verde ao vermelho conforme enche, e ganhou um ícone de limpeza, que limpa a conversa daquele agente depois de confirmar (ADR-091).
 
 ## [1.7.1] - 2026-10-31
 
@@ -320,7 +317,8 @@ Primeira versão para passar adiante (tag `v0`).
 - Aviso de "terminou" e "precisa de você" vindo do gancho do CLI.
 - Socket de controle em `~/.egeon/sock`.
 
-[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/JulioRennan/egeon-deck/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/JulioRennan/egeon-deck/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/JulioRennan/egeon-deck/compare/v1.5.0...v1.6.0
