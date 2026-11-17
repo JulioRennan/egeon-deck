@@ -96,7 +96,7 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
   <div class="sub">migração Swift → Rust + Flutter</div>
   <div class="docs"><a class="" href="1-hoje.html">O que temos hoje <span class="st">inventário</span></a><a class="" href="2-arquitetura-atual.html">Arquitetura atual <span class="st">estrutura</span></a><a class="on" href="3-proposta.html">Proposta <span class="st">em redação</span></a></div>
   <h5>Nesta página</h5>
-  <a href="#decidido">Decidido</a><a href="#componentes">Componentes</a><a href="#ui">Estrutura da UI</a><a href="#funcionalidades">Funcionalidades por camada</a><a href="#debate">Em debate</a><a href="#abertas">Perguntas abertas</a><a href="#rascunho">Rascunho anterior</a>
+  <a href="#decidido">Decidido</a><a href="#componentes">Componentes</a><a href="#ui">Estrutura da UI</a><a href="#rust">Padrão do Rust</a><a href="#funcionalidades">Funcionalidades por camada</a><a href="#debate">Em debate</a><a href="#abertas">Perguntas abertas</a><a href="#rascunho">Rascunho anterior</a>
 </nav>
 <main>
 <h1>Proposta</h1>
@@ -332,6 +332,91 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <tr><td>5</td><td>Parte nativa</td><td>Nó web (view nativa), janela, menus e drop de arquivo: quais são <code>core/adapters</code> e quais são <code>commons/widgets</code>?</td></tr>
 <tr><td>7</td><td>Dois “core”</td><td>O core Rust e o <code>core</code> do front têm o mesmo nome.</td></tr>
 </table></div>
+</section>
+<section id="rust"><h2>Padrão do Rust: core e driver</h2>
+<p><span class="state talk">rascunho — falta a sua revisão</span></p>
+<p>O que a comunidade Rust recomenda para este tipo de projeto, cruzado com as decisões 1 a 9 e com o jeito que você organiza o front. Cada regra traz de onde veio; o que é opinião minha está marcado.</p>
+
+<h3>Estrutura do workspace</h3>
+<pre><code>rust/
+├─ Cargo.toml              manifesto virtual: membros, versões das dependências e lints num lugar só
+└─ crates/
+   ├─ egeon-core/          toda a lógica do app
+   ├─ egeon-terminal/      emulador (libghostty-vt)
+   ├─ egeon-driver/        acesso ao sistema, com um arquivo por plataforma dentro de cada capacidade
+   └─ egeon-app/           montagem: cria driver e terminal, entrega ao core</code></pre>
+<div class="tablewrap"><table>
+<tr><th>Regra</th><th>Origem</th></tr>
+<tr><td>Crates numa pasta só, <code>crates/</code>, sem aninhar</td><td>matklad (rust-analyzer); diretrizes de Rust da Microsoft</td></tr>
+<tr><td>Raiz é manifesto virtual, sem <code>src/</code></td><td>matklad</td></tr>
+<tr><td>Nome da pasta igual ao nome do crate</td><td>matklad</td></tr>
+<tr><td>Versões de dependência e lints declarados uma vez, no workspace</td><td>Microsoft</td></tr>
+<tr><td>Poucos crates: só vira crate o que tem fronteira de verdade</td><td>Opinião minha, pelas suas decisões: os quatro componentes já são as fronteiras</td></tr>
+</table></div>
+
+<h3>Por dentro do core</h3>
+<p>Mesma ideia do seu front: módulos por feature, planos, agrupados quando fizer sentido, com as mesmas três camadas dentro de cada um.</p>
+<pre><code>egeon-core/src/
+├─ lib.rs
+├─ ports/                  as interfaces que driver e terminal implementam
+│  ├─ pty.rs · procs.rs · local_conn.rs · notifier.rs · screen.rs …
+├─ features/
+│  ├─ workspace/           cada feature:
+│  │  ├─ model.rs            entidades e leitura/gravação tolerante   (≈ entities)
+│  │  ├─ store.rs            persistência em disco                    (≈ repository)
+│  │  └─ service.rs          regras e casos de uso                    (≈ usecase)
+│  ├─ workbench/ · node/ · dispatch/ · activity/ · chat/
+│  └─ maestro/ · queue/ · usage/ · trace/ · update/
+├─ protocol/               mensagens do socket: comandos, respostas, eventos, rotas
+├─ runtime/                o laço único dono do estado
+└─ commons/                caminhos, flavor, utilitários</code></pre>
+
+<h3>Regras de código</h3>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Regra</th><th>Por quê</th><th>Origem</th></tr>
+<tr><td>1</td><td><strong>Interfaces no core, implementação fora.</strong> Os traits ficam em <code>ports/</code>, com o formato do que o core precisa; driver e terminal implementam</td><td>O core não importa nada de sistema; trocar de plataforma não o toca</td><td>Arquitetura hexagonal em Rust (How To Code It); sua decisão 7</td></tr>
+<tr><td>2</td><td><strong>Só abstrair o que varia.</strong> Arquivo, git, rede e relógio o core usa direto</td><td>“Apps que não têm essa necessidade não precisam de ports e adapters”; abstrair demais deixa o código frágil</td><td>How To Code It; sua decisão 6</td></tr>
+<tr><td>3</td><td><strong>Um dono do estado.</strong> Uma tarefa única guarda o estado e recebe mensagens por canal; quem quer algo manda mensagem e espera a resposta</td><td>Substitui a main thread de hoje sem locks espalhados</td><td>“Actors with Tokio” (Alice Ryhl)</td></tr>
+<tr><td>4</td><td><strong>Um ator, não um por feature.</strong> Leitores de pty, socket e vigias são tarefas que só mandam mensagens para ele</td><td>Atores que se chamam em ciclo travam (canal cheio dos dois lados) e não encerram</td><td>Alice Ryhl (o alerta); a escolha de um só é opinião minha</td></tr>
+<tr><td>5</td><td><strong>Canais com limite.</strong></td><td>Se a UI ou um terminal não acompanha, a fila não cresce sem fim</td><td>Alice Ryhl</td></tr>
+<tr><td>6</td><td><strong>Lógica com tempo recebe a hora como parâmetro.</strong> Injeção, nova tentativa, fila de prompts e cronômetro são funções que recebem “agora” e devolvem o que fazer</td><td>O teste avança cinco minutos passando outro instante, sem esperar e sem relógio falso</td><td>Padrão sans-IO (Firezone)</td></tr>
+<tr><td>7</td><td><strong>…mas só onde o tempo importa.</strong> O resto é código assíncrono comum</td><td>Máquina de estados escrita à mão para fluxo sequencial é trabalho que o <code>async</code> já faz</td><td>Firezone (desvantagens citadas)</td></tr>
+<tr><td>8</td><td><strong>Erros tipados no core, genéricos só na borda.</strong> Cada feature tem seu tipo de erro; a montagem e o CLI podem usar erro genérico</td><td>Quem chama consegue reagir a cada caso; a rota do socket traduz erro em resposta</td><td>How To Code It</td></tr>
+<tr><td>9</td><td><strong>Sem <code>panic</code> em caminho normal.</strong></td><td>Um nó com problema não pode derrubar o app e os outros agentes</td><td>How To Code It</td></tr>
+<tr><td>10</td><td><strong>Tipos próprios para o que tem regra.</strong> Endereço de nó, id de bancada e nome de branch são tipos com construtor que valida, não <code>String</code> solta</td><td>O erro aparece na entrada, não três camadas depois</td><td>How To Code It</td></tr>
+<tr><td>11</td><td><strong><code>unsafe</code> só no driver e no terminal.</strong> O core proíbe</td><td>Toda chamada ao sistema e ao Ghostty fica em dois lugares auditáveis</td><td>Prática comum (crates <code>-sys</code>); a proibição no core é opinião minha</td></tr>
+<tr><td>12</td><td><strong>Testes ao lado do código, com implementações falsas das interfaces.</strong></td><td>O core roda inteiro em teste sem sistema operacional</td><td>How To Code It</td></tr>
+<tr><td>13</td><td><strong>A montagem é mínima.</strong> Só cria as peças e as liga</td><td>É a parte que não dá para testar; quanto menor, melhor</td><td>How To Code It</td></tr>
+</table></div>
+
+<h3>Por dentro do driver</h3>
+<p>O padrão da biblioteca padrão do Rust e de crates como <code>mio</code> e <code>winit</code>: um crate só, um módulo por capacidade, e dentro dele um arquivo por plataforma escolhido na compilação. (A organização desses crates eu cito de memória; não conferi nesta pesquisa.)</p>
+<pre><code>egeon-driver/src/
+├─ lib.rs
+├─ pty/          mod.rs (implementa o trait do core) · unix.rs · windows.rs
+├─ procs/        mod.rs · macos.rs · linux.rs · windows.rs
+├─ local_conn/   mod.rs · unix.rs · windows.rs
+├─ notifier/     mod.rs · macos.rs · …
+└─ folders/      mod.rs · macos.rs          (TCC só existe no macOS)</code></pre>
+<p>Muda uma coisa que eu tinha dito antes: em vez de um crate por plataforma, <strong>um crate com arquivos por plataforma</strong>. macOS e Linux compartilham quase tudo de pty e socket; separar por crate duplicaria esse código. Enquanto só houver macOS, cada módulo tem um arquivo.</p>
+
+<h3>Quatro escolhas que são suas</h3>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Escolha</th><th>Opções</th><th>Minha sugestão</th></tr>
+<tr><td>1</td><td>Macros <code>derive</code> contam como gerador de código?</td><td>Aceitar (<code>serde</code> para JSON, <code>thiserror</code> para erros) · escrever à mão</td><td>Aceitar. Rodam na compilação, não deixam arquivo gerado para manter, e ler JSON à mão em Rust é muito mais verboso que <code>fromMap</code> em Dart</td></tr>
+<tr><td>2</td><td>Runtime assíncrono</td><td><code>tokio</code> · threads e canais da biblioteca padrão</td><td><code>tokio</code>: é o padrão da comunidade, e socket com várias conexões, timers e vigia de arquivo ficam simples nele</td></tr>
+<tr><td>3</td><td>Como o core recebe o driver</td><td>Objeto de trait (<code>dyn</code>) · genéricos</td><td><code>dyn</code>: o driver é escolhido uma vez, na partida, e genéricos espalhariam parâmetros de tipo pelo core inteiro. A referência consultada usa genéricos, então aqui eu divirjo dela</td></tr>
+<tr><td>4</td><td>Scripts de build e release</td><td>Manter em shell · reescrever como crate <code>xtask</code></td><td>Manter em shell por enquanto; não é o foco da migração</td></tr>
+</table></div>
+
+<h3>Fontes</h3>
+<ul>
+<li><a href="https://matklad.github.io/2021/08/22/large-rust-workspaces.html">Large Rust Workspaces — matklad</a></li>
+<li><a href="https://microsoft.github.io/rust-guidelines/guidelines/project/index.html">Rust Guidelines, Project — Microsoft</a></li>
+<li><a href="https://www.howtocodeit.com/articles/master-hexagonal-architecture-rust">Master Hexagonal Architecture in Rust — How To Code It</a></li>
+<li><a href="https://ryhl.io/blog/actors-with-tokio/">Actors with Tokio — Alice Ryhl</a></li>
+<li><a href="https://www.firezone.dev/blog/sans-io">sans-IO: The secret to effective Rust for network services — Firezone</a></li>
+</ul>
 </section>
 <section id="funcionalidades"><h2>Funcionalidades por camada</h2>
 <p><span class="state talk">rascunho — falta a sua revisão</span></p>
