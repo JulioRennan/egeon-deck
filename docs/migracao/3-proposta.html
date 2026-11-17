@@ -96,7 +96,7 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
   <div class="sub">migração Swift → Rust + Flutter</div>
   <div class="docs"><a class="" href="1-hoje.html">O que temos hoje <span class="st">inventário</span></a><a class="" href="2-arquitetura-atual.html">Arquitetura atual <span class="st">estrutura</span></a><a class="on" href="3-proposta.html">Proposta <span class="st">em redação</span></a></div>
   <h5>Nesta página</h5>
-  <a href="#decidido">Decidido</a><a href="#funcionalidades">Funcionalidades por camada</a><a href="#debate">Em debate</a><a href="#abertas">Perguntas abertas</a><a href="#rascunho">Rascunho anterior</a>
+  <a href="#decidido">Decidido</a><a href="#componentes">Componentes</a><a href="#funcionalidades">Funcionalidades por camada</a><a href="#debate">Em debate</a><a href="#abertas">Perguntas abertas</a><a href="#rascunho">Rascunho anterior</a>
 </nav>
 <main>
 <h1>Proposta</h1>
@@ -120,6 +120,112 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
 <tr><td>6</td><td><strong>Core</strong> tem todas as lógicas do app, incluindo a comunicação por socket, arquivos, git e rede. <strong>Driver</strong> é só o que dá acesso a coisas do sistema operacional que podem diferir por plataforma, como o pty. Teste prático: se o código precisa de um <code>cfg</code> por sistema, é driver; se não, é core.</td><td>Debate sobre core × driver</td></tr>
 <tr><td>7</td><td>As interfaces pertencem ao core. Para tudo que está no driver ou no componente terminal, o core define a interface com o formato do que ele precisa (não o da API do sistema), e o driver a implementa por plataforma. O core não conhece o driver; uma peça fina no topo monta os dois. Só há interface para o que varia: arquivos, git, rede e relógio o core usa direto.</td><td>Debate sobre core × driver</td></tr>
 </table></div>
+</section>
+<section id="componentes"><h2>Componentes</h2>
+<p>Como as peças estão neste momento, pelas decisões 1 a 7. O que ainda não foi decidido aparece tracejado ou marcado.</p>
+<div class="diagram">
+<svg viewBox="0 0 1040 600" width="100%" role="img" aria-label="Componentes do Egeon na proposta">
+  <defs>
+    <marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+  </defs>
+  <g font-size="12.5" style="color:var(--mute)">
+    <rect x="10" y="10" width="770" height="580" rx="12" fill="none" stroke="var(--line)" stroke-dasharray="5 4"/>
+    <text x="24" y="30" font-size="11.5">o app</text>
+
+    <rect x="24" y="42" width="742" height="92" rx="10" fill="var(--ui-bg)" stroke="var(--ui)"/>
+    <text x="38" y="64" font-weight="700">UI — Flutter</text>
+    <text x="38" y="85" font-size="12">Barra lateral · abas · canvas · chat · formulários</text>
+    <text x="38" y="103" font-size="12">Widget de terminal próprio: pinta as linhas, captura teclado, acentos, mouse e rolagem</text>
+    <text x="38" y="121" font-size="11">mostra e captura gesto; não guarda regra de negócio · módulos a debater</text>
+
+    <line x1="395" y1="136" x2="395" y2="176" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#pa)" marker-start="url(#pa)"/>
+    <text x="408" y="153" font-size="11.5">mensagens: comandos ↓  eventos ↑</text>
+    <text x="408" y="168" font-size="11">transporte em debate (socket, sem gerador de código)</text>
+
+    <rect x="24" y="180" width="742" height="188" rx="10" fill="var(--core-bg)" stroke="var(--core)"/>
+    <text x="38" y="202" font-weight="700">CORE — Rust</text>
+    <text x="38" y="223" font-size="12">Toda a lógica do app: workspaces, bancadas, nós, arestas, abas, atividade, chat, maestro, fila, consumo</text>
+    <text x="38" y="241" font-size="12">Coordenação: protocolo e rotas do socket, envio entre agentes, guardas, injeção, permissões, trilha</text>
+    <text x="38" y="259" font-size="12">Usa direto o que é igual em toda plataforma: arquivos, git, rede, relógio</text>
+
+    <text x="38" y="290" font-size="11" font-weight="650" letter-spacing=".05em">INTERFACES QUE O CORE DEFINE</text>
+    <g font-size="11.5">
+      <rect x="38" y="300" width="200" height="54" rx="8" fill="var(--panel)" stroke="var(--mix)"/>
+      <text x="138" y="322" text-anchor="middle" font-weight="650">Tela</text>
+      <text x="138" y="340" text-anchor="middle" font-size="10.5">bytes entram, linhas e texto saem</text>
+      <rect x="318" y="300" width="434" height="54" rx="8" fill="var(--panel)" stroke="var(--drv)"/>
+      <text x="535" y="322" text-anchor="middle" font-weight="650">Pty · Processos · Conexão local · Notificação</text>
+      <text x="535" y="340" text-anchor="middle" font-weight="650">Acesso a pastas · Apps abertos · Troca do app · Arquivo mudou</text>
+    </g>
+
+    <g stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" fill="none">
+      <line x1="138" y1="418" x2="138" y2="358" marker-end="url(#pa)"/>
+      <line x1="535" y1="418" x2="535" y2="358" marker-end="url(#pa)"/>
+    </g>
+    <text x="150" y="394" font-size="11.5">implementa</text>
+    <text x="547" y="394" font-size="11.5">implementa</text>
+
+    <rect x="24" y="420" width="228" height="100" rx="10" fill="var(--mix-bg)" stroke="var(--mix)"/>
+    <text x="38" y="442" font-weight="700">TERMINAL — Rust</text>
+    <text x="38" y="463" font-size="12">Emulador: libghostty-vt</text>
+    <text x="38" y="481" font-size="12">grade, scrollback, seleção,</text>
+    <text x="38" y="499" font-size="12">codificação de teclado</text>
+    <text x="38" y="514" font-size="11">sem código por plataforma</text>
+
+    <rect x="304" y="420" width="462" height="100" rx="10" fill="var(--drv-bg)" stroke="var(--drv)"/>
+    <text x="318" y="442" font-weight="700">DRIVER — Rust, um por plataforma</text>
+    <text x="318" y="463" font-size="12">Só o acesso ao sistema que muda de plataforma para plataforma:</text>
+    <text x="318" y="481" font-size="12">pty e sinais · tabela de processos · escuta local e pid do par</text>
+    <text x="318" y="499" font-size="12">notificação e som · TCC · apps abertos · troca do app instalado</text>
+    <text x="318" y="514" font-size="11">macOS primeiro; outros sistemas são outro driver com as mesmas interfaces</text>
+
+    <rect x="24" y="536" width="742" height="40" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="38" y="561" font-size="12"><tspan font-weight="700">MONTAGEM</tspan> — peça fina no topo: cria o driver da plataforma e o terminal, entrega os dois ao core e sobe a UI</text>
+
+    <rect x="820" y="186" width="210" height="62" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="834" y="208" font-weight="700">egeon</text>
+    <text x="834" y="228" font-size="12">CLI e ganchos dos agentes</text>
+    <line x1="820" y1="217" x2="770" y2="217" stroke="currentColor" stroke-width="1.5" marker-end="url(#pa)"/>
+    <text x="795" y="207" text-anchor="middle" font-size="11">socket</text>
+
+    <rect x="820" y="290" width="210" height="62" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="834" y="312" font-weight="700">~/.egeon/</text>
+    <text x="834" y="332" font-size="12">mesmos arquivos de hoje</text>
+    <line x1="768" y1="321" x2="818" y2="321" stroke="currentColor" stroke-width="1.5" marker-end="url(#pa)" marker-start="url(#pa)"/>
+    <text x="793" y="311" text-anchor="middle" font-size="11">direto</text>
+
+    <rect x="820" y="438" width="210" height="62" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="834" y="460" font-weight="700">Processos dos agentes</text>
+    <text x="834" y="480" font-size="12">zsh → claude · codex · gemini</text>
+    <line x1="768" y1="469" x2="818" y2="469" stroke="currentColor" stroke-width="1.5" marker-end="url(#pa)" marker-start="url(#pa)"/>
+    <text x="793" y="459" text-anchor="middle" font-size="11">pty</text>
+  </g>
+</svg>
+</div>
+
+<h3>Quem depende de quem</h3>
+<div class="tablewrap"><table>
+<tr><th>Componente</th><th>Linguagem</th><th>Conhece</th><th>Não conhece</th><th>Estado</th></tr>
+<tr><td><span class="tag core">CORE</span></td><td>Rust</td><td>Só as próprias interfaces</td><td>Driver, terminal, UI, sistema operacional</td><td><span class="state ok">decidido</span></td></tr>
+<tr><td><span class="tag drv">DRIVER</span></td><td>Rust</td><td>As interfaces do core e o sistema operacional</td><td>A lógica do app, a UI</td><td><span class="state ok">decidido</span></td></tr>
+<tr><td><span class="tag mix">TERMINAL</span></td><td>Rust + <code>libghostty-vt</code></td><td>A interface de tela do core e o motor do Ghostty</td><td>pty, sistema operacional, UI</td><td><span class="state ok">decidido</span></td></tr>
+<tr><td><span class="tag ui">UI</span></td><td>Flutter</td><td>As mensagens do core</td><td>Driver, terminal, arquivos</td><td><span class="state ok">decidido</span> · transporte <span class="state talk">em debate</span></td></tr>
+<tr><td>Montagem</td><td>Rust</td><td>Todos</td><td>—</td><td><span class="state ok">decidido</span></td></tr>
+<tr><td><code>egeon</code></td><td>—</td><td>O protocolo do socket</td><td>O resto</td><td><span class="state open">não discutido</span> (hoje é script bash)</td></tr>
+</table></div>
+
+<h3>O caminho de um caractere</h3>
+<p>Do processo até a tela, e da tecla de volta, passando por todos os componentes:</p>
+<pre><code>saída   processo ─▶ pty (driver) ─bytes─▶ core ─bytes─▶ tela (terminal) ─linhas alteradas─▶ core ─mensagem─▶ UI pinta
+entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla ─bytes─▶ core ─▶ pty (driver) ─▶ processo</code></pre>
+<p>O core fica no meio porque só ele conhece as duas interfaces. É também por isso que ele sabe o instante do último byte (os tempos da injeção) e lê o texto da tela (<code>egeon peek</code>, marcador de CLI sem gancho) sem depender da UI.</p>
+
+<h3>Ainda fora do desenho</h3>
+<ul>
+<li><strong>Nó web</strong> — precisa de view nativa (<code>WKWebView</code> no macOS); não foi discutido onde entra.</li>
+<li><strong>Janela, menus nativos e drop de arquivo</strong> — parte nativa do lado do Flutter; não discutido.</li>
+<li><strong>Módulos internos</strong> de cada componente — a decisão 4 diz que são modulares; o recorte ainda será debatido.</li>
+</ul>
 </section>
 <section id="funcionalidades"><h2>Funcionalidades por camada</h2>
 <p><span class="state talk">rascunho — falta a sua revisão</span></p>
