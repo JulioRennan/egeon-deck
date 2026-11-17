@@ -9,6 +9,10 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- "Novo projeto…" no menu do workspace: dá nome, escolhe a pasta-mãe (sugere a que os projetos dele já dividem) e cria a pasta, com `git init` se quiser, sem sair do app (ADR-092).
+
 ## [1.8.0] - 2026-11-04
 
 ### Adicionado

@@ -178,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         sidebar.onCreateWorkspace = { [weak self] in self?.createWorkspace() }
         sidebar.onEditWorkspace = { [weak self] id in self?.editWorkspace(id) }
+        sidebar.onCreateProject = { [weak self] id in self?.askNewProject(inWorkspace: id) }
         sidebar.onRemoveWorkspace = { [weak self] id in self?.confirmRemoveWorkspace(id) }
         sidebar.onRemoveProject = { [weak self] ws, id in self?.confirmRemoveProject(ws, id) }
         sidebar.onToggleGroup = { [weak self] item in self?.toggleGroup(item) }
@@ -453,6 +454,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let index = self.configs.firstIndex(where: { $0.name == name })
             else { return }
             self.shell(at: index)?.chat.focusFromOutside(id)
+        }
+        AppControl.createProject = { [weak self] workspace, name, parent, git in
+            guard let self else { return ["ok": false, "error": "app indisponível"] }
+            guard let space = self.workspaces.first(where: { $0.id == workspace || $0.name == workspace })
+            else { return ["ok": false, "error": "workspace desconhecido '\(workspace)'"] }
+            let base = parent ?? NewProject.suggestedParent(for: space)
+            switch NewProject.plan(name: name, parent: base, in: space, kind: NewProject.diskKind) {
+            case .failure(let problem): return ["ok": false, "error": problem.message]
+            case .success(let plan):
+                if let error = self.addProject(plan, git: git, toWorkspace: space.id) {
+                    return ["ok": false, "error": error]
+                }
+                return ["ok": true, "path": plan.path, "created": plan.create,
+                        "tree": AppControl.workspacesSnapshot?() ?? [:]]
+            }
         }
         AppControl.moveInTree = { [weak self] kind, id, parent, position in
             guard let self else { return ["ok": false, "error": "app indisponível"] }
@@ -2237,6 +2253,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText = "Remova antes as bancadas de: \(refused.joined(separator: ", "))."
             alert.runModal()
         }
+    }
+
+    private func askNewProject(inWorkspace id: String) {
+        guard let space = workspaces.first(where: { $0.id == id }),
+              let form = NewProjectForm.ask(in: space) else { return }
+        if let error = addProject(form.plan, git: form.git, toWorkspace: id) {
+            presentError("Não consegui criar o projeto", ProjectFolder.Failure(errorDescription: error))
+        }
+    }
+
+    /// Cria (ou adota) a pasta e a põe no fim da lista do workspace, já à
+    /// vista: workspace recolhido abre, senão o projeto novo nasce escondido.
+    /// Devolve o erro, ou nil.
+    @discardableResult
+    private func addProject(_ plan: NewProject.Plan, git: Bool, toWorkspace id: String) -> String? {
+        guard let w = workspaces.firstIndex(where: { $0.id == id }) else { return "workspace desconhecido" }
+        do { try ProjectFolder.materialize(plan, git: git) }
+        catch { return error.localizedDescription }
+        let project = ProjectConfig.forFolder(plan.path)
+        workspaces[w].projects.append(project)
+        workspaces[w].collapsed = nil
+        WorkspaceStore.save(workspaces)
+        Log.write("projeto \"\(project.name)\" \(plan.create ? "criado" : "adotado") em "
+                  + "\(plan.path) no workspace \"\(workspaces[w].name)\"\(git ? " (git)" : "")")
+        reloadSidebar()
+        return nil
     }
 
     private static func multiProjectPath(_ id: String) -> String {

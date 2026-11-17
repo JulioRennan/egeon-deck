@@ -169,6 +169,10 @@ enum AppControl {
     static var chatFocus: ((_ workbench: String, _ id: String) -> Void)?
     /// Reposiciona um item da árvore: workspace, projeto ou bancada (ADR-051).
     /// `parent` é o workspace do projeto ou o projeto da bancada.
+    /// "Novo projeto…" sem o formulário (ADR-092). `parent` nil é a pasta-mãe
+    /// sugerida, a mesma que o formulário mostra.
+    static var createProject: ((_ workspace: String, _ name: String, _ parent: String?,
+                                _ git: Bool) -> [String: Any])?
     static var moveInTree: ((_ kind: String, _ id: String, _ parent: String,
                             _ position: Int) -> [String: Any])?
 

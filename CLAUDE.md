@@ -57,7 +57,8 @@ app/Sources/EgeonDeck/
 ## Conceitos, em uma linha cada
 
 - **Workspace → Projeto → Bancada** (ADR-043) — workspace é nome + foto (ou a
-  inicial) + pastas; cada pasta é um projeto; a bancada guarda o `project`
+  inicial) + pastas; cada pasta é um projeto — e "Novo projeto…", no menu do
+  workspace, cria a pasta (com `git init`) sem sair do app (ADR-092); a bancada guarda o `project`
   (id) a que pertence. Bancada em worktree é do projeto do repositório
   principal. Todos os workspaces ficam à vista na barra, expansíveis; o
   arquivo é `workspaces.json`, e `GET /workspaces` devolve a árvore. Os três

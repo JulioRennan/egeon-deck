@@ -184,6 +184,7 @@ final class WorkspaceForm: NSObject, NSTableViewDataSource, NSTableViewDelegate 
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = true
         panel.prompt = "Adicionar"
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {

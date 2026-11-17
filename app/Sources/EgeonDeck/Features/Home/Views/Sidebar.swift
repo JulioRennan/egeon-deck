@@ -482,6 +482,7 @@ final class SidebarGroupRow: NSView {
     var onCreateWorkbench: ((_ projectID: String) -> Void)?
     var onCreateWorkbenchFromWorktree: ((_ projectID: String) -> Void)?
     var onEditWorkspace: ((_ workspaceID: String) -> Void)?
+    var onCreateProject: ((_ workspaceID: String) -> Void)?
     var onRemoveWorkspace: ((_ workspaceID: String) -> Void)?
     var onRemoveProject: ((_ workspaceID: String, _ projectID: String) -> Void)?
 
@@ -760,6 +761,8 @@ final class SidebarGroupRow: NSView {
         let menu = NSMenu()
         switch item {
         case .workspace:
+            menu.addItem(withTitle: "Novo projeto…", action: #selector(createProject),
+                         keyEquivalent: "")
             menu.addItem(withTitle: "Editar workspace…", action: #selector(editWorkspace),
                          keyEquivalent: "")
             menu.addItem(.separator())
@@ -787,6 +790,9 @@ final class SidebarGroupRow: NSView {
 
     @objc private func editWorkspace() {
         if case .workspace(let id) = item { onEditWorkspace?(id) }
+    }
+    @objc private func createProject() {
+        if case .workspace(let id) = item { onCreateProject?(id) }
     }
     @objc private func removeWorkspace() {
         if case .workspace(let id) = item { onRemoveWorkspace?(id) }
@@ -983,6 +989,7 @@ final class Sidebar: NSView {
     var onCreateFromWorktreeInProject: ((_ projectID: String) -> Void)?
     var onCreateWorkspace: (() -> Void)?
     var onEditWorkspace: ((_ workspaceID: String) -> Void)?
+    var onCreateProject: ((_ workspaceID: String) -> Void)?
     var onRemoveWorkspace: ((_ workspaceID: String) -> Void)?
     var onRemoveProject: ((_ workspaceID: String, _ projectID: String) -> Void)?
     /// Guardar o projeto na gaveta do workspace, ou tirá-lo de lá (ADR-052).
@@ -1189,6 +1196,7 @@ final class Sidebar: NSView {
         group.onCreateWorkbench = { [weak self] in self?.onCreateInProject?($0) }
         group.onCreateWorkbenchFromWorktree = { [weak self] in self?.onCreateFromWorktreeInProject?($0) }
         group.onEditWorkspace = { [weak self] in self?.onEditWorkspace?($0) }
+        group.onCreateProject = { [weak self] in self?.onCreateProject?($0) }
         group.onRemoveWorkspace = { [weak self] in self?.onRemoveWorkspace?($0) }
         group.onRemoveProject = { [weak self] in self?.onRemoveProject?($0, $1) }
         group.onToggleStored = { [weak self] in self?.onToggleStored?($0, $1, $2) }

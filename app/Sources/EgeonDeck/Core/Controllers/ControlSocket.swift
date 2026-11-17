@@ -490,6 +490,18 @@ final class ControlSocket {
             }
             respond(fd, status: outcome.0, json: outcome.1)
 
+        case ("POST", _, _) where route.contains("/project/new"):
+            // /project/new?workspace=<id|nome>&name=<pasta>[&parent=<pasta-mãe>][&git=0]
+            // — o "Novo projeto…" do menu do workspace, sem o formulário (ADR-092).
+            let query = Self.query(in: route)
+            let payload = DispatchQueue.main.sync {
+                AppControl.createProject?(query["workspace"] ?? "", query["name"] ?? "",
+                                          query["parent"], query["git"] != "0")
+            }
+            let ok = payload?["ok"] as? Bool ?? false
+            respond(fd, status: ok ? "200 OK" : "400 Bad Request",
+                    json: payload ?? ["ok": false, "error": "app sem árvore"])
+
         case ("POST", _, _) where route.contains("/node/clear"):
             // /node/clear?target=ws/id — o botão de limpar do card, sem o diálogo.
             // Responde no disparo: terminal ocupado recebe quando ficar livre.
