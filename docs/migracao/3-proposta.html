@@ -116,6 +116,7 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
 <tr><td>2</td><td>Sem gerador de código na ponte entre Rust e Dart — o <code>flutter_rust_bridge</code> está fora.</td><td>Debate sobre a fronteira UI ↔ core</td></tr>
 <tr><td>3</td><td>O emulador de terminal é o <code>libghostty-vt</code>, o motor oficial do Ghostty, usado direto — sem widget nem binding de terceiro. Ele fica num <strong>componente próprio, “terminal”</strong>, ao lado de driver e core: o core continua sem dependência nativa e fala com o terminal por uma interface. A pintura e a entrada no Flutter são escritas por nós.</td><td>Debate sobre o emulador de terminal</td></tr>
 <tr><td>4</td><td>A arquitetura é modular em todos os componentes — driver, core, terminal e UI. O desenho dos módulos de cada uma ainda será debatido.</td><td>Debate sobre o emulador de terminal</td></tr>
+<tr><td>5</td><td>O pty fica no driver. O componente terminal é só o emulador: recebe bytes, mantém a tela e não tem código por plataforma.</td><td>Debate sobre o emulador de terminal</td></tr>
 </table></div>
 </section>
 <section id="funcionalidades"><h2>Funcionalidades por camada</h2>
@@ -186,7 +187,6 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
 <tr><td>3</td><td>Processo único ou core como daemon?</td><td>Microfone (TCC), identidade por pid e árvore de processos dependem de o app ser o pai do pty. Daemon reabre o ADR-010.</td></tr>
 <tr><td>4</td><td>App novo em paralelo, ou Rust por baixo do app Swift primeiro?</td><td>Define se existe uma ponte Swift ↔ Rust temporária e por quanto tempo os dois apps convivem.</td></tr>
 <tr><td>5</td><td>Como o <code>libghostty-vt</code> entra no build: biblioteca já compilada do projeto, ou compilar do fonte (exige Zig)?</td><td>Define o que precisa estar instalado para compilar o Egeon e como a biblioteca vai dentro do bundle.</td></tr>
-<tr><td>10</td><td>O pty fica no driver ou dentro do componente terminal?</td><td>No driver, o terminal é só o emulador e porta para qualquer plataforma sem mudar. Dentro do terminal, o componente entrega uma sessão completa (processo + tela), mas passa a ter código por plataforma.</td></tr>
 <tr><td>6</td><td>O que fazer com o nó web sob zoom?</td><td><code>WKWebView</code> embutido não acompanha a transformação do canvas.</td></tr>
 <tr><td>7</td><td>Fila de injeção e pedidos de permissão continuam só em memória?</td><td>Hoje somem no restart.</td></tr>
 <tr><td>8</td><td>Bugs achados no levantamento: corrigir no Swift antes, ou só no porte?</td><td>Define se o Rust replica o comportamento atual ou já nasce diferente.</td></tr>
