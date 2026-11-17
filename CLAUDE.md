@@ -1,5 +1,13 @@
 # Egeon Deck
 
+> **Migração em curso (branch `migracao-flutter`).** O app está sendo reescrito de
+> ponta a ponta em Rust (core, driver, terminal) + Flutter (UI), sem transição. O
+> app Swift descrito abaixo foi movido para `legado/` (`legado/app`, `legado/tools`,
+> `legado/poc`) e serve só de referência para o porte: não se corrige nada nele.
+> Onde este arquivo diz `app/…`, leia `legado/app/…`. As decisões da migração e os
+> padrões a seguir estão em `docs/migracao/3-proposta.html`; o inventário e a
+> arquitetura do Swift, em `docs/migracao/1-hoje.html` e `2-arquitetura-atual.html`.
+
 App macOS de uso pessoal: um **canvas infinito onde cada nó é uma ferramenta de
 trabalho real** — terminal, agente de IA, navegador. O ponto é dirigir
 vários agentes em paralelo: cada um vive num terminal endereçável, recebe prompt
