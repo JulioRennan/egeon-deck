@@ -270,10 +270,22 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <tr><td><code>commons/widgets</code></td><td>Design system e adaptações de libs de UI</td><td>—</td></tr>
 </table></div>
 
+<h3>Eventos empurrados pelo core</h3>
+<p><span class="state ok">decidido</span></p>
+<div class="tablewrap"><table>
+<tr><th>Quem</th><th>Papel</th></tr>
+<tr><td>Core Rust</td><td>Manda o estado inteiro do item a cada mudança, não a diferença. A assinatura é por tópico, numa conexão só. Se a conexão cair, a UI assina de novo e recebe o estado atual</td></tr>
+<tr><td>repository</td><td><code>Future</code> para consulta e comando; <code>Stream</code> para o que o core empurra</td></tr>
+<tr><td>usecase</td><td>Repassa o stream, ou combina quando a tela junta mais de uma fonte</td></tr>
+<tr><td>cubit</td><td><strong>Dono da assinatura:</strong> abre ao nascer, emite estado a cada evento, cancela no <code>close()</code>. A vida da assinatura é a vida da tela</td></tr>
+<tr><td>Granularidade</td><td>Um cubit por item (card de nó, linha da barra lateral), não um por tela — para o tique de badges e relógios não reconstruir tudo</td></tr>
+<tr><td>Exceção: terminal</td><td>O widget escuta o stream das linhas direto e repinta só o que mudou; o cubit cuida do resto (título, tamanho, se está vivo)</td></tr>
+<tr><td>Exceção: chat</td><td>O core manda a diferença de blocos (removidos, inseridos, alterados), porque a thread é longa</td></tr>
+</table></div>
+
 <h3>Em aberto: como o Egeon encaixa nisso</h3>
 <div class="tablewrap"><table>
 <tr><th>#</th><th>Ponto</th><th>O que falta decidir</th></tr>
-<tr><td>1</td><td>Eventos do core</td><td>O core empurra estado o tempo todo (atividade, chat ao vivo, linhas do terminal). O repository expõe isso como stream? Passa pelo usecase ou o cubit assina direto?</td></tr>
 <tr><td>2</td><td>A conexão com o core Rust</td><td>É uma só para o app inteiro. Fica em <code>core/adapters</code>, e os repositories das features a usam?</td></tr>
 <tr><td>3</td><td>O widget de terminal</td><td>É uma feature própria, ou um widget em <code>commons</code> usado por canvas e chat?</td></tr>
 <tr><td>4</td><td>Features dentro de features</td><td>Hoje o Swift aninha (Nodes → AgentNode → ClaudeCode). No front as features são planas ou podem aninhar?</td></tr>
