@@ -1,0 +1,17 @@
+[package]
+name = "egeon-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "egeon"
+path = "src/main.rs"
+
+# Dependências entram quando o código que as usa entrar; a direção permitida
+# está na skill `padrao-rust`.
+[dependencies]
+
+[lints]
+workspace = true

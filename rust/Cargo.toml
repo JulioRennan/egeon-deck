@@ -1,0 +1,21 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+# Versões num lugar só: todo crate declara dependência com `workspace = true`.
+[workspace.dependencies]
+egeon-core = { path = "crates/egeon-core" }
+egeon-driver = { path = "crates/egeon-driver" }
+egeon-terminal = { path = "crates/egeon-terminal" }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"

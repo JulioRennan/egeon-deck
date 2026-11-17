@@ -25,3 +25,6 @@ docs/_diff-test.md
 # macOS
 .DS_Store
 dist/
+
+# Rust
+rust/target/

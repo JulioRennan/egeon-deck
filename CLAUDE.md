@@ -7,6 +7,20 @@
 > Onde este arquivo diz `app/…`, leia `legado/app/…`. As decisões da migração e os
 > padrões a seguir estão em `docs/migracao/3-proposta.html`; o inventário e a
 > arquitetura do Swift, em `docs/migracao/1-hoje.html` e `2-arquitetura-atual.html`.
+>
+> O código novo mora em duas pastas, por enquanto só com a fundação (sem lógica):
+>
+> - `rust/` — workspace com `egeon-core`, `egeon-terminal`, `egeon-driver`,
+>   `egeon-app` e `egeon-cli`. **Skill `padrao-rust`: consultar antes de criar
+>   arquivo, crate ou dependência ali.** Conferir com
+>   `cd rust && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace`.
+> - `ui/` — app Flutter (macOS), versão fixada em `ui/.fvmrc`; usar sempre
+>   `fvm flutter`. **Skill `estrutura-flutter`: consultar antes de criar arquivo,
+>   widget, cubit ou dependência ali.** Conferir com
+>   `cd ui && fvm flutter analyze && fvm flutter test`.
+>
+> As skills `estrutura-de-modulos` e `protocolo-entre-agentes` descrevem o Swift
+> de `legado/`.
 
 App macOS de uso pessoal: um **canvas infinito onde cada nó é uma ferramenta de
 trabalho real** — terminal, agente de IA, navegador. O ponto é dirigir
