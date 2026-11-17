@@ -288,22 +288,48 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <div class="tablewrap"><table>
 <tr><th>Peça</th><th>Onde fica</th><th>Regra</th></tr>
 <tr><td>Cliente do socket</td><td><code>core/adapters</code></td><td>Um só para o app inteiro, criado na raiz. Os repositories de cada feature o recebem; nenhuma feature abre conexão por conta própria</td></tr>
-<tr><td>Widget de terminal</td><td><code>features/terminal</code></td><td>Feature própria: pinta as linhas e captura teclado. Canvas e chat usam o widget sem saber como ele funciona por dentro</td></tr>
+<tr><td>Widget de terminal</td><td><code>features/node/terminal</code></td><td>Feature própria: pinta as linhas e captura teclado. Canvas e chat usam o widget sem saber como ele funciona por dentro</td></tr>
 </table></div>
 
 <h3>Recorte das features</h3>
-<p><span class="state ok">decidido</span> — as regras; a lista em si ainda está em aberto.</p>
+<p><span class="state ok">decidido</span></p>
 <ul>
 <li><strong>Cada coisa é um módulo:</strong> chat é uma feature, canvas outra, barra lateral outra.</li>
 <li><strong>Features planas por padrão.</strong> Quando fizer sentido, várias features ficam agrupadas dentro de uma maior — por exemplo o que gira em torno do terminal.</li>
 <li><strong>A home é a feature que compõe:</strong> junta barra lateral, canvas, chat e as demais views.</li>
 </ul>
+<pre><code>features/
+├─ home/         a casca: janela, barra de título, alterna canvas/chat,
+│                compõe sidebar + abas + conteúdo, cortinas (ocupado, sem acesso)
+├─ sidebar/      árvore workspace → projeto → bancada, aba Ativas, arrasto, gaveta
+├─ tabs/         faixa de abas das bancadas abertas
+├─ workspace/    formulários de workspace, projeto novo e multi-projeto
+├─ workbench/    formulário da bancada, worktree, cor, relógio, limpar e remover
+├─ canvas/       grid, zoom e pan, cards posicionados, arestas, ferramentas
+├─ chat/         thread, composer, participantes, bandeja de permissão
+├─ node/         ── grupo ──
+│  ├─ card/        moldura do card: cabeçalho, estado, botões
+│  ├─ terminal/    widget que pinta as linhas e captura teclado
+│  ├─ agent/       modelo, esforço, contexto, formulário do agente
+│  ├─ web/         nó web
+│  └─ queue/       fila de prompts
+├─ usage/        consumo e custo: pastilha, painel de detalhe
+├─ processes/    janela Processos
+└─ update/       aviso e menu de atualização</code></pre>
+<div class="tablewrap"><table>
+<tr><th>Escolha</th><th>Motivo</th></tr>
+<tr><td>Consumo fora do grupo <code>node</code></td><td>É por bancada e aparece na barra lateral, no canvas e no chat — não dentro do card</td></tr>
+<tr><td><code>card</code> separado de <code>terminal</code></td><td>A moldura é a mesma para terminal, web e fila; só o conteúdo muda</td></tr>
+<tr><td>Arestas dentro de <code>canvas</code></td><td>Só existem ali</td></tr>
+<tr><td>Maestro e trilha sem feature</td><td>Quase não têm tela: o maestro é uma marca no formulário e uma borda no card; a trilha não aparece na UI</td></tr>
+<tr><td>Entidades compartilhadas em <code>core/domain</code></td><td>Bancada, nó e estado de atividade são lidos por sidebar, abas, canvas e chat</td></tr>
+<tr><td>Em <code>commons/widgets</code></td><td>Badges, spinner, anel de atenção, painel de vidro, botão de barra e o diff com realce de código</td></tr>
+</table></div>
 
 <h3>Em aberto: como o Egeon encaixa nisso</h3>
 <div class="tablewrap"><table>
 <tr><th>#</th><th>Ponto</th><th>O que falta decidir</th></tr>
 <tr><td>5</td><td>Parte nativa</td><td>Nó web (view nativa), janela, menus e drop de arquivo: quais são <code>core/adapters</code> e quais são <code>commons/widgets</code>?</td></tr>
-<tr><td>6</td><td>Lista de features</td><td>Qual o recorte: barra lateral, abas, canvas, chat, nó, fila, processos, consumo…</td></tr>
 <tr><td>7</td><td>Dois “core”</td><td>O core Rust e o <code>core</code> do front têm o mesmo nome.</td></tr>
 </table></div>
 </section>
