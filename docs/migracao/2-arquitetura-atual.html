@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Egeon Deck — Arquitetura atual</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div class="layout">
+<nav>
+  <div class="brand">Egeon Deck</div>
+  <div class="sub">migração Swift → Rust + Flutter</div>
+  <div class="docs"><a class="" href="1-hoje.html">O que temos hoje <span class="st">inventário</span></a><a class="on" href="2-arquitetura-atual.html">Arquitetura atual <span class="st">como está montado</span></a><a class="" href="3-proposta.html">Proposta <span class="st">em redação</span></a></div>
+  <h5>Nesta página</h5>
+  <a href="#camadas">Camadas e ciclo de vida</a><a href="#coord">Coordenação e IPC</a><a href="#nos">Nós, pty e processos</a><a href="#ui">UI</a><a href="#dominio">Domínio</a><a href="#plataforma">Armadilhas de plataforma</a><a href="#atrito">Pontos de atrito para uma migração</a>
+</nav>
+<main>
+<h1>Arquitetura atual</h1>
+<p class="lede">Como o app Swift está montado por dentro: camadas, fluxos, concorrência, o terminal, a UI e o domínio. As colunas de destino (<span class="tag core">CORE</span> <span class="tag drv">DRIVER</span> <span class="tag ui">UI</span>) e as observações para a migração são leitura minha sob a premissa Rust core + driver e Flutter UI — não são decisão.</p>
+<section id="camadas"><h2>Camadas e ciclo de vida</h2>
+<p>Um processo, um bundle, AppKit puro (sem SwiftUI). O <code>AppDelegate</code> em <code>main.swift</code> é dono de todo o estado e liga as peças por closures. Não há camada de domínio separada: a lógica está espalhada entre modelos puros (bem testados), controllers e views.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 1040 430" width="100%" role="img" aria-label="Arquitetura atual">
+  <g font-size="12.5" style="color:var(--mute)">
+    <rect x="10" y="10" width="1020" height="92" rx="10" fill="var(--ui-bg)" stroke="var(--ui)"/>
+    <text x="24" y="32" font-weight="700">Views AppKit</text>
+    <text x="24" y="54" font-size="12">RootView → WorkbenchShell → CanvasContainer (sempre montado) + ChatContainer (por cima, em chat)</text>
+    <text x="24" y="74" font-size="12">Sidebar · WorkbenchTabsBar · NodeView (TerminalNode · WebNode · QueueNode) · formulários</text>
+    <text x="24" y="92" font-size="11">guardam estado próprio: foco do chat, passos abertos, frames do canvas, ferramenta armada, ordem das abas</text>
+
+    <rect x="10" y="118" width="1020" height="70" rx="10" fill="var(--mix-bg)" stroke="var(--mix)"/>
+    <text x="24" y="140" font-weight="700">AppDelegate — main.swift (4 347 linhas)</text>
+    <text x="24" y="161" font-size="12">dono de configs, workspaces, abas abertas, shells; monta a linha de comando do agente; preenche ~50 closures do AppControl</text>
+    <text x="24" y="178" font-size="11">tudo na main thread, sem locks · timers de 0,12 s (badges) e 0,25 s (dispatch)</text>
+
+    <rect x="10" y="204" width="330" height="92" rx="10" fill="var(--core-bg)" stroke="var(--core)"/>
+    <text x="24" y="226" font-weight="700">Coordenação</text>
+    <text x="24" y="246" font-size="12">Dispatcher + Target (fila, guardas, atividade)</text>
+    <text x="24" y="264" font-size="12">PermissionDesk · MaestroController</text>
+    <text x="24" y="282" font-size="12">QueueController · WorkbenchCleaner</text>
+
+    <rect x="355" y="204" width="330" height="92" rx="10" fill="var(--core-bg)" stroke="var(--core)"/>
+    <text x="369" y="226" font-weight="700">Modelos e stores</text>
+    <text x="369" y="246" font-size="12">Workspace · Workbench · Node · Edge · Template</text>
+    <text x="369" y="264" font-size="12">ChatThread/Turn/Block · ClaudeTranscript</text>
+    <text x="369" y="282" font-size="12">MaestroPlanner · UsageLedger · PriceTable</text>
+
+    <rect x="700" y="204" width="330" height="92" rx="10" fill="var(--drv-bg)" stroke="var(--drv)"/>
+    <text x="714" y="226" font-weight="700">Serviços de sistema</text>
+    <text x="714" y="246" font-size="12">ControlSocket · Peer · ProcessScanner</text>
+    <text x="714" y="264" font-size="12">Worktree (git) · UnversionedCopy · FolderAccess</text>
+    <text x="714" y="282" font-size="12">UpdateInstaller · SystemNotifier · AppKeeper</text>
+
+    <rect x="10" y="312" width="500" height="56" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="24" y="334" font-weight="700">SwiftTerm</text>
+    <text x="24" y="354" font-size="12">emulador + pty + render + seleção + IME, dentro da view do card</text>
+
+    <rect x="530" y="312" width="500" height="56" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="544" y="334" font-weight="700">Processos filhos</text>
+    <text x="544" y="354" font-size="12">zsh -lc → claude / codex / gemini → ganchos e <tspan font-family="ui-monospace,Menlo,monospace">egeon</tspan> → socket</text>
+
+    <rect x="10" y="384" width="1020" height="36" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="24" y="407" font-size="12"><tspan font-weight="700">Disco</tspan> — ~/.egeon/: workbenches.json · workspaces.json · agents.json · workbenches/&lt;id&gt;/{chat.jsonl, trace.md, usage.json, clock.json, queues/}</text>
+  </g>
+</svg>
+</div>
+<h3>Ordem de arranque</h3>
+<ol>
+<li>Recusa a segunda instância sondando o socket, com <code>exit(0)</code> — para não gravar um <code>workbenches.json</code> vazio.</li>
+<li>Zera o log; carrega bancadas, workspaces e agentes; reconcilia a árvore e os links de multi-projeto.</li>
+<li>Regrava os gerados: script de cópia de worktree, ganchos do Claude, skills, <code>bin/egeon</code>, <code>ZDOTDIR</code> do zsh.</li>
+<li>Menu, atualização, janela, barra lateral, <code>RootView</code>.</li>
+<li>Preenche as closures do <code>AppControl</code>; notificações; restaura as abas.</li>
+<li>Liga o <code>Dispatcher</code>, o socket, o <code>OrphanReaper</code>, o <code>UsageStore</code> e o timer de badges.</li>
+</ol>
+<p>No encerramento: sincroniza frames, grava a ordem das abas, salva as bancadas, descarrega os relógios, fecha o socket. Esse é o único ponto de gravação garantido — um SIGTERM o pula.</p>
+<h3>Concorrência</h3>
+<div class="tablewrap"><table>
+<tr><th>Onde</th><th>O que roda</th></tr>
+<tr><td>Main thread</td><td>Toda a UI e todo o estado de domínio; saída do pty (<code>dataReceived</code>); timers de 0,12 s, 0,25 s, 1 s (fila), 8 s (consumo)</td></tr>
+<tr><td>Filas do socket</td><td>Uma serial no <code>accept</code>, uma concorrente por conexão, uma do watchdog — todas entram na main por <code>sync</code></td></tr>
+<tr><td>Filas de fundo</td><td>Montagem e medição da thread do chat; leitura de transcript; varredura do binário do Claude; git e cópia de worktree; reaper; AppKeeper</td></tr>
+<tr><td>Singletons</td><td><code>Dispatcher</code>, <code>PermissionDesk</code>, <code>SystemNotifier</code>, <code>TraceLog</code>, <code>UsageStore</code>, <code>WorkbenchClocks</code>, <code>OrphanReaper</code>, <code>AppKeeper</code>, <code>Flavor.current</code></td></tr>
+</table></div>
+</section>
+<section id="coord"><h2>Coordenação e IPC</h2>
+<p>É a camada que faz o Egeon ser o Egeon: socket de controle, CLI <code>egeon</code>, fila de injeção, ganchos e trilha. Quase toda ela é lógica e vai para o core; o que sobra é transporte e chamada de sistema.</p>
+
+<div class="cards">
+  <div class="card"><div class="k">main.swift</div><div class="v">4 347</div><div class="d">linhas — o AppDelegate é o dono de tudo</div></div>
+  <div class="card"><div class="k">AppControl</div><div class="v">~50</div><div class="d">closures: a fronteira real de hoje</div></div>
+  <div class="card"><div class="k">Rotas no socket</div><div class="v">~55</div><div class="d">num único <code>switch</code> de 760 linhas</div></div>
+  <div class="card"><div class="k">Dispatcher</div><div class="v">1 320</div><div class="d">linhas, com AppKit e SwiftTerm dentro</div></div>
+</div>
+<h3>Do <code>egeon send</code> até os bytes no pty</h3>
+<div class="diagram">
+<svg viewBox="0 0 1040 250" width="100%" role="img" aria-label="Fluxo de uma mensagem entre agentes">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+  <g font-size="12.5" style="color:var(--mute)">
+    <rect x="10" y="60" width="140" height="64" rx="8" fill="var(--drv-bg)" stroke="var(--drv)"/>
+    <text x="80" y="87" text-anchor="middle" font-weight="650">egeon send</text>
+    <text x="80" y="106" text-anchor="middle" font-size="11">bash + curl</text>
+
+    <rect x="190" y="60" width="150" height="64" rx="8" fill="var(--drv-bg)" stroke="var(--drv)"/>
+    <text x="265" y="87" text-anchor="middle" font-weight="650">ControlSocket</text>
+    <text x="265" y="106" text-anchor="middle" font-size="11">HTTP em socket unix</text>
+
+    <rect x="380" y="60" width="150" height="64" rx="8" fill="var(--drv-bg)" stroke="var(--drv)"/>
+    <text x="455" y="87" text-anchor="middle" font-weight="650">Peer</text>
+    <text x="455" y="106" text-anchor="middle" font-size="11">pid → nó de origem</text>
+
+    <rect x="570" y="60" width="150" height="64" rx="8" fill="var(--core-bg)" stroke="var(--core)"/>
+    <text x="645" y="87" text-anchor="middle" font-weight="650">Guardas</text>
+    <text x="645" y="106" text-anchor="middle" font-size="11">aresta · fila · cadeia</text>
+
+    <rect x="760" y="60" width="120" height="64" rx="8" fill="var(--core-bg)" stroke="var(--core)"/>
+    <text x="820" y="87" text-anchor="middle" font-weight="650">Fila do alvo</text>
+    <text x="820" y="106" text-anchor="middle" font-size="11">só em memória</text>
+
+    <rect x="920" y="60" width="110" height="64" rx="8" fill="var(--drv-bg)" stroke="var(--drv)"/>
+    <text x="975" y="87" text-anchor="middle" font-weight="650">pty</text>
+    <text x="975" y="106" text-anchor="middle" font-size="11">paste + Enter</text>
+
+    <g stroke="currentColor" stroke-width="1.5" fill="none">
+      <line x1="150" y1="92" x2="188" y2="92" marker-end="url(#ar)"/>
+      <line x1="340" y1="92" x2="378" y2="92" marker-end="url(#ar)"/>
+      <line x1="530" y1="92" x2="568" y2="92" marker-end="url(#ar)"/>
+      <line x1="720" y1="92" x2="758" y2="92" marker-end="url(#ar)"/>
+      <line x1="880" y1="92" x2="918" y2="92" marker-end="url(#ar)"/>
+    </g>
+
+    <text x="80" y="150" text-anchor="middle" font-size="11">não manda identidade</text>
+    <text x="265" y="150" text-anchor="middle" font-size="11">main.sync por requisição</text>
+    <text x="455" y="150" text-anchor="middle" font-size="11">LOCAL_PEERPID,</text>
+    <text x="455" y="165" text-anchor="middle" font-size="11">sobe até 32 pais</text>
+    <text x="645" y="150" text-anchor="middle" font-size="11">envelope [ED]</text>
+    <text x="645" y="165" text-anchor="middle" font-size="11">maxSends da aresta</text>
+    <text x="820" y="150" text-anchor="middle" font-size="11">tick de 0,25 s,</text>
+    <text x="820" y="165" text-anchor="middle" font-size="11">uma entrega por vez</text>
+    <text x="975" y="150" text-anchor="middle" font-size="11">confirma por byte,</text>
+    <text x="975" y="165" text-anchor="middle" font-size="11">até 3 reenvios</text>
+
+    <rect x="10" y="205" width="14" height="14" rx="3" fill="var(--core-bg)" stroke="var(--core)"/><text x="30" y="216" font-size="11.5">core</text>
+    <rect x="80" y="205" width="14" height="14" rx="3" fill="var(--drv-bg)" stroke="var(--drv)"/><text x="100" y="216" font-size="11.5">driver</text>
+  </g>
+</svg>
+</div>
+<h4>Os tempos da injeção</h4>
+<p>Calibrados à mão e dependentes de saber o instante do último byte do pty. Têm de ser portados idênticos.</p>
+<div class="tablewrap"><table>
+<tr><th>Etapa</th><th>Regra</th></tr>
+<tr><td>Pode entregar?</td><td>Já houve saída, passou o aquecimento, silêncio de pelo menos <code>idleInterval</code>, nenhuma entrega sem confirmação</td></tr>
+<tr><td>Colagem</td><td>TUI: <code>ESC[200~ … ESC[201~</code>; zsh: texto direto. Imagens coladas uma a uma antes do texto</td></tr>
+<tr><td>Enter</td><td>Depois de <code>submitDelay</code> e de 0,3 s de pty quieto, ou no teto de 2,5 s</td></tr>
+<tr><td>Confirmação</td><td>Após 1,5 s, byte novo confirma (o gancho <code>prompt</code> também). Sem reação, reenvia até 3 vezes e loga "prompt perdido"</td></tr>
+<tr><td>Erro de API</td><td>Transitório: 30 / 120 / 300 s. <code>rate_limit</code>: 120 / 600 / 1800 s. Fatal: bolinha vermelha</td></tr>
+</table></div>
+<h3>Socket de controle</h3>
+<div class="tablewrap"><table>
+<tr><th>Aspecto</th><th>Como é hoje</th></tr>
+<tr><td>Transporte</td><td>Socket unix <code>SOCK_STREAM</code> em <code>~/.egeon/sock</code> (ou <code>-dev</code>); HTTP/1.1 mínimo; uma requisição por conexão; resposta sempre JSON; sem autenticação</td></tr>
+<tr><td>Roteamento</td><td>Um <code>switch</code> que casa por <code>hasSuffix</code>/<code>contains</code>/<code>hasPrefix</code> — <strong>depende da ordem dos casos</strong>. Muitos <code>GET</code> têm efeito colateral</td></tr>
+<tr><td>Threads</td><td>Fila serial presa no <code>accept()</code>; fila concorrente com um handler por conexão; quase todo handler faz <code>DispatchQueue.main.sync</code></td></tr>
+<tr><td>Identidade</td><td><code>LOCAL_PEERPID</code> → sobe a cadeia de pais → compara com o pid do shell de cada nó. Sem nó = "é você", sem guardas</td></tr>
+<tr><td>Ciclo de vida</td><td>Sonda o socket antes do bind (segunda instância não sobe); <code>FD_CLOEXEC</code>; watchdog do inode a cada 10 s</td></tr>
+</table></div>
+<h3>Ganchos e estado do terminal</h3>
+<div class="tablewrap"><table>
+<tr><th>Gancho do Claude Code</th><th>Chamada ao app</th><th>Efeito</th></tr>
+<tr><td>SessionStart</td><td><code>/activity?event=start</code></td><td>Sessão de pé</td></tr>
+<tr><td>UserPromptSubmit</td><td><code>/conversation?id=&amp;transcript=</code></td><td>Grava a conversa do nó; confirma a entrega</td></tr>
+<tr><td>Stop</td><td><code>/activity?event=stop</code> + <code>bg</code>, <code>last</code>…</td><td>Fecha o turno; relê o transcript até 6 vezes a cada 250 ms para achar o marcador</td></tr>
+<tr><td>StopFailure</td><td><code>/activity?event=failure</code></td><td>Agenda nova tentativa ou falha</td></tr>
+<tr><td>Notification</td><td><code>/activity?event=ask</code></td><td>Laranja, se o turno está em curso</td></tr>
+<tr><td>PermissionRequest</td><td><code>POST /permission</code>, depois <code>GET</code> a cada 0,4 s por até 580 s</td><td>Bloqueia o CLI até você (ou o maestro) responder</td></tr>
+</table></div>
+<p><strong>Estados:</strong> <code>starting</code> · <code>ready</code> · <code>working</code> · <code>waiting</code> (verde) · <code>asking</code> (laranja) · <code>background</code> · <code>awaiting</code> · <code>retrying</code> · <code>failed</code> · <code>dead</code>. A máquina vive em <code>Target</code>, com nove latches (<code>attentionHeld</code>, <code>handedOff</code>, <code>turnInFlight</code>…). CLI sem gancho cai no silêncio do pty mais leitura da tela a cada 0,4 s.</p>
+<p><strong>Trilha:</strong> <code>egeon trace</code> → <code>POST /trace</code> → o app carimba nó, CLI, modelo e conversa → append em <code>workbenches/&lt;id&gt;/trace.md</code>. O nó shell registra cada comando por um <code>preexec</code> do zsh, instalado via <code>ZDOTDIR</code>.</p>
+</section>
+<section id="nos"><h2>Nós, pty e processos</h2>
+<p>Hoje o SwiftTerm faz cinco trabalhos de uma vez — pty, emulador, render, seleção e entrada de texto — e o app escreve muito pouco por cima.</p>
+<h3>O terminal, peça por peça</h3>
+<div class="tablewrap"><table>
+<tr><th>Peça</th><th>Hoje</th><th>Quem faz</th><th>Observação para a migração</th></tr>
+<tr><td>pty e fork</td><td><code>startProcess("/bin/zsh", ["-lc", linha])</code>; o app nunca chama <code>forkpty</code></td><td>SwiftTerm</td><td><span class="tag drv">DRIVER</span> escrever</td></tr>
+<tr><td>Linha de comando</td><td><code>cd '&lt;cwd&gt;'; clear; &lt;comando&gt;</code>. Shell de login não interativo — <code>.zshrc</code> não é lido, por isso o PATH é enriquecido à mão</td><td>App</td><td><span class="tag core">CORE</span> portar</td></tr>
+<tr><td>Ambiente</td><td>Ambiente do app sem <code>CLAUDE_CODE*</code> → <code>TERM</code> → env do perfil → <code>EGEON_TARGET</code> (agente) → <code>EGEON_NODE</code>/<code>EGEON_DECK</code> → <code>ZDOTDIR</code> (shell)</td><td>App</td><td><span class="tag core">CORE</span> portar, na mesma ordem</td></tr>
+<tr><td>Parser VT e grade</td><td>xterm-256color, bracketed paste, protocolo Kitty de teclado, mouse, OSC 8</td><td>SwiftTerm</td><td><span class="tag drv">DRIVER</span> crate de emulador</td></tr>
+<tr><td>Resize</td><td>Só <code>term.frame = body.bounds</code>; colunas e <code>TIOCSWINSZ</code> saem do layout</td><td>SwiftTerm</td><td>Tamanho vira estado explícito: a UI informa colunas × linhas</td></tr>
+<tr><td>Ler a tela (<code>peek</code>)</td><td><code>getLine(row)</code> do viewport, nunca do scrollback</td><td>App sobre SwiftTerm</td><td><span class="tag core">CORE</span> lê a grade direto, fora da thread de UI</td></tr>
+<tr><td>Relógio de saída</td><td><code>dataReceived</code> marca <code>lastOutput</code>; é o que diz "o pty está quieto"</td><td>App</td><td><span class="tag drv">DRIVER</span> → <span class="tag core">CORE</span></td></tr>
+<tr><td>Render</td><td>NSView com layer; nitidez por <code>contentsScale</code> = tela × zoom</td><td>SwiftTerm</td><td><span class="tag ui">UI</span> escrever em Flutter</td></tr>
+<tr><td>Seleção, cópia, colar, scrollback, menu</td><td>Nenhuma linha no app; nem cores ou fonte são configuradas</td><td>SwiftTerm</td><td><span class="tag ui">UI</span> escrever</td></tr>
+<tr><td>IME, tecla morta, Option como Meta</td><td>De graça</td><td>AppKit + SwiftTerm</td><td><span class="tag ui">UI</span> <span class="tag risk">RISCO</span> ABNT2 com acento é uso diário</td></tr>
+<tr><td>Links</td><td>⌘-clique resolve contra o cwd do processo da frente (<code>tcgetpgrp</code> + <code>proc_pidinfo</code>); nome solto como <code>main.swift:42</code> também</td><td>App, com conta de célula replicada à mão</td><td>Resolução no <span class="tag core">CORE</span>; a célula sob o cursor fica trivial</td></tr>
+<tr><td>Drop de arquivo</td><td>Caminho citado, sem Enter; imagem crua vira PNG em tmp; agente recebe como paste</td><td>App</td><td><span class="tag ui">UI</span> plugin de drop + <span class="tag core">CORE</span></td></tr>
+<tr><td>Voz</td><td>Nenhum código: só a chave de microfone no Info.plist do bundle que segura o pty</td><td>macOS</td><td>Manter o pty no processo do bundle</td></tr>
+<tr><td>Morte do processo</td><td>Polling de <code>process.running</code>; sem reinício automático</td><td>App</td><td><span class="tag drv">DRIVER</span> evento de saída (<code>waitpid</code>)</td></tr>
+<tr><td>Remoção</td><td>SIGTERM na árvore de descendentes, depois <code>terminate</code>, e SIGKILL no grupo após 0,5 s se o shell é líder</td><td>App</td><td><span class="tag drv">DRIVER</span> portar</td></tr>
+<tr><td>Troca de modelo</td><td>Não há troca a quente: destrói o card e cria outro no mesmo frame, com <code>--resume &lt;id&gt; || --session-id &lt;id&gt;</code></td><td>App</td><td><span class="tag core">CORE</span></td></tr>
+</table></div>
+<h3>Contrato de agente</h3>
+<p>Um CLI é um <code>AgentProfile</code> em <code>agents.json</code>, só dados: comando, estratégia de ociosidade e aquecimento, modo de injeção e atraso do Enter, flags de retomada e de sessão nova, flag de system prompt, comando de limpar, flags de modelo e esforço, marcadores e padrões de atenção, ambiente e pasta de config. Decodificação tolerante a chave ausente, e migração que só preenche campos novos quando o comando ainda é o de fábrica.</p>
+<p>O system prompt é montado nesta ordem: instrução de marcador → catálogo de vizinhos → papel → regras (bancada + nó). CLI sem flag de system prompt recebe o texto como primeira mensagem. <code>codex</code>, <code>opencode</code> e <code>gemini</code> entram sem ganchos: estado por silêncio e marcador na tela.</p>
+<div class="note">Hoje <code>launchPlan</code>, <code>conversationCommand</code> e <code>makeNode</code> vivem dentro do AppDelegate, e o construtor do <code>TerminalNode</code> faz o spawn, registra no Dispatcher e semeia a confiança. São os primeiros cortes a fazer: tudo isso é core.</div>
+<h3>Integração com o Claude Code</h3>
+<div class="tablewrap"><table>
+<tr><th>Peça</th><th>O que faz</th><th>Fragilidade</th></tr>
+<tr><td>Ganchos</td><td>Gera <code>agent-hook.sh</code> e <code>claude-hooks.json</code>, passado por <code>--settings</code></td><td>Depende de <code>curl</code> e <code>/usr/bin/python3</code> em runtime</td></tr>
+<tr><td>Skills</td><td>Publica <code>skills/egeon/SKILL.md</code> em cada <code>~/.claude*</code> — a única escrita na config do usuário</td><td>YAML do frontmatter</td></tr>
+<tr><td>Confiança</td><td>Edita <code>projects[pasta]</code> no <code>.claude.json</code>; worktree herda do repositório principal</td><td>Arquivo gravado em concorrência com o CLI</td></tr>
+<tr><td>Catálogo de modelos</td><td><code>mmap</code> do binário (~200 MB) e regex sobre a tabela minificada: modelos, esforços, preços, janela</td><td>Quebra por versão do CLI; cache em <code>claude-models.json</code></td></tr>
+<tr><td>Transcript</td><td>JSONL; pré-filtro em bytes antes do JSON; leituras de cauda (512 KB a 4 MB) e incremental a partir do offset do prompt</td><td>Formato interno do CLI</td></tr>
+<tr><td>Consumo</td><td><code>message.usage</code> deduplicado por <code>message.id</code>, subagentes inclusos</td><td>Cursor em bytes: o parser tem de cortar no mesmo ponto</td></tr>
+</table></div>
+<h3>Nó web</h3>
+<p><code>WKWebView</code> com um <code>WKWebsiteDataStore(forIdentifier:)</code> por perfil nomeado, user agent de Safari fixo, barra própria. Não participa do dispatch nem tem ponte JS. A nitidez sob zoom usa um seletor <strong>privado</strong> do WebKit (<code>_setOverrideDeviceScaleFactor:</code>).</p>
+<h3>Fila de prompts</h3>
+<p><code>PromptQueue</code> com itens <code>pending → sent → done</code>, thread por tarefa e modo automático. O <code>QueueRunner.step</code> é puro: fecha o item quando o agente fica livre depois de ter trabalhado, trava com pergunta aberta, manda o próximo. Persistência em <code>workbenches/&lt;id&gt;/queues/&lt;nó&gt;/queue.json</code>. A lógica já recebe o mundo por closures — porta direto.</p>
+<h3>Processos</h3>
+<div class="tablewrap"><table>
+<tr><th>Função</th><th>Como</th><th>Destino</th></tr>
+<tr><td>Marca</td><td><code>EGEON_NODE</code> e <code>EGEON_DECK</code> no ambiente, herdados</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>Leitura</td><td><code>sysctl(KERN_PROC_UID)</code> e <code>KERN_PROCARGS2</code> por pid (argv + env)</td><td><span class="tag drv">DRIVER</span> só macOS</td></tr>
+<tr><td>Classificação</td><td>Descendentes do app; órfãos pela marca; nó propagado de filho para pai porque o <code>zsh -lc</code> com prompt longo estoura o buffer do kernel</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>Morte em árvore</td><td>SIGTERM em todos os descendentes; SIGKILL após 2 s em quem ainda tem o mesmo (pid, início)</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>OrphanReaper</td><td>A cada 10 min, órfão com mais de 1 h; poupa o daemon do Claude Code</td><td>Política no <span class="tag core">CORE</span></td></tr>
+<tr><td>AppKeeper</td><td>Cruza apps rodando com o ambiente; mantém se há socket unix em uso (<code>lsof</code>) ou container de bancada (<code>docker ps</code>)</td><td><span class="tag drv">DRIVER</span> usa <code>NSRunningApplication</code></td></tr>
+</table></div>
+</section>
+<section id="ui"><h2>UI</h2>
+<h3>Hierarquia da janela</h3>
+<pre><code>NSWindow (fullSizeContentView, titlebar transparente, só tema escuro)
+└─ RootView
+   ├─ WorkbenchShell          um por bancada de pé; só o ativo fica na hierarquia
+   │  ├─ ViewToolbar          46 pt — faz o papel de titlebar (arrasta e dá zoom na janela)
+   │  ├─ WorkbenchTabsBar     34 pt — some com uma aba só
+   │  ├─ CanvasContainer      SEMPRE montado, nos dois modos
+   │  │  ├─ NSScrollView → documento (grid de 40 pt)
+   │  │  │    ├─ EdgeLayerView        atrás dos nós
+   │  │  │    └─ NodeView…            TerminalNode · WebNode · QueueNode
+   │  │  ├─ CanvasGlow · ToolOverlay
+   │  │  └─ vidro: CanvasToolbar · CanvasInfoBar
+   │  ├─ ChatContainer        só em chat; opaco, por cima do canvas
+   │  │  ├─ ParticipantsColumn  264 pt
+   │  │  ├─ thread (NSTableView)  — ou o NodeView de um shell, emprestado
+   │  │  ├─ PermissionTray · ChatComposer · ChatListPopup
+   │  │  └─ QueueNode emprestado, ao lado
+   │  └─ banner · BusyOverlay · AccessOverlay
+   └─ vidro: Sidebar          por cima; 308 pt aberta, 52 pt no trilho</code></pre>
+<h3>Canvas</h3>
+<div class="tablewrap"><table>
+<tr><th>Aspecto</th><th>Hoje</th><th>Observação para a migração</th></tr>
+<tr><td>"Infinito"</td><td><code>NSScrollView</code> com magnificação (0,25–3,0) sobre um documento de 6000×4000 que cresce. Para cima e para a esquerda, <strong>desloca todos os nós</strong> e regrava as coordenadas</td><td>Transformação própria com coordenadas livres, inclusive negativas. Elimina o "mundo que anda", mas pede cuidado ao ler as coordenadas já salvas</td></tr>
+<tr><td>Pan</td><td>Monitor global de eventos — SwiftTerm e WKWebView engolem o mouse. Fundo, ⌥+arrasto, botão do meio</td><td>Simples se o terminal for widget Flutter; continua difícil sobre o nó web</td></tr>
+<tr><td>Zoom</td><td>⌘+scroll exponencial ancorado no cursor, com detente de 3% nos passos; pinça nativa</td><td>Portar a conta; pinça via gesto do Flutter</td></tr>
+<tr><td>Nitidez</td><td><code>contentsScale</code> de cada nó = tela × zoom</td><td>Texto desenhado em vetor já escala; o nó web não</td></tr>
+<tr><td>Cards</td><td>Arrasto pelo cabeçalho, alça de resize, mínimo 280×180. <strong>Não existe seleção nem multi-seleção</strong></td><td>Direto</td></tr>
+<tr><td>Arestas</td><td>Três rotas (<code>direct</code>, <code>loop</code>, <code>stacked</code>); hit-test por amostragem; controles em tamanho fixo de tela (× 1/zoom); nasce bidirecional</td><td><code>EdgeCurve</code> inteiro é geometria pura → core. Pintura com <code>CustomPainter</code></td></tr>
+</table></div>
+<h3>O truque do terminal reparentado</h3>
+<p>O <code>WorkbenchShell</code> é dono dos nós. Em modo chat, o canvas continua montado por baixo de um <code>ChatContainer</code> opaco, porque um terminal fora da hierarquia não recebe layout, fica sem colunas e a TUI nasce vazia. Clicar num shell na coluna do chat tira a view do canvas e a encaixa no lugar da thread; depois ela volta para o frame guardado. A fila de prompts faz o mesmo.</p>
+
+<h3>Chat</h3>
+<div class="tablewrap"><table>
+<tr><th>Etapa</th><th>Hoje</th><th>Destino</th></tr>
+<tr><td>Dados fechados</td><td><code>chat.jsonl</code>, relido quando tamanho ou mtime mudam</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>Dados ao vivo</td><td>Cauda do transcript com vigia no fd, ~3 leituras por segundo; a bolha vive 20 s após o Stop até o histórico confirmar</td><td><span class="tag core">CORE</span> + <span class="tag drv">DRIVER</span></td></tr>
+<tr><td>Montagem</td><td><code>ChatThread.build</code> cruza turnos por tempo e aplica a regra de citação; <code>ChatBlocks.build</code> gera uma linha por bloco</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>Medição</td><td>TextKit 1 avulso numa fila de fundo, com cache por bolha</td><td><span class="tag ui">UI</span> reescrever</td></tr>
+<tr><td>Diff da lista</td><td>Removidos, inseridos e alterados por id; âncora na primeira linha visível</td><td>Diff no <span class="tag core">CORE</span>, lista na <span class="tag ui">UI</span></td></tr>
+<tr><td>Recolhimento</td><td>Passo nasce recolhido; contíguos viram capa de três níveis; diff nunca recolhe</td><td>Estado no <span class="tag core">CORE</span> (hoje está no <code>ChatContainer</code>)</td></tr>
+<tr><td>Composer</td><td>Cresce de 44 a 132 pt; Enter envia, ⇧Enter quebra, Tab cicla agente; <code>@</code> e <code>/</code> com popup. <strong>Não tem anexos</strong></td><td>Parsers no <span class="tag core">CORE</span> (offsets UTF-16, iguais aos do Dart)</td></tr>
+<tr><td>Rolagem</td><td>"No fim" com tolerância de 40 pt, contando a animação em curso; enviar sempre desce</td><td><span class="tag ui">UI</span></td></tr>
+</table></div>
+<p><strong>Código:</strong> não há algoritmo de diff — o app lê o diff unificado que o CLI já entrega e pareia as linhas em modo lado a lado. O realce é um tokenizador por linha, sete linguagens. Tudo puro, vai para o core; o <code>DiffView</code> é um <code>draw</code> só.</p>
+<h3>Home</h3>
+<ul>
+<li><strong>Barra lateral</strong> (1 866 linhas): árvore, aba Ativas, trilho recolhido, arrasto dos três níveis, gaveta, badges. É recriada inteira a cada <code>reload</code>. A regra de onde um item pode cair é lógica pura.</li>
+<li><strong>Faixa de abas:</strong> a pastilha acompanha o cursor e as vizinhas deslizam; a conta já está isolada em <code>TabDragLayout</code>.</li>
+<li><strong>Menus e atalhos:</strong> barra de menus com validação dinâmica, menus de contexto em três níveis, long-press. ⌘→/⌘← desligam com foco em campo de texto.</li>
+<li><strong>Visual:</strong> só tema escuro, com cores literais espalhadas pelo código. Vidro por <code>NSGlassEffectView</code> (macOS 26) com fallback de chapa; não usa <code>NSVisualEffectView</code>.</li>
+</ul>
+<h3>Lógica presa em views</h3>
+<div class="tablewrap"><table>
+<tr><th>Onde está</th><th>O que é</th></tr>
+<tr><td><code>ChatContainer</code> (1 224 linhas)</td><td>Foco do chat e "primeiro agente vivo"; eco pendente; janela de 60 mensagens; cache e leitura de histórico e transcript; pipeline de montagem; passos abertos e nível das capas; <code>clearedHistory</code>; catálogo e filtro de slash; candidatos de menção</td></tr>
+<tr><td><code>WorkbenchShell</code></td><td>Modo (canvas ou chat), lista de nós, frames do canvas</td></tr>
+<tr><td><code>CanvasContainer</code></td><td>Ferramenta armada; passos e detente de zoom; crescimento do documento; onde nasce um nó novo; regra de quem pode ligar com quem</td></tr>
+<tr><td><code>EdgeController</code></td><td>Parse do limite da aresta dentro de um <code>NSAlert</code> ("vazio ≠ zero", mínimo 1)</td></tr>
+<tr><td><code>Sidebar</code></td><td>Regra de drop; soma de atividade por grupo; composição de badge; aba persistida</td></tr>
+<tr><td><code>ParticipantsColumn</code></td><td>Texto e cor do estado por <code>Activity</code></td></tr>
+<tr><td><code>PermissionTray</code></td><td>Escolhas da pergunta e quando há "Responder"</td></tr>
+<tr><td><code>WorkbenchTabsBar</code></td><td>Ordem das abas durante o arrasto</td></tr>
+<tr><td><code>NodeWorktree</code> (um Model!)</td><td>Monta um <code>NSAlert</code> — o único modelo com UI dentro</td></tr>
+</table></div>
+</section>
+<section id="dominio"><h2>Domínio</h2>
+<p>A parte mais limpa do código. Quase não toca AppKit, já recebe o mundo por closures em vários pontos e concentra um terço dos testes.</p>
+<h3>Modelo de dados</h3>
+<div class="diagram">
+<svg viewBox="0 0 1040 250" width="100%" role="img" aria-label="Entidades e relações">
+  <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+  <g font-size="12" style="color:var(--mute)">
+    <g>
+      <rect x="10" y="20" width="200" height="130" rx="8" fill="var(--core-bg)" stroke="var(--core)"/>
+      <text x="22" y="42" font-weight="700" font-size="13">Workspace</text>
+      <text x="22" y="62">id · name · icon?</text>
+      <text x="22" y="80">collapsed? · storedOpen?</text>
+      <text x="22" y="98">lastConfigs?</text>
+      <text x="22" y="134" font-size="11">workspaces.json</text>
+    </g>
+    <g>
+      <rect x="280" y="20" width="200" height="130" rx="8" fill="var(--core-bg)" stroke="var(--core)"/>
+      <text x="292" y="42" font-weight="700" font-size="13">Project</text>
+      <text x="292" y="62">id · path · name</text>
+      <text x="292" y="80">collapsed? · stored?</text>
+      <text x="292" y="98">members? → multi-projeto</text>
+      <text x="292" y="134" font-size="11">dentro do workspace</text>
+    </g>
+    <g>
+      <rect x="550" y="20" width="200" height="130" rx="8" fill="var(--core-bg)" stroke="var(--core)"/>
+      <text x="562" y="42" font-weight="700" font-size="13">Workbench</text>
+      <text x="562" y="62">id · name · path · project?</text>
+      <text x="562" y="80">rules? · view? · color?</text>
+      <text x="562" y="98">tabOrder? · tabActive?</text>
+      <text x="562" y="134" font-size="11">workbenches.json (lista plana)</text>
+    </g>
+    <g>
+      <rect x="820" y="10" width="210" height="110" rx="8" fill="var(--core-bg)" stroke="var(--core)"/>
+      <text x="832" y="32" font-weight="700" font-size="13">Node</text>
+      <text x="832" y="51">type · id · agent? · cwd? · cmd?</text>
+      <text x="832" y="68">model? · effort? · ultracode?</text>
+      <text x="832" y="85">prompt? · rules? · maestro?</text>
+      <text x="832" y="102">conversationId? · x y w h</text>
+    </g>
+    <g>
+      <rect x="820" y="140" width="210" height="62" rx="8" fill="var(--core-bg)" stroke="var(--core)"/>
+      <text x="832" y="162" font-weight="700" font-size="13">Edge</text>
+      <text x="832" y="182">from · to · maxSends?</text>
+    </g>
+    <g stroke="currentColor" stroke-width="1.5" fill="none">
+      <line x1="210" y1="85" x2="278" y2="85" marker-end="url(#ar2)"/>
+      <line x1="480" y1="85" x2="548" y2="85" marker-end="url(#ar2)"/>
+      <line x1="750" y1="65" x2="818" y2="65" marker-end="url(#ar2)"/>
+      <path d="M750 110 C785 110 785 170 818 170" marker-end="url(#ar2)"/>
+      <path d="M380 150 C380 190 330 190 330 152" marker-end="url(#ar2)"/>
+    </g>
+    <text x="244" y="78" text-anchor="middle" font-size="11">1—N</text>
+    <text x="514" y="78" text-anchor="middle" font-size="11">1—N</text>
+    <text x="784" y="58" text-anchor="middle" font-size="11">1—N</text>
+    <text x="355" y="208" text-anchor="middle" font-size="11">members (N—N)</text>
+    <text x="10" y="238" font-size="11.5">A lista de bancadas é plana e global; a árvore da barra lateral é derivada. A ligação bancada → projeto é por id.</text>
+  </g>
+</svg>
+</div>
+<p>Tudo é <code>Codable</code> com as chaves iguais aos nomes dos campos — nenhuma renomeação. <code>Node.type</code> é <code>shell | agent | web | queue</code>; <code>Node.byAgent</code> guarda o que muda por CLI (comando, config, modelo, esforço, prompt, regras).</p>
+<h3>Git e worktree</h3>
+<p>Tudo por subprocesso (<code>/usr/bin/env git</code>), sem libgit, com a saída num arquivo temporário em vez de pipe — por causa da herança de fd que já travou o app.</p>
+<div class="tablewrap"><table>
+<tr><th>Caso</th><th>O que faz</th></tr>
+<tr><td>Branch nova</td><td><code>worktree add -b</code>; mudanças não commitadas vão junto por <code>stash create</code> + <code>stash apply</code></td></tr>
+<tr><td>Branch local</td><td><code>worktree add &lt;dest&gt; &lt;branch&gt;</code></td></tr>
+<tr><td>Só no remoto</td><td><code>worktree add --track -b</code></td></tr>
+<tr><td>Já aberta em outra worktree</td><td>Reaproveita o caminho, não cria nada</td></tr>
+<tr><td>Destino</td><td><code>&lt;pai do repo&gt;/worktrees/&lt;repo&gt;/&lt;branch&gt;</code></td></tr>
+<tr><td>Multi-projeto</td><td><code>&lt;pai comum&gt;/worktrees/&lt;multi&gt;/&lt;branch&gt;/</code>, uma worktree por membro</td></tr>
+<tr><td>Não versionado</td><td><code>clonefile</code> (APFS) em paralelo, ou o seu <code>worktree-copy.sh</code> se você o editou</td></tr>
+<tr><td>Remoção</td><td><code>worktree remove --force</code>; se o git deixar pela metade, apaga com 5 tentativas e roda <code>prune</code></td></tr>
+</table></div>
+<h3>Maestro</h3>
+<p>Plano JSON com <code>rules</code>, <code>nodes</code>, <code>remove</code>, <code>edges</code>, <code>unlink</code>, <code>force</code>, <code>layout</code>. Cada campo tem <strong>três estados</strong>: ausente mantém, <code>null</code> limpa, valor troca. Chave desconhecida é erro, com mensagem em português e o caminho. O <code>MaestroPlanner</code> é puro, valida tudo e devolve a bancada seguinte ou a lista de erros — nada é aplicado pela metade. Aplicar é uma sequência de closures: commit → descarta removidos → reinicia → cria → redesenha arestas → rearruma → persiste → trilha. São 66 testes só aqui.</p>
+<h3>Consumo e atualização</h3>
+<ul>
+<li><strong>Consumo:</strong> a cada 8 s, lê só o que cresceu em cada transcript (cursor de offset e último id), corta na última quebra de linha e soma. Preço em três camadas; o custo é somado na entrada e nunca recalculado. Sem preço, fica pendente até a tabela conhecer o modelo.</li>
+<li><strong>Atualização:</strong> consulta a release do GitHub; baixa zip e assinatura; confere Ed25519, um único <code>.app</code>, bundle id igual, versão maior e <code>codesign</code>; deixa <code>.novo</code> ao lado; um script solto espera o app sair e troca por dois <code>mv</code>. Tudo específico de bundle macOS.</li>
+<li><strong>Acesso a pastas:</strong> o app <strong>não é sandboxed</strong> — sem entitlements, sem bookmarks. O problema é só o TCC de Documentos, Mesa e Transferências, detectado por <code>opendir</code> e reiniciado por <code>tccutil reset</code>.</li>
+</ul>
+</section>
+<section id="plataforma"><h2>Armadilhas de plataforma</h2>
+<h3>O que já custou caro</h3>
+<div class="tablewrap"><table>
+<tr><th>Área</th><th>Armadilha</th><th>ADR</th></tr>
+<tr><td rowspan="6">Pty e processos</td><td>zsh mostra os marcadores de bracketed paste literais; o Ink descarta <code>\r</code> imediato</td><td>007</td></tr>
+<tr><td>Prompt entregue durante o boot do CLI some sem rastro</td><td>008</td></tr>
+<tr><td>Shell interativo ignora SIGTERM — escalar para SIGKILL no grupo, com guarda <code>getpgid(pid) == pid</code></td><td>017</td></tr>
+<tr><td>A ponta de escrita de um pipe é herdada por processos lançados depois — <code>git rev-parse</code> travou 2 min 30</td><td>017</td></tr>
+<tr><td>fd de escuta sem <code>FD_CLOEXEC</code> vaza para todo pty filho</td><td>032</td></tr>
+<tr><td>O Bash do Claude Code põe cada comando em grupo próprio: <code>killpg</code> não alcança</td><td>083</td></tr>
+<tr><td rowspan="3">TCC</td><td>Assinatura ad-hoc invalida concessões a cada build — por isso toda verificação é por rota de socket</td><td>003</td></tr>
+<tr><td>Microfone vai para o processo responsável; sem a chave de uso no bundle o filho aborta (exit 134)</td><td>027</td></tr>
+<tr><td><code>fileExists</code> responde sim em pasta bloqueada; só <code>opendir</code> revela</td><td>070</td></tr>
+<tr><td rowspan="2">Bundle</td><td><code>rm -rf</code> num app vivo o mata sem passar pelo terminate</td><td>015</td></tr>
+<tr><td>Bundle em quarentena roda de <code>AppTranslocation</code></td><td>033</td></tr>
+<tr><td rowspan="2">WKWebView</td><td>ATS bloqueia HTTP local (<code>NSAllowsLocalNetworking</code>)</td><td>003, 076</td></tr>
+<tr><td>Sob transform fica borrado</td><td>—</td></tr>
+<tr><td rowspan="2">Arquivos</td><td><code>/tmp</code> × <code>/private/tmp</code></td><td>060, 071, 084</td></tr>
+<tr><td><code>.claude.json</code> é gravado em concorrência com o CLI</td><td>071</td></tr>
+</table></div>
+</section>
+<section id="atrito"><h2>Pontos de atrito para uma migração</h2>
+<p>Achados da leitura do código, não decisões: onde a estrutura de hoje resiste a ser dividida em core, driver e UI.</p>
+<h3>Coordenação</h3>
+<div class="note bad"><strong>Tudo é serializado pela main thread, sem um lock.</strong> O socket faz <code>main.sync</code> por requisição; <code>Target</code>, <code>PermissionDesk</code> e as coleções do AppDelegate só são seguras porque vivem na main. Fora da main thread, essa garantia precisa ser reconstruída de outro jeito, senão as corridas que hoje não existem passam a existir.</div>
+<div class="note bad"><strong><code>Target</code> lê a tela e o teclado.</strong> O veredito de fim de turno, o <code>/peek</code> e a detecção de "você digitou" usam a grade do SwiftTerm, o first responder e um monitor de <code>NSEvent</code>. Separar a UI do resto exige que foco e tecla virem eventos, e que a grade do terminal fique acessível a quem decide.</div>
+<div class="note"><strong>Rotas de tela atravessam a fronteira nos dois sentidos.</strong> <code>/geometry</code>, <code>/shot</code>, <code>/chat?expand</code>, <code>/sidebar</code> e <code>/layout</code> perguntam coisas que só a UI sabe. Quem atender o socket terá de pedir à UI e esperar a resposta.</div>
+<div class="note"><strong>Compatibilidade com o que já roda.</strong> Scripts em disco e agentes vivos dependem das rotas exatas, do alias <code>/session</code>, do teto de 580 s do pedido de permissão (casado com os 600 s do settings) e de o gancho nunca escrever em stdout.</div>
+<div class="note"><strong>Estado volátil.</strong> Fila do alvo, cadeia e pedidos de permissão vivem só em memória e somem no restart. Vale decidir se continua assim.</div>
+<h3>Persistência e serde</h3>
+<div class="note bad"><strong>Arquivo ilegível vira lista vazia e é sobrescrito.</strong> Se o decode de <code>workbenches.json</code> falha, o app carrega <code>[]</code> e o próximo save grava por cima. O serde é mais estrito que o <code>Codable</code> com tipos, então a chance aumenta. Vale fazer backup antes de gravar e decodificar item a item, tolerando o que não se entende.</div>
+<div class="note"><strong>Ausente, <code>null</code> e valor são três coisas</strong> em <code>maxSends</code> e em todo campo do plano do maestro. <code>#[serde(default)]</code> simples colapsa os dois primeiros; precisa de <code>Option&lt;Option&lt;T&gt;&gt;</code> com deserializador próprio. E há um bug provável hoje: "sem limite" (<code>nil</code>) não sobrevive a um ciclo de gravação e volta como 2.</div>
+<div class="note"><strong>Chaves desconhecidas somem ao regravar.</strong> Os arquivos são editados à mão. Em Rust dá para preservar o que não se conhece (<code>flatten</code>) — melhor que a paridade.</div>
+<div class="note"><strong>Detalhes de formato:</strong> a data do relógio é um número em segundos desde 2001, não Unix nem ISO; a saída do Swift é ordenada por chave e escapa <code>/</code> — a comparação entre Swift e Rust tem de ser semântica, não byte a byte. Caminhos com <code>~</code>, <code>/private/tmp</code> e symlinks precisam da mesma normalização.</div>
+<div class="note"><strong>Dois apps no mesmo <code>~/.egeon</code> se atropelam</strong> (gravação não atômica, sem lock). Um segundo app só convive com o de hoje num flavor próprio.</div>
+<h3>ADRs que são detalhe de AppKit</h3>
+<div class="tablewrap"><table>
+<tr><th>ADR</th><th>Hoje</th><th>Observação para a migração</th></tr>
+<tr><td>016, 029, 061</td><td>Reparentar <code>NodeView</code>; bancada "passa pela tela" no arranque para o pty ganhar colunas</td><td>Some se o grid do terminal viver no Rust com tamanho explícito. Fica o requisito: o pty sempre tem colunas e linhas válidas</td></tr>
+<tr><td>042, 047, 050</td><td><code>NSTableView</code>, TextKit 1, cache de alturas, caixa no <code>draw</code> da linha</td><td>Lista virtualizada do Flutter</td></tr>
+<tr><td>048</td><td><code>HandCursor</code> por <code>resetCursorRects</code></td><td><code>MouseRegion</code>; a regra continua</td></tr>
+<tr><td>025, 062</td><td>Key equivalent de menu consultado antes do responder chain</td><td>Reaparece como roteamento de atalhos entre menu, terminal e caixa de texto</td></tr>
+<tr><td>051, 062</td><td>Laço <code>PressDrag</code> (limiar de 4 pt)</td><td>Reimplementar a semântica com gesto do Flutter</td></tr>
+<tr><td>028</td><td>Pontas de aresta em pontos de tela sob magnificação</td><td>Mesma conta, com a transformação do canvas</td></tr>
+<tr><td>011, 056</td><td><code>Decodable</code> sintetizado</td><td>serde. A lição fica: campo fora do round-trip some do disco</td></tr>
+</table></div>
+<h3>O que é difícil em Flutter desktop</h3>
+<div class="tablewrap"><table>
+<tr><th>Tema</th><th>Dificuldade</th></tr>
+<tr><td>Thread de altura variável</td><td>Hoje a altura é exata, pré-medida fora da main. Lista com altura desconhecida faz a barra saltar e complica "rolar até a mensagem X". Precisa de pré-medição ou de lista por índice com âncora</td></tr>
+<tr><td>Texto nas bolhas</td><td>Seleção e cópia atravessando blocos, link clicável, caixa cujo título é botão e o miolo é selecionável</td></tr>
+<tr><td>Vidro</td><td>Não há equivalente ao <code>NSGlassEffectView</code>. Desfoque do Flutter sobre terminal que redesenha várias vezes por segundo é caro e não enxerga view nativa</td></tr>
+<tr><td>Janela</td><td>Titlebar própria com arrasto, zoom e a preferência de duplo clique do sistema exigem código nativo no runner</td></tr>
+<tr><td>Menus</td><td>Barra de menus com validação dinâmica e menus de contexto nativos pedem plugin</td></tr>
+<tr><td>Atalhos</td><td>A regra "menu é consultado antes de quem tem o foco" reaparece: ⌘W, ⌘1…9, ⌘←/→ não podem vazar para o terminal, e ⌘C/⌘V têm de chegar nele</td></tr>
+<tr><td>Ritmo de atualização</td><td>O tique de 0,12 s que empurra badges e relógios vira stream granular por item, senão reconstrói a árvore oito vezes por segundo</td></tr>
+</table></div>
+
+</section>
+
+</main>
+</div>
+</body>
+</html>

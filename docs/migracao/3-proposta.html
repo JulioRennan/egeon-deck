@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Egeon Deck — Proposta</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div class="layout">
+<nav>
+  <div class="brand">Egeon Deck</div>
+  <div class="sub">migração Swift → Rust + Flutter</div>
+  <div class="docs"><a class="" href="1-hoje.html">O que temos hoje <span class="st">inventário</span></a><a class="" href="2-arquitetura-atual.html">Arquitetura atual <span class="st">como está montado</span></a><a class="on" href="3-proposta.html">Proposta <span class="st">em redação</span></a></div>
+  <h5>Nesta página</h5>
+  <a href="#decidido">Decidido</a><a href="#debate">Em debate</a><a href="#abertas">Perguntas abertas</a><a href="#rascunho">Rascunho anterior</a>
+</nav>
+<main>
+<h1>Proposta</h1>
+<p class="lede">O que já foi decidido sobre a migração, o que está em debate e o que ainda não foi discutido. Cresce conforme a conversa; nada entra como decidido sem passar por você.</p>
+<section id="decidido"><h2>Decidido</h2>
+<h3>Premissa</h3>
+<div class="tablewrap"><table>
+<tr><th>Camada</th><th>Linguagem</th><th>O que é</th><th>Regra</th></tr>
+<tr><td><span class="tag core">CORE</span></td><td>Rust</td><td>Domínio puro: modelos, stores, parsing, guardas, planejador do maestro, preços, diff, estado das bancadas.</td><td>Não toca SO nem UI. Testável com <code>cargo test</code>, sem app aberto.</td></tr>
+<tr><td><span class="tag drv">DRIVER</span></td><td>Rust</td><td>O que fala com o macOS: pty, processos, socket de controle, sistema de arquivos, git, Keychain, rede.</td><td>Implementa <em>traits</em> que o core define. É a única parte que muda por plataforma.</td></tr>
+<tr><td><span class="tag ui">UI</span></td><td>Flutter</td><td>Janela, canvas, chat, barra lateral, formulários, gesto e animação.</td><td>Não guarda regra de negócio: mostra o estado do core e manda intenções.</td></tr>
+</table></div>
+<h3>Decisões</h3>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Decisão</th><th>De onde veio</th></tr>
+<tr><td>1</td><td>Rust fica com core e driver; Flutter fica com a UI.</td><td>Pedido inicial</td></tr>
+<tr><td>2</td><td>Sem gerador de código na ponte entre Rust e Dart — o <code>flutter_rust_bridge</code> está fora.</td><td>Debate sobre a fronteira UI ↔ core</td></tr>
+</table></div>
+</section>
+<section id="debate"><h2>Em debate</h2>
+
+<p>Encaminhado na conversa, ainda sem o seu "sim".</p>
+<div class="tablewrap"><table>
+<tr><th>Tema</th><th>Onde paramos</th></tr>
+<tr><td>Core ↔ driver</td><td>Crates Rust no mesmo processo: o core define traits, o driver implementa, e eventos voltam por canal em memória. Sem socket entre os dois.</td></tr>
+<tr><td>UI ↔ core</td><td>Um protocolo só, por mensagens: a UI vira mais um cliente do socket que o <code>egeon</code> e o <code>curl</code> já usam, com uma conexão persistente para receber eventos. O FFI se reduz a uma função escrita à mão que sobe o core dentro do processo.</td></tr>
+<tr><td>Custo dessa escolha</td><td>Modelos Dart e <code>fromJson</code> à mão; erro de campo só aparece em execução, o que pede testes de contrato com exemplos gravados pelo Rust.</td></tr>
+<tr><td>Dúvida técnica</td><td>Se o socket unix aguenta o volume dos terminais. É palpite que sim; só um protótipo mede. Se não aguentar, só esse stream vai para FFI cru.</td></tr>
+</table></div>
+</section>
+<section id="abertas"><h2>Perguntas abertas</h2>
+
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Pergunta</th><th>Por que importa</th></tr>
+<tr><td>1</td><td>Qual é o motivo da migração?</td><td>Se não é para rodar em Linux ou Windows, o driver pode ser só macOS e o trabalho cai. Não há ADR nem motivo registrado.</td></tr>
+<tr><td>2</td><td>A restrição a gerador de código vale também dentro do Dart?</td><td>Gerência de estado e modelos imutáveis no Flutter costumam puxar gerador (<code>freezed</code>, <code>json_serializable</code>, <code>riverpod_generator</code>).</td></tr>
+<tr><td>3</td><td>Processo único ou core como daemon?</td><td>Microfone (TCC), identidade por pid e árvore de processos dependem de o app ser o pai do pty. Daemon reabre o ADR-010.</td></tr>
+<tr><td>4</td><td>App novo em paralelo, ou Rust por baixo do app Swift primeiro?</td><td>Define se existe uma ponte Swift ↔ Rust temporária e por quanto tempo os dois apps convivem.</td></tr>
+<tr><td>5</td><td>Quem emula o terminal?</td><td>Emulador em Rust com pintura em Flutter, ou SwiftTerm embutido como view nativa. É o maior risco técnico levantado.</td></tr>
+<tr><td>6</td><td>O que fazer com o nó web sob zoom?</td><td><code>WKWebView</code> embutido não acompanha a transformação do canvas.</td></tr>
+<tr><td>7</td><td>Fila de injeção e pedidos de permissão continuam só em memória?</td><td>Hoje somem no restart.</td></tr>
+<tr><td>8</td><td>Bugs achados no levantamento: corrigir no Swift antes, ou só no porte?</td><td>Define se o Rust replica o comportamento atual ou já nasce diferente.</td></tr>
+<tr><td>9</td><td>Vidro do macOS 26: aceitar a perda visual?</td><td>Não há equivalente no Flutter.</td></tr>
+</table></div>
+</section>
+<section id="rascunho"><h2>Rascunho anterior</h2>
+
+<p>A primeira versão deste material trazia um rascunho meu de arquitetura alvo, fronteira Rust ↔ Flutter, riscos e fases, escrito antes do debate. Ele saiu daqui para a proposta só conter o que passou pela conversa. Continua no histórico do git, no arquivo <code>docs/04-migracao-flutter-rust.html</code> do commit <code>1a267a6</code>.</p>
+</section>
+
+</main>
+</div>
+</body>
+</html>

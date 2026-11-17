@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Egeon Deck — O que temos hoje</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div class="layout">
+<nav>
+  <div class="brand">Egeon Deck</div>
+  <div class="sub">migração Swift → Rust + Flutter</div>
+  <div class="docs"><a class="on" href="1-hoje.html">O que temos hoje <span class="st">inventário</span></a><a class="" href="2-arquitetura-atual.html">Arquitetura atual <span class="st">como está montado</span></a><a class="" href="3-proposta.html">Proposta <span class="st">em redação</span></a></div>
+  <h5>Nesta página</h5>
+  <a href="#numeros">Números</a><a href="#disco">Arquivos em disco</a><a href="#superficie">Superfície externa</a><a href="#arquivos">Código, arquivo por arquivo</a><a href="#adrs">O que os ADRs fixam</a><a href="#pendencias">Pendências encontradas</a>
+</nav>
+<main>
+<h1>O que temos hoje</h1>
+<p class="lede">Inventário do Egeon Deck em Swift: tamanho, arquivos em disco, rotas, comandos, testes e os comportamentos que os ADRs fixam. Tudo lido no código e nos documentos. As colunas de destino (<span class="tag core">CORE</span> <span class="tag drv">DRIVER</span> <span class="tag ui">UI</span>) e as observações para a migração são leitura minha sob a premissa Rust core + driver e Flutter UI — não são decisão.</p>
+<section id="numeros"><h2>Números</h2>
+<div class="cards">
+  <div class="card"><div class="k">Código Swift</div><div class="v">46,5k</div><div class="d">linhas, fontes + testes</div></div>
+  <div class="card"><div class="k">Arquivos fonte</div><div class="v">168</div><div class="d">14 features + Core + main</div></div>
+  <div class="card"><div class="k">Importam AppKit</div><div class="v">66</div><div class="d">de 168 — o resto é Foundation</div></div>
+  <div class="card"><div class="k">Dependência externa</div><div class="v">1</div><div class="d">SwiftTerm (emulador de terminal)</div></div>
+</div>
+<h3>Tamanho por módulo</h3>
+<div class="tablewrap"><table>
+<tr><th>Módulo</th><th>Arquivos</th><th>Linhas</th><th>O que faz</th></tr>
+<tr><td>Nodes</td><td class="n">32</td><td class="n">8 489</td><td>Card, terminal, agente (contrato + Claude Code), web, fila de prompts</td></tr>
+<tr><td>Chat</td><td class="n">21</td><td class="n">4 967</td><td>Modo chat: thread, composer, participantes, permissão</td></tr>
+<tr><td>Home</td><td class="n">12</td><td class="n">3 530</td><td>Janela raiz, barra lateral, abas, WorkbenchShell</td></tr>
+<tr><td>Workbench</td><td class="n">19</td><td class="n">2 505</td><td>Bancada: config, store, template, worktree, relógios</td></tr>
+<tr><td>Canvas</td><td class="n">8</td><td class="n">2 403</td><td>Grid infinito, arestas, barras</td></tr>
+<tr><td>Core</td><td class="n">11</td><td class="n">2 023</td><td>Flavor, log, socket de controle, CLI <code>egeon</code>, vidro</td></tr>
+<tr><td>Maestro</td><td class="n">8</td><td class="n">1 702</td><td>Plano declarativo que monta a bancada</td></tr>
+<tr><td>Dispatch</td><td class="n">5</td><td class="n">1 650</td><td>Fila, injeção de prompt, guardas de cadeia</td></tr>
+<tr><td>Workspace</td><td class="n">13</td><td class="n">1 440</td><td>Workspace → projeto, multi-projeto</td></tr>
+<tr><td>Usage</td><td class="n">6</td><td class="n">1 186</td><td>Consumo e custo por bancada</td></tr>
+<tr><td>Processes</td><td class="n">11</td><td class="n">976</td><td>Procedência, órfãos, apps abertos por nó</td></tr>
+<tr><td>Notifications</td><td class="n">9</td><td class="n">811</td><td>Atividade, ganchos, permissão, som</td></tr>
+<tr><td>Code</td><td class="n">5</td><td class="n">621</td><td>Diff lado a lado, realce de sintaxe</td></tr>
+<tr><td>Update</td><td class="n">4</td><td class="n">550</td><td>Atualização assinada do app</td></tr>
+<tr><td>Trace</td><td class="n">3</td><td class="n">269</td><td>Trilha da bancada</td></tr>
+</table></div>
+<h3>Proporção estimada por destino</h3>
+<p>Conta grosseira a partir das tabelas por arquivo (37,5 mil linhas de fonte; o resto são testes). Arquivos mistos foram divididos no olho.</p>
+<div class="tablewrap"><table>
+<tr><th>Destino</th><th>Parcela</th><th></th><th>O que entra</th></tr>
+<tr><td><span class="tag ui">UI</span></td><td class="n">~45%</td><td><div class="bar"><i style="width:45%;background:var(--ui)"></i></div></td><td>Views, formulários, layout de texto do chat, metade do <code>main.swift</code>. <strong>Reescrita</strong> em Flutter</td></tr>
+<tr><td><span class="tag core">CORE</span></td><td class="n">~45%</td><td><div class="bar"><i style="width:45%;background:var(--core)"></i></div></td><td>Modelos, parsers, guardas, máquinas de estado, planejador. <strong>Porte</strong> quase mecânico, com os testes junto</td></tr>
+<tr><td><span class="tag drv">DRIVER</span></td><td class="n">~10%</td><td><div class="bar"><i style="width:10%;background:var(--drv)"></i></div></td><td>Socket, pty, processos, git, TCC, atualização. Pequeno em linhas, grande em armadilhas</td></tr>
+</table></div>
+<div class="note good"><strong>633 testes em 83 arquivos</strong> (o CLAUDE.md ainda diz 190). São quase todos sobre lógica pura — é a suíte de paridade do core Rust pronta para ser portada.</div>
+<h3>Testes por área</h3>
+<div class="tablewrap"><table>
+<tr><th>Área</th><th>Testes</th><th></th></tr>
+<tr><td>Nós, agente, Claude Code, fila</td><td class="n">142</td><td><div class="bar"><i style="width:100%;background:var(--core)"></i></div></td></tr>
+<tr><td>Chat</td><td class="n">93</td><td><div class="bar"><i style="width:65%;background:var(--core)"></i></div></td></tr>
+<tr><td>Workbench</td><td class="n">72</td><td><div class="bar"><i style="width:51%;background:var(--core)"></i></div></td></tr>
+<tr><td>Maestro</td><td class="n">66</td><td><div class="bar"><i style="width:46%;background:var(--core)"></i></div></td></tr>
+<tr><td>Workspace</td><td class="n">53</td><td><div class="bar"><i style="width:37%;background:var(--core)"></i></div></td></tr>
+<tr><td>Dispatch, canvas, arestas</td><td class="n">47</td><td><div class="bar"><i style="width:33%;background:var(--core)"></i></div></td></tr>
+<tr><td>Notificações e permissões</td><td class="n">47</td><td><div class="bar"><i style="width:33%;background:var(--core)"></i></div></td></tr>
+<tr><td>Home, abas, barra lateral</td><td class="n">35</td><td><div class="bar"><i style="width:25%;background:var(--core)"></i></div></td></tr>
+<tr><td>Processos</td><td class="n">21</td><td><div class="bar"><i style="width:15%;background:var(--core)"></i></div></td></tr>
+<tr><td>Core</td><td class="n">17</td><td><div class="bar"><i style="width:12%;background:var(--core)"></i></div></td></tr>
+<tr><td>Consumo · Código · Atualização · Trilha</td><td class="n">40</td><td><div class="bar"><i style="width:28%;background:var(--core)"></i></div></td></tr>
+</table></div>
+</section>
+<section id="disco"><h2>Arquivos em disco</h2>
+<h3>O que há em <code>~/.egeon/</code></h3>
+<div class="tablewrap"><table>
+<tr><th>Caminho</th><th>Conteúdo</th><th>Quem grava, quando</th></tr>
+<tr><td><code>workbenches.json</code></td><td>Lista de bancadas com nós e arestas</td><td>Debounce de 0,6 s e no encerramento. <strong>Não atômico</strong></td></tr>
+<tr><td><code>workspaces.json</code></td><td>Workspaces e projetos</td><td>A cada mutação. Não atômico</td></tr>
+<tr><td><code>agents.json</code></td><td>Perfil de cada CLI</td><td>Na migração de campos; editado à mão</td></tr>
+<tr><td><code>templates.json</code> · <code>components.json</code></td><td>Templates de bancada e de nó</td><td>A cada put ou remove</td></tr>
+<tr><td><code>web-profiles.json</code></td><td>Nome → UUID do data store</td><td>Ao criar perfil</td></tr>
+<tr><td><code>pricing.json</code></td><td>Exceções de preço; nasce <code>{}</code></td><td>Você, à mão; relido por mtime</td></tr>
+<tr><td><code>processes.json</code> · <code>apps.json</code> · <code>update.json</code></td><td>Política do reaper, apps abertos por nó, opção de atualização</td><td>Sob demanda</td></tr>
+<tr><td><code>claude-models.json</code></td><td>Cache do catálogo lido do binário</td><td>Quando o binário muda</td></tr>
+<tr><td><code>workbenches/&lt;id&gt;/chat.jsonl</code></td><td>Histórico do chat, só-append</td><td>No <code>Stop</code> de cada turno</td></tr>
+<tr><td><code>workbenches/&lt;id&gt;/trace.md</code></td><td>Trilha</td><td>A cada <code>egeon trace</code></td></tr>
+<tr><td><code>workbenches/&lt;id&gt;/usage.json</code></td><td>Consumo por nó e tarifa, com cursores</td><td>A cada 8 s, se mudou. Atômico</td></tr>
+<tr><td><code>workbenches/&lt;id&gt;/clock.json</code></td><td>Cronômetro por fase</td><td>A cada 15 s, se mudou. Atômico</td></tr>
+<tr><td><code>workbenches/&lt;id&gt;/queues/&lt;nó&gt;/</code></td><td><code>queue.json</code> e imagens</td><td>A cada mudança. Atômico</td></tr>
+<tr><td><code>…/chat-archive/</code> · <code>…/trace-archive/</code></td><td>Arquivados por período</td><td>Ao limpar a bancada</td></tr>
+<tr><td><code>projects/&lt;id&gt;/</code></td><td>Symlinks do multi-projeto</td><td>No arranque e ao salvar o formulário</td></tr>
+<tr><td><code>sock</code> · <code>bin/egeon</code> · <code>agent-hook.sh</code> · <code>claude-hooks.json</code> · <code>zsh/</code> · <code>worktree-copy.sh</code></td><td>Gerados</td><td>A cada arranque (o script de cópia só se não existir)</td></tr>
+</table></div>
+<h3>Compatibilidade que o código ainda carrega</h3>
+<p>Doze migrações silenciosas na leitura. Qualquer reimplementação tem de fazer todas, senão os arquivos atuais não abrem iguais:</p>
+<ol>
+<li><code>sessions.json</code> lido quando não há <code>workbenches.json</code>.</li>
+<li><code>sessionId</code>/<code>sessionStarted</code> → <code>conversationId</code>/<code>conversationStarted</code>.</li>
+<li><code>id</code> ausente em bancada, projeto ou workspace é gerado — e tem de ser gravado em seguida, senão a bancada se desliga da pasta dela.</li>
+<li>Nó <code>editor</code> é pulado, em bancadas, templates e componentes.</li>
+<li><code>view</code> desconhecido (inclusive <code>mosaic</code>) vira canvas.</li>
+<li>Cor fora da paleta vira nula e é reatribuída.</li>
+<li>Bancada sem projeto, ou com projeto órfão, cai no workspace "Geral".</li>
+<li><code>clock.json</code> sem <code>lastActive</code> usa o mtime do arquivo.</li>
+<li><code>Spend</code> no formato antigo (só tokens) entra como pendente.</li>
+<li><code>pricing.json</code> semeado com a tabela inteira é tratado como vazio.</li>
+<li><code>maxSends</code> ausente vira 2.</li>
+<li>Template antigo com <code>conversationId</code> é zerado ao instanciar.</li>
+</ol>
+</section>
+<section id="superficie"><h2>Superfície externa</h2>
+<h3>Rotas do socket de controle</h3>
+<div class="tablewrap"><table>
+<tr><th>Área</th><th>Rotas</th><th>Quem chama</th></tr>
+<tr><td>Agente</td><td><code>/targets</code> <code>/dispatch</code> <code>/message</code> <code>/peers</code> <code>/status</code> <code>/peek</code> <code>/trace</code> <code>/tasks</code> <code>/task</code> <code>/retry</code></td><td>CLI <code>egeon</code>, de dentro de um terminal</td></tr>
+<tr><td>Ganchos</td><td><code>/conversation</code> (alias <code>/session</code>) <code>/activity</code> <code>/permission</code> <code>/permissions</code> <code>/permission/answer</code></td><td><code>agent-hook.sh</code>, disparado pelo CLI do agente</td></tr>
+<tr><td>Maestro</td><td><code>/maestro/bench</code> <code>/maestro/models</code> <code>/maestro/apply</code> <code>/maestro/asks</code> <code>/maestro/answer</code> <code>/maestro</code></td><td>O nó maestro</td></tr>
+<tr><td>Bancada e árvore</td><td><code>/workspaces</code> <code>/move</code> <code>/project/new</code> <code>/activate</code> <code>/tabs</code> <code>/worktree</code> <code>/remove</code> <code>/edge</code> <code>/model</code> <code>/workbench/color</code> <code>/workbench/clear</code> <code>/chat/clear</code> <code>/node/clear</code></td><td>Você, por curl; testes</td></tr>
+<tr><td>Tela e verificação</td><td><code>/geometry</code> <code>/layout</code> <code>/sidebar</code> <code>/shot</code> <code>/chat</code> <code>/compose</code> <code>/queue</code> <code>/about</code></td><td>Verificação sem Acessibilidade</td></tr>
+<tr><td>Sistema</td><td><code>/processes</code> <code>/processes/kill</code> <code>/processes/reap</code> <code>/apps</code> <code>/usage</code> <code>/update</code></td><td>CLI, janela Processos</td></tr>
+</table></div>
+<h3>CLI <code>egeon</code></h3>
+<p>Não é binário: é um <strong>script bash</strong> cujo texto mora numa string do app e é regravado em <code>~/.egeon*/bin/egeon</code> a cada arranque, com o caminho do socket embutido. Fala por <code>curl --unix-socket</code>. Subcomandos: <code>peers</code>, <code>send</code>, <code>peek</code>, <code>trace</code>, <code>status</code>, <code>tasks</code>, <code>task done|ask|note</code>, <code>ps</code>, <code>bench</code>, <code>models</code>, <code>plan</code>, <code>apply</code>, <code>permissions</code>, <code>allow</code>, <code>deny</code>, <code>guide</code>.</p>
+
+</section>
+<section id="arquivos"><h2>Código, arquivo por arquivo</h2>
+<h3>Coordenação e IPC</h3>
+<div class="tablewrap"><table>
+<tr><th>Arquivo</th><th>Linhas</th><th>Responsabilidade</th><th>Destino</th></tr>
+<tr><td><code>main.swift</code></td><td class="n">4 347</td><td>AppDelegate: carrega stores, monta a janela, preenche as closures do <code>AppControl</code>, liga timers</td><td><span class="tag mix">MISTO</span> orquestração e estado → core; janela, alertas, menus → UI</td></tr>
+<tr><td><code>ControlSocket</code></td><td class="n">1 106</td><td>Servidor HTTP em socket unix, rotas, watchdog</td><td><span class="tag mix">MISTO</span> transporte → driver; rotas → core</td></tr>
+<tr><td><code>Dispatcher</code></td><td class="n">1 320</td><td><code>Target</code> (fila, injeção, atividade) e registro com guardas</td><td><span class="tag mix">MISTO</span> guardas e máquina → core; tela, foco, teclado → driver/UI</td></tr>
+<tr><td><code>AppControl</code></td><td class="n">213</td><td>Closures estáticas entre socket/Dispatcher e o AppDelegate</td><td><span class="tag core">CORE</span> vira a API do core</td></tr>
+<tr><td><code>Peer</code></td><td class="n">50</td><td>pid do par e cadeia de pais</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td><code>Flavor</code></td><td class="n">72</td><td>estável/dev pelo bundle id; diretórios</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td><code>Environment</code></td><td class="n">69</td><td>PATH, ambiente do filho sem <code>CLAUDE_CODE*</code></td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td><code>EgeonCLI</code></td><td class="n">174</td><td>Gera o script <code>egeon</code></td><td><span class="tag core">CORE</span> vira binário</td></tr>
+<tr><td><code>Log</code> · <code>TraceLog</code> · <code>ShellHook</code></td><td class="n">233</td><td>Log, trilha, <code>preexec</code> do zsh</td><td><span class="tag drv">DRIVER</span> (texto e nomes no core)</td></tr>
+<tr><td><code>DispatchRequest</code> · <code>StopReport</code> · <code>ApiFailure</code> · <code>SenderBacklog</code></td><td class="n">330</td><td>Envelope, veredito do Stop, nova tentativa, fila por remetente</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td><code>Activity</code> · <code>HookEvent</code> · <code>PermissionAsk</code> · <code>PermissionDesk</code> · <code>SystemNotice</code> · <code>TraceEntry</code></td><td class="n">528</td><td>Estados, eventos, pedidos de permissão</td><td><span class="tag core">CORE</span> (cor e rótulo → UI)</td></tr>
+<tr><td><code>AttentionSound</code> · <code>SystemNotifier</code></td><td class="n">143</td><td>Som e notificação do sistema</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td><code>Drop</code></td><td class="n">83</td><td>Arrasto → caminhos citados; imagem crua gravada em tmp</td><td><span class="tag mix">MISTO</span></td></tr>
+<tr><td><code>Glass</code> · <code>HandCursor</code> · <code>ToolbarButton</code> · <code>Spinner</code> · <code>AttentionRing</code></td><td class="n">432</td><td>Vidro, cursor, botão, anel de atenção</td><td><span class="tag ui">UI</span></td></tr>
+</table></div>
+<h3>Nós e processos</h3>
+<div class="tablewrap"><table>
+<tr><th>Arquivo</th><th>Linhas</th><th>Destino</th><th>Nota</th></tr>
+<tr><td><code>NodeConfig</code> · <code>NodeTemplate</code> · <code>RetiredNode</code> · <code>TerminalLink</code></td><td class="n">656</td><td><span class="tag core">CORE</span></td><td>Montagem do nó, componente cross-CLI, tipo aposentado, resolução de link</td></tr>
+<tr><td><code>AgentProfile</code> (+ <code>AgentStore</code>)</td><td class="n">643</td><td><span class="tag core">CORE</span></td><td>Contrato do CLI e migração do <code>agents.json</code></td></tr>
+<tr><td><code>AgentRules</code> · <code>ContextGauge</code> · <code>ModelCatalog</code> · <code>ModelChoice</code> · <code>SlashCommand</code></td><td class="n">253</td><td><span class="tag core">CORE</span></td><td></td></tr>
+<tr><td><code>ClaudeTranscript</code> · <code>ClaudeUsage</code></td><td class="n">586</td><td><span class="tag core">CORE</span></td><td>Parser em bytes; leitura de cauda é driver</td></tr>
+<tr><td><code>ClaudeModelRegistry</code> · <code>ClaudeCommandRegistry</code> · <code>ClaudeSlashCatalog</code> · <code>ClaudeModelCatalog</code></td><td class="n">806</td><td><span class="tag core">CORE</span> + io</td><td>Regex sobre o binário; varredura de commands e skills</td></tr>
+<tr><td><code>ClaudeHooks</code> · <code>ClaudeSkill</code> · <code>ClaudeTrust</code> · <code>ClaudeTrustSeeder</code> · <code>ClaudeProfile</code></td><td class="n">643</td><td><span class="tag core">CORE</span> + io</td><td>Texto gerado e regra pura; escrita é driver</td></tr>
+<tr><td><code>PromptQueue</code> · <code>QueueController</code> · <code>QueueStore</code></td><td class="n">635</td><td><span class="tag core">CORE</span> + io</td><td></td></tr>
+<tr><td><code>ProcessTable</code> · <code>ProcessMark</code> · <code>ProcessList</code> · <code>ReapPolicy</code> · <code>AppClaims</code> · <code>ContainerOwners</code> · <code>ProcessArguments</code></td><td class="n">445</td><td><span class="tag core">CORE</span></td><td></td></tr>
+<tr><td><code>ProcessScanner</code> · <code>OrphanReaper</code> · <code>AppKeeper</code></td><td class="n">277</td><td><span class="tag drv">DRIVER</span></td><td></td></tr>
+<tr><td><code>TerminalNode</code></td><td class="n">523</td><td><span class="tag mix">MISTO</span></td><td>Spawn, env e kill → driver; links, drop e badge → UI</td></tr>
+<tr><td><code>NodeView</code> · <code>WebNode</code> · <code>NodeTemplateDialog</code> · <code>QueueNode</code></td><td class="n">3 056</td><td><span class="tag ui">UI</span></td><td>Card, navegador, formulário do nó, card da fila</td></tr>
+<tr><td><code>ModelRow</code> · <code>EffortDial</code> · <code>ContextIndicator</code> · <code>ProcessesWindow</code></td><td class="n">942</td><td><span class="tag ui">UI</span></td><td></td></tr>
+</table></div>
+<p>De passagem: há JSON de estado de ferramenta (<code>.omc/</code>) dentro de <code>QueueNode/</code> na árvore de fontes, além do <code>6625</code> solto.</p>
+<p>UI (Canvas, Chat, Code, Home) e domínio (Workbench, Workspace, Maestro, Usage, Update) foram mapeados arquivo por arquivo pelos agentes, mas as tabelas não entraram neste documento; posso acrescentá-las.</p>
+</section>
+<section id="adrs"><h2>O que os ADRs fixam</h2>
+<p>Lidos inteiros: <code>docs/01-decisoes.md</code> (93 ADRs, de 001 a 092 mais o 005b), <code>00-prior-art.md</code>, <code>02-mvp.md</code> e a PoC.</p>
+
+<div class="note"><strong>Não há ADR sobre a escolha da stack.</strong> Swift, AppKit e SwiftTerm aparecem como dado desde o ADR-010; Flutter, Rust, Tauri, xterm.js, alacritty e libghostty nunca foram avaliados. Também não há motivo registrado para sair do Swift, nem menção a IME. A migração precisa de um ADR novo que diga o porquê — hoje o único registro sobre outras plataformas é "Windows e Linux: fora do MVP".</div>
+<h3>O que a stack atual dá de graça</h3>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Ganho</th><th>Origem</th><th>Camada na migração</th></tr>
+<tr><td>1</td><td>O app segura o pty master e escreve bytes direto (bracketed paste, Enter 150 ms depois)</td><td>ADR-007, 010</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>2</td><td>O grid do terminal só existe depois de um passe de layout; sem colunas a TUI nasce vazia e <code>SIGWINCH</code> depois não recupera</td><td>ADR-029</td><td><span class="tag drv">DRIVER</span> <span class="tag ui">UI</span></td></tr>
+<tr><td>3</td><td>O card troca de container (canvas ↔ chat) sem reiniciar o processo</td><td>ADR-016, 029</td><td><span class="tag ui">UI</span></td></tr>
+<tr><td>4</td><td><code>WKWebView</code> no nó web, com perfil de navegação isolado por nome</td><td>ADR-003, 076</td><td><span class="tag ui">UI</span></td></tr>
+<tr><td>5</td><td>O bundle é o processo responsável no TCC: microfone e pastas são concedidos a ele</td><td>ADR-027, 070</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>6</td><td>Um binário, dois flavors (estável e dev) isolados</td><td>ADR-015, 032, 033</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>7</td><td>Socket unix com <code>LOCAL_PEERPID</code>: quem falou vem do pid da conexão</td><td>ADR-040</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>8</td><td>Vidro de verdade (<code>NSGlassEffectView</code>, macOS 26), que amostra inclusive o WKWebView</td><td>ADR-025</td><td><span class="tag ui">UI</span> — perda visual a decidir</td></tr>
+</table></div>
+<h3>Comportamentos que têm de sobreviver</h3>
+<p>Comportamento de que você depende hoje e que tem de sobreviver. Quase tudo cai no core — é lógica, não tela.</p>
+<div class="tablewrap"><table>
+<tr><th>ADR</th><th>Regra</th><th>Camada</th></tr>
+<tr><td>007</td><td>Injeção na sessão viva: bracketed paste em TUI, <code>plain</code> em zsh; Enter após <code>submitDelayMs</code>; tirar <code>CLAUDE_CODE_*</code> do ambiente</td><td><span class="tag drv">DRIVER</span> <span class="tag core">CORE</span></td></tr>
+<tr><td>008</td><td>Nunca parsear a tela; warmup + <code>sawOutput</code>; entrega confirmada por bytes; uma por vez, até 3 reenvios</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>009</td><td>Nenhum código conhece "Claude Code": perfil em <code>agents.json</code></td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>010</td><td>Sem tmux; o terminal morre com o app; pty criado num único arquivo</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>011</td><td>Marcadores <code>[[ED:ok|ask|wait]]</code>; decode tolerante a chave ausente — JSON editado à mão não pode ser apagado</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>012, 028, 038, 077</td><td>Aresta é capacidade, não cano; duas dirigidas no arquivo, uma linha na tela; guardas: aresta obrigatória, <code>maxSends</code>, fila por remetente; a cadeia zera quando o humano digita</td><td><span class="tag core">CORE</span> <span class="tag ui">UI</span></td></tr>
+<tr><td>014, 030</td><td><code>conversationId</code> é do nó e escolhido pelo app; <code>resume || cria</code>; ganchos por <code>--settings</code>, nunca no settings do usuário</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>015, 032, 033</td><td>Dois flavors isolados; segunda instância não sobe (sonda o socket antes de carregar estado); inode do socket conferido a cada 10 s; <code>FD_CLOEXEC</code></td><td><span class="tag core">CORE</span> <span class="tag drv">DRIVER</span></td></tr>
+<tr><td>017–022, 060, 065</td><td>Worktree por bancada e por terminal; convenção <code>&lt;pai&gt;/worktrees/&lt;repo&gt;/&lt;branch&gt;</code>; remoção termina o que o git deixou no meio; multi-projeto por links</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>024, 034, 063, 067, 081</td><td>Estado por gancho; veredito pelo payload e transcript; <code>asking</code> interrompe, <code>waiting</code> só informa; "aguardando vizinho" não apita</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>026, 088</td><td>Drop de arquivo injeta o caminho como paste, sem Enter, e toma o foco; imagem vira <code>[Image #N]</code></td><td><span class="tag ui">UI</span> <span class="tag drv">DRIVER</span></td></tr>
+<tr><td>027</td><td><code>NSMicrophoneUsageDescription</code> no bundle que segura o pty</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>031, 036, 043</td><td>Endereço <code>bancada/id</code> estável; pasta da bancada é o <code>id</code> de 8 hex; compatibilidade com <code>sessions.json</code> e chave <code>session</code></td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>035, 064, 090, 091</td><td>Modelo, esforço e ultracode por nó; catálogo lido do binário do Claude Code; trocar reinicia e retoma a conversa</td><td><span class="tag core">CORE</span> <span class="tag ui">UI</span></td></tr>
+<tr><td>036</td><td>Trilha <code>trace.md</code> por bancada, carimbada pelo app; shell por <code>preexec</code> via <code>ZDOTDIR</code></td><td><span class="tag core">CORE</span> <span class="tag drv">DRIVER</span></td></tr>
+<tr><td>037, 039, 059</td><td>Histórico do chat é do app (<code>chat.jsonl</code>, gravado no <code>Stop</code>); ao vivo pela cauda do transcript; limpar arquiva e a rota só responde no fim</td><td><span class="tag core">CORE</span> <span class="tag ui">UI</span></td></tr>
+<tr><td>040</td><td>Identidade pelo pid da conexão (subida de <code>ppid</code> até o pty); de fora recebe 403</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>042, 044–050, 053</td><td>Linha do tempo plana; uma linha por bloco; passo recolhido, diff nunca recolhe, capa de 3 níveis</td><td><span class="tag ui">UI</span> — modelo de blocos no <span class="tag core">CORE</span></td></tr>
+<tr><td>045</td><td>Auto-scroll: fim medido após layout, descida animada conta como fim, enviar sempre desce</td><td><span class="tag ui">UI</span></td></tr>
+<tr><td>051, 052, 061, 062, 082</td><td>Arrasto reordena os três níveis; gaveta manual; <strong>fechar aba não encerra a bancada</strong>; faixa persistida com teto de 6</td><td><span class="tag ui">UI</span> <span class="tag core">CORE</span></td></tr>
+<tr><td>054, 058</td><td>Skill <code>egeon</code> publicada em cada <code>~/.claude*</code>; quem recebe pedido responde</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>056, 057</td><td>Papel e regras separados, regras depois do papel; componente cross-CLI com <code>byAgent</code>; <strong>conversa nunca copiada</strong></td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>066, 080</td><td>Maestro: plano validado inteiro; não se reconfigura; não interrompe turno; aprova permissões do time; todo <code>apply</code> vai para a trilha</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>068</td><td>Permissão respondida pelo chat via <code>PermissionRequest</code>; tecla no terminal fecha o pedido</td><td><span class="tag core">CORE</span> <span class="tag ui">UI</span></td></tr>
+<tr><td>070, 071</td><td>Pasta bloqueada por TCC trava a bancada com cortina; worktree herda a confiança do Claude</td><td><span class="tag drv">DRIVER</span> <span class="tag core">CORE</span></td></tr>
+<tr><td>072</td><td><code>StopFailure</code>: novas tentativas escalonadas, depois bolinha vermelha</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>074, 078</td><td>Cronômetro por fases, <code>clock.json</code>, passo máximo de 2 s</td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>083, 084</td><td><code>EGEON_NODE</code>/<code>EGEON_DECK</code> no ambiente; nó que morre leva a árvore; <code>OrphanReaper</code> poupa o daemon do Claude; app aberto fecha com o último usuário</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>085</td><td>Consumo incremental por cursor; preço em 3 camadas; <strong>o custo congela quando entra</strong></td><td><span class="tag core">CORE</span></td></tr>
+<tr><td>088</td><td>Nó <code>queue</code>: tarefa enviada não muda; o automático não avança com pergunta aberta</td><td><span class="tag core">CORE</span> <span class="tag ui">UI</span></td></tr>
+<tr><td>089</td><td>Atualização só com zip assinado (Ed25519); nunca reinicia sozinho; troca por outro processo</td><td><span class="tag drv">DRIVER</span></td></tr>
+<tr><td>092</td><td>"Novo projeto…" cria a pasta e roda <code>git init</code></td><td><span class="tag core">CORE</span></td></tr>
+</table></div>
+
+<div class="note good"><strong>Regra transversal.</strong> Toda interação de UI já tem rota no socket (<code>/edge</code>, <code>/tabs</code>, <code>/move</code>, <code>/compose</code>, <code>/chat</code>, <code>/queue</code>, <code>/sidebar</code>, <code>/shot</code>), porque evento sintético exige Acessibilidade. Esse conjunto de rotas já descreve o app como comandos e consultas.</div>
+<h3>Rotas já descartadas</h3>
+<div class="tablewrap"><table>
+<tr><th>Tema</th><th>ADR</th><th>Por que caiu</th><th>Ainda vale em Rust + Flutter?</th></tr>
+<tr><td>Embutir janela de outro app</td><td>001, 003</td><td>macOS não reparenteia entre processos; portal por Accessibility caiu por z-order, TCC perdido a cada build e zoom</td><td>Sim, é limite do SO</td></tr>
+<tr><td>tmux ou daemon próprio</td><td>010</td><td>Camada extra; seria "reimplementar tmux pior"</td><td><strong>Reabre:</strong> um core Rust separado da UI é justamente essa camada. Se o core virar processo à parte, é ADR novo</td></tr>
+<tr><td>Parsear a tela da TUI</td><td>008 → 067</td><td>Frágil; estado vem de gancho e transcript</td><td>Sim</td></tr>
+<tr><td>Editor embutido (VSCode)</td><td>003 → 076</td><td>Removido por falta de uso</td><td>Sim; arquivo antigo com <code>editor</code> tem de continuar carregando</td></tr>
+<tr><td>Mosaico</td><td>016, 023 → 073</td><td>Removido</td><td>Não reconstruir</td></tr>
+<tr><td>SQLite</td><td>037</td><td>JSONL só-append; arquivo editável à mão é requisito</td><td>Sim</td></tr>
+<tr><td>Lista em SwiftUI para o chat</td><td>042</td><td>Lenta com centenas de linhas de altura variável</td><td>O requisito vale: lista virtualizada com altura medida fora da thread de UI</td></tr>
+<tr><td>Tree-sitter / Highlightr</td><td>041</td><td>Lexer próprio por linha, atrás de <code>tokens(_:language:)</code></td><td>Em Rust o tree-sitter fica barato; a interface é o contrato</td></tr>
+<tr><td>Sparkle</td><td>089</td><td>Atualizador próprio sobre a release do GitHub</td><td>Sim</td></tr>
+<tr><td>Uma janela por bancada</td><td>061</td><td>Faixa de abas</td><td>Sim</td></tr>
+<tr><td><code>CLAUDE_CONFIG_DIR</code> por flavor</td><td>015</td><td>O app não gerencia config de CLI</td><td>Sim</td></tr>
+<tr><td>Clipboard para colar imagem</td><td>026</td><td>Gasta o clipboard do usuário</td><td>Sim</td></tr>
+</table></div>
+</section>
+<section id="pendencias"><h2>Pendências encontradas</h2>
+<h3>Bugs prováveis (não verificados em execução)</h3>
+<ul>
+<li>O watchdog do socket pode não voltar: se a religação encontra outro ouvinte, sai antes de reagendar o timer, e o processo fica sem socket.</li>
+<li><code>/workbench/clear</code> e <code>/remove</code> escrevem a resposta na main e leem no worker; no timeout as duas correm.</li>
+<li>A skill <code>protocolo-entre-agentes</code> está desatualizada: não cita o evento <code>failure</code>, nem <code>.failed</code> como atenção, nem as rotas de permissão, tarefas e retry.</li>
+</ul>
+<h3>Outras</h3>
+<ul>
+<li><code>maxSends</code> "sem limite" provavelmente não sobrevive a um ciclo de gravação e volta como 2.</li>
+<li>Se o decode de <code>workbenches.json</code> falha, o app carrega uma lista vazia e o próximo save grava por cima.</li>
+<li>O CLAUDE.md diz 190 testes; são 633.</li>
+<li>A spec do chat diz que "terminal embutido não existe", mas o código mostra o shell no lugar da thread.</li>
+<li>Os tooltips das ferramentas do canvas anunciam ⌘V/⌘T/⌘W; o menu usa outras teclas.</li>
+<li>Lixo na árvore de fontes: <code>app/Sources/EgeonDeck/6625</code> e pastas <code>.omc/</code> dentro de <code>QueueNode/</code>.</li>
+</ul>
+</section>
+
+</main>
+</div>
+</body>
+</html>
