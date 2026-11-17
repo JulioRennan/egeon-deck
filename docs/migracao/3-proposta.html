@@ -119,10 +119,11 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
 <tr><td>5</td><td>O pty fica no driver. O componente terminal é só o emulador: recebe bytes, mantém a tela e não tem código por plataforma.</td><td>Debate sobre o emulador de terminal</td></tr>
 <tr><td>6</td><td><strong>Core</strong> tem todas as lógicas do app, incluindo a comunicação por socket, arquivos, git e rede. <strong>Driver</strong> é só o que dá acesso a coisas do sistema operacional que podem diferir por plataforma, como o pty. Teste prático: se o código precisa de um <code>cfg</code> por sistema, é driver; se não, é core.</td><td>Debate sobre core × driver</td></tr>
 <tr><td>7</td><td>As interfaces pertencem ao core. Para tudo que está no driver ou no componente terminal, o core define a interface com o formato do que ele precisa (não o da API do sistema), e o driver a implementa por plataforma. O core não conhece o driver; uma peça fina no topo monta os dois. Só há interface para o que varia: arquivos, git, rede e relógio o core usa direto.</td><td>Debate sobre core × driver</td></tr>
+<tr><td>8</td><td>A UI fala com o core <strong>pelo socket</strong>, como mais um cliente — sem bridge e sem gerador de código. O protocolo é por mensagens (comando, resposta, evento empurrado) e não depende do transporte: hoje socket local, e o mesmo protocolo deve servir a um app do Egeon lançado à parte.</td><td>Debate sobre a estrutura da UI</td></tr>
 </table></div>
 </section>
 <section id="componentes"><h2>Componentes</h2>
-<p>Como as peças estão neste momento, pelas decisões 1 a 7. O que ainda não foi decidido aparece tracejado ou marcado.</p>
+<p>Como as peças estão neste momento, pelas decisões 1 a 8. O que ainda não foi decidido aparece marcado.</p>
 <div class="diagram">
 <svg viewBox="0 0 1040 600" width="100%" role="img" aria-label="Componentes do Egeon na proposta">
   <defs>
@@ -138,9 +139,9 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
     <text x="38" y="103" font-size="12">Widget de terminal próprio: pinta as linhas, captura teclado, acentos, mouse e rolagem</text>
     <text x="38" y="121" font-size="11">mostra e captura gesto; não guarda regra de negócio · módulos a debater</text>
 
-    <line x1="395" y1="136" x2="395" y2="176" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#pa)" marker-start="url(#pa)"/>
+    <line x1="395" y1="136" x2="395" y2="176" stroke="currentColor" stroke-width="1.5" marker-end="url(#pa)" marker-start="url(#pa)"/>
     <text x="408" y="153" font-size="11.5">mensagens: comandos ↓  eventos ↑</text>
-    <text x="408" y="168" font-size="11">transporte em debate (socket, sem gerador de código)</text>
+    <text x="408" y="168" font-size="11">pelo socket — sem bridge, sem gerador de código</text>
 
     <rect x="24" y="180" width="742" height="188" rx="10" fill="var(--core-bg)" stroke="var(--core)"/>
     <text x="38" y="202" font-weight="700">CORE — Rust</text>
@@ -209,7 +210,7 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
 <tr><td><span class="tag core">CORE</span></td><td>Rust</td><td>Só as próprias interfaces</td><td>Driver, terminal, UI, sistema operacional</td><td><span class="state ok">decidido</span></td></tr>
 <tr><td><span class="tag drv">DRIVER</span></td><td>Rust</td><td>As interfaces do core e o sistema operacional</td><td>A lógica do app, a UI</td><td><span class="state ok">decidido</span></td></tr>
 <tr><td><span class="tag mix">TERMINAL</span></td><td>Rust + <code>libghostty-vt</code></td><td>A interface de tela do core e o motor do Ghostty</td><td>pty, sistema operacional, UI</td><td><span class="state ok">decidido</span></td></tr>
-<tr><td><span class="tag ui">UI</span></td><td>Flutter</td><td>As mensagens do core</td><td>Driver, terminal, arquivos</td><td><span class="state ok">decidido</span> · transporte <span class="state talk">em debate</span></td></tr>
+<tr><td><span class="tag ui">UI</span></td><td>Flutter</td><td>As mensagens do core</td><td>Driver, terminal, arquivos</td><td><span class="state ok">decidido</span></td></tr>
 <tr><td>Montagem</td><td>Rust</td><td>Todos</td><td>—</td><td><span class="state ok">decidido</span></td></tr>
 <tr><td><code>egeon</code></td><td>—</td><td>O protocolo do socket</td><td>O resto</td><td><span class="state open">não discutido</span> (hoje é script bash)</td></tr>
 </table></div>
@@ -330,13 +331,11 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 </section>
 <section id="debate"><h2>Em debate</h2>
 
-<p>Encaminhado na conversa, ainda sem o seu "sim".</p>
+<p>Pontos ligados a decisões já tomadas que ainda pedem medida ou cuidado.</p>
 <div class="tablewrap"><table>
 <tr><th>Tema</th><th>Onde paramos</th></tr>
-<tr><td>Core ↔ driver</td><td>Crates Rust no mesmo processo: o core define traits, o driver implementa, e eventos voltam por canal em memória. Sem socket entre os dois.</td></tr>
-<tr><td>UI ↔ core</td><td>Um protocolo só, por mensagens: a UI vira mais um cliente do socket que o <code>egeon</code> e o <code>curl</code> já usam, com uma conexão persistente para receber eventos. O FFI se reduz a uma função escrita à mão que sobe o core dentro do processo.</td></tr>
-<tr><td>Custo dessa escolha</td><td>Modelos Dart e <code>fromJson</code> à mão; erro de campo só aparece em execução, o que pede testes de contrato com exemplos gravados pelo Rust.</td></tr>
-<tr><td>Dúvida técnica</td><td>Se o socket unix aguenta o volume dos terminais. É palpite que sim; só um protótipo mede. Se não aguentar, só esse stream vai para FFI cru.</td></tr>
+<tr><td>Custo do socket sem gerador</td><td>Modelos Dart e <code>fromJson</code> à mão; erro de campo só aparece em execução, o que pede testes de contrato com exemplos gravados pelo Rust.</td></tr>
+<tr><td>Volume do terminal</td><td>Se o socket unix aguenta o volume dos terminais. É palpite que sim; só um protótipo mede. Se não aguentar, só esse stream vai para FFI cru.</td></tr>
 </table></div>
 </section>
 <section id="abertas"><h2>Perguntas abertas</h2>
@@ -348,6 +347,8 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <tr><td>3</td><td>Processo único ou core como daemon?</td><td>Microfone (TCC), identidade por pid e árvore de processos dependem de o app ser o pai do pty. Daemon reabre o ADR-010.</td></tr>
 <tr><td>4</td><td>App novo em paralelo, ou Rust por baixo do app Swift primeiro?</td><td>Define se existe uma ponte Swift ↔ Rust temporária e por quanto tempo os dois apps convivem.</td></tr>
 <tr><td>5</td><td>Como o <code>libghostty-vt</code> entra no build: biblioteca já compilada do projeto, ou compilar do fonte (exige Zig)?</td><td>Define o que precisa estar instalado para compilar o Egeon e como a biblioteca vai dentro do bundle.</td></tr>
+<tr><td>10</td><td>Como o core Rust é ligado quando o app abre?</td><td>Como biblioteca dentro do app (uma função chamada pelo Dart, escrita à mão) ou como processo filho lançado pelo Flutter (nenhum FFI).</td></tr>
+<tr><td>11</td><td>O que é o “app do Egeon” e de onde ele conecta?</td><td>Socket unix só funciona na mesma máquina, e a identidade de hoje vem do pid de quem conecta. Um app em outro aparelho precisa de transporte de rede e de autenticação — o protocolo pode ser o mesmo, mas isso muda o desenho da conexão.</td></tr>
 <tr><td>6</td><td>O que fazer com o nó web sob zoom?</td><td><code>WKWebView</code> embutido não acompanha a transformação do canvas.</td></tr>
 <tr><td>7</td><td>Fila de injeção e pedidos de permissão continuam só em memória?</td><td>Hoje somem no restart.</td></tr>
 <tr><td>8</td><td>Bugs achados no levantamento: corrigir no Swift antes, ou só no porte?</td><td>Define se o Rust replica o comportamento atual ou já nasce diferente.</td></tr>
