@@ -231,7 +231,7 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 </ul>
 </section>
 <section id="ui"><h2>Estrutura da UI</h2>
-<p><span class="state ok">definida por você</span> — a organização do front em Flutter. O encaixe de cada peça do Egeon nela ainda está em aberto, no fim da seção.</p>
+<p><span class="state ok">definida por você</span> — a organização do front em Flutter. O encaixe das peças do Egeon nela está nas subseções abaixo.</p>
 <pre><code>lib/
 ├─ features/
 │  └─ &lt;feature&gt;/
@@ -327,12 +327,17 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <tr><td>Em <code>commons/widgets</code></td><td>Badges, spinner, anel de atenção, painel de vidro, botão de barra e o diff com realce de código</td></tr>
 </table></div>
 
-<h3>Em aberto: como o Egeon encaixa nisso</h3>
+<h3>Parte nativa e os dois “core”</h3>
+<p><span class="state ok">decidido</span></p>
 <div class="tablewrap"><table>
-<tr><th>#</th><th>Ponto</th><th>O que falta decidir</th></tr>
-<tr><td>5</td><td>Parte nativa</td><td>Nó web (view nativa), janela, menus e drop de arquivo: quais são <code>core/adapters</code> e quais são <code>commons/widgets</code>?</td></tr>
-<tr><td>7</td><td>Dois “core”</td><td>O core Rust e o <code>core</code> do front têm o mesmo nome.</td></tr>
+<tr><th>Peça</th><th>Onde</th><th>Motivo</th></tr>
+<tr><td>Nó web (<code>WKWebView</code>)</td><td><code>commons/widgets</code></td><td>É uma view externa adaptada; quem usa é a feature <code>node/web</code></td></tr>
+<tr><td>Janela com barra de título própria</td><td><code>core/adapters</code></td><td>Acesso ao sistema, não widget</td></tr>
+<tr><td>Menus nativos</td><td><code>core/adapters</code></td><td>Idem</td></tr>
+<tr><td>Drop de arquivo vindo de outro app</td><td><code>core/adapters</code></td><td>Idem; terminal e fila recebem o resultado</td></tr>
 </table></div>
+<p>Nenhuma feature chama código nativo direto; sempre através desses wraps.</p>
+<p><strong>Nomes:</strong> o core Rust e a pasta <code>core</code> do front mantêm o nome. Na conversa e nos documentos diz-se sempre “core Rust” e “core do front”.</p>
 </section>
 <section id="rust"><h2>Padrão do Rust: core e driver</h2>
 <p><span class="state ok">decidido</span> — é o padrão a ser seguido em todo código Rust do Egeon.</p>
