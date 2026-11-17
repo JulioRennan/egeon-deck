@@ -283,11 +283,17 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <tr><td>Exceção: chat</td><td>O core manda a diferença de blocos (removidos, inseridos, alterados), porque a thread é longa</td></tr>
 </table></div>
 
+<h3>Conexão e terminal</h3>
+<p><span class="state ok">decidido</span></p>
+<div class="tablewrap"><table>
+<tr><th>Peça</th><th>Onde fica</th><th>Regra</th></tr>
+<tr><td>Cliente do socket</td><td><code>core/adapters</code></td><td>Um só para o app inteiro, criado na raiz. Os repositories de cada feature o recebem; nenhuma feature abre conexão por conta própria</td></tr>
+<tr><td>Widget de terminal</td><td><code>features/terminal</code></td><td>Feature própria: pinta as linhas e captura teclado. Canvas e chat usam o widget sem saber como ele funciona por dentro</td></tr>
+</table></div>
+
 <h3>Em aberto: como o Egeon encaixa nisso</h3>
 <div class="tablewrap"><table>
 <tr><th>#</th><th>Ponto</th><th>O que falta decidir</th></tr>
-<tr><td>2</td><td>A conexão com o core Rust</td><td>É uma só para o app inteiro. Fica em <code>core/adapters</code>, e os repositories das features a usam?</td></tr>
-<tr><td>3</td><td>O widget de terminal</td><td>É uma feature própria, ou um widget em <code>commons</code> usado por canvas e chat?</td></tr>
 <tr><td>4</td><td>Features dentro de features</td><td>Hoje o Swift aninha (Nodes → AgentNode → ClaudeCode). No front as features são planas ou podem aninhar?</td></tr>
 <tr><td>5</td><td>Parte nativa</td><td>Nó web (view nativa), janela, menus e drop de arquivo: quais são <code>core/adapters</code> e quais são <code>commons/widgets</code>?</td></tr>
 <tr><td>6</td><td>Lista de features</td><td>Qual o recorte: barra lateral, abas, canvas, chat, nó, fila, processos, consumo…</td></tr>
