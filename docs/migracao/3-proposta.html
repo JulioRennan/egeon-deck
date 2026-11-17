@@ -96,7 +96,7 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
   <div class="sub">migração Swift → Rust + Flutter</div>
   <div class="docs"><a class="" href="1-hoje.html">O que temos hoje <span class="st">inventário</span></a><a class="" href="2-arquitetura-atual.html">Arquitetura atual <span class="st">estrutura</span></a><a class="on" href="3-proposta.html">Proposta <span class="st">em redação</span></a></div>
   <h5>Nesta página</h5>
-  <a href="#decidido">Decidido</a><a href="#componentes">Componentes</a><a href="#funcionalidades">Funcionalidades por camada</a><a href="#debate">Em debate</a><a href="#abertas">Perguntas abertas</a><a href="#rascunho">Rascunho anterior</a>
+  <a href="#decidido">Decidido</a><a href="#componentes">Componentes</a><a href="#ui">Estrutura da UI</a><a href="#funcionalidades">Funcionalidades por camada</a><a href="#debate">Em debate</a><a href="#abertas">Perguntas abertas</a><a href="#rascunho">Rascunho anterior</a>
 </nav>
 <main>
 <h1>Proposta</h1>
@@ -226,6 +226,59 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <li><strong>Janela, menus nativos e drop de arquivo</strong> — parte nativa do lado do Flutter; não discutido.</li>
 <li><strong>Módulos internos</strong> de cada componente — a decisão 4 diz que são modulares; o recorte ainda será debatido.</li>
 </ul>
+</section>
+<section id="ui"><h2>Estrutura da UI</h2>
+<p><span class="state ok">definida por você</span> — a organização do front em Flutter. O encaixe de cada peça do Egeon nela ainda está em aberto, no fim da seção.</p>
+<pre><code>lib/
+├─ features/
+│  └─ &lt;feature&gt;/
+│     ├─ presentation/
+│     │  ├─ cubit/        orquestra o estado da tela a partir do que o usecase retorna
+│     │  ├─ page/         só compõe widgets; quase nada solto
+│     │  └─ widgets/      os componentes da página
+│     └─ domain/
+│        ├─ entities/     os modelos, com fromMap e toMap
+│        ├─ repository/   faz as consultas pelo socket
+│        └─ usecase/      consulta os repositories para montar algo específico da tela
+├─ core/
+│  ├─ adapters/           wrap de toda lib externa — menos as de UI, que vão para commons
+│  ├─ domain/             mesma estrutura do domain das features, para o que é usado em mais de um módulo
+│  └─ cubits/             cubits globais (raro: costuma bastar um AppCubit na raiz)
+├─ commons/
+│  ├─ widgets/            widgets compartilhados: o design system ou adaptação de lib externa de UI
+│  ├─ utils/              utilitários básicos (datas, formatação)
+│  └─ forms/              validators e máscaras
+└─ theme/                 cores do app, temas, decorations, fontes com seus pesos</code></pre>
+
+<h3>O caminho de uma ação</h3>
+<pre><code>page ─▶ widgets ─▶ cubit ─▶ usecase ─▶ repository ─▶ socket ─▶ core Rust
+                     ▲                                  │
+                     └──────── estado da tela ◀─────────┘</code></pre>
+
+<h3>Regras</h3>
+<div class="tablewrap"><table>
+<tr><th>Peça</th><th>Faz</th><th>Não faz</th></tr>
+<tr><td>page</td><td>Compõe os widgets da feature</td><td>Não tem lógica nem widget solto</td></tr>
+<tr><td>widgets</td><td>Os componentes daquela página</td><td>O que é reutilizado em outra feature vai para <code>commons/widgets</code></td></tr>
+<tr><td>cubit</td><td>Orquestra o estado da tela pelo retorno do usecase</td><td>Não fala com o socket</td></tr>
+<tr><td>usecase</td><td>Consulta repositories e monta o que a tela precisa</td><td>—</td></tr>
+<tr><td>repository</td><td>Consulta o socket</td><td>—</td></tr>
+<tr><td>entities</td><td>Modelos com <code>fromMap</code> e <code>toMap</code> escritos à mão</td><td>Sem gerador de código</td></tr>
+<tr><td><code>core/adapters</code></td><td>Envolve toda lib externa que não é de UI</td><td>Nenhuma feature importa a lib direto</td></tr>
+<tr><td><code>commons/widgets</code></td><td>Design system e adaptações de libs de UI</td><td>—</td></tr>
+</table></div>
+
+<h3>Em aberto: como o Egeon encaixa nisso</h3>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Ponto</th><th>O que falta decidir</th></tr>
+<tr><td>1</td><td>Eventos do core</td><td>O core empurra estado o tempo todo (atividade, chat ao vivo, linhas do terminal). O repository expõe isso como stream? Passa pelo usecase ou o cubit assina direto?</td></tr>
+<tr><td>2</td><td>A conexão com o core Rust</td><td>É uma só para o app inteiro. Fica em <code>core/adapters</code>, e os repositories das features a usam?</td></tr>
+<tr><td>3</td><td>O widget de terminal</td><td>É uma feature própria, ou um widget em <code>commons</code> usado por canvas e chat?</td></tr>
+<tr><td>4</td><td>Features dentro de features</td><td>Hoje o Swift aninha (Nodes → AgentNode → ClaudeCode). No front as features são planas ou podem aninhar?</td></tr>
+<tr><td>5</td><td>Parte nativa</td><td>Nó web (view nativa), janela, menus e drop de arquivo: quais são <code>core/adapters</code> e quais são <code>commons/widgets</code>?</td></tr>
+<tr><td>6</td><td>Lista de features</td><td>Qual o recorte: barra lateral, abas, canvas, chat, nó, fila, processos, consumo…</td></tr>
+<tr><td>7</td><td>Dois “core”</td><td>O core Rust e o <code>core</code> do front têm o mesmo nome.</td></tr>
+</table></div>
 </section>
 <section id="funcionalidades"><h2>Funcionalidades por camada</h2>
 <p><span class="state talk">rascunho — falta a sua revisão</span></p>
