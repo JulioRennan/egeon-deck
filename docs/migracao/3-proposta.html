@@ -291,10 +291,17 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <tr><td>Widget de terminal</td><td><code>features/terminal</code></td><td>Feature própria: pinta as linhas e captura teclado. Canvas e chat usam o widget sem saber como ele funciona por dentro</td></tr>
 </table></div>
 
+<h3>Recorte das features</h3>
+<p><span class="state ok">decidido</span> — as regras; a lista em si ainda está em aberto.</p>
+<ul>
+<li><strong>Cada coisa é um módulo:</strong> chat é uma feature, canvas outra, barra lateral outra.</li>
+<li><strong>Features planas por padrão.</strong> Quando fizer sentido, várias features ficam agrupadas dentro de uma maior — por exemplo o que gira em torno do terminal.</li>
+<li><strong>A home é a feature que compõe:</strong> junta barra lateral, canvas, chat e as demais views.</li>
+</ul>
+
 <h3>Em aberto: como o Egeon encaixa nisso</h3>
 <div class="tablewrap"><table>
 <tr><th>#</th><th>Ponto</th><th>O que falta decidir</th></tr>
-<tr><td>4</td><td>Features dentro de features</td><td>Hoje o Swift aninha (Nodes → AgentNode → ClaudeCode). No front as features são planas ou podem aninhar?</td></tr>
 <tr><td>5</td><td>Parte nativa</td><td>Nó web (view nativa), janela, menus e drop de arquivo: quais são <code>core/adapters</code> e quais são <code>commons/widgets</code>?</td></tr>
 <tr><td>6</td><td>Lista de features</td><td>Qual o recorte: barra lateral, abas, canvas, chat, nó, fila, processos, consumo…</td></tr>
 <tr><td>7</td><td>Dois “core”</td><td>O core Rust e o <code>core</code> do front têm o mesmo nome.</td></tr>
