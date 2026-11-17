@@ -915,6 +915,19 @@ ui/                       o app Flutter
 <section id="fronteira"><h2>8 · Fronteira Rust ↔ Flutter</h2>
 <p>O <code>AppControl</code> de hoje (cerca de 50 closures) e as rotas do socket já descrevem o app como comandos e consultas. A fronteira nova é essa mesma lista, tipada.</p>
 
+<h3>Como cada camada fala com a outra</h3>
+<p>São três fronteiras, e só uma usa socket — a que cruza processos.</p>
+<div class="tablewrap"><table>
+<tr><th>Fronteira</th><th>Mecanismo</th><th>Mesmo processo?</th><th>Por plataforma</th></tr>
+<tr><td>UI ↔ core</td><td><strong>FFI.</strong> O Rust é uma biblioteca nativa dentro do bundle. O Dart chama funções dela (assíncronas, devolvem <code>Future</code>); o Rust empurra eventos por porta nativa, que no Dart vira <code>Stream</code></td><td>Sim</td><td>Igual em macOS, Linux e Windows; muda só o formato da biblioteca. Flutter web não carrega biblioteca nativa</td></tr>
+<tr><td>Core ↔ driver</td><td><strong>Traits Rust.</strong> O core define (<code>Pty</code>, <code>Fs</code>, <code>Git</code>, <code>Procs</code>…), o driver implementa. Eventos do driver voltam por canal em memória para o ator do core</td><td>Sim</td><td>Troca-se a crate do driver; o core não muda</td></tr>
+<tr><td>Agentes ↔ app</td><td><strong>Socket unix</strong> com HTTP mínimo, como hoje. Quem fala é o <code>egeon</code>, rodando dentro do terminal do agente. O transporte fica dentro do driver</td><td>Não</td><td>macOS e Linux: socket unix, com chamada diferente para o pid do par (<code>LOCAL_PEERPID</code> × <code>SO_PEERCRED</code>). Windows: named pipe é o caminho natural — a verificar</td></tr>
+</table></div>
+<div class="note"><strong>Os dados são copiados na travessia do FFI.</strong> Dart e Rust não compartilham objetos. Para comandos é irrelevante; para o terminal é o ponto a medir no protótipo — a ideia é mandar só as linhas alteradas, agrupadas por quadro.</div>
+<p>Além do socket, o driver de outra plataforma teria de refazer o pty (ConPTY no Windows) e a leitura de processos e ambiente (<code>/proc</code> no Linux). TCC, <code>clonefile</code> e a troca de bundle na atualização são só do macOS.</p>
+
+<h3>O que atravessa a ponte UI ↔ core</h3>
+
 <div class="tablewrap"><table>
 <tr><th>Canal</th><th>Sentido</th><th>Exemplos</th><th>Frequência</th></tr>
 <tr><td>Comandos</td><td>UI → core</td><td>criar nó, mover card, ligar aresta, enviar prompt, responder permissão, trocar modelo, reordenar árvore, fechar aba, aplicar plano</td><td>Por gesto</td></tr>
