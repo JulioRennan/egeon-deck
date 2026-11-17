@@ -122,10 +122,15 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
 <tr><td>8</td><td>A UI fala com o core <strong>pelo socket</strong>, como mais um cliente — sem bridge e sem gerador de código. O protocolo é por mensagens (comando, resposta, evento empurrado) e não depende do transporte: hoje socket local, e o mesmo protocolo deve servir a um app do Egeon lançado à parte.</td><td>Debate sobre a estrutura da UI</td></tr>
 <tr><td>9</td><td>Haverá um app mobile que dá acesso remoto ao Egeon do usuário. Não é o primeiro passo, mas o protocolo e a estrutura da UI já nascem servindo a ele: mesmas mensagens, mesmo código de repository, outra conexão.</td><td>Debate sobre a estrutura da UI</td></tr>
 <tr><td>10</td><td>Todo código Rust segue o padrão da seção “Padrão do Rust: core e driver”, tirado das práticas da comunidade: workspace plano, core por features com interfaces em <code>ports/</code>, um dono do estado, erros tipados, <code>unsafe</code> só no driver e no terminal. Macros <code>derive</code> são aceitas no Rust.</td><td>Pesquisa na comunidade Rust</td></tr>
+<tr><td>11</td><td><strong>Sem transição.</strong> A migração é de ponta a ponta, nesta branch. O app Swift vai para uma pasta provisória e serve só de referência para o porte, até ser removido.</td><td>Você</td></tr>
+<tr><td>12</td><td><strong>Porte fiel.</strong> Nada é corrigido no Swift e o comportamento é portado como está — inclusive a fila de injeção e os pedidos de permissão só em memória.</td><td>Você</td></tr>
+<tr><td>13</td><td>O core Rust é um <strong>executável próprio</strong>, que o app Flutter lança como processo filho ao abrir; o usuário só abre o app. O mesmo executável roda sem janela, o que permite testar core e driver por <code>curl</code>. Não há FFI entre Dart e Rust. A conferir no primeiro teste: o microfone continuar atribuído ao app.</td><td>Delegado; escolhido para facilitar os testes</td></tr>
+<tr><td>14</td><td>O <code>libghostty-vt</code> entra como biblioteca já compilada, distribuída pelo projeto Ghostty, com versão fixa e conferida por checksum. Compilar do fonte (exige Zig) fica como plano B. A conferir no primeiro build.</td><td>Delegado</td></tr>
+<tr><td>15</td><td>O <code>egeon</code> vira <strong>binário Rust</strong>, incluindo os ganchos (<code>egeon hook &lt;evento&gt;</code>). Hoje cada gancho dispara bash, <code>curl</code> e <code>python3</code>; passa a ser um processo nativo só.</td><td>Delegado; escolhido por desempenho</td></tr>
 </table></div>
 </section>
 <section id="componentes"><h2>Componentes</h2>
-<p>Como as peças estão neste momento, pelas decisões 1 a 8. O que ainda não foi decidido aparece marcado.</p>
+<p>Como as peças estão neste momento, pelas decisões 1 a 15. O que ainda não foi decidido aparece marcado.</p>
 <div class="diagram">
 <svg viewBox="0 0 1040 600" width="100%" role="img" aria-label="Componentes do Egeon na proposta">
   <defs>
@@ -133,7 +138,7 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
   </defs>
   <g font-size="12.5" style="color:var(--mute)">
     <rect x="10" y="10" width="770" height="580" rx="12" fill="none" stroke="var(--line)" stroke-dasharray="5 4"/>
-    <text x="24" y="30" font-size="11.5">o app</text>
+    <text x="24" y="30" font-size="11.5">o app — a UI é um processo, o resto é outro, filho dela</text>
 
     <rect x="24" y="42" width="742" height="92" rx="10" fill="var(--ui-bg)" stroke="var(--ui)"/>
     <text x="38" y="64" font-weight="700">UI — Flutter</text>
@@ -183,7 +188,7 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
     <text x="318" y="514" font-size="11">macOS primeiro; outros sistemas são outro driver com as mesmas interfaces</text>
 
     <rect x="24" y="536" width="742" height="40" rx="10" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="38" y="561" font-size="12"><tspan font-weight="700">MONTAGEM</tspan> — peça fina no topo: cria o driver da plataforma e o terminal, entrega os dois ao core e sobe a UI</text>
+    <text x="38" y="561" font-size="12"><tspan font-weight="700">MONTAGEM</tspan> — o executável do core: cria o driver da plataforma e o terminal e os entrega ao core; a UI o lança ao abrir</text>
 
     <rect x="820" y="186" width="210" height="62" rx="10" fill="var(--panel)" stroke="var(--line)"/>
     <text x="834" y="208" font-weight="700">egeon</text>
@@ -214,7 +219,7 @@ nav h5{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacin
 <tr><td><span class="tag mix">TERMINAL</span></td><td>Rust + <code>libghostty-vt</code></td><td>A interface de tela do core e o motor do Ghostty</td><td>pty, sistema operacional, UI</td><td><span class="state ok">decidido</span></td></tr>
 <tr><td><span class="tag ui">UI</span></td><td>Flutter</td><td>As mensagens do core</td><td>Driver, terminal, arquivos</td><td><span class="state ok">decidido</span></td></tr>
 <tr><td>Montagem</td><td>Rust</td><td>Todos</td><td>—</td><td><span class="state ok">decidido</span></td></tr>
-<tr><td><code>egeon</code></td><td>—</td><td>O protocolo do socket</td><td>O resto</td><td><span class="state open">não discutido</span> (hoje é script bash)</td></tr>
+<tr><td><code>egeon</code></td><td>Rust</td><td>O protocolo do socket</td><td>O resto</td><td><span class="state ok">decidido</span> (binário, com os ganchos)</td></tr>
 </table></div>
 
 <h3>O caminho de um caractere</h3>
@@ -350,7 +355,8 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
    ├─ egeon-core/          toda a lógica do app
    ├─ egeon-terminal/      emulador (libghostty-vt)
    ├─ egeon-driver/        acesso ao sistema, com um arquivo por plataforma dentro de cada capacidade
-   └─ egeon-app/           montagem: cria driver e terminal, entrega ao core</code></pre>
+   ├─ egeon-app/           montagem: o executável do core; cria driver e terminal e entrega ao core
+   └─ egeon-cli/           o binário <code>egeon</code>: CLI dos agentes e ganchos</code></pre>
 <div class="tablewrap"><table>
 <tr><th>Regra</th><th>Origem</th></tr>
 <tr><td>Crates numa pasta só, <code>crates/</code>, sem aninhar</td><td>matklad (rust-analyzer); diretrizes de Rust da Microsoft</td></tr>
@@ -486,16 +492,9 @@ entrada UI captura tecla ─mensagem─▶ core ─▶ terminal codifica a tecla
 <div class="tablewrap"><table>
 <tr><th>#</th><th>Pergunta</th><th>Por que importa</th></tr>
 <tr><td>1</td><td>Qual é o motivo da migração?</td><td>Se não é para rodar em Linux ou Windows, o driver pode ser só macOS e o trabalho cai. Não há ADR nem motivo registrado.</td></tr>
-<tr><td>2</td><td>A restrição a gerador de código vale também dentro do Dart?</td><td>Gerência de estado e modelos imutáveis no Flutter costumam puxar gerador (<code>freezed</code>, <code>json_serializable</code>, <code>riverpod_generator</code>).</td></tr>
-<tr><td>3</td><td>Processo único ou core como daemon?</td><td>Microfone (TCC), identidade por pid e árvore de processos dependem de o app ser o pai do pty. Daemon reabre o ADR-010.</td></tr>
-<tr><td>4</td><td>App novo em paralelo, ou Rust por baixo do app Swift primeiro?</td><td>Define se existe uma ponte Swift ↔ Rust temporária e por quanto tempo os dois apps convivem.</td></tr>
-<tr><td>5</td><td>Como o <code>libghostty-vt</code> entra no build: biblioteca já compilada do projeto, ou compilar do fonte (exige Zig)?</td><td>Define o que precisa estar instalado para compilar o Egeon e como a biblioteca vai dentro do bundle.</td></tr>
-<tr><td>10</td><td>Como o core Rust é ligado quando o app abre?</td><td>Como biblioteca dentro do app (uma função chamada pelo Dart, escrita à mão) ou como processo filho lançado pelo Flutter (nenhum FFI).</td></tr>
 <tr><td>11</td><td><span class="state open">adiada</span> Acesso remoto: como o celular alcança o Egeon e como se autentica?</td><td>Socket unix só funciona na mesma máquina, e a identidade de hoje vem do pid de quem conecta. Pela rede é preciso outro transporte, pareamento do aparelho e autenticação; fora da rede local, também um caminho até o computador (relay ou VPN).</td></tr>
 <tr><td>12</td><td><span class="state open">adiada</span> O Egeon precisa responder ao celular com a janela fechada?</td><td>Se sim, o core tem de rodar sem a UI de desktop, o que pesa na pergunta 10 e reabre “processo único ou daemon” (pergunta 3).</td></tr>
 <tr><td>6</td><td>O que fazer com o nó web sob zoom?</td><td><code>WKWebView</code> embutido não acompanha a transformação do canvas.</td></tr>
-<tr><td>7</td><td>Fila de injeção e pedidos de permissão continuam só em memória?</td><td>Hoje somem no restart.</td></tr>
-<tr><td>8</td><td>Bugs achados no levantamento: corrigir no Swift antes, ou só no porte?</td><td>Define se o Rust replica o comportamento atual ou já nasce diferente.</td></tr>
 <tr><td>9</td><td>Vidro do macOS 26: aceitar a perda visual?</td><td>Não há equivalente no Flutter.</td></tr>
 </table></div>
 </section>
