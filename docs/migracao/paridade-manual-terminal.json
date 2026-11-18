@@ -1,0 +1,80 @@
+{
+  "TerminalLinkTests.testRelativePathResolvesAgainstTheDirectoriesInOrder": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/link.rs::relativo_resolve_nas_pastas_em_ordem"
+    ],
+    "dart": []
+  },
+  "TerminalLinkTests.testLineAndColumnSuffixIsDropped": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/link.rs::sufixo_de_linha_e_coluna_sai"
+    ],
+    "dart": []
+  },
+  "TerminalLinkTests.testAFileWhoseNameEndsInColonDigitsWinsOverTheSuffix": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/link.rs::arquivo_com_dois_pontos_no_nome_vence_o_sufixo"
+    ],
+    "dart": []
+  },
+  "TerminalLinkTests.testHomeIsExpanded": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/link.rs::home_e_expandida"
+    ],
+    "dart": [],
+    "nota": "a home vem por parâmetro (a pasta padrão da configuração), não de NSHomeDirectory"
+  },
+  "TerminalLinkTests.testMissingFileOpensNothing": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/link.rs::arquivo_que_nao_existe_nao_abre_nada",
+      "rust/crates/egeon-core/src/features/terminal/link.rs::espaco_horizontal_nas_pontas_sai_como_no_swift"
+    ],
+    "dart": []
+  },
+  "TerminalLinkTests.testUrlsPassThroughUntouched": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/link.rs::url_passa_intacta"
+    ],
+    "dart": []
+  },
+  "TerminalLinkTests.testProsePunctuationIsDropped": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/link.rs::pontuacao_da_frase_sai"
+    ],
+    "dart": []
+  },
+  "TerminalLinkTests.testWordUnderTheColumn": {
+    "rust": [
+      "rust/crates/egeon-terminal/src/link.rs::palavra_sob_a_coluna",
+      "rust/crates/egeon-terminal/tests/interaction.rs::link_implicito_e_nome_solto"
+    ],
+    "dart": [],
+    "nota": "a palavra sob a coluna é achada no terminal (`link_at` devolve `LinkHit::Word`)"
+  },
+  "TerminalLinkTests.testBareNameResolvesThroughTheWord": {
+    "rust": [
+      "rust/crates/egeon-terminal/src/link.rs::pontuacao_da_frase_sai_da_palavra",
+      "rust/crates/egeon-core/src/features/terminal/link.rs::nome_solto_resolve",
+      "rust/crates/egeon-core/src/runtime/actor/terminal_commands.rs::cmd_clique_em_nome_solto_entrega_o_soltar_e_abre_se_existe"
+    ],
+    "dart": [],
+    "nota": "dividido em três: a palavra no terminal, a resolução no core e o ⌘-clique no ator"
+  },
+  "TerminalDropTests.testFileDropBecomesQuotedPathsWithTrailingSpace": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/drop.rs::caminhos_citados_so_quando_precisa_e_espaco_no_fim",
+      "rust/crates/egeon-core/src/runtime/actor/terminal_commands.rs::arrasto_de_arquivos_escreve_os_caminhos_citados"
+    ],
+    "dart": []
+  },
+  "TerminalDropTests.testEmptyPasteboardIsNothing": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/terminal/drop.rs::arrasto_sem_caminho_nao_escreve_nada"
+    ],
+    "dart": [],
+    "nota": "a metade do `accepts` é da UI, que só manda o arrasto quando há arquivo"
+  },
+  "TerminalDropTests.testAcceptsFileURLs": {
+    "nao": "`accepts` olha os tipos do NSPasteboard; no app novo é a UI que decide o que aceita e manda só caminhos ou imagem ao core"
+  }
+}

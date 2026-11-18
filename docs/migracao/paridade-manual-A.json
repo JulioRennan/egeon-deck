@@ -1,0 +1,1018 @@
+{
+ "AgentPaletteTests.testColorIsDeterministic": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::cor_do_agente_e_deterministica"
+  ]
+ },
+ "AgentProfileTests.testClaudeCodeEffortTemplating": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::esforco_do_claude"
+  ]
+ },
+ "AgentProfileTests.testClaudeCodeFactoryProfileTemplating": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::perfil_de_fabrica_do_claude_monta_a_linha_de_comando"
+  ]
+ },
+ "AgentProfileTests.testDefaultModelMeansNoFlag": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::modelo_padrao_e_nao_passar_flag"
+  ]
+ },
+ "AgentProfileTests.testEffortChoiceAppliesToNodeOnly": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::escolha_de_esforco_mexe_so_no_esforco"
+  ]
+ },
+ "AgentProfileTests.testProfileWithoutDeclarationsReturnsNil": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::perfil_sem_declaracoes_devolve_nada"
+  ]
+ },
+ "AgentRulesTests.testASingleBlockCarriesNoOrigin": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::um_bloco_so_nao_carrega_origem"
+  ]
+ },
+ "AgentRulesTests.testBothBlocksAreNamedAndOrdered": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::dois_blocos_nomeados_e_em_ordem"
+  ]
+ },
+ "AgentRulesTests.testHeaderStatesPrecedenceOverTheRole": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::cabecalho_diz_a_precedencia"
+  ]
+ },
+ "AgentRulesTests.testNothingWhenThereAreNoRules": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::sem_regras_nada"
+  ]
+ },
+ "AgentRulesTests.testUserTextIsNotRewritten": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::texto_do_usuario_nao_e_reescrito"
+  ]
+ },
+ "ChatBlockLayoutTests.testAgentPromptMentionsWithoutArrow": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::prompt_de_agente_menciona_sem_seta"
+  ]
+ },
+ "ChatBlockLayoutTests.testCollapsedStepIsOneLineAndOpenOneIsTaller": {
+  "nota": "o texto da linha (chevron, título, contagem, comando e saída) é do core; que a linha aberta seja mais alta é medida de view e fica na UI",
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::passo_recolhido_e_uma_linha_e_o_aberto_tem_comando_e_saida"
+  ]
+ },
+ "ChatBlockLayoutTests.testEveryRowGetsAHeightAndBubbleSharesWidth": {
+  "nao": "altura e largura de bolha são medida do TextKit; no app novo quem mede é a UI (Flutter) e ainda não há teste de widget do chat"
+ },
+ "ChatBlockLayoutTests.testMeasuresOffMainThread": {
+  "nao": "medir fora da main é detalhe de threading do AppKit; sem equivalente no Flutter"
+ },
+ "ChatBlockLayoutTests.testNarrowerThreadMakesProseTaller": {
+  "nao": "quebra de linha por largura é medida de TextKit; fica na UI (Flutter), sem teste de widget do chat ainda"
+ },
+ "ChatBlockLayoutTests.testUnchangedBubbleIsReusedAndChangedOneIsNot": {
+  "nao": "cache de medida por bolha é do NSTableView/TextKit; no app novo o ListView do Flutter mede sozinho e o core só manda o diff de blocos"
+ },
+ "ChatBlocksTests.testActivityDoesNotChangeBlocks": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::atividade_nao_muda_as_linhas"
+  ]
+ },
+ "ChatBlocksTests.testContiguousStepsCollapseIntoOneGroup": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::passos_seguidos_viram_uma_capa"
+  ]
+ },
+ "ChatBlocksTests.testLiveTurnGetsStatusRowAndNoTime": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::turno_ao_vivo_ganha_linha_de_status_e_nao_tem_hora"
+  ]
+ },
+ "ChatBlocksTests.testMentionOnlyWhenNotContinuous": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::mencao_so_quando_nao_e_continua"
+  ]
+ },
+ "ChatBlocksTests.testOneRowPerBlockWithStableIds": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::uma_linha_por_bloco_com_id_estavel"
+  ]
+ },
+ "ChatBlocksTests.testStepsCollapseUntilOpenedByIdButDiffNeverDoes": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::passos_recolhem_ate_abrir_por_id_mas_o_diff_nunca"
+  ]
+ },
+ "ChatBlocksTests.testTypingAndAgentToAgentPrompt": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::digitando_e_prompt_de_agente_para_agente"
+  ]
+ },
+ "ChatClearTests.testClearingResetsTheThreadState": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::limpar_zera_o_estado_da_thread"
+  ]
+ },
+ "ChatClearTests.testClearingTheHistoryTakesTheUnconfirmedEchoWithIt": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::limpar_o_historico_leva_o_eco_junto",
+   "rust/crates/egeon-core/src/features/chat/routes.rs::clear_arquiva_leva_o_eco_e_avisa_a_ui"
+  ]
+ },
+ "ChatComposerTests.testHeightChangeFiresOnlyWhenHeightChanges": {
+  "nao": "altura desejada do NSTextView do composer e callback de mudança de altura: medida de view, fica na UI (Flutter); sem teste de widget do chat ainda"
+ },
+ "ChatComposerTests.testTypingDoesNotRemeasureThread": {
+  "dart": [
+   "ui/test/features/chat/chat_page_test.dart::digitar não remonta a thread"
+  ],
+  "nota": "o lado do core (refresh sem mudança não remonta) está em ChatThreadReuseTests",
+  "falta": "largura nova remede a thread (o Swift prova `builds + 1` ao mudar a largura; o teste Dart cobre só o digitar)"
+ },
+ "ChatHistoryTests.testArchiveIsNamedByConversationPeriod": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::o_arquivo_leva_o_periodo_da_conversa"
+  ]
+ },
+ "ChatHistoryTests.testArchiveMovesCurrentAndStartsFresh": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::arquivar_move_a_corrente_e_recomeca"
+  ]
+ },
+ "ChatHistoryTests.testArchiveOnEmptyIsNoop": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::arquivar_sem_conversa_nao_faz_nada"
+  ]
+ },
+ "ChatHistoryTests.testCurrentLivesAtWorkbenchRoot": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::a_corrente_mora_na_raiz_da_bancada"
+  ]
+ },
+ "ChatHistoryTests.testRoundTrip": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::ida_e_volta",
+   "rust/crates/egeon-core/src/features/chat/tests.rs::formato_da_linha_e_o_do_swift"
+  ]
+ },
+ "ChatHistoryTests.testSamePeriodTwiceGetsDistinctNames": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::mesmo_periodo_duas_vezes_tem_nomes_distintos"
+  ]
+ },
+ "ChatHistoryTests.testSameTurnIsNotWrittenTwice": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::o_mesmo_turno_nao_e_gravado_duas_vezes"
+  ]
+ },
+ "ChatLazyLoadTests.testAnimatedDescentPassingTheTopDoesNotLoadMore": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::a_descida_animada_nao_carrega_mais"
+  ]
+ },
+ "ChatLazyLoadTests.testHistoryLoadsInWindowsWhenScrolledToTop": {
+  "nota": "o gesto de rolar até o topo é da UI; o core recebe `scroll top` e cresce a janela (rota coberta em chat/routes.rs::scroll_top_cresce_a_janela_uma_vez)",
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::historico_carrega_em_janelas_ao_rolar_ate_o_topo"
+  ]
+ },
+ "ChatLazyLoadTests.testOnlyVisibleRowsExistAndScrollingReusesThem": {
+  "nao": "reuso de células do NSTableView (rowsCreated); no Flutter é ListView.builder, sem teste de widget do chat ainda"
+ },
+ "ChatLazyLoadTests.testOpeningLoadsOnlyTheLastWindowAfterTheDescentSettles": {
+  "nota": "a animação de descida de 0,35 s é da UI; a regra (aberta a conversa de 300 turnos, só uma janela) está no core",
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::a_descida_animada_nao_carrega_mais"
+  ]
+ },
+ "ChatLazyLoadTests.testRowsInsertedAboveKeepTheReaderInPlace": {
+  "nao": "manter a linha no mesmo ponto da tela quando entra histórico em cima é ancoragem de rolagem da view; o core só entrega inserts (histórico_carrega_em_janelas_ao_rolar_ate_o_topo) e a UI ancora"
+ },
+ "ChatLazyLoadTests.testTextComesRenderedFromMeasurement": {
+  "nao": "o texto renderizado (NSAttributedString) vem da medição do TextKit; no app novo o core manda spans e a UI desenha"
+ },
+ "ChatParticipantTests.testFromNodesFiltersAndDerives": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::participantes_vem_dos_nos_agentes_e_shells"
+  ]
+ },
+ "ChatScrollTests.testNewRowIsReachedEvenBeforeTheTableRelayouts": {
+  "dart": [
+   "ui/test/features/chat/chat_page_test.dart::mensagem nova com você no fim: continua no fim"
+  ],
+  "nota": "no Flutter é o ScrollController da thread, não o relayout da NSTableView"
+ },
+ "ChatScrollTests.testSendingScrollsToBottomEvenFromAboveIt": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::eco_pendente_fica_na_linha_do_tempo",
+   "rust/crates/egeon-core/src/features/chat/routes.rs::compose_poe_o_texto_na_caixa_e_so_envia_com_send"
+  ],
+  "dart": [
+   "ui/test/features/chat/chat_page_test.dart::mandar de um ponto acima do fim leva ao fim"
+  ],
+  "nota": "o gesto é da UI; do core, o eco como última bolha"
+ },
+ "ChatScrollTests.testThreadCountsAsAtBottomWhileTheAnimatedDropIsStillRunning": {
+  "dart": [
+   "ui/test/features/chat/chat_page_test.dart::descida animada em curso conta como \"no fim\"",
+   "ui/test/features/chat/chat_page_test.dart::pegar a thread na mão no meio da descida cancela a descida"
+  ],
+  "nota": "a regra do core que a acompanha (descida não carrega histórico) está em ChatLazyLoadTests"
+ },
+ "ChatStepTests.testBashResultFillsCommandOutputAndError": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::resultado_do_bash_preenche_comando_saida_e_erro"
+  ]
+ },
+ "ChatStepTests.testDiffIsCapped": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::diff_tem_teto"
+  ]
+ },
+ "ChatStepTests.testEditShowsDiffAtToolUseAndPatchWhenResultArrives": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::edicao_mostra_o_diff_no_uso_e_o_patch_quando_o_resultado_chega"
+  ]
+ },
+ "ChatStepTests.testMarkdownBlocksAndSpans": {
+  "nota": "a asserção de fonte em negrito no NSAttributedString é da UI; o core entrega o span `bold`",
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/markdown.rs::blocos_titulo_lista_codigo_e_negrito"
+  ]
+ },
+ "ChatStepTests.testOutputIsCappedByLinesAndBytes": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::saida_tem_teto_de_linhas_e_de_bytes"
+  ]
+ },
+ "ChatStepTests.testReadShowsTheFileContentHighlightedByExtension": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::leitura_mostra_o_conteudo_do_arquivo"
+  ]
+ },
+ "ChatStepTests.testStepPartRoundTripsAndOldFlatFormDecodes": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::passo_de_cadeia_vai_e_volta_e_a_forma_antiga_decodifica"
+  ]
+ },
+ "ChatStepTests.testWriteIsAllAddedAndReadCountsLines": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::write_e_tudo_adicionado_e_read_conta_linhas"
+  ]
+ },
+ "ChatStepToggleTests.testClickingTheGroupCoverCyclesTheLevels": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::clicar_na_capa_cicla_os_niveis"
+  ]
+ },
+ "ChatStepToggleTests.testCoverClosesWhenAStepWasOpenedByHand": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::a_capa_fecha_quando_um_passo_foi_aberto_a_mao"
+  ]
+ },
+ "ChatStepToggleTests.testOpenStepPaintsHeaderAndBodyDifferently": {
+  "dart": [],
+  "falta": "teste Dart que compare a cor/decoração de `step-title` e `step-body` (o Swift prova brilho diferente entre cabeçalho e miolo)"
+ },
+ "ChatStepToggleTests.testRowTogglesOnlyOnTheTitleStrip": {
+  "dart": [
+   "ui/test/features/chat/chat_page_test.dart::aberto mostra comando e saída; só o título responde ao clique"
+  ],
+  "nota": "o clique no corpo não alterna; só o do título"
+ },
+ "ChatStepToggleTests.testToggleOpensStepAndDiffAndClosesAgain": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::alternar_abre_o_passo_e_o_diff_continua_aberto",
+   "rust/crates/egeon-core/src/features/chat/routes.rs::expand_abre_o_passo_e_pede_a_remontagem"
+  ]
+ },
+ "ChatThreadReuseTests.testRefreshWithoutChangeDoesNotRebuild": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::refresh_sem_mudanca_nao_renasce"
+  ]
+ },
+ "ChatThreadTests.testAgentMessagesAreTheirOwnBubbles": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::mensagens_entre_agentes_sao_bolhas_proprias"
+  ]
+ },
+ "ChatThreadTests.testBuildInterleavesByTime": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::thread_intercala_por_tempo"
+  ]
+ },
+ "ChatThreadTests.testConsecutiveReplyHasNoQuote": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::resposta_consecutiva_nao_cita"
+  ]
+ },
+ "ChatThreadTests.testInterleavedPromptQuotesAgentsLastReply": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::prompt_intercalado_cita_a_ultima_resposta_do_agente"
+  ]
+ },
+ "ChatThreadTests.testKnownTurnDoesNotConfirmNewPending": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::turno_conhecido_nao_confirma_eco_novo"
+  ]
+ },
+ "ChatThreadTests.testLegacyExchangeDecodesToNothing": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::elo_extinto_decodifica_para_nada"
+  ]
+ },
+ "ChatThreadTests.testOneNewTurnConfirmsOnePending": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::um_turno_novo_confirma_um_eco"
+  ]
+ },
+ "ChatThreadTests.testPendingDropsWhatTranscriptConfirmed": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::eco_sai_quando_o_transcript_confirma"
+  ]
+ },
+ "ChatThreadTests.testPendingEchoSitsInTimeline": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::eco_pendente_fica_na_linha_do_tempo"
+  ]
+ },
+ "ChatThreadTests.testReplyToAgentMessageQuotesTheSender": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::resposta_a_mensagem_de_agente_cita_o_remetente"
+  ]
+ },
+ "ChatThreadTests.testSendTargetIgnoresHeredocNoise": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::alvo_do_envio_ignora_ruido_de_heredoc"
+  ]
+ },
+ "ChatThreadTests.testUnknownSenderKeepsRawAddress": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::remetente_desconhecido_guarda_o_endereco_cru"
+  ]
+ },
+ "ClaudeSkillTests.testBodyTeachesAnsweringWhoeverCalledYou": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::corpo_ensina_a_responder_a_quem_acionou"
+  ]
+ },
+ "ClaudeSkillTests.testBodyTeachesPeersBeforeSubagent": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::corpo_ensina_vizinhos_antes_de_subagente"
+  ]
+ },
+ "ClaudeSkillTests.testConfigDirectoriesIncludeTheEnvironmentOne": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::configuracoes_incluem_a_do_ambiente_sem_repetir"
+  ]
+ },
+ "ClaudeSkillTests.testFrontmatterIsReadableByTheCLI": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::frontmatter_da_skill_e_legivel_pelo_cli"
+  ]
+ },
+ "ClaudeSkillTests.testInstallWritesIntoEveryConfig": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::install_escreve_em_toda_config_e_reescreve",
+   "rust/crates/egeon-core/src/features/agent/tests.rs::install_apaga_a_pasta_da_primeira_tentativa"
+  ]
+ },
+ "ClaudeSkillTests.testMaestroSkillFrontmatterIsReadableAndGated": {
+  "nota": "a parte que confere os campos do plano (MaestroPlan.Node.Keys) é do dono do maestro",
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::skill_do_maestro_tem_frontmatter_legivel_e_com_porteiro"
+  ]
+ },
+ "ClaudeSkillTests.testSkillLivesAtTheRootOfEachConfig": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::skill_mora_na_raiz_de_cada_config"
+  ]
+ },
+ "ClaudeSkillTests.testTextValuesUseBlockScalarsSoPunctuationCannotBreakTheYAML": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::valores_de_texto_usam_bloco_para_a_pontuacao_nao_quebrar_o_yaml"
+  ]
+ },
+ "ClaudeSkillTests.testTriggerPhrasesAreInTheFrontmatter": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::frases_de_gatilho_estao_no_frontmatter"
+  ]
+ },
+ "ClaudeTranscriptLiveTests.testLiveTurnReadsFromKnownPromptOffset": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::leitura_ao_vivo_parte_do_offset_do_prompt"
+  ]
+ },
+ "ClaudeTranscriptLiveTests.testScanRecordsByteOffsetOfEachPrompt": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::varredura_guarda_o_byte_de_cada_prompt"
+  ]
+ },
+ "ClaudeTranscriptLiveTests.testStaleOffsetFallsBackToTail": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::offset_velho_volta_para_a_cauda"
+  ]
+ },
+ "ClaudeTranscriptTests.testAgentEnvelopeIsUnwrapped": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::envelope_de_agente_e_desembrulhado"
+  ]
+ },
+ "ClaudeTranscriptTests.testAssistantBeforeAnyPromptIsIgnored": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::assistente_antes_de_qualquer_prompt_e_ignorado"
+  ]
+ },
+ "ClaudeTranscriptTests.testChainKeepsProseAndStepsInOrder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::cadeia_guarda_prosa_e_passos_em_ordem"
+  ]
+ },
+ "ClaudeTranscriptTests.testChainPartsRoundTripWithSendTarget": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::elos_da_cadeia_voltam_do_disco_com_o_destino_do_envio"
+  ]
+ },
+ "ClaudeTranscriptTests.testLiveTurnReportsWhatIsHappeningNow": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::turno_ao_vivo_diz_o_que_acontece_agora"
+  ]
+ },
+ "ClaudeTranscriptTests.testOldEgeonTagIsStillUnwrapped": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::marca_antiga_ainda_e_desembrulhada"
+  ]
+ },
+ "ClaudeTranscriptTests.testParsesPromptStepsAndReply": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::transcript_vira_prompt_passos_e_resposta"
+  ]
+ },
+ "ClaudeTranscriptTests.testSendStepCarriesTarget": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::passo_de_envio_leva_o_destino"
+  ]
+ },
+ "ClaudeTranscriptTests.testTurnWithoutPartsDecodesAndRebuildsChain": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::turno_sem_parts_decodifica_e_reconstroi_a_cadeia"
+  ]
+ },
+ "ClaudeTrustTests.testAcceptedParentCounts": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::pai_aceito_conta"
+  ]
+ },
+ "ClaudeTrustTests.testMultiFolderNeedsEveryRepository": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::multiprojeto_precisa_de_todos_os_repositorios"
+  ]
+ },
+ "ClaudeTrustTests.testNothingWhenOriginNotAcceptedOrTargetAlready": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::nada_quando_origem_nao_aceitou_ou_alvo_ja_aceito"
+  ]
+ },
+ "ClaudeTrustTests.testPrivatePrefixIsKept": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::prefixo_private_e_mantido"
+  ]
+ },
+ "ClaudeTrustTests.testSourcesFromRealGit": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::fontes_com_git_de_verdade"
+  ]
+ },
+ "ClaudeTrustTests.testWorktreeInheritsWhatTheRepositoryAccepted": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::worktree_herda_o_que_o_repositorio_aceitou"
+  ]
+ },
+ "ContextGaugeTests.testAskedLargeWindowWinsOverTheCatalog": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::janela_grande_pedida_vence_o_catalogo"
+  ]
+ },
+ "ContextGaugeTests.testCatalogWithoutSchemaIsOld": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::catalogo_sem_schema_e_antigo"
+  ]
+ },
+ "ContextGaugeTests.testFullWindowStopsAtAHundred": {
+  "dart": [
+   "ui/test/features/node/agent/context_reading_test.dart::janela cheia para em 100%"
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::janela_cheia_para_em_cem"
+  ]
+ },
+ "ContextGaugeTests.testHueGoesFromGreenToRedAsTheWindowFills": {
+  "dart": [
+   "ui/test/features/node/agent/context_reading_test.dart::o matiz vai do verde ao vermelho conforme a janela enche"
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::matiz_vai_do_verde_ao_vermelho"
+  ]
+ },
+ "ContextGaugeTests.testIndicatorWithoutReadingShowsADash": {
+  "dart": [
+   "ui/test/features/node/agent/context_indicator_test.dart::sem leitura mostra um travessão; com leitura, a porcentagem"
+  ]
+ },
+ "ContextGaugeTests.testRegistryReadsTheWindowNotTheMaximum": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::registro_le_a_janela_e_nao_o_maximo"
+  ]
+ },
+ "ContextGaugeTests.testShortNumbers": {
+  "dart": [
+   "ui/test/features/node/agent/context_reading_test.dart::números curtos"
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::numeros_curtos"
+  ]
+ },
+ "ContextGaugeTests.testShowsTheShareInUseRoundedUp": {
+  "dart": [
+   "ui/test/features/node/agent/context_reading_test.dart::mostra a fatia em uso, arredondada para cima"
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::medidor_mostra_a_fatia_arredondada_para_cima"
+  ]
+ },
+ "ContextGaugeTests.testUnknownWindowHasNoGauge": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::janela_desconhecida_nao_tem_medidor"
+  ]
+ },
+ "ContextGaugeTests.testUsageAboveTheCatalogWindowMeansTheLargeOne": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::uso_acima_da_janela_do_catalogo_e_a_grande"
+  ]
+ },
+ "ContextTokensTests.testCompactionHidesTheOldNumberUntilTheNextAnswer": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::compactar_esconde_o_numero_velho_ate_a_proxima_resposta"
+  ]
+ },
+ "ContextTokensTests.testCountsThePromptOfTheLastAnswerWithoutOutput": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::contexto_conta_o_prompt_da_ultima_resposta_sem_a_saida"
+  ]
+ },
+ "ContextTokensTests.testNoAnswerYet": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::contexto_sem_resposta_ainda"
+  ]
+ },
+ "ContextTokensTests.testQuotingTheBoundaryIsNotCompaction": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::citar_o_marcador_nao_e_compactar"
+  ]
+ },
+ "ContextTokensTests.testSkipsSubagentsAndFabricatedAnswers": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::contexto_pula_subagente_e_resposta_fabricada"
+  ]
+ },
+ "DiffHunkTests.testDiffWithoutHeaderHasNoNumbers": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/diff_hunk.rs::diff_sem_cabecalho_nao_tem_numeros"
+  ]
+ },
+ "DiffHunkTests.testParsesHeadersAndKinds": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/diff_hunk.rs::le_cabecalho_e_tipos"
+  ]
+ },
+ "DiffHunkTests.testRowsPairRemovalsWithAdditionsLikeGitHub": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/diff_hunk.rs::linhas_pareiam_remocoes_com_adicoes_como_o_github"
+  ]
+ },
+ "DiffHunkTests.testStructuredPatchKeepsHunkHeader": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/diff_hunk.rs::cabecalho_do_structured_patch"
+  ]
+ },
+ "EffortDialTests.testAccessoryRowGrowsTheHeader": {
+  "nao": "altura do cabeçalho do NodeView com a linha acessória (headerExtent, frame do corpo); layout do nó é da UI"
+ },
+ "EffortDialTests.testAutoShowsTheModelLevelDimmedAndLitPill": {
+  "dart": [
+   "ui/test/features/node/agent/effort_dial_view_test.dart::testAutoShowsTheModelLevelDimmedAndLitPill: em auto a barra "
+  ],
+  "nota": "a opacidade do slider e a pílula acesa são da UI; a regra (marca no nível do modelo, em auto) é do core",
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::auto_mostra_o_nivel_do_modelo"
+  ]
+ },
+ "EffortDialTests.testKeepsAnUnknownCurrentLevel": {
+  "dart": [
+   "ui/test/features/node/agent/effort_dial_view_test.dart::testKeepsAnUnknownCurrentLevel: o nível fora da lista aparece "
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::dial_guarda_nivel_desconhecido"
+  ]
+ },
+ "EffortDialTests.testNoEffortModelHasNoAutoPill": {
+  "dart": [
+   "ui/test/features/node/agent/effort_dial_view_test.dart::testNoEffortModelHasNoAutoPill: sem níveis a barra desliga, "
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::modelo_sem_esforco_nao_tem_o_que_ligar"
+  ]
+ },
+ "EffortDialTests.testStartsOnTheCurrentLevel": {
+  "dart": [
+   "ui/test/features/node/agent/effort_dial_view_test.dart::testStartsOnTheCurrentLevel: a marca fica no nível que o core "
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::dial_comeca_no_nivel_atual"
+  ]
+ },
+ "EffortDialTests.testTextTakesOnlyItsWidthAndTheControlsStayRight": {
+  "nao": "largura preferida do texto e posição do slider/pílula (fittingSize, frames do NSView); layout é da UI"
+ },
+ "EffortDialTests.testTogglingAutoOffKeepsTheLevelTheModelWasUsing": {
+  "dart": [
+   "ui/test/features/node/agent/effort_dial_view_test.dart::testTogglingAutoOffKeepsTheLevelTheModelWasUsing: a pílula "
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::desligar_o_auto_mantem_o_nivel_que_o_modelo_usava"
+  ]
+ },
+ "EffortDialTests.testTogglingAutoOffWithoutKnownLevelPicksTheMiddle": {
+  "dart": [
+   "ui/test/features/node/agent/effort_dial_view_test.dart::testTogglingAutoOffWithoutKnownLevelPicksTheMiddle: a marca "
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::desligar_o_auto_sem_nivel_conhecido_pega_o_meio"
+  ]
+ },
+ "EffortDialTests.testTogglingAutoOnFromALevel": {
+  "dart": [
+   "ui/test/features/node/agent/effort_dial_view_test.dart::testTogglingAutoOnFromALevel: ligar o auto devolve a intenção; "
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::ligar_o_auto_a_partir_de_um_nivel"
+  ]
+ },
+ "EffortDialTests.testTouchingTheSliderLeavesAuto": {
+  "dart": [
+   "ui/test/features/node/agent/effort_dial_view_test.dart::testTouchingTheSliderLeavesAuto: tocar na barra em auto manda "
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::tocar_na_barra_sai_do_auto"
+  ]
+ },
+ "LastModelSinceTests.testIgnoresAnswersFromBeforeTheLaunch": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::modelo_descarta_resposta_anterior_ao_arranque"
+  ]
+ },
+ "LastModelSinceTests.testKeepsAnswersAfterTheLaunch": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::modelo_mantem_resposta_posterior_ao_arranque"
+  ]
+ },
+ "MarkdownLinkTests.testBareURLBecomesLink": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/markdown.rs::url_solta_vira_link"
+  ]
+ },
+ "MarkdownLinkTests.testBracketsWithoutSchemeStayText": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/markdown.rs::colchetes_sem_esquema_ficam_texto"
+  ]
+ },
+ "MarkdownLinkTests.testLinkifyKeepsExistingLink": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/markdown.rs::linkify_respeita_o_link_que_ja_existe"
+  ]
+ },
+ "MarkdownLinkTests.testMarkdownLinkShowsLabelAndCarriesURL": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/markdown.rs::link_mostra_o_rotulo_e_leva_a_url"
+  ]
+ },
+ "MentionParserTests.testAtInsideWordIsNotMention": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::arroba_dentro_de_palavra_nao_e_mencao"
+  ]
+ },
+ "MentionParserTests.testBareAtOpensEmptyQuery": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::arroba_sozinho_abre_consulta_vazia"
+  ]
+ },
+ "MentionParserTests.testCandidatesFilterCaseInsensitive": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::candidatos_sem_caixa"
+  ]
+ },
+ "MentionParserTests.testCaretBeforeAtIsNotMention": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::cursor_antes_do_arroba_nao_e_mencao"
+  ]
+ },
+ "MentionParserTests.testInsertReplacesTypedMention": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::inserir_troca_a_mencao_digitada"
+  ]
+ },
+ "MentionParserTests.testMentionAtCaretWithQuery": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::mencao_no_cursor_com_consulta"
+  ]
+ },
+ "MentionParserTests.testSpaceClosesMention": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::espaco_fecha_a_mencao"
+  ]
+ },
+ "ModelCatalogTests.testBinaryWithoutTableGivesNothing": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::binario_sem_tabela_nao_da_nada"
+  ]
+ },
+ "ModelCatalogTests.testEffortLevelsFollowCapabilities": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::niveis_de_esforco_seguem_as_capacidades"
+  ]
+ },
+ "ModelCatalogTests.testFeaturedIsTheNewestOfEachFamilyInMenuOrder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::destaque_e_o_mais_novo_de_cada_familia_na_ordem_do_menu"
+  ]
+ },
+ "ModelCatalogTests.testReadsTheTableAndSkipsDecoysAndRepeats": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::le_a_tabela_e_pula_iscas_e_repeticoes"
+  ]
+ },
+ "ModelCatalogTests.testResolvesWhatTheNodeAskedOrTheTranscriptRecorded": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::resolve_o_que_o_no_pediu_ou_o_transcript_gravou"
+  ]
+ },
+ "ModelCatalogTests.testUltracodeMovesTheLevelToTheEnvironment": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::ultracode_leva_o_nivel_para_o_ambiente"
+  ]
+ },
+ "ModelChoiceOfferTests.testFlagWithEmptyListOffersNothing": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::faixa_do_cabecalho_so_com_o_que_escolher"
+  ]
+ },
+ "PermissionQuestionTests.testQuestionToolLineOnlyForHookedProfile": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::linha_da_pergunta_so_para_perfil_com_gancho"
+  ]
+ },
+ "SlashCommandTests.testActiveQueryOnlyAtStartAndBeforeSpace": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::comando_so_no_comeco_e_antes_do_espaco"
+  ]
+ },
+ "SlashCommandTests.testCatalogMergesSyncedSessionAndBinary": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::catalogo_junta_sincronizado_sessao_e_binario"
+  ]
+ },
+ "SlashCommandTests.testCatalogReadsUserProjectAndEnabledPlugins": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::catalogo_le_usuario_projeto_e_plugins_ligados"
+  ]
+ },
+ "SlashCommandTests.testFrontmatterFoldedQuotedAndHidden": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::frontmatter_dobrado_aspas_e_oculto"
+  ]
+ },
+ "SlashCommandTests.testInsertKeepsTheRestOfTheMessage": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/parsers.rs::inserir_mantem_o_resto_da_mensagem"
+  ]
+ },
+ "SlashCommandTests.testMatchingPrefersPrefixAndPluginShortName": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::matching_prefere_prefixo_e_nome_curto_do_plugin"
+  ]
+ },
+ "SlashCommandTests.testRegistryReadsBuiltinsAndBundledSkillsFromBinary": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::registro_le_embutidos_e_skills_do_binario"
+  ]
+ },
+ "SlashCommandTests.testSearchMatchesEveryWordInNameAliasOrDescription": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::busca_casa_cada_palavra_no_nome_apelido_ou_descricao"
+  ]
+ },
+ "SlashCommandTests.testSkillListingKeepsOrderAndRestartsOnInitial": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::listagem_da_sessao_mantem_a_ordem_e_recomeca_no_inicial"
+  ]
+ },
+ "SyntaxLiteTests.testFencedBlockKeepsItsLabel": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/syntax.rs::bloco_cercado_guarda_o_rotulo"
+  ]
+ },
+ "SyntaxLiteTests.testHTML": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/syntax.rs::html"
+  ]
+ },
+ "SyntaxLiteTests.testJSONAndPlain": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/syntax.rs::json_e_plain"
+  ]
+ },
+ "SyntaxLiteTests.testLanguageComesFromExtensionOnly": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/syntax.rs::linguagem_vem_so_da_extensao"
+  ]
+ },
+ "SyntaxLiteTests.testLanguageFromFenceLabelAndFromCommand": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/syntax.rs::linguagem_pelo_rotulo_e_pelo_comando"
+  ]
+ },
+ "SyntaxLiteTests.testPython": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/syntax.rs::python"
+  ]
+ },
+ "SyntaxLiteTests.testSwiftAndShellTokens": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/syntax.rs::tokens_de_swift_e_shell"
+  ]
+ },
+ "SyntaxLiteTests.testTypeScriptAndDart": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/syntax.rs::typescript_e_dart"
+  ]
+ },
+ "SystemPromptOrderTests.testRulesAloneStillReachTheAgent": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::so_regras_ainda_chegam_ao_agente"
+  ]
+ },
+ "SystemPromptOrderTests.testRulesComeAfterTheRole": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::regras_vem_depois_do_papel"
+  ]
+ },
+ "TranscriptLastTurnTests.testEmptyOrMissing": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::ultimo_turno_vazio_ou_ausente"
+  ]
+ },
+ "TranscriptLastTurnTests.testLastTurnCarriesPromptAndReply": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::ultimo_turno_leva_prompt_e_resposta"
+  ]
+ },
+ "TranscriptLastTurnTests.testTailThatLosesThePromptFallsBackToWholeFile": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::cauda_que_perde_o_prompt_volta_ao_arquivo_inteiro"
+  ]
+ },
+ "TranscriptMarkerTests.testAskWins": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::ask_wins"
+  ]
+ },
+ "TranscriptMarkerTests.testCarriesTheLineTimestamp": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::carries_the_line_timestamp"
+  ]
+ },
+ "TranscriptMarkerTests.testLegacyInstructionStillTeachesWait": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::legacy_instruction_still_teaches_wait"
+  ]
+ },
+ "TranscriptMarkerTests.testLowestOfTheThreeWins": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::lowest_of_the_three_wins"
+  ]
+ },
+ "TranscriptMarkerTests.testMentionAboveDoesNotOverrideFinalMarker": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::mention_above_does_not_override_final_marker"
+  ]
+ },
+ "TranscriptMarkerTests.testNoMarkerIsNil": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::no_marker_is_nil"
+  ]
+ },
+ "TranscriptMarkerTests.testOkAtEndOfLastReply": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::ok_at_end_of_last_reply"
+  ]
+ },
+ "TranscriptMarkerTests.testOnlyTheLastReplyCounts": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::only_the_last_reply_counts"
+  ]
+ },
+ "TranscriptMarkerTests.testReadsOnlyTheTailOfTheFile": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::reads_only_the_tail_of_the_file"
+  ]
+ },
+ "TranscriptMarkerTests.testSkipsTrailingToolUseOnlyLines": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::skips_trailing_tool_use_only_lines"
+  ]
+ },
+ "TranscriptMarkerTests.testWaitIsStrippedFromTheChat": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::wait_is_stripped_from_the_chat"
+  ]
+ },
+ "TranscriptMarkerTests.testWaitMeansBackground": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/dispatch/marker.rs::wait_means_background"
+  ]
+ },
+ "TranscriptModelTests.testLastAssistantModelWins": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::o_ultimo_modelo_vence"
+  ]
+ },
+ "TranscriptModelTests.testSyntheticIsSkipped": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::sintetico_e_pulado"
+  ]
+ },
+ "UsageTests.testCacheWriteWithoutSplitIsFiveMinutes": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::escrita_de_cache_sem_divisao_e_de_cinco_minutos"
+  ]
+ },
+ "UsageTests.testCatalogOverBuiltInAndFileOverBoth": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::precos_em_camadas"
+  ]
+ },
+ "UsageTests.testEntriesCountEachMessageOnce": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::entradas_contam_cada_mensagem_uma_vez"
+  ]
+ },
+ "UsageTests.testLedgerReadsOnlyCompleteLinesAndKeepsTheCursor": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::registro_le_so_linhas_completas_e_guarda_o_cursor"
+  ]
+ },
+ "UsageTests.testLegacyLedgerReadsTokensAsPending": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::registro_antigo_le_tokens_como_pendentes"
+  ]
+ },
+ "UsageTests.testMoneyText": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::texto_do_dinheiro"
+  ]
+ },
+ "UsageTests.testPriceChangeOnlyCountsFromThenOn": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::preco_novo_so_conta_dali_para_frente"
+  ]
+ },
+ "UsageTests.testPriceKeysAndCost": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::chaves_de_preco_e_custo"
+  ]
+ },
+ "UsageTests.testPricesFromTheClaudeCodeCatalog": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/agent/tests.rs::precos_do_catalogo_do_claude_code"
+  ]
+ },
+ "UsageTests.testTokensWithoutPriceFreezeWhenThePriceArrives": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::tokens_sem_preco_congelam_quando_o_preco_chega"
+  ]
+ },
+ "UsageTests.testTraceConversations": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/usage/tests.rs::conversas_da_trilha"
+  ]
+ },
+ "UsageTests.testTurnCarriesItsUsage": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/chat/tests.rs::o_turno_carrega_o_seu_consumo"
+  ]
+ }
+}

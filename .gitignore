@@ -28,3 +28,4 @@ dist/
 
 # Rust
 rust/target/
+docs/migracao/__pycache__/

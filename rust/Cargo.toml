@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# O hook do OMC recria crates/.omc ao entrar na pasta; sem isto o glob o toma por crate.
+# crates/target nasce de um `cargo` rodado de dentro de crates/ com target relativo.
+exclude = ["crates/.omc", "crates/target"]
 
 [workspace.package]
 version = "0.0.0"
@@ -13,6 +16,44 @@ publish = false
 egeon-core = { path = "crates/egeon-core" }
 egeon-driver = { path = "crates/egeon-driver" }
 egeon-terminal = { path = "crates/egeon-terminal" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+# Só o egeon-driver, no macOS: apps abertos, notificação e som.
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = "0.3"
+objc2-core-foundation = "0.3"
+objc2-app-kit = "0.3"
+objc2-user-notifications = "0.3"
+# Info.plist do app baixado, na troca do app.
+plist = "1"
+tempfile = "3"
+# Só o build do egeon-terminal: conferir e abrir o libghostty-vt baixado.
+sha2 = "0.11"
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+thiserror = "2"
+# Leitura do catálogo de modelos e comandos dentro do binário do Claude Code.
+regex = "1"
+# Padrões de atenção do agents.json: o Swift usava ICU, com lookaround e retrorreferência.
+fancy-regex = "0.14"
+memchr = "2"
+# Busca da barra do composer sem acento (SlashCommand.searching).
+unicode-normalization = "0.1"
+uuid = { version = "1", features = ["v4"] }
+# Assinatura Ed25519 do zip da atualização (a mesma curva do CryptoKit do Swift).
+ed25519-dalek = "2"
+base64 = "0.22"
+# Corta texto por grafema, como o `Character` do Swift.
+unicode-segmentation = "1"
+# Hora local do sistema, com o horário de verão de cada data (o `DateFormatter`
+# do Swift): o core usa o relógio direto, sem interface no driver (decisão 34).
+jiff = "0.2"
+# Cliente HTTPS da atualização; rustls para não depender do OpenSSL, com as
+# raízes do sistema (Keychain no macOS), como o URLSession do Swift: atrás de
+# proxy com CA própria o app segue funcionando.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-util", "time"] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

@@ -1,0 +1,27 @@
+[
+  {
+    "color" : "blue",
+    "id" : "b1",
+    "name" : "d",
+    "nodes" : [
+      {
+        "conversationId" : "S",
+        "conversationStarted" : true,
+        "id" : "a",
+        "type" : "agent"
+      },
+      {
+        "conversationId" : "C",
+        "conversationStarted" : true,
+        "id" : "b",
+        "type" : "agent"
+      },
+      {
+        "conversationStarted" : true,
+        "id" : "c",
+        "type" : "agent"
+      }
+    ],
+    "path" : "\/p"
+  }
+]

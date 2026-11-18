@@ -1,0 +1,19 @@
+[
+  {
+    "name": "velha",
+    "path": "~/velha",
+    "maxVisits": 10,
+    "campoDoFuturo": {"x": [1, 2, 3]},
+    "view": "mosaic",
+    "color": "gold",
+    "nodes": [
+      {"type": "editor", "id": "code"},
+      {"type": "agent", "id": "claude", "agent": "claude", "sessionId": "S-123", "sessionStarted": true},
+      {"type": "agent", "id": "ja-migrado", "conversationId": "NOVA", "sessionId": "VELHA", "conversationStarted": false, "sessionStarted": true},
+      {"type": "shell", "id": "sh"}
+    ],
+    "edges": [{"from": "claude", "to": "sh"}, {"from": "sh", "to": "claude", "maxSends": null}]
+  },
+  {"name": "sem-nos", "path": "~/sem-nos"},
+  {"name": "cor-de-tipo-errado", "path": "/tmp/c", "nodes": null, "color": 7, "view": "canvas", "tabOrder": 2}
+]

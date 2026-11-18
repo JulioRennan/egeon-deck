@@ -1,0 +1,21 @@
+[
+  {
+    "color" : "blue",
+    "id" : "b1",
+    "name" : "d",
+    "nodes" : [
+
+    ],
+    "path" : "\/p",
+    "view" : "canvas"
+  },
+  {
+    "color" : "violet",
+    "id" : "b2",
+    "name" : "e",
+    "nodes" : [
+
+    ],
+    "path" : "\/q"
+  }
+]

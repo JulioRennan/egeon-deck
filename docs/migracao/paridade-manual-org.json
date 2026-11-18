@@ -1,0 +1,12 @@
+{
+ "ShellCommandTests.testShellCommandRoundTripsAndInstantiates": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::o_comando_do_shell_vai_e_volta_e_instancia"
+  ]
+ },
+ "ShellCommandTests.testCaptureKeepsShellCommand": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::capturar_guarda_o_comando_do_shell"
+  ]
+ }
+}

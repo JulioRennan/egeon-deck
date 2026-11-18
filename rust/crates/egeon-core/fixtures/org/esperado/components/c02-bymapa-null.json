@@ -1,0 +1,16 @@
+{
+  "a" : {
+    "agent" : "claude",
+    "byAgent" : {
+      "claude" : {
+        "model" : "m"
+      }
+    },
+    "kind" : "agent",
+    "name" : "a"
+  },
+  "b" : {
+    "kind" : "agent",
+    "name" : "b"
+  }
+}

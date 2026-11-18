@@ -1,0 +1,33 @@
+[
+  {
+    "id" : "f250fe8c",
+    "name" : "Duck",
+    "projects" : [
+      {
+        "id" : "7dbe5eef",
+        "name" : "deck",
+        "path" : "\/repos\/deck"
+      },
+      {
+        "id" : "bbb17af0",
+        "name" : "Nexus",
+        "path" : "~\/repos\/nexus\/",
+        "stored" : false
+      }
+    ]
+  },
+  {
+    "id" : "373d15ea",
+    "name" : "Agro",
+    "projects" : [
+
+    ]
+  },
+  {
+    "id" : "b1e67992",
+    "name" : "Vazio",
+    "projects" : [
+
+    ]
+  }
+]

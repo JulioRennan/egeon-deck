@@ -1,0 +1,23 @@
+[
+  {
+    "color" : "blue",
+    "edges" : [
+      {
+        "from" : "a",
+        "maxSends" : -3,
+        "to" : "b"
+      },
+      {
+        "from" : "a",
+        "maxSends" : 0,
+        "to" : "c"
+      }
+    ],
+    "id" : "b1",
+    "name" : "d",
+    "nodes" : [
+
+    ],
+    "path" : "\/p"
+  }
+]

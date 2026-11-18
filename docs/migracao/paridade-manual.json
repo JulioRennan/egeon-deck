@@ -1,0 +1,20 @@
+{
+ "_dono": {
+  "KeyMonitorTests": "dispatch/ui: `Dispatcher.reachesPty` (qual tecla conta como digitação) não existe no Rust nem na UI",
+  "AppClaimsTests": "processes: `claims.rs`/`containers.rs` sem teste",
+  "ActivityTests": "activity/ui: cor, rótulo e ampulheta do estado são da UI e sem teste de widget",
+  "ShellCommandTests": "node: `shell` com `cmd`, `instantiate` e `capture` sem teste Rust",
+  "ChatStepToggleTests": "ui: teste de cor de `step-title` × `step-body` no chat",
+  "ChatComposerTests": "ui: teste de que a largura nova remede a thread"
+ },
+ "PromptQueueTests.testDraggedWidthHoldsWithinLimits": {
+  "dart": [
+   "ui/test/features/node/queue/prompt_queue_test.dart::a largura arrastada fica dentro dos limites"
+  ]
+ },
+ "PromptQueueTests.testPanelLeavesRoomForTheConversation": {
+  "dart": [
+   "ui/test/features/node/queue/prompt_queue_test.dart::o painel deixa espaço para a conversa"
+  ]
+ }
+}

@@ -1,0 +1,24 @@
+Egeon Deck — falar com os outros terminais desta bancada.
+
+  egeon peers              quem você pode acionar
+  egeon send <endereço>    manda o stdin para ele
+  egeon peek <endereço>    o que ele mostra agora, sem interromper
+  egeon trace [texto]      registra na trilha da bancada (texto ou stdin)
+  egeon status             quem você é e como está este terminal
+  egeon tasks              as tarefas das filas ligadas a você
+  egeon task done <id> [nota]   marca a tarefa como feita
+  egeon task ask <id>      pergunta sobre a tarefa (texto no stdin)
+  egeon task note <id>     comenta na tarefa (texto no stdin)
+  egeon ps [--orphans]     processos lançados pelo Egeon, e os órfãos
+  egeon ps --kill [pid…]   encerra os órfãos (ou os pids dados)
+
+Só no terminal maestro (ADR-066) — montar e reconfigurar a bancada:
+  egeon bench              a bancada: regras, nós, arestas, estado
+  egeon models             CLIs, modelos e esforços que cada um aceita
+  egeon plan               valida o plano (JSON no stdin), sem aplicar
+  egeon apply              valida e aplica o plano (JSON no stdin)
+  egeon guide              o manual do maestro
+
+Só no maestro que aprova as permissões do time (ADR-080):
+  egeon permissions        os pedidos de ferramenta abertos no time
+  egeon allow <id> [--always]  permite (--always: não pergunta mais)

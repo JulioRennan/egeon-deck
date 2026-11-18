@@ -1,0 +1,708 @@
+{
+  "app_activate": {
+    "effect": "activate",
+    "topic": "app"
+  },
+  "app_idle": {
+    "reaper": {
+      "enabled": true
+    },
+    "topic": "app",
+    "update": {
+      "auto": false,
+      "installed": "1.6.0",
+      "menu": "Procurar atualizações…",
+      "menu_enabled": true,
+      "staged": false,
+      "state": "idle"
+    }
+  },
+  "app_show_processes": {
+    "effect": "show_processes",
+    "topic": "app"
+  },
+  "app_terminate": {
+    "effect": "terminate",
+    "topic": "app"
+  },
+  "app_ui_request": {
+    "effect": "ui_request",
+    "id": 7,
+    "params": {
+      "mode": "chat"
+    },
+    "route": "layout",
+    "topic": "app"
+  },
+  "app_update_message": {
+    "effect": "update_message",
+    "text": "Egeon Deck 1.6.0.",
+    "title": "Você está na última versão",
+    "topic": "app"
+  },
+  "app_update_prompt": {
+    "accept_label": "Atualizar e reiniciar",
+    "auto": false,
+    "auto_label": "Atualizar automaticamente: baixar sozinho e trocar quando eu fechar o app",
+    "effect": "update_prompt",
+    "later_label": "Depois",
+    "text": "novidades\n\nReiniciar encerra o que estiver rodando: 2 agentes abertos. As conversas são retomadas quando o app voltar.\n\nO app não tem assinatura da Apple. Ao atualizar, ele confere a assinatura própria da versão baixada e tira dela a quarentena do macOS.",
+    "title": "Versão 1.7.0 do Egeon Deck disponível",
+    "topic": "app",
+    "version": "1.7.0"
+  },
+  "app_update_ready": {
+    "reaper": {
+      "enabled": false
+    },
+    "topic": "app",
+    "update": {
+      "auto": true,
+      "installed": "1.6.0",
+      "menu": "Reiniciar para atualizar para a versão 1.7.0",
+      "menu_enabled": true,
+      "staged": true,
+      "state": "ready",
+      "version": "1.7.0"
+    }
+  },
+  "node_agent": {
+    "agent": {
+      "clear_hint": "Conversa nova — a de agora fica no histórico",
+      "clearable": true,
+      "context": {
+        "used": 84000,
+        "window": 200000
+      },
+      "conversation": {
+        "id": "4d95e5e6-9c11-4512-bd29-48866ad41d0b",
+        "started": true
+      },
+      "dial": {
+        "auto": false,
+        "index": 2,
+        "label": "high",
+        "levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "pending": false
+      },
+      "model_hint": "padrão do CLI",
+      "model_title": "Opus 5.5",
+      "models": [
+        {
+          "group": "standard",
+          "label": "padrão",
+          "selected": false
+        },
+        {
+          "group": "featured",
+          "label": "Opus 5.5",
+          "selected": true,
+          "value": "opus"
+        },
+        {
+          "group": "alias",
+          "label": "Sonnet 5.5",
+          "selected": false,
+          "value": "sonnet"
+        }
+      ],
+      "offers_effort": true,
+      "offers_model": true,
+      "ultracode": {
+        "available": true,
+        "on": false
+      }
+    },
+    "kind": "agent",
+    "node": "claude",
+    "topic": "node/1a2b3c4d/claude",
+    "workbench": "1a2b3c4d"
+  },
+  "node_draft": {
+    "effect": "draft",
+    "text": "rascunho vindo do egeon",
+    "topic": "node/1a2b3c4d/fila"
+  },
+  "node_open_item": {
+    "effect": "open_item",
+    "item": "a1b2c3",
+    "topic": "node/1a2b3c4d/fila"
+  },
+  "node_queue": {
+    "kind": "queue",
+    "node": "fila",
+    "queue": {
+      "asking": true,
+      "auto": true,
+      "blocker": "claude está trabalhando",
+      "destination": "claude",
+      "image_extensions": [
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "heic",
+        "tiff",
+        "bmp"
+      ],
+      "images_dir": "/Users/eu/.egeon-next/workbenches/1a2b3c4d/queues/fila/images",
+      "items": [
+        {
+          "awaiting": true,
+          "empty": false,
+          "id": "a1b2c3",
+          "images": [],
+          "locked": true,
+          "sent_at": "2026-11-18T03:12:00.000Z",
+          "sent_to": "claude",
+          "status": "sent",
+          "text": "roda os testes",
+          "thread": [
+            {
+              "at": "2026-11-18T03:13:10.000Z",
+              "author": "claude",
+              "kind": "question",
+              "text": "Posso apagar o target?"
+            }
+          ]
+        },
+        {
+          "awaiting": false,
+          "empty": false,
+          "id": "d4e5f6",
+          "images": [
+            "img-9f8e7d6c.png"
+          ],
+          "locked": false,
+          "status": "pending",
+          "text": "atualiza o CHANGELOG",
+          "thread": []
+        }
+      ],
+      "pending": 1,
+      "subtitle": "1 pendente",
+      "summary": "? pergunta",
+      "target": "claude",
+      "targets": [
+        {
+          "id": "claude",
+          "label": "claude"
+        }
+      ]
+    },
+    "topic": "node/1a2b3c4d/fila",
+    "workbench": "1a2b3c4d"
+  },
+  "node_web": {
+    "kind": "web",
+    "node": "docs",
+    "topic": "node/1a2b3c4d/docs",
+    "web": {
+      "profile": "padrão",
+      "profile_id": "3f2a9c1e-5b7d-4e8a-9c0b-1d2e3f4a5b6c",
+      "profiles": [
+        "padrão",
+        "trabalho"
+      ],
+      "url": "https://docs.rs"
+    },
+    "workbench": "1a2b3c4d"
+  },
+  "nodes": {
+    "links": [
+      {
+        "a": "claude",
+        "a_to_b": true,
+        "b": "sh",
+        "b_to_a": false
+      },
+      {
+        "a": "claude",
+        "a_to_b": true,
+        "b": "docs",
+        "b_to_a": true,
+        "max_sends": 2
+      }
+    ],
+    "nodes": [
+      {
+        "activity": {
+          "glyph": "dot",
+          "label": "precisa de você",
+          "needs_attention": true,
+          "pending": 0,
+          "state": "asking",
+          "tone": "orange"
+        },
+        "agent": "claude",
+        "alive": true,
+        "component": "core",
+        "dir": "~/Documents/agro/deck",
+        "effort": "high",
+        "exists": true,
+        "frame": {
+          "h": 420.0,
+          "w": 640.0,
+          "x": 120.0,
+          "y": 80.5
+        },
+        "id": "claude",
+        "linkable": [
+          "sh"
+        ],
+        "maestro": true,
+        "model": "opus",
+        "port": true,
+        "role": "dono do core",
+        "rules": "português",
+        "screen": "1a2b3c4d.claude",
+        "type": "agent",
+        "ultracode": false
+      },
+      {
+        "activity": {
+          "glyph": "spinner",
+          "label": "trabalhando",
+          "needs_attention": false,
+          "pending": 2,
+          "state": "working"
+        },
+        "alive": true,
+        "cwd": "../nexus-backend",
+        "dir": "~/Documents/agro/deck",
+        "exists": false,
+        "id": "sh",
+        "linkable": [
+          "claude"
+        ],
+        "maestro": false,
+        "port": true,
+        "screen": "1a2b3c4d.sh",
+        "type": "shell"
+      },
+      {
+        "alive": false,
+        "dir": "~/Documents/agro/deck",
+        "exists": true,
+        "frame": {
+          "h": 420.0,
+          "w": 640.0,
+          "x": 120.0,
+          "y": 80.5
+        },
+        "id": "docs",
+        "maestro": false,
+        "port": false,
+        "type": "web",
+        "url": "https://docs.rs"
+      }
+    ],
+    "topic": "workbench/1a2b3c4d/nodes",
+    "workbench": "1a2b3c4d"
+  },
+  "screen_bell": {
+    "effect": "bell",
+    "topic": "screen/1a2b3c4d.claude"
+  },
+  "screen_clipboard": {
+    "effect": "clipboard",
+    "text": "copiado pelo programa",
+    "topic": "screen/1a2b3c4d.claude"
+  },
+  "screen_clipboard_request": {
+    "effect": "clipboard_request",
+    "topic": "screen/1a2b3c4d.claude"
+  },
+  "screen_delta": {
+    "cols": 80,
+    "cursor": {
+      "col": 2,
+      "row": 1,
+      "shape": "block",
+      "visible": true
+    },
+    "kind": "delta",
+    "lines": [
+      {
+        "row": 0,
+        "selection": [
+          6,
+          10
+        ],
+        "spans": [
+          {
+            "cells": 6,
+            "col": 0,
+            "text": "hello "
+          },
+          {
+            "bold": true,
+            "cells": 5,
+            "col": 6,
+            "fg": 2,
+            "text": "world"
+          },
+          {
+            "bg": 236,
+            "cells": 4,
+            "col": 11,
+            "fg": "#ff8800",
+            "italic": true,
+            "text": "日本",
+            "underline": true
+          }
+        ]
+      }
+    ],
+    "rows": 24,
+    "topic": "screen/t1"
+  },
+  "screen_full": {
+    "cols": 80,
+    "cursor": {
+      "col": 2,
+      "row": 1,
+      "shape": "block",
+      "visible": true
+    },
+    "kind": "full",
+    "lines": [
+      {
+        "row": 0,
+        "selection": [
+          6,
+          10
+        ],
+        "spans": [
+          {
+            "cells": 6,
+            "col": 0,
+            "text": "hello "
+          },
+          {
+            "bold": true,
+            "cells": 5,
+            "col": 6,
+            "fg": 2,
+            "text": "world"
+          },
+          {
+            "bg": 236,
+            "cells": 4,
+            "col": 11,
+            "fg": "#ff8800",
+            "italic": true,
+            "text": "日本",
+            "underline": true
+          }
+        ]
+      },
+      {
+        "row": 1,
+        "spans": [
+          {
+            "cells": 2,
+            "col": 0,
+            "dim": true,
+            "inverse": true,
+            "strike": true,
+            "text": "$ "
+          }
+        ]
+      },
+      {
+        "row": 2,
+        "spans": []
+      }
+    ],
+    "rows": 24,
+    "scrollbar": {
+      "len": 24,
+      "offset": 0,
+      "total": 24
+    },
+    "topic": "screen/t1"
+  },
+  "screen_so_cursor": {
+    "cols": 80,
+    "cursor": {
+      "col": 0,
+      "row": 3,
+      "shape": "bar",
+      "visible": false
+    },
+    "kind": "delta",
+    "lines": [],
+    "rows": 24,
+    "topic": "screen/t1"
+  },
+  "terminals": {
+    "terminals": [
+      {
+        "alive": true,
+        "cols": 80,
+        "cwd": "/Users/eu/projeto",
+        "id": "t1",
+        "pid": 4242,
+        "rows": 24
+      },
+      {
+        "alive": false,
+        "cols": 80,
+        "command": "make test",
+        "cwd": "/Users/eu/projeto",
+        "exit_code": 0,
+        "id": "t1",
+        "pid": 4242,
+        "rows": 24
+      }
+    ],
+    "topic": "terminals"
+  },
+  "usage": {
+    "panel": {
+      "agents": [
+        {
+          "amount": "US$ 10,00",
+          "detail": "1,0M tokens",
+          "fraction": 1.0,
+          "name": "claude",
+          "tag": "maestro"
+        }
+      ],
+      "heading": "CONSUMO DA BANCADA",
+      "models": [
+        {
+          "amount": "US$ 12,34",
+          "detail": "1,2M tokens",
+          "family": "opus",
+          "fraction": 1.0,
+          "name": "Opus 5.5"
+        }
+      ],
+      "prices": {
+        "columns": [
+          "",
+          "Entrada",
+          "Saída",
+          "5 min",
+          "1 h",
+          "Lido"
+        ],
+        "file_note": "~/.egeon-next/pricing.json",
+        "open_note": "US$ por milhão de tokens",
+        "origin_note": "Preços públicos da Anthropic",
+        "rows": [
+          {
+            "edited": false,
+            "lit": true,
+            "name": "Opus 5.5",
+            "values": [
+              "5,00",
+              "25,00",
+              "6,25",
+              "10,00",
+              "0,500"
+            ]
+          }
+        ],
+        "rule_note": "Cache gravado: 1,25× (5 min) ou 2× (1 h)"
+      },
+      "split": [
+        {
+          "amount": "US$ 6,00",
+          "detail": "120K tokens",
+          "dollars": 6.0,
+          "key": "output",
+          "title": "Saída"
+        },
+        {
+          "amount": "US$ 1,00",
+          "detail": "200K tokens",
+          "dollars": 1.0,
+          "key": "input",
+          "title": "Entrada"
+        },
+        {
+          "amount": "US$ 2,34",
+          "detail": "300K tokens",
+          "dollars": 2.34,
+          "key": "cache_write",
+          "title": "Cache gravado"
+        },
+        {
+          "amount": "US$ 3,00",
+          "detail": "600K tokens",
+          "dollars": 3.0,
+          "key": "cache_read",
+          "title": "Cache lido"
+        }
+      ],
+      "total": {
+        "amount": "US$ 12,34",
+        "tokens": "1,2M tokens"
+      }
+    },
+    "pill": {
+      "text": "US$ 1,23",
+      "tooltip": "Consumo da bancada"
+    },
+    "topic": "workbench/1a2b3c4d/usage",
+    "workbench": "1a2b3c4d"
+  },
+  "workspaces": {
+    "active": [
+      {
+        "state": "recent",
+        "workbench": "1a2b3c4d"
+      },
+      {
+        "state": "stale",
+        "workbench": "0c0c0c0c"
+      }
+    ],
+    "orphans": [
+      "0c0c0c0c"
+    ],
+    "topic": "workspaces",
+    "workbenches": [
+      {
+        "activity": {
+          "attention": 0,
+          "background": 0,
+          "done": 0,
+          "starting": 0,
+          "working": 0
+        },
+        "agents": 2,
+        "color": "teal",
+        "exists": true,
+        "id": "1a2b3c4d",
+        "live": true,
+        "name": "deck",
+        "path": "~/Documents/agro/deck",
+        "project": "p1",
+        "removing": false,
+        "tab_active": true,
+        "tab_order": 0,
+        "view": "canvas"
+      },
+      {
+        "activity": {
+          "attention": 0,
+          "background": 0,
+          "done": 0,
+          "starting": 0,
+          "working": 0
+        },
+        "agents": 2,
+        "color": "teal",
+        "exists": true,
+        "id": "5e6f7a8b",
+        "live": true,
+        "name": "deck-2",
+        "path": "~/Documents/agro/deck-2",
+        "project": "p1",
+        "removing": false,
+        "tab_active": false,
+        "tab_order": 1,
+        "view": "canvas"
+      },
+      {
+        "access": {
+          "folder": "Documentos",
+          "message": "Sem acesso a a pasta Documentos: libere o Egeon Deck em Ajustes › Privacidade › Arquivos e Pastas."
+        },
+        "activity": {
+          "attention": 1,
+          "background": 0,
+          "done": 2,
+          "starting": 0,
+          "working": 1
+        },
+        "agents": 2,
+        "clock": {
+          "failed": 0,
+          "running": 754,
+          "ticking": [
+            "running"
+          ],
+          "waiting": 120
+        },
+        "exists": false,
+        "id": "0c0c0c0c",
+        "live": false,
+        "name": "solta",
+        "path": "~/Documents/agro/solta",
+        "removing": true,
+        "rules": "só leitura",
+        "tab_active": false,
+        "view": "chat"
+      }
+    ],
+    "workspaces": [
+      {
+        "activity": {
+          "attention": 1,
+          "background": 0,
+          "done": 0,
+          "starting": 0,
+          "working": 1
+        },
+        "collapsed": false,
+        "icon": "icon.png",
+        "id": "9f8e7d6c",
+        "name": "Agro",
+        "projects": [
+          {
+            "activity": {
+              "attention": 1,
+              "background": 0,
+              "done": 0,
+              "starting": 0,
+              "working": 1
+            },
+            "collapsed": false,
+            "exists": true,
+            "id": "p1",
+            "name": "nexus-backend",
+            "path": "~/Documents/agro/nexus-backend",
+            "stored": false,
+            "workbenches": [
+              "1a2b3c4d",
+              "5e6f7a8b"
+            ]
+          },
+          {
+            "activity": {
+              "attention": 0,
+              "background": 0,
+              "done": 0,
+              "starting": 0,
+              "working": 0
+            },
+            "collapsed": true,
+            "exists": false,
+            "id": "p9",
+            "members": [
+              "p1",
+              "p2"
+            ],
+            "name": "nexus",
+            "path": "~/.egeon-next/projects/p9",
+            "stored": true,
+            "workbenches": []
+          }
+        ],
+        "stored_open": true
+      }
+    ]
+  }
+}

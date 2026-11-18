@@ -1,0 +1,1 @@
+[{"id": "b1", "name": "deck", "path": "~/d", "nodes": [{"type": "agent", "id": "a", "agent": "claude", "x": 1, "y": 2, "w": 3, "h": 4}], "edges": [{"from": "a", "to": "b", "maxSends": 5.0}]}]

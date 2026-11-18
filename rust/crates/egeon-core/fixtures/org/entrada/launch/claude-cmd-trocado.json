@@ -1,0 +1,1 @@
+{"node": {"type": "agent", "id": "dev", "agent": "claude", "cmd": "meu-script --x", "model": "opus", "conversationId": "abc", "prompt": "papel"}, "profile": "claude"}

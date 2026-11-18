@@ -1,0 +1,1 @@
+{"node": {"type": "agent", "id": "dev", "agent": "claude", "conversationId": "abc", "ultracode": true, "effort": "max", "maestro": true}, "profile": "claude"}

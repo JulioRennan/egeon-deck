@@ -1,0 +1,1 @@
+{"node": {"type": "agent", "id": "a", "agent": "codex", "byAgent": {"codex": {"prompt": "do mapa", "rules": "r mapa", "model": "o3"}}, "prompt": "raiz"}, "profile": "codex"}

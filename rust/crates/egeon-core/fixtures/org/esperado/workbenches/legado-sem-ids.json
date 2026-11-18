@@ -1,0 +1,59 @@
+[
+  {
+    "color" : "blue",
+    "edges" : [
+      {
+        "from" : "claude",
+        "maxSends" : 2,
+        "to" : "sh"
+      },
+      {
+        "from" : "sh",
+        "to" : "claude"
+      }
+    ],
+    "id" : "2f3a0be0",
+    "name" : "velha",
+    "nodes" : [
+      {
+        "agent" : "claude",
+        "conversationId" : "S-123",
+        "conversationStarted" : true,
+        "id" : "claude",
+        "type" : "agent"
+      },
+      {
+        "conversationId" : "NOVA",
+        "conversationStarted" : false,
+        "id" : "ja-migrado",
+        "type" : "agent"
+      },
+      {
+        "id" : "sh",
+        "type" : "shell"
+      }
+    ],
+    "path" : "~\/velha",
+    "view" : "canvas"
+  },
+  {
+    "color" : "violet",
+    "id" : "42d54b2e",
+    "name" : "sem-nos",
+    "nodes" : [
+
+    ],
+    "path" : "~\/sem-nos"
+  },
+  {
+    "color" : "pink",
+    "id" : "0562248c",
+    "name" : "cor-de-tipo-errado",
+    "nodes" : [
+
+    ],
+    "path" : "\/tmp\/c",
+    "tabOrder" : 2,
+    "view" : "canvas"
+  }
+]

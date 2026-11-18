@@ -10,6 +10,9 @@
 // Chamada ao sistema e ao Ghostty mora só no driver e no terminal; aqui o
 // compilador garante.
 #![forbid(unsafe_code)]
+// `eprintln!` e `println!` entram em pânico com o cano quebrado (a UI morta
+// com kill -9); o core escreve só por `log!`, e o compilador garante.
+#![deny(clippy::print_stdout, clippy::print_stderr)]
 
 pub mod commons;
 pub mod features;

@@ -1,0 +1,554 @@
+{
+ "ActiveWorkbenchesTests.testEmpty": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::vazio"
+  ],
+  "dart": [
+   "ui/test/features/sidebar/sidebar_page_test.dart::sem nada de pé, a aba Ativas diz como abrir uma"
+  ]
+ },
+ "ActiveWorkbenchesTests.testNeverRanGoesLastAndTiesKeepListOrder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::nunca_rodou_vai_por_ultimo_e_o_empate_guarda_a_ordem_da_lista"
+  ]
+ },
+ "ActiveWorkbenchesTests.testOnlyLiveOnesNewestFirstSplitAt24Hours": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::so_as_de_pe_mais_novas_primeiro_cortadas_em_24_horas",
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::instante_no_futuro_conta_como_agora_e_a_borda_de_24h_ja_e_parada"
+  ],
+  "dart": [
+   "ui/test/features/sidebar/sidebar_page_test.dart::a aba Ativas separa as últimas 24 horas das paradas"
+  ]
+ },
+ "FlavorTests.testConfigBuildsInsideOwnDirectory": {
+  "rust": [
+   "rust/crates/egeon-core/src/commons/paths.rs::caminhos_dentro_da_pasta"
+  ]
+ },
+ "FlavorTests.testConfigDirectoriesAreSeparate": {
+  "rust": [
+   "rust/crates/egeon-core/src/commons/paths.rs::pastas_do_estavel_e_do_dev_sao_separadas"
+  ],
+  "nota": "as pastas do app novo são .egeon-next e .egeon-next-dev (não .egeon/.egeon-dev); o teste Rust prova que são distintas; nunca_as_pastas_do_swift prova que não pisam nas do Swift"
+ },
+ "FlavorTests.testCurrentWithoutBundleIsStable": {
+  "rust": [
+   "rust/crates/egeon-core/src/commons/paths.rs::sem_a_variavel_e_estavel"
+  ],
+  "nota": "sem bundle vira 'sem variável de ambiente de sabor'"
+ },
+ "FlavorTests.testLogsAreSeparate": {
+  "rust": [
+   "rust/crates/egeon-core/src/commons/paths.rs::logs_do_estavel_e_do_dev_sao_separados"
+  ],
+  "nota": "decisão 38"
+ },
+ "FolderAccessTests.testNamesTheProtectedFolderAsSettingsShowsIt": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::nomeia_a_pasta_protegida_como_o_ajustes_mostra"
+  ]
+ },
+ "FolderAccessTests.testReadableMissingAndBlocked": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::pasta_legivel_ausente_e_bloqueada"
+  ]
+ },
+ "FolderAccessTests.testRequestOutsideAnAppIsJustTheCheck": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::pedir_sem_o_que_zerar_e_so_a_conferencia",
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::pasta_protegida_negada_zera_o_servico_e_confere_de_novo"
+  ]
+ },
+ "FolderAccessTests.testServiceOfEachProtectedFolder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::o_servico_de_cada_pasta_protegida"
+  ]
+ },
+ "NodeWorktreeTests.testEmptyBranchStays": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::branch_vazia_fica"
+  ]
+ },
+ "NodeWorktreeTests.testNeighborRepoWithBranchGetsOwnWorktree": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::repo_vizinho_com_branch_ganha_worktree_propria_mesmo_na_mesma_branch"
+  ]
+ },
+ "NodeWorktreeTests.testNonGitFolderNeverGetsWorktree": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::pasta_fora_de_git_nunca_ganha_worktree"
+  ]
+ },
+ "NodeWorktreeTests.testOtherBranchInsideGetsOwnWorktree": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::outra_branch_dentro_da_bancada_ganha_worktree_propria"
+  ]
+ },
+ "NodeWorktreeTests.testSameBranchInsideGoesAlong": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::mesma_branch_dentro_da_bancada_vai_junto"
+  ]
+ },
+ "UnversionedCopyTests.testCopiesUntrackedAndIgnoredButNotTracked": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::copia_o_nao_rastreado_e_o_ignorado_mas_nao_o_versionado"
+  ],
+  "nota": "o clone real (clonefile) é do driver; o teste Rust usa um clonador de cópia comum atrás da interface FileCloner"
+ },
+ "UnversionedCopyTests.testEditedScriptIsNotStock": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::script_editado_nao_e_de_fabrica"
+  ]
+ },
+ "UnversionedCopyTests.testExistingDestinationIsKept": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::o_destino_que_ja_existe_fica"
+  ]
+ },
+ "UnversionedCopyTests.testScriptWrittenByTheAppIsStockEvenWithAnotherHeader": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::script_escrito_pelo_app_e_de_fabrica_mesmo_com_outro_cabecalho"
+  ]
+ },
+ "ViewModeTests.testMissingViewDefaultsToCanvas": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::modo_desconhecido_vira_canvas"
+  ],
+  "dart": [
+   "ui/test/core/domain/view_mode_test.dart::ausente vira canvas e chat é lido"
+  ]
+ },
+ "ViewModeTests.testRawValuesAreFileFormat": {
+  "dart": [
+   "ui/test/core/domain/view_mode_test.dart::os nomes são formato de arquivo e parâmetro de rota"
+  ],
+  "nota": "no Rust o raw() do ViewMode não é afirmado literalmente; só a ida e volta de \"view\" em todo_campo_da_bancada_vai_e_volta"
+ },
+ "ViewModeTests.testRemovedMosaicOpensInCanvas": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::modo_desconhecido_vira_canvas"
+  ],
+  "dart": [
+   "ui/test/core/domain/view_mode_test.dart::modo desconhecido ou aposentado (mosaico) abre no canvas"
+  ],
+  "nota": "o Rust testa view:\"mosaic\" sem o bloco mosaic com proporções (serde ignora campo desconhecido); ViewMode.all só é afirmado no Dart"
+ },
+ "ViewModeTests.testUnknownViewFallsBackToCanvas": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::modo_desconhecido_vira_canvas"
+  ],
+  "dart": [
+   "ui/test/core/domain/view_mode_test.dart::modo desconhecido ou aposentado (mosaico) abre no canvas"
+  ]
+ },
+ "WorkbenchCleanerTests.testAgentAskingForPermissionIsNotWaitedFor": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::agente_pedindo_permissao_nao_e_esperado"
+  ]
+ },
+ "WorkbenchCleanerTests.testAgentsWithoutClearAreSkippedAndDoNotDelayArchiving": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::agentes_sem_clear_sao_pulados_e_nao_atrasam_o_arquivamento"
+  ]
+ },
+ "WorkbenchCleanerTests.testArchivesOnlyAfterTheAgentsSettle": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::so_arquiva_depois_que_os_agentes_assentam"
+  ]
+ },
+ "WorkbenchCleanerTests.testDispatchFailureCountsAsSkipped": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::falha_no_despacho_conta_como_pulado"
+  ]
+ },
+ "WorkbenchCleanerTests.testStuckAgentDoesNotHoldTheCleanupForever": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::agente_atolado_nao_prende_a_limpeza_para_sempre"
+  ]
+ },
+ "WorkbenchClockTests.testAddCapsLongGaps": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::somar_limita_os_buracos_longos"
+  ]
+ },
+ "WorkbenchClockTests.testFailedIsNeitherWaitingNorRunning": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::falha_nao_e_espera_nem_trabalho"
+  ]
+ },
+ "WorkbenchClockTests.testFormat": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::formato_de_relogio"
+  ],
+  "dart": [
+   "ui/test/features/workbench/clock_test.dart::o formato é mm:ss, e h:mm:ss a partir de uma hora"
+  ]
+ },
+ "WorkbenchClockTests.testOldFileTakesLastActiveFromModificationDate": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::arquivo_antigo_tira_o_last_active_da_data_de_modificacao"
+  ]
+ },
+ "WorkbenchClockTests.testPhasesRunTogether": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::as_fases_andam_juntas"
+  ]
+ },
+ "WorkbenchClockTests.testTickAccumulatesPersistsAndResets": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::o_tique_soma_grava_e_zera"
+  ]
+ },
+ "WorkbenchColorTests.testColorIsFoundByCaseOrMenuLabel": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::cor_achada_pelo_nome_ou_pelo_rotulo"
+  ]
+ },
+ "WorkbenchColorTests.testColorRoundTripsAndUnknownOneDoesNotBreakTheList": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::cor_vai_e_volta_e_a_desconhecida_nao_quebra_a_lista"
+  ],
+  "dart": [
+   "ui/test/theme/workbench_palette_test.dart::sem cor, ou com cor que saiu da paleta, vale o destaque do app"
+  ]
+ },
+ "WorkbenchColorTests.testColorsSavedBeforeTheBigPaletteStillDecode": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::cores_gravadas_antes_da_paleta_grande_ainda_abrem"
+  ],
+  "dart": [
+   "ui/test/theme/workbench_palette_test.dart::as cores gravadas antes da paleta grande continuam lendo"
+  ]
+ },
+ "WorkbenchColorTests.testNewBenchIsColoredAgainstTheOthers": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::bancada_nova_e_colorida_contra_as_outras"
+  ]
+ },
+ "WorkbenchColorTests.testOldListGetsDistinctColorsInOrderAndKeepsWhatItHad": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::lista_antiga_ganha_cores_distintas_em_ordem_e_guarda_o_que_tinha"
+  ]
+ },
+ "WorkbenchColorTests.testPaletteHasTwentyFourNamedColors": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::paleta_tem_vinte_e_quatro_cores_com_nome"
+  ],
+  "dart": [
+   "ui/test/theme/workbench_palette_test.dart::a paleta tem 24 cores com rótulo e nome únicos"
+  ]
+ },
+ "WorkbenchColorTests.testPicksTheLeastUsedAndTheFirstOnTies": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::escolhe_a_menos_usada_e_a_primeira_no_empate"
+  ]
+ },
+ "WorkbenchColorTests.testStatusColorsStayOutOfTheAutomaticChoice": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::cores_de_estado_ficam_fora_da_escolha_automatica"
+  ]
+ },
+ "WorkbenchConfigTests.testAddressIsWorkbenchSlashNode": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::endereco_e_bancada_barra_no"
+  ]
+ },
+ "WorkbenchConfigTests.testOldMaxVisitsIsIgnored": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::maxvisits_antigo_e_ignorado"
+  ]
+ },
+ "WorkbenchConfigTests.testResolveCwdThreeForms": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::resolve_cwd_nas_tres_formas"
+  ],
+  "nota": "o home entra como parâmetro em vez de NSHomeDirectory()"
+ },
+ "WorkbenchConfigTests.testResolvedDirectoryWithoutCwdIsTheRoot": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::diretorio_resolvido_sem_cwd_e_a_raiz"
+  ]
+ },
+ "WorkbenchConfigTests.testTargetsAreOutgoingEdgesOnly": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::alvos_sao_so_as_arestas_de_saida"
+  ]
+ },
+ "WorkbenchIDTests.testLegacyFileGetsAnIDAndKeepsIt": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::arquivo_antigo_ganha_id_e_o_guarda"
+  ]
+ },
+ "WorkbenchIDTests.testNewIDIsEightHex": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::id_novo_tem_oito_hex_e_nao_repete"
+  ]
+ },
+ "WorkbenchIDTests.testRulesSurviveARoundTrip": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::regras_sobrevivem_a_gravar_e_reler",
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::todo_campo_da_bancada_vai_e_volta"
+  ]
+ },
+ "WorkbenchIDTests.testSameNameDifferentIDs": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::mesmo_nome_ids_diferentes"
+  ]
+ },
+ "WorkbenchIDTests.testStoredIDWins": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::id_gravado_vence"
+  ]
+ },
+ "WorkbenchLookupTests.testAddressSplitsOnTheFirstSlashOnly": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::endereco_parte_na_primeira_barra"
+  ],
+  "nota": "o split mora em commons::ids::Address::parse (retorna Err em vez de nil)"
+ },
+ "WorkbenchLookupTests.testIdSurvivesRemovalWhilePositionDoesNot": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::id_sobrevive_a_remocao_e_a_posicao_nao"
+  ]
+ },
+ "WorkbenchLookupTests.testIndexAndIdAreTwoWays": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::indice_e_id_andam_nos_dois_sentidos"
+  ]
+ },
+ "WorkbenchLookupTests.testOutOfRangeAndUnknownAreNilAndNotACrash": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::fora_da_faixa_e_desconhecido_sao_none_e_nao_pânico"
+  ]
+ },
+ "WorkbenchLookupTests.testRenameKeepsTheId": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::rename_mantem_o_id"
+  ]
+ },
+ "WorkbenchRemovalTests.testAllRemovedSucceeds": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::tudo_removido_tem_sucesso"
+  ]
+ },
+ "WorkbenchRemovalTests.testFailureKeepsGoingAndIsReported": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::falha_segue_adiante_e_e_relatada"
+  ]
+ },
+ "WorkbenchRemovalTests.testLeftoversCountAsRemovedAndGoToSweep": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::sobras_contam_como_removidas_e_vao_para_a_faxina"
+  ]
+ },
+ "WorkbenchRemovalTests.testNothingToRemoveSucceeds": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_clean.rs::nada_a_remover_tem_sucesso"
+  ]
+ },
+ "WorkbenchShellLayoutTests.testBarSpansFullWidthInEveryMode": {
+  "dart": [
+   "ui/test/features/home/home_shell_page_test.dart::a barra corre de borda a borda em todo modo"
+  ],
+  "nota": "geometria de view: a medida fica na UI (WorkbenchShell/NSView virou HomeShellPage)"
+ },
+ "WorkbenchShellLayoutTests.testOnlyContentYieldsToSidebar": {
+  "dart": [
+   "ui/test/features/home/home_shell_page_test.dart::só o conteúdo cede à barra lateral, e só no chat"
+  ],
+  "nota": "geometria de view: a medida fica na UI; no Flutter o canvas corre por baixo do vidro da barra lateral e só o chat cede"
+ },
+ "WorkbenchStoreTests.testBrokenNewFileDoesNotFallBackToLegacy": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::arquivo_novo_quebrado_nao_cai_no_antigo"
+  ]
+ },
+ "WorkbenchStoreTests.testEmptyListIsAStateAndDoesNotBringOldWorkbenchesBack": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::lista_vazia_e_um_estado_e_nao_traz_as_antigas_de_volta"
+  ]
+ },
+ "WorkbenchStoreTests.testLegacyFileCountsOnlyWhenTheNewOneNeverExisted": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::arquivo_antigo_so_vale_quando_o_novo_nunca_existiu"
+  ]
+ },
+ "WorkbenchStoreTests.testNewFileWinsOverLegacy": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::o_arquivo_novo_vence_o_antigo"
+  ]
+ },
+ "WorkbenchStoreTests.testNothingOnDiskStartsEmpty": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::sem_nada_em_disco_comeca_vazio"
+  ]
+ },
+ "WorkbenchTabOrderTests.testClosedWorkbenchHasNoOrder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::bancada_fechada_nao_tem_ordem"
+  ]
+ },
+ "WorkbenchTabOrderTests.testFileWithoutTheKeyStillLoads": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::arquivo_sem_a_chave_carrega"
+  ]
+ },
+ "WorkbenchTabOrderTests.testRestoreOrderFollowsTheSavedPositions": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::reabrir_segue_as_posicoes_gravadas"
+  ]
+ },
+ "WorkbenchTabOrderTests.testTabOrderSurvivesARoundTrip": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::a_ordem_da_aba_vai_e_volta"
+  ]
+ },
+ "WorkbenchTabTests.testActivityIsMatchedByWorkbenchName": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::atividade_casa_pelo_nome_da_bancada"
+  ]
+ },
+ "WorkbenchTabTests.testAllThreeBadgesShowTogetherInAFixedOrder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::os_tres_avisos_juntos_em_ordem_fixa"
+  ],
+  "dart": [
+   "ui/test/features/tabs/workbench_tabs_bar_test.dart::os avisos saem na ordem fixa: trabalhando, atenção, pronto"
+  ]
+ },
+ "WorkbenchTabTests.testBackgroundShowsTheHourglassNotTheSpinner": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::fundo_mostra_a_ampulheta_e_nao_o_spinner"
+  ]
+ },
+ "WorkbenchTabTests.testClosedWorkbenchesAreNotTabs": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::bancada_fechada_nao_e_aba"
+  ]
+ },
+ "WorkbenchTabTests.testClosingATabPicksTheNeighbour": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::fechar_uma_aba_escolhe_a_vizinha"
+  ]
+ },
+ "WorkbenchTabTests.testQuietWorkbenchHasNoBadge": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::bancada_quieta_nao_tem_selo"
+  ]
+ },
+ "WorkbenchTabTests.testTabOfARemovedWorkbenchDisappears": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::aba_de_bancada_removida_some"
+  ]
+ },
+ "WorkbenchTabTests.testTabsFollowTheOrderYouOpenedThem": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::abas_seguem_a_ordem_em_que_voce_abriu"
+  ]
+ },
+ "WorkbenchTabTests.testWorkingAndDoneAreDifferentBadges": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::trabalhando_e_terminou_sao_selos_diferentes"
+  ]
+ },
+ "WorkbenchTabsBarTests.testEmptyBarHidesItself": {
+  "dart": [
+   "ui/test/features/tabs/tabs_page_test.dart::com menos de duas abas a faixa some; com duas, aparece"
+  ],
+  "nota": "o Dart é mais estrito: some com menos de duas abas (o Swift só com zero); lista vazia some e duas aparecem nos dois"
+ },
+ "WorkbenchTabsBarTests.testEveryTabGetsAVisiblePill": {
+  "dart": [
+   "ui/test/features/tabs/workbench_tabs_bar_test.dart::toda aba ganha uma pastilha visível, dentro da faixa"
+  ],
+  "nota": "geometria de view: a medida fica na UI"
+ },
+ "WorkbenchTabsBarTests.testMovingATabRearrangesThePills": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::moved_tira_e_poe_de_volta"
+  ],
+  "dart": [
+   "ui/test/features/tabs/workbench_tabs_bar_test.dart::arrastar além do limiar reordena e avisa a ordem final",
+   "ui/test/features/tabs/tab_drag_layout_test.dart::moved tira de um lugar e põe no outro"
+  ]
+ },
+ "WorkbenchTabsBarTests.testMovingToAnImpossiblePlaceDoesNothing": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::moved_tira_e_poe_de_volta",
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::indice_desconhecido_e_inerte"
+  ],
+  "dart": [
+   "ui/test/features/tabs/tab_drag_layout_test.dart::índice desconhecido é inerte: bancada que saiu no meio do arrasto"
+  ],
+  "nota": "o Swift move por id (nil para id desconhecido); o porte move por índice (moved devolve a lista igual para índice fora da faixa)"
+ },
+ "WorkbenchTabsBarTests.testReorderingFromTheAppKeepsTheSameViews": {
+  "dart": [
+   "ui/test/features/tabs/workbench_tabs_bar_test.dart::a ordem que vem do core reordena sem recriar as pastilhas"
+  ],
+  "nota": "identidade de widget: só faz sentido na UI"
+ },
+ "WorkbenchTabsBarTests.testStateChangeKeepsTheSameViews": {
+  "dart": [
+   "ui/test/features/tabs/workbench_tabs_bar_test.dart::trocar só o estado não remonta as pastilhas"
+  ],
+  "nota": "identidade de widget: só faz sentido na UI"
+ },
+ "WorkbenchTabsBarTests.testTabsAreLaidOutSideBySide": {
+  "dart": [
+   "ui/test/features/tabs/workbench_tabs_bar_test.dart::as pastilhas ficam lado a lado, sem empilhar no mesmo x"
+  ],
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::deslocamentos_empilham_com_o_vao"
+  ],
+  "nota": "a conta dos x é do core (tab_offsets); a medida na tela é da UI"
+ },
+ "WorkbenchTemplateTests.testCaptureStripsConversationAndReducesWebToOrigin": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::captura_tira_a_conversa_e_reduz_o_web_a_origem",
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::origem_da_url_do_template"
+  ]
+ },
+ "WorkbenchTemplateTests.testInstantiateZeroesConversationAgain": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::instanciar_zera_a_conversa_de_novo"
+  ]
+ },
+ "WorktreeRemoveTests.testFinishesTheRemovalGitGaveUpOn": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::termina_a_remocao_em_que_o_git_desistiu"
+  ]
+ },
+ "WorktreeRemoveTests.testKeepsTheFolderWhileTheWorktreeIsStillRegistered": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::guarda_a_pasta_enquanto_a_worktree_esta_registrada"
+  ]
+ },
+ "WorktreeRemoveTests.testNothingToFinishWhenTheFolderIsAlreadyGone": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::nada_a_terminar_quando_a_pasta_ja_sumiu"
+  ]
+ },
+ "WorktreeRemoveTests.testRegistrationLookupSurvivesSymlinkedPaths": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::a_busca_do_registro_sobrevive_a_caminho_com_symlink"
+  ],
+  "nota": "o teste Rust só roda em macOS (/var -> /private/var); em outros sistemas retorna sem verificar"
+ },
+ "WorktreeRemoveTests.testRemovalFinishesEvenWithSomebodyWritingInTheFolder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::a_remocao_termina_mesmo_com_alguem_escrevendo_na_pasta"
+  ]
+ },
+ "WorktreeRemoveTests.testRemovesTheFolderAndTheRegistration": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::remove_a_pasta_e_o_registro"
+  ]
+ },
+ "WorktreeRemoveTests.testReportsLeftoversWhenNobodyCanDeleteTheFolder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/worktree/tests.rs::avisa_das_sobras_quando_ninguem_consegue_apagar_a_pasta"
+  ]
+ }
+}

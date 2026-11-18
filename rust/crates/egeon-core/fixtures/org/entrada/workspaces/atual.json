@@ -1,0 +1,16 @@
+[
+  {
+    "collapsed" : true,
+    "icon" : "icon.png",
+    "id" : "w-duck",
+    "lastConfigs" : { "claude" : "~/.claude-agro", "codex" : "~/.codex" },
+    "name" : "Duck",
+    "projects" : [
+      { "id" : "p-deck", "name" : "deck", "path" : "~/repos/deck", "collapsed" : true },
+      { "id" : "p-guardado", "name" : "velho", "path" : "~/repos/velho", "stored" : true },
+      { "id" : "p-multi", "members" : ["p-deck", "p-guardado"], "name" : "conjunto", "path" : "~/.egeon/projects/p-multi" }
+    ],
+    "storedOpen" : true
+  },
+  { "id" : "w-agro", "name" : "Agro", "projects" : [] }
+]
