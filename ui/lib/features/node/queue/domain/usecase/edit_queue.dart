@@ -17,9 +17,9 @@ class EditQueue {
       _repository.toggleDone(nodeId, id);
   Future<void> reopen(String nodeId, String id) =>
       _repository.reopen(nodeId, id);
-  Future<String?> send(String nodeId, {String? id}) =>
+  Future<void> send(String nodeId, {String? id}) =>
       _repository.send(nodeId, id: id);
-  Future<String?> reply(String nodeId, String id, String text) =>
+  Future<void> reply(String nodeId, String id, String text) =>
       _repository.reply(nodeId, id, text);
   Future<void> setAuto(String nodeId, {required bool on}) =>
       _repository.setAuto(nodeId, on: on);

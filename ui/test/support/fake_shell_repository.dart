@@ -1,24 +1,24 @@
 import 'dart:async';
 
 import 'package:egeon_deck/core/domain/entities/view_mode.dart';
-import 'package:egeon_deck/features/home/domain/entities/shell_state.dart';
+import 'package:egeon_deck/features/home/domain/entities/shell_snapshot.dart';
 import 'package:egeon_deck/features/home/domain/repository/shell_repository.dart';
 
 /// A casca falsa: o teste empurra estados e lê os gestos que a UI mandou.
 class FakeShellRepository implements ShellRepository {
-  final _states = StreamController<ShellState>.broadcast();
+  final _states = StreamController<ShellSnapshot>.broadcast();
   final views = <ViewMode>[];
   var settingsOpened = 0;
   var askedAgain = 0;
   var watchers = 0;
 
-  void push(ShellState state) => _states.add(state);
+  void push(ShellSnapshot state) => _states.add(state);
 
   @override
-  Stream<ShellState> watch() {
-    late StreamController<ShellState> controller;
-    StreamSubscription<ShellState>? inner;
-    controller = StreamController<ShellState>(
+  Stream<ShellSnapshot> watch() {
+    late StreamController<ShellSnapshot> controller;
+    StreamSubscription<ShellSnapshot>? inner;
+    controller = StreamController<ShellSnapshot>(
       onListen: () {
         watchers++;
         inner = _states.stream.listen(controller.add);

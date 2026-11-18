@@ -4,6 +4,7 @@ import '../entities/chat_completion.dart';
 import '../entities/chat_thread.dart';
 import '../entities/chat_update.dart';
 import 'chat_repository.dart';
+import '../errors/chat_error.dart';
 
 /// O chat falando com o core Rust pelo cliente único do socket: o tópico
 /// `chat/<bancada>` traz o diff de linhas, e os gestos viram `chat_step`,
@@ -15,15 +16,19 @@ class SocketChatRepository implements ChatRepository {
 
   final EgeonSocketClient _client;
 
+  /// Recusa e queda do socket viram [ChatError].
+  Future<EgeonMessage> _request(String cmd, [EgeonMessage args = const {}]) =>
+      _client
+          .request(cmd, args)
+          .failingAs(refused: ChatRefused.new, offline: ChatOffline.new);
+
   @override
   Stream<ChatUpdate> watch(String workbenchId) =>
       _client.subscribe('chat/$workbenchId').map(ChatUpdate.fromMap);
 
   @override
   Future<ChatThread> snapshot(String workbenchId) async {
-    final reply = await _client.request('chat_snapshot', {
-      'workbench': workbenchId,
-    });
+    final reply = await _request('chat_snapshot', {'workbench': workbenchId});
     return ChatThread(
       rev: reply['rev']! as int,
       blocks: [
@@ -37,7 +42,7 @@ class SocketChatRepository implements ChatRepository {
   /// clique.
   @override
   Future<String> newQueue(String workbenchId, {String? agent}) async {
-    final reply = await _client.request('chat_new_queue', {
+    final reply = await _request('chat_new_queue', {
       'workbench': workbenchId,
       'agent': ?agent,
     });
@@ -54,7 +59,7 @@ class SocketChatRepository implements ChatRepository {
 
   @override
   Future<void> loadMore(String workbenchId) =>
-      _client.request('chat_more', {'workbench': workbenchId});
+      _request('chat_more', {'workbench': workbenchId});
 
   @override
   Future<ChatCompletion> complete(
@@ -64,7 +69,7 @@ class SocketChatRepository implements ChatRepository {
     String? to,
     String? search,
   }) async => ChatCompletion.fromMap(
-    await _client.request('chat_complete', {
+    await _request('chat_complete', {
       'workbench': workbenchId,
       'text': text,
       'caret': caret,
@@ -75,7 +80,7 @@ class SocketChatRepository implements ChatRepository {
 
   @override
   Future<void> clear(String workbenchId) =>
-      _client.request('chat_clear', {'workbench': workbenchId});
+      _request('chat_clear', {'workbench': workbenchId});
 
   @override
   Future<void> answerPermission(
@@ -84,7 +89,7 @@ class SocketChatRepository implements ChatRepository {
     String? answer,
     String? choice,
     Map<String, List<String>>? answers,
-  }) => _client.request('permission_answer', {
+  }) => _request('permission_answer', {
     'workbench': workbenchId,
     'request': request,
     'answer': ?answer,
@@ -98,7 +103,7 @@ class SocketChatRepository implements ChatRepository {
     required List<String> to,
     required String text,
     String? quoteKey,
-  }) => _client.request('chat_send', {
+  }) => _request('chat_send', {
     'workbench': workbenchId,
     'to': to,
     'text': text,

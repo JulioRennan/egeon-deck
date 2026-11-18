@@ -1,11 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../domain/repository/terminal_repository.dart';
-import '../../domain/usecase/resize_terminal.dart';
-import '../../domain/usecase/send_terminal_input.dart';
-import '../../domain/usecase/watch_terminal.dart';
-import '../../domain/usecase/watch_terminal_effects.dart';
+import '../../../../../core/adapters/injector.dart';
 import '../cubit/terminal_cubit.dart';
 import '../page/terminal_page.dart';
 
@@ -20,16 +16,9 @@ class TerminalBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final repository = context.read<TerminalRepository>();
     return BlocProvider(
       key: ValueKey(nodeId),
-      create: (_) => TerminalCubit(
-        nodeId: nodeId,
-        watch: WatchTerminal(repository),
-        input: SendTerminalInput(repository),
-        resize: ResizeTerminal(repository),
-        effects: WatchTerminalEffects(repository),
-      ),
+      create: (_) => inject<TerminalCubit>(nodeId),
       child: TerminalPage(autofocus: autofocus),
     );
   }

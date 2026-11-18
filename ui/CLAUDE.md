@@ -48,6 +48,20 @@ fvm flutter build macos --debug
 
 `analyze` e `test` passam antes de todo commit.
 
+## Desenvolvimento
+
+Como no Swift: dois apps lado a lado (decisão 41).
+
+| | estável | dev |
+|---|---|---|
+| bundle | `ui/build/EgeonDeck Next.app` | `ui/build/EgeonDeck Next Dev.app` |
+| config · socket · log | `~/.egeon-next/` | `~/.egeon-next-dev/` |
+
+- `ui/scripts/dev.sh` recompila, derruba e reabre o DEV (`dev.sh release stable`
+  para o outro). `ui/scripts/make.sh [debug|release] [stable|dev]` só monta.
+- Conferir pelo socket: `curl --unix-socket ~/.egeon-next-dev/sock http://eg/targets`.
+- `EGEON_HOME` vence o flavor (testes e o e2e usam pasta temporária).
+
 ## Regras que mais pegam
 
 - **Sem gerador de código.** Nada de `freezed`, `json_serializable`,
@@ -57,7 +71,21 @@ fvm flutter build macos --debug
 - **Nenhuma feature importa lib externa direto.** Lib de UI ganha wrap em
   `commons/widgets`; as demais, em `core/adapters`.
 - **Um cliente de socket só**, em `core/adapters`. Nenhuma feature abre conexão.
+- **Dependências pelo injector** (`core/adapters/injector.dart`, sobre o
+  GetIt), por módulo: cada feature tem `di/<feature>_injection.dart`
+  (repositórios reais × domínio), e `lib/core/di/injection.dart` chama
+  todos e registra o do core do front. A página cria o cubit com
+  `BlocProvider(create: (_) => inject<XCubit>(…))`; nada de
+  `RepositoryProvider` nem `context.read` de repositório ou usecase. Fábrica
+  por padrão; único só com estado repartido. Teste: `injectFakes(…)`.
 - **O cubit é dono da assinatura:** abre ao nascer, cancela no `close()`.
+- **Estado é do cubit:** `<x>_state.dart` como `part of` do cubit, nunca em
+  `domain/entities`. Fases que se excluem são `sealed class` e o widget faz
+  `switch` exaustivo.
+- **Erro tipado por feature:** `domain/errors/<feature>_error.dart` (sealed). O
+  repositório converte a falha do socket (`failingAs`) com o texto do core
+  dentro; o cubit captura `on <F>Error`. Nada de `catch` genérico virando
+  `String`.
 - **Um cubit por item** (card, linha da barra lateral), não um por tela.
 - **Page só compõe widgets.** Widget reutilizado por outra feature vai para
   `commons/widgets`.

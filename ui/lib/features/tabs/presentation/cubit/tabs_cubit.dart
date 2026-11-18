@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/workbench_tab.dart';
+import '../../domain/errors/tabs_error.dart';
 import '../../domain/usecase/close_tab.dart';
 import '../../domain/usecase/pick_tab.dart';
 import '../../domain/usecase/reorder_tabs.dart';
 import '../../domain/usecase/watch_tabs.dart';
-import 'tabs_state.dart';
+
+part 'tabs_state.dart';
 
 /// Dono da assinatura das abas: abre ao nascer e cancela no `close()`. Cada
 /// evento do core traz a lista inteira.
@@ -62,7 +64,8 @@ class TabsCubit extends Cubit<TabsState> {
   }
 
   /// Gesto é "mande e siga": o que vale é o estado que o core devolve.
-  void _fire(Future<void> future) => unawaited(future.catchError((_) {}));
+  void _fire(Future<void> future) =>
+      unawaited(future.catchError((_) {}, test: (error) => error is TabsError));
 
   @override
   Future<void> close() async {

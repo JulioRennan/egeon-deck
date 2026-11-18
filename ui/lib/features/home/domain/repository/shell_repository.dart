@@ -1,10 +1,10 @@
 import '../../../../core/domain/entities/view_mode.dart';
-import '../entities/shell_state.dart';
+import '../entities/shell_snapshot.dart';
 
 /// A casca: qual bancada está na tela e em que modo. O core Rust decide; aqui
 /// se pergunta e se manda o gesto.
 abstract interface class ShellRepository {
-  Stream<ShellState> watch();
+  Stream<ShellSnapshot> watch();
 
   Future<void> setView(ViewMode mode);
 

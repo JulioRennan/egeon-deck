@@ -4,56 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/worktree_info.dart';
 import '../../domain/entities/worktree_plan.dart';
+import '../../domain/errors/workbench_error.dart';
 import '../../domain/usecase/bench_creation.dart';
 
-/// O formulário de worktree: o que o core respondeu e o que a pessoa escolheu.
-class WorktreeFormState {
-  const WorktreeFormState({
-    this.info,
-    this.branch = '',
-    this.plan,
-    this.destination = WorktreeDestination.newWorkbench,
-    this.edited = const {},
-  });
-
-  /// Nulo até o core responder ao abrir.
-  final WorktreeInfo? info;
-  final String branch;
-
-  /// O veredito para [branch]; nulo enquanto pergunta ou sem branch.
-  final WorktreePlan? plan;
-  final WorktreeDestination destination;
-
-  /// A branch que a pessoa escreveu à mão para um terminal. Sem entrada, a
-  /// linha acompanha a da bancada.
-  final Map<String, String> edited;
-
-  WorktreeFormState copyWith({
-    WorktreeInfo? info,
-    String? branch,
-    WorktreePlan? plan,
-    bool clearPlan = false,
-    WorktreeDestination? destination,
-    Map<String, String>? edited,
-  }) => WorktreeFormState(
-    info: info ?? this.info,
-    branch: branch ?? this.branch,
-    plan: clearPlan ? null : plan ?? this.plan,
-    destination: destination ?? this.destination,
-    edited: edited ?? this.edited,
-  );
-
-  /// O que a linha do terminal mostra: o que foi escrito, ou a branch dele.
-  String rowText(NodeWorktree node) => edited[node.node] ?? node.branch ?? '';
-
-  /// O mapa que vai ao `worktree`: só terminais em repositório, com a branch
-  /// que difere da da bancada.
-  Map<String, String> get nodes => {
-    for (final node in info?.nodes ?? const <NodeWorktree>[])
-      if (node.editable && rowText(node).trim().isNotEmpty)
-        node.node: rowText(node).trim(),
-  };
-}
+part 'worktree_form_state.dart';
 
 /// Dono do formulário de worktree. Pergunta o resumo ao abrir e o veredito a
 /// cada mudança de branch, esperando a pessoa parar de digitar e descartando a
@@ -63,7 +17,7 @@ class WorktreeFormCubit extends Cubit<WorktreeFormState> {
     required this.benchId,
     required this._actions,
     this.debounce = const Duration(milliseconds: 250),
-  }) : super(const WorktreeFormState()) {
+  }) : super(const WorktreeFormOpening()) {
     unawaited(_open());
   }
 
@@ -76,9 +30,17 @@ class WorktreeFormCubit extends Cubit<WorktreeFormState> {
     try {
       final info = await _actions.info(benchId);
       if (isClosed) return;
-      emit(state.copyWith(info: info, branch: info.suggestedBranch));
+      emit(
+        WorktreeFormReady(
+          info: info,
+          branch: info.suggestedBranch,
+          plan: state.plan,
+          destination: state.destination,
+          edited: state.edited,
+        ),
+      );
       await _ask(info.suggestedBranch);
-    } on Object {
+    } on WorkbenchError {
       // Sem o resumo o formulário segue vazio; o gesto de criar mostra o erro.
     }
   }
@@ -97,7 +59,7 @@ class WorktreeFormCubit extends Cubit<WorktreeFormState> {
       final plan = await _actions.plan(benchId, branch.trim());
       if (isClosed || state.branch.trim() != branch.trim()) return;
       emit(state.copyWith(plan: plan));
-    } on Object {
+    } on WorkbenchError {
       // O veredito é só aviso: sem ele, o botão continua valendo.
     }
   }

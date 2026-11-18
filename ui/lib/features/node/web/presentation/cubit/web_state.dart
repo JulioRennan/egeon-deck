@@ -1,16 +1,27 @@
-import '../../../../../commons/widgets/web_surface.dart';
-import '../../domain/entities/web_node_state.dart';
+part of 'web_cubit.dart';
 
-class WebState {
-  const WebState({this.node, this.page});
+/// O nó web: esperando o core dizer qual página e perfil, ou com eles.
+sealed class WebState {
+  const WebState();
+}
 
-  final WebNodeState? node;
+/// O core ainda não mandou o nó: sem página, sem perfil.
+final class WebWaiting extends WebState {
+  const WebWaiting();
+}
+
+/// O que o core guardou do nó e, depois que a página nativa abre, onde ela
+/// está.
+final class WebShown extends WebState {
+  const WebShown({required this.node, this.page});
+
+  final WebNode node;
   final WebPageState? page;
 
   /// O que a barra de endereço mostra: a página onde ela está agora, senão o
   /// que o core guardou.
-  String get address => page?.url ?? node?.url ?? '';
+  String get address => page?.url ?? node.url;
 
-  WebState copyWith({WebNodeState? node, WebPageState? page}) =>
-      WebState(node: node ?? this.node, page: page ?? this.page);
+  WebShown copyWith({WebNode? node, WebPageState? page}) =>
+      WebShown(node: node ?? this.node, page: page ?? this.page);
 }

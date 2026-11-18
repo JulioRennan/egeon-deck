@@ -34,7 +34,7 @@ class ShellScreenControl implements ScreenControl {
   @override
   String? setLayout(String mode) {
     final wanted = ViewMode.values.where((m) => m.wire == mode);
-    if (wanted.isEmpty || shell.state.shell.bench == null) return null;
+    if (wanted.isEmpty || shell.state.snapshot.bench == null) return null;
     shell.setView(wanted.first);
     return wanted.first.wire;
   }
@@ -59,7 +59,7 @@ class ShellScreenControl implements ScreenControl {
 
   @override
   Future<Map<String, Object?>> geometry() async {
-    final bench = shell.state.shell.bench;
+    final bench = shell.state.snapshot.bench;
     if (bench == null) return {};
     // Em chat não há canvas montado: só o modo diz o que há na tela.
     final probe = canvas();
@@ -93,7 +93,7 @@ class ShellScreenControl implements ScreenControl {
       // desenhada, e a captura de um card exige o card desenhado.
       if (card.length != 2 ||
           probe == null ||
-          card.first != shell.state.shell.bench?.name) {
+          card.first != shell.state.snapshot.bench?.name) {
         return "erro: nó desconhecido '$target'";
       }
       return probe.snapshot(card[1], file);

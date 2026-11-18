@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/processes_view.dart';
+import '../../domain/errors/processes_error.dart';
 import '../../domain/usecase/manage_processes.dart';
-import 'processes_state.dart';
+
+part 'processes_state.dart';
 
 /// O cubit da janela Processos: varre ao abrir e a cada [every], e solta o
 /// relógio no `close()`. A lista, o resumo e a ordem vêm prontos do core.
@@ -12,7 +14,7 @@ class ProcessesCubit extends Cubit<ProcessesState> {
   ProcessesCubit({
     required this._manage,
     this.every = const Duration(seconds: 3),
-  }) : super(const ProcessesState()) {
+  }) : super(const ProcessesScanning()) {
     unawaited(refresh());
     _timer = Timer.periodic(every, (_) => unawaited(refresh()));
   }
@@ -28,12 +30,18 @@ class ProcessesCubit extends Cubit<ProcessesState> {
     _scanning = true;
     try {
       _show(await _manage.list());
-    } on Object {
+    } on ProcessesError {
       // A próxima varredura tenta de novo.
     } finally {
       _scanning = false;
     }
   }
+
+  /// O que está escolhido; nada antes da primeira lista.
+  Set<int> get _selected => switch (state) {
+    ProcessesScanning() => const {},
+    ProcessesLoaded(:final selected) => selected,
+  };
 
   /// Mantém a seleção pelo pid: a lista se refaz a cada varredura, e o que
   /// você marcou continua marcado enquanto o processo existir.
@@ -41,51 +49,55 @@ class ProcessesCubit extends Cubit<ProcessesState> {
     if (isClosed) return;
     final alive = {for (final r in view.rows) r.pid};
     emit(
-      state.copyWith(
+      ProcessesLoaded(
         view: view,
-        loaded: true,
-        selected: state.selected.where(alive.contains).toSet(),
+        filter: state.filter,
+        selected: _selected.where(alive.contains).toSet(),
       ),
     );
   }
 
   void setFilter(ProcessFilter filter) {
-    final visible = {
-      for (final r
-          in filter == ProcessFilter.orphans
-              ? state.view.rows.where((r) => r.orphan)
-              : state.view.rows)
-        r.pid,
-    };
-    emit(
-      state.copyWith(
-        filter: filter,
-        selected: state.selected.where(visible.contains).toSet(),
-      ),
-    );
+    switch (state) {
+      case ProcessesScanning():
+        emit(ProcessesScanning(filter: filter));
+      case final ProcessesLoaded loaded:
+        final shown = loaded.copyWith(filter: filter);
+        final visible = {for (final r in shown.rows) r.pid};
+        emit(
+          shown.copyWith(
+            selected: loaded.selected.where(visible.contains).toSet(),
+          ),
+        );
+    }
   }
 
   /// Clique numa linha: escolhe só ela; com [additive] (⌘ ou Ctrl) liga e
   /// desliga; com [range] (⇧) vai da última escolhida até ela.
   void select(int pid, {bool additive = false, bool range = false}) {
-    final rows = state.rows.map((r) => r.pid).toList();
-    if (range && state.selected.isNotEmpty) {
-      final anchor = rows.indexWhere(state.selected.contains);
+    if (state case final ProcessesLoaded loaded) {
+      emit(loaded.copyWith(selected: _picked(loaded, pid, additive, range)));
+    }
+  }
+
+  Set<int> _picked(ProcessesLoaded loaded, int pid, bool additive, bool range) {
+    final selected = loaded.selected;
+    final rows = loaded.rows.map((r) => r.pid).toList();
+    if (range && selected.isNotEmpty) {
+      final anchor = rows.indexWhere(selected.contains);
       final to = rows.indexOf(pid);
       if (anchor >= 0 && to >= 0) {
         final from = anchor < to ? anchor : to;
         final end = anchor < to ? to : anchor;
-        emit(state.copyWith(selected: rows.sublist(from, end + 1).toSet()));
-        return;
+        return rows.sublist(from, end + 1).toSet();
       }
     }
     if (additive) {
-      final next = {...state.selected};
+      final next = {...selected};
       next.contains(pid) ? next.remove(pid) : next.add(pid);
-      emit(state.copyWith(selected: next));
-      return;
+      return next;
     }
-    emit(state.copyWith(selected: {pid}));
+    return {pid};
   }
 
   /// A pergunta de encerrar os órfãos, como o core a escreve; nula se ele não
@@ -94,12 +106,12 @@ class ProcessesCubit extends Cubit<ProcessesState> {
 
   /// A pergunta de encerrar os escolhidos, como o core a escreve.
   Future<ProcessConfirm?> confirmKill() =>
-      _ask(() => _manage.confirmKill(state.selected.toList()));
+      _ask(() => _manage.confirmKill(_selected.toList()));
 
   Future<ProcessConfirm?> _ask(Future<ProcessConfirm> Function() ask) async {
     try {
       return await ask();
-    } on Object {
+    } on ProcessesError {
       return null;
     }
   }
@@ -109,14 +121,14 @@ class ProcessesCubit extends Cubit<ProcessesState> {
 
   /// Os escolhidos têm SIGTERM.
   Future<void> killSelected() {
-    final pids = state.selected.toList();
+    final pids = _selected.toList();
     return _run(() => _manage.kill(pids));
   }
 
   Future<void> _run(Future<ProcessesView> Function() action) async {
     try {
       _show(await action());
-    } on Object {
+    } on ProcessesError {
       // A varredura seguinte mostra o que de fato aconteceu.
     }
   }

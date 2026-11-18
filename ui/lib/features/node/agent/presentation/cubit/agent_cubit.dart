@@ -4,10 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/agent_status.dart';
 import '../../domain/entities/model_choice.dart';
+import '../../domain/errors/agent_error.dart';
 import '../../domain/usecase/choose_agent_option.dart';
 import '../../domain/usecase/clear_agent.dart';
 import '../../domain/usecase/watch_agent.dart';
-import 'agent_state.dart';
+
+part 'agent_state.dart';
 
 /// Um cubit por agente. É dono da assinatura da faixa do cabeçalho: abre ao
 /// nascer e cancela no `close()`. O core manda o estado inteiro a cada
@@ -18,7 +20,7 @@ class AgentCubit extends Cubit<AgentState> {
     required WatchAgent watch,
     required this._choose,
     required this._clear,
-  }) : super(const AgentState()) {
+  }) : super(const AgentWaiting()) {
     _subscription = watch(nodeId).listen(_onStatus);
   }
 
@@ -27,7 +29,7 @@ class AgentCubit extends Cubit<AgentState> {
   final ClearAgent _clear;
   StreamSubscription<AgentStatus>? _subscription;
 
-  void _onStatus(AgentStatus status) => emit(AgentState(status: status));
+  void _onStatus(AgentStatus status) => emit(AgentShown(status));
 
   void chooseModel(String? model) => _fire(_choose(nodeId, ModelPick(model)));
 
@@ -44,7 +46,9 @@ class AgentCubit extends Cubit<AgentState> {
 
   /// Comando é "mande e siga": o estado que o core mandar a seguir já
   /// corrige a tela se ele recusar.
-  void _fire(Future<void> future) => unawaited(future.catchError((_) {}));
+  void _fire(Future<void> future) => unawaited(
+    future.catchError((_) {}, test: (error) => error is AgentError),
+  );
 
   @override
   Future<void> close() async {

@@ -13,6 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/pasted_image_fake.dart';
 import '../../../support/pump.dart';
 
+import 'package:egeon_deck/features/node/queue/domain/errors/queue_error.dart';
+
 void main() {
   Future<(QueueCubit, InMemoryQueueRepository)> make({
     PromptQueue? queue,
@@ -82,8 +84,14 @@ void main() {
     await cubit.create(text: 'a');
     await pump();
     await cubit.send(id: cubit.state.queue.items.single.id);
-    expect(cubit.state.notice, contains('Ligue a fila'));
-    expect(cubit.state.shownNotice, cubit.state.notice);
+    expect(
+      cubit.state.failure?.error,
+      isA<QueueRefused>().having(
+        (e) => e.message,
+        'message',
+        contains('Ligue a fila'),
+      ),
+    );
     await cubit.close();
   });
 
@@ -97,7 +105,7 @@ void main() {
     expect(item.status, ItemStatus.sent);
     expect(item.locked, isTrue);
     expect(item.sentTo, 'dev');
-    expect(cubit.state.notice, isNull);
+    expect(cubit.state.failure, isNull);
     await cubit.close();
   });
 
@@ -276,5 +284,5 @@ void main() {
 class _FailingQueueRepository extends InMemoryQueueRepository {
   @override
   Future<String> add(String nodeId, {String text = '', String? after}) =>
-      Future.error(StateError('core fora'));
+      Future.error(const QueueOffline());
 }

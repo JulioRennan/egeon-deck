@@ -1,5 +1,5 @@
 import 'package:egeon_deck/features/update/domain/entities/app_effect.dart';
-import 'package:egeon_deck/features/update/domain/entities/app_state.dart';
+import 'package:egeon_deck/features/update/domain/entities/app_snapshot.dart';
 import 'package:egeon_deck/features/update/domain/repository/socket_app_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -29,7 +29,7 @@ void main() {
         withoutId(commands['subscribe_app']!),
       );
       harness.connection.say(events['app_idle']!);
-      final AppState state = await first;
+      final AppSnapshot state = await first;
 
       expect(state.update.phase, UpdatePhase.idle);
       expect(state.update.menu, 'Procurar atualizações…');
@@ -54,7 +54,7 @@ void main() {
     });
 
     test('efeito não vira estado', () async {
-      final seen = <AppState>[];
+      final seen = <AppSnapshot>[];
       final sub = repository.watch().listen(seen.add);
       await pump();
       harness.connection.say(events['app_terminate']!);

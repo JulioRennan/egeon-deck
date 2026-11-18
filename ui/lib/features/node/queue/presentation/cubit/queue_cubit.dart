@@ -5,11 +5,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/prompt_queue.dart';
 import '../../domain/entities/queue_effect.dart';
+import '../../domain/errors/queue_error.dart';
 import '../../domain/repository/queue_repository.dart';
 import '../../domain/usecase/edit_queue.dart';
 import '../../domain/usecase/watch_queue.dart';
 import '../../domain/usecase/watch_queue_effects.dart';
-import 'queue_state.dart';
+
+part 'queue_state.dart';
 
 /// Um cubit por fila (um por nó). É dono da assinatura: abre ao nascer e
 /// cancela no `close()`. A fila inteira vem do core a cada mudança; daqui só
@@ -83,7 +85,7 @@ class QueueCubit extends Cubit<QueueState> {
     final String id;
     try {
       id = await _edit.add(nodeId, text: text, after: after);
-    } on Object {
+    } on QueueError {
       // Core fora: a tarefa não nasceu, e o próximo estado dele corrige a tela.
       return;
     }
@@ -128,7 +130,7 @@ class QueueCubit extends Cubit<QueueState> {
     try {
       final id = await _edit.attachLoose(nodeId, images, open: state.expanded);
       if (id.isNotEmpty) expand(id);
-    } on Object {
+    } on QueueError {
       return;
     }
   }
@@ -155,34 +157,43 @@ class QueueCubit extends Cubit<QueueState> {
 
   // ---- mandar --------------------------------------------------------------
 
-  Future<void> send({String? id}) async => _report(
-    await _edit.send(nodeId, id: id).catchError((_) => 'Falha ao enviar'),
-  );
+  Future<void> send({String? id}) =>
+      _deliver(_edit.send(nodeId, id: id), reply: false);
 
-  Future<void> reply(String id, String text) async => _report(
-    await _edit.reply(nodeId, id, text).catchError((_) => 'Falha ao responder'),
-  );
+  Future<void> reply(String id, String text) =>
+      _deliver(_edit.reply(nodeId, id, text), reply: true);
+
+  Future<void> _deliver(Future<void> sent, {required bool reply}) async {
+    try {
+      await sent;
+      _report(null);
+    } on QueueError catch (error) {
+      _report(QueueSendFailure(error, reply: reply));
+    }
+  }
 
   void setAuto({required bool on}) => _fire(_edit.setAuto(nodeId, on: on));
 
   void setTarget(String target) => _fire(_edit.setTarget(nodeId, target));
 
   /// O erro fica seis segundos e dá lugar ao que a fila diz de si.
-  void _report(String? error) {
+  void _report(QueueSendFailure? failure) {
     _noticeTimer?.cancel();
     if (isClosed) return;
-    emit(state.copyWith(notice: () => error));
-    if (error == null) return;
+    emit(state.copyWith(failure: () => failure));
+    if (failure == null) return;
     _noticeTimer = Timer(const Duration(seconds: 6), () {
-      if (!isClosed && state.notice == error) {
-        emit(state.copyWith(notice: () => null));
+      if (!isClosed && state.failure == failure) {
+        emit(state.copyWith(failure: () => null));
       }
     });
   }
 
   /// Comando é "mande e siga": o estado que o core mandar a seguir corrige a
   /// tela se ele recusar.
-  void _fire(Future<void> future) => unawaited(future.catchError((_) {}));
+  void _fire(Future<void> future) => unawaited(
+    future.catchError((_) {}, test: (error) => error is QueueError),
+  );
 
   @override
   Future<void> close() async {

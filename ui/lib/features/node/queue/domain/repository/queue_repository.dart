@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../entities/prompt_queue.dart';
 import '../entities/queue_effect.dart';
+import '../errors/queue_error.dart';
 
 /// Um print colado ou solto na fila: o nome que ele tinha e os bytes.
 class PastedImage {
@@ -37,12 +38,12 @@ abstract interface class QueueRepository {
   /// Reabre uma tarefa fechada.
   Future<void> reopen(String nodeId, String id);
 
-  /// Manda ao agente ligado. Devolve por que não foi (sem ligação, falha), ou
-  /// nulo quando foi. Sem [id], a próxima pendente.
-  Future<String?> send(String nodeId, {String? id});
+  /// Manda ao agente ligado; sem [id], a próxima pendente. Recusa (sem
+  /// ligação, agente ocupado) vem como [QueueRefused] com o texto do core.
+  Future<void> send(String nodeId, {String? id});
 
-  /// Responde a uma pergunta do agente, ou comenta. Mesmo retorno de [send].
-  Future<String?> reply(String nodeId, String id, String text);
+  /// Responde a uma pergunta do agente, ou comenta. Falha como [send].
+  Future<void> reply(String nodeId, String id, String text);
 
   Future<void> setAuto(String nodeId, {required bool on});
   Future<void> setTarget(String nodeId, String target);

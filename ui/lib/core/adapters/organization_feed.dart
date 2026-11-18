@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import '../domain/entities/command_failed.dart';
 import '../domain/entities/organization.dart';
 import 'egeon_socket_client.dart';
 
@@ -51,15 +50,8 @@ class OrganizationFeed {
     out.onCancel = inner.cancel;
   });
 
-  /// Manda o comando; recusa do core vira `CommandFailed` com o texto dele.
-  Future<EgeonMessage> command(
-    String cmd, [
-    EgeonMessage args = const {},
-  ]) async {
-    try {
-      return await _client.request(cmd, args);
-    } on EgeonCommandError catch (error) {
-      throw CommandFailed('${error.reply['error'] ?? 'O core recusou.'}');
-    }
-  }
+  /// Manda o comando. A recusa do core e a queda chegam como as do cliente;
+  /// quem converte é o repositório.
+  Future<EgeonMessage> command(String cmd, [EgeonMessage args = const {}]) =>
+      _client.request(cmd, args);
 }

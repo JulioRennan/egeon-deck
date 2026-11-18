@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:egeon_deck/core/domain/entities/command_failed.dart';
+import 'package:egeon_deck/features/workbench/domain/errors/workbench_error.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/bench_template.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/removal_plan.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/worktree_info.dart';
@@ -19,7 +19,7 @@ class FakeWorkbenchRepository implements WorkbenchRepository {
 
   Future<T> _run<T>(String entry, T value) async {
     final reason = refuse;
-    if (reason != null) throw CommandFailed(reason);
+    if (reason != null) throw WorkbenchRefused(reason);
     log.add(entry);
     return value;
   }

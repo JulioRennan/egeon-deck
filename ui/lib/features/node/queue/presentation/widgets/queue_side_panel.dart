@@ -11,6 +11,7 @@ import 'queue_body.dart';
 class QueueSidePanel extends StatefulWidget {
   const QueueSidePanel({
     required this.thread,
+    required this.workbenchId,
     required this.queueNodeId,
     required this.onWidth,
     required this.onClose,
@@ -21,6 +22,9 @@ class QueueSidePanel extends StatefulWidget {
   static const gap = 16.0;
 
   final Widget thread;
+
+  /// A bancada da fila: os comandos dela vão por esta bancada.
+  final String workbenchId;
   final String queueNodeId;
   final double? preferredWidth;
   final ValueChanged<double?> onWidth;
@@ -79,6 +83,7 @@ class _QueueSidePanelState extends State<QueueSidePanel> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: QueueBody(
+                  workbenchId: widget.workbenchId,
                   nodeId: widget.queueNodeId,
                   onClose: widget.onClose,
                 ),

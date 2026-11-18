@@ -1,23 +1,20 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../commons/widgets/standard_dialogs.dart';
-import '../../../../core/adapters/egeon_socket_client.dart'
-    show EgeonDisconnected;
-import '../../../../core/domain/entities/command_failed.dart';
+import '../../../../core/adapters/injector.dart';
 import '../../../workbench/domain/entities/bench_template.dart';
+import '../../../workbench/domain/errors/workbench_error.dart';
+import '../../../workspace/domain/errors/workspace_error.dart';
 import '../../../workbench/domain/entities/removal_plan.dart';
 import '../../../workbench/domain/usecase/bench_creation.dart';
 import '../../../workbench/presentation/widgets/new_bench_form.dart';
 import '../../../workbench/presentation/widgets/worktree_form.dart';
-import '../../../workbench/domain/repository/workbench_repository.dart';
 import '../../../workbench/domain/usecase/change_bench_color.dart';
 import '../../../workbench/domain/usecase/clear_workbench.dart';
 import '../../../workbench/domain/usecase/edit_workbench_rules.dart';
 import '../../../workbench/domain/usecase/remove_workbench.dart';
 import '../../../workbench/domain/usecase/rename_workbench.dart';
 import '../../../workbench/presentation/widgets/color_palette_dialog.dart';
-import '../../../workspace/domain/repository/workspace_repository.dart';
 import '../../../workspace/domain/usecase/remove_workspace.dart' as usecase;
 import '../../../workspace/domain/entities/workspace_draft.dart';
 import '../../../workspace/domain/usecase/create_project.dart';
@@ -64,38 +61,41 @@ Future<void> handleForm(BuildContext context, FormRequest request) async {
   }
 }
 
-/// Roda o gesto e mostra o que deu errado: a recusa do core com o texto dele, e
-/// qualquer outra falha (socket caído, resposta ilegível) com a mensagem dela.
+/// Roda o gesto e mostra o que deu errado: a recusa do core com o texto dele,
+/// e a queda do socket.
 Future<void> _guard(
   BuildContext context,
   Future<void> Function() action,
 ) async {
+  final String message;
   try {
     await action();
-  } on Exception catch (failure) {
-    if (!context.mounted) return;
-    await messageDialog(
-      context,
-      title: 'Não foi possível',
-      message: switch (failure) {
-        CommandFailed(:final message) => message,
-        EgeonDisconnected() => 'Sem conexão com o core. Tente de novo.',
-        _ => '$failure',
-      },
-    );
+    return;
+  } on WorkbenchError catch (failure) {
+    message = switch (failure) {
+      WorkbenchRefused(:final message) => message,
+      WorkbenchOffline() => _offline,
+    };
+  } on WorkspaceError catch (failure) {
+    message = switch (failure) {
+      WorkspaceRefused(:final message) => message,
+      WorkspaceOffline() => _offline,
+    };
   }
+  if (!context.mounted) return;
+  await messageDialog(context, title: 'Não foi possível', message: message);
 }
 
+const _offline = 'Sem conexão com o core. Tente de novo.';
+
 Future<void> _newBench(BuildContext context, NewBench request) async {
-  final repository = context.read<WorkbenchRepository>();
-  final picker = context.read<PathPicker>();
   var path = request.path;
-  path ??= await picker.folder(prompt: 'Escolher');
+  path ??= await inject<PathPicker>().folder(prompt: 'Escolher');
   if (path == null || !context.mounted) return;
   var templates = const <BenchTemplate>[];
   await _guard(
     context,
-    () async => templates = await ListTemplates(repository)(),
+    () async => templates = await inject<ListTemplates>()(),
   );
   if (!context.mounted) return;
   final input = await showNewBenchForm(
@@ -106,7 +106,7 @@ Future<void> _newBench(BuildContext context, NewBench request) async {
   if (input == null || !context.mounted) return;
   await _guard(
     context,
-    () => CreateWorkbench(repository)(
+    () => inject<CreateWorkbench>()(
       path: path!,
       name: input.name,
       project: request.projectId,
@@ -122,12 +122,11 @@ String _folderName(String path) {
 }
 
 Future<void> _duplicate(BuildContext context, DuplicateBench request) async {
-  final actions = WorktreeActions(context.read<WorkbenchRepository>());
+  final actions = inject<WorktreeActions>();
   final input = await showWorktreeForm(
     context,
     benchId: request.benchId,
     benchName: request.benchName,
-    actions: actions,
   );
   if (input == null || !context.mounted) return;
   await _guard(
@@ -142,14 +141,14 @@ Future<void> _duplicate(BuildContext context, DuplicateBench request) async {
 }
 
 Future<void> _recolor(BuildContext context, RecolorBench request) async {
-  final change = ChangeBenchColor(context.read<WorkbenchRepository>());
+  final change = inject<ChangeBenchColor>();
   final picked = await showColorPalette(context, current: request.current);
   if (picked == null || !context.mounted) return;
   await _guard(context, () => change(request.benchId, picked));
 }
 
 Future<void> _rename(BuildContext context, RenameBench request) async {
-  final rename = RenameWorkbench(context.read<WorkbenchRepository>());
+  final rename = inject<RenameWorkbench>();
   final name = request.benchName;
   final typed = await promptDialog(
     context,
@@ -165,7 +164,7 @@ Future<void> _rename(BuildContext context, RenameBench request) async {
 }
 
 Future<void> _clear(BuildContext context, ClearBench request) async {
-  final clear = ClearWorkbench(context.read<WorkbenchRepository>());
+  final clear = inject<ClearWorkbench>();
   int? asked;
   await _guard(
     context,
@@ -188,7 +187,7 @@ Future<void> _clear(BuildContext context, ClearBench request) async {
 }
 
 Future<void> _removeBench(BuildContext context, RemoveBench request) async {
-  final remove = RemoveWorkbench(context.read<WorkbenchRepository>());
+  final remove = inject<RemoveWorkbench>();
   RemovalPlan? asked;
   await _guard(context, () async => asked = await remove.plan(request.benchId));
   final plan = asked;
@@ -229,7 +228,7 @@ Future<void> _removeBench(BuildContext context, RemoveBench request) async {
 }
 
 Future<void> _rules(BuildContext context, EditBenchRules request) async {
-  final rules = EditWorkbenchRules(context.read<WorkbenchRepository>());
+  final rules = inject<EditWorkbenchRules>();
   String? asked;
   await _guard(
     context,
@@ -272,7 +271,7 @@ Future<void> _removeWorkspace(
   BuildContext context,
   RemoveWorkspace request,
 ) async {
-  final remove = usecase.RemoveWorkspace(context.read<WorkspaceRepository>());
+  final remove = inject<usecase.RemoveWorkspace>();
   if (!await _accepted(
     context,
     () => remove.checkWorkspace(request.workspaceId),
@@ -292,7 +291,7 @@ Future<void> _removeWorkspace(
 }
 
 Future<void> _removeProject(BuildContext context, RemoveProject request) async {
-  final remove = usecase.RemoveWorkspace(context.read<WorkspaceRepository>());
+  final remove = inject<usecase.RemoveWorkspace>();
   if (!await _accepted(
     context,
     () => remove.checkProject(request.workspaceId, request.projectId),
@@ -315,9 +314,7 @@ Future<void> _removeProject(BuildContext context, RemoveProject request) async {
 }
 
 Future<void> _workspaceForm(BuildContext context, EditWorkspace? edit) async {
-  final workspaces = context.read<WorkspaceRepository>();
-  final picker = context.read<PathPicker>();
-  final save = SaveWorkspace(workspaces);
+  final save = inject<SaveWorkspace>();
   var initial = const WorkspaceDraft();
   if (edit != null) {
     WorkspaceDraft? loaded;
@@ -332,7 +329,7 @@ Future<void> _workspaceForm(BuildContext context, EditWorkspace? edit) async {
     context,
     initial: initial,
     editing: edit != null,
-    picker: picker,
+    picker: inject<PathPicker>(),
     suggestName: (folders) => save.multiName(edit?.workspaceId, folders),
   );
   if (draft == null || !context.mounted) return;
@@ -340,8 +337,8 @@ Future<void> _workspaceForm(BuildContext context, EditWorkspace? edit) async {
 }
 
 Future<void> _newProject(BuildContext context, NewProject request) async {
-  final create = CreateProject(context.read<WorkspaceRepository>());
-  final picker = context.read<PathPicker>();
+  final create = inject<CreateProject>();
+  final picker = inject<PathPicker>();
   String? suggested;
   await _guard(
     context,
@@ -374,7 +371,7 @@ Future<void> _newProject(BuildContext context, NewProject request) async {
         git: input.git,
       );
       return;
-    } on CommandFailed catch (failure) {
+    } on WorkspaceRefused catch (failure) {
       problem = failure.message;
     }
     if (!context.mounted) return;

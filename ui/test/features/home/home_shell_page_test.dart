@@ -1,5 +1,6 @@
 import 'package:egeon_deck/commons/widgets/app_text_field.dart';
 
+import 'package:egeon_deck/core/adapters/injector.dart';
 import 'package:egeon_deck/core/adapters/window_frame.dart';
 import 'package:egeon_deck/core/domain/entities/view_mode.dart';
 import 'package:egeon_deck/core/domain/entities/workbench.dart';
@@ -8,35 +9,28 @@ import 'package:egeon_deck/features/canvas/domain/entities/canvas_probe.dart'
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_probe.dart'
     as canvas
     show WindowFrame;
-import 'package:egeon_deck/features/home/domain/entities/shell_state.dart';
+import 'package:egeon_deck/features/home/domain/entities/shell_snapshot.dart';
 import 'package:egeon_deck/features/home/domain/entities/ui_request.dart';
-import 'package:egeon_deck/features/home/domain/repository/shell_repository.dart';
-import 'package:egeon_deck/features/home/domain/repository/ui_request_repository.dart';
 import 'package:egeon_deck/features/home/presentation/forms/form_request.dart';
 import 'package:egeon_deck/features/home/presentation/page/home_shell_page.dart';
 import 'package:egeon_deck/features/home/presentation/widgets/root_layout.dart';
 import 'package:egeon_deck/features/home/presentation/widgets/view_toolbar.dart';
-import 'package:egeon_deck/features/sidebar/domain/repository/sidebar_repository.dart';
-import 'package:egeon_deck/features/processes/domain/repository/processes_repository.dart';
 import 'package:egeon_deck/features/usage/domain/entities/usage_view.dart';
-import 'package:egeon_deck/features/usage/domain/repository/usage_repository.dart';
-import 'package:egeon_deck/features/update/domain/entities/app_state.dart';
-import 'package:egeon_deck/features/update/domain/repository/app_repository.dart';
+import 'package:egeon_deck/features/update/domain/entities/app_snapshot.dart';
 import 'package:egeon_deck/features/sidebar/presentation/widgets/sidebar_panel.dart';
 import 'package:egeon_deck/features/sidebar/presentation/widgets/sidebar_segments.dart';
 import 'package:egeon_deck/features/tabs/domain/entities/workbench_tab.dart';
-import 'package:egeon_deck/features/tabs/domain/repository/tabs_repository.dart';
 import 'package:egeon_deck/features/tabs/presentation/widgets/workbench_tabs_bar.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_shell_repository.dart';
 import '../../support/fake_sidebar_repository.dart';
 import '../../support/hand_cursor.dart';
+import '../../support/inject_fakes.dart';
 import '../../support/fake_app_repository.dart';
 import '../../support/fake_processes_repository.dart';
 import '../../support/fake_usage_repository.dart';
@@ -73,7 +67,17 @@ class _FakeActivator implements WindowActivator {
 }
 
 class Shell {
-  Shell({this.content});
+  Shell({this.content}) {
+    injectFakes(
+      shell: shell,
+      sidebar: sidebar,
+      tabs: tabs,
+      uiRequests: requests,
+      app: app,
+      usage: usage,
+      processes: FakeProcessesRepository(const []),
+    );
+  }
 
   /// O que ocupa o lugar do canvas; sem isso, um texto.
   final Widget? content;
@@ -90,35 +94,22 @@ class Shell {
   final forms = <FormRequest>[];
 
   Widget build() => overlayHost(
-    MultiRepositoryProvider(
-      providers: [
-        RepositoryProvider<ShellRepository>.value(value: shell),
-        RepositoryProvider<SidebarRepository>.value(value: sidebar),
-        RepositoryProvider<TabsRepository>.value(value: tabs),
-        RepositoryProvider<UiRequestRepository>.value(value: requests),
-        RepositoryProvider<AppRepository>.value(value: app),
-        RepositoryProvider<UsageRepository>.value(value: usage),
-        RepositoryProvider<ProcessesRepository>.value(
-          value: FakeProcessesRepository(const []),
-        ),
-      ],
-      child: HomeShellPage(
-        canvas: (_, _) =>
-            content ??
-            const Focus(
-              autofocus: true,
-              child: Text('CANVAS', key: ValueKey('canvas')),
-            ),
-        chat: (_, _) => const Text('CHAT', key: ValueKey('chat')),
-        onForm: (_, request) => forms.add(request),
-        window: const _FixedWindow(),
-        activator: activator,
-        writePng: (path, png) async => pngs[path] = png,
-      ),
+    HomeShellPage(
+      canvas: (_, _) =>
+          content ??
+          const Focus(
+            autofocus: true,
+            child: Text('CANVAS', key: ValueKey('canvas')),
+          ),
+      chat: (_, _) => const Text('CHAT', key: ValueKey('chat')),
+      onForm: (_, request) => forms.add(request),
+      window: const _FixedWindow(),
+      activator: activator,
+      writePng: (path, png) async => pngs[path] = png,
     ),
   );
 
-  Future<void> show(WidgetTester tester, ShellState state) async {
+  Future<void> show(WidgetTester tester, ShellSnapshot state) async {
     shell.push(state);
     sidebar.push(sampleTree());
     await tester.pump();
@@ -126,13 +117,15 @@ class Shell {
   }
 }
 
-Future<Shell> mount(WidgetTester tester, [ShellState? state]) async {
+Future<Shell> mount(WidgetTester tester, [ShellSnapshot? state]) async {
   tester.view.physicalSize = const Size(1000, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+  // Há teste que monta a casca mais de uma vez: cada uma com o seu registro.
+  await Injector.reset();
   final s = Shell();
   await tester.pumpWidget(s.build());
-  await s.show(tester, state ?? const ShellState(bench: bench));
+  await s.show(tester, state ?? const ShellSnapshot(bench: bench));
   return s;
 }
 
@@ -161,7 +154,7 @@ void main() {
     for (final mode in ViewMode.values) {
       final s = await mount(
         tester,
-        ShellState(
+        ShellSnapshot(
           bench: Workbench(id: 'b1', name: 'deck', path: '~', view: mode),
         ),
       );
@@ -180,7 +173,7 @@ void main() {
   ) async {
     await mount(
       tester,
-      const ShellState(
+      const ShellSnapshot(
         bench: Workbench(id: 'b', name: 'd', path: '~', view: ViewMode.chat),
       ),
     );
@@ -204,7 +197,7 @@ void main() {
   testWidgets('recolher a barra devolve a largura ao chat', (tester) async {
     await mount(
       tester,
-      const ShellState(
+      const ShellSnapshot(
         bench: Workbench(id: 'b', name: 'd', path: '~', view: ViewMode.chat),
       ),
     );
@@ -291,7 +284,7 @@ void main() {
   ) async {
     final s = await mount(
       tester,
-      const ShellState(
+      const ShellSnapshot(
         bench: bench,
         busy: 'Criando a worktree…',
         lock: AccessLock(text: 'Negado.'),
@@ -317,7 +310,7 @@ void main() {
   ) async {
     final s = await mount(
       tester,
-      const ShellState(
+      const ShellSnapshot(
         bench: bench,
         lock: AccessLock(text: 'x', asking: true),
       ),
@@ -347,7 +340,7 @@ void main() {
   ) async {
     final s = await mount(
       tester,
-      const ShellState(
+      const ShellSnapshot(
         bench: bench,
         busy: 'x',
         lock: AccessLock(text: 'y'),
@@ -468,7 +461,7 @@ void main() {
             const WorkbenchTab(id: 'b', name: 'b', isActive: true),
             const WorkbenchTab(id: 'c', name: 'c'),
           ]);
-          await s.show(tester, const ShellState(bench: bench));
+          await s.show(tester, const ShellSnapshot(bench: bench));
           await tester.pump();
           await tester.pump();
           await tester.tap(find.byType(EditableText));
@@ -529,7 +522,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(s.build());
-      await s.show(tester, const ShellState(bench: bench));
+      await s.show(tester, const ShellSnapshot(bench: bench));
 
       expect(s.usage.watched, ['b1']);
       expect(
@@ -542,14 +535,14 @@ void main() {
     });
 
     testWidgets('sem bancada não há pastilha', (tester) async {
-      final s = await mount(tester, const ShellState());
+      final s = await mount(tester, const ShellSnapshot());
       expect(find.byKey(const ValueKey('usage-pill')), findsNothing);
       expect(s.usage.watched, isEmpty);
     });
 
     testWidgets('o menu oferece Processos…', (tester) async {
       final s = await mount(tester);
-      s.app.push(const AppState());
+      s.app.push(const AppSnapshot());
       await tester.pump();
       expect(menuCalls.last, contains('Processos…'));
     });
@@ -560,7 +553,7 @@ void main() {
       tester,
     ) async {
       final s = await mount(tester);
-      s.app.push(const AppState());
+      s.app.push(const AppSnapshot());
       await tester.pump();
       final menu = menuCalls.last;
       for (final label in [
@@ -588,7 +581,7 @@ void main() {
     ) async {
       final s = await mount(tester);
       s.app.push(
-        const AppState(
+        const AppSnapshot(
           update: UpdateView(
             menu: 'Reiniciar para atualizar',
             menuEnabled: false,
@@ -645,7 +638,7 @@ void main() {
       final s = await mount(tester);
       var reply = await ask(tester, s, 'layout', {'mode': 'xyz'});
       expect(reply.value, isNull);
-      await s.show(tester, const ShellState());
+      await s.show(tester, const ShellSnapshot());
       reply = await ask(tester, s, 'layout', {'mode': 'chat'});
       expect(reply.value, isNull);
       expect(s.shell.views, isEmpty);
@@ -722,13 +715,13 @@ void main() {
       final s = Shell(
         content: Builder(
           builder: (context) {
-            context.read<CanvasProbeRegistry>().register(probe);
+            inject<CanvasProbeRegistry>().register(probe);
             return const Text('CANVAS');
           },
         ),
       );
       await tester.pumpWidget(s.build());
-      await s.show(tester, const ShellState(bench: bench));
+      await s.show(tester, const ShellSnapshot(bench: bench));
 
       var reply = await ask(tester, s, 'geometry');
       expect(probe.windows.single.x, 10);
@@ -760,7 +753,7 @@ void main() {
     testWidgets('em chat a geometria só diz o modo', (tester) async {
       final s = await mount(
         tester,
-        ShellState(
+        ShellSnapshot(
           bench: Workbench(
             id: 'b1',
             name: 'deck',

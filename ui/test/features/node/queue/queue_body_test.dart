@@ -2,15 +2,14 @@ import 'package:egeon_deck/features/node/queue/domain/entities/prompt_queue.dart
 import 'package:egeon_deck/features/node/queue/domain/entities/queue_item.dart';
 
 import '../../../support/in_memory_queue_repository.dart';
+import '../../../support/inject_fakes.dart';
 
-import 'package:egeon_deck/features/node/queue/domain/repository/queue_repository.dart';
 import 'package:egeon_deck/features/node/queue/presentation/widgets/queue_body.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> pumpQueue(
@@ -21,18 +20,16 @@ Future<void> pumpQueue(
     ..physicalSize = const Size(540, 800)
     ..devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+  injectFakes(queue: (_) => repo);
   await tester.pumpWidget(
-    RepositoryProvider<QueueRepository>.value(
-      value: repo,
-      child: WidgetsApp(
-        color: const Color(0xFF000000),
-        textStyle: AppTheme.textStyle,
-        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-          settings: settings,
-          pageBuilder: (context, _, _) => builder(context),
-        ),
-        home: const QueueBody(nodeId: 'fila'),
+    WidgetsApp(
+      color: const Color(0xFF000000),
+      textStyle: AppTheme.textStyle,
+      pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
+        settings: settings,
+        pageBuilder: (context, _, _) => builder(context),
       ),
+      home: const QueueBody(workbenchId: 'bancada', nodeId: 'fila'),
     ),
   );
   await tester.pump();

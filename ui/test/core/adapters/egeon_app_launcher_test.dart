@@ -57,9 +57,27 @@ void main() {
     expect(startMode, ProcessStartMode.normal);
     expect(env!['EGEON_HOME'], '/tmp/h');
     expect(env!['PATH'], '/bin');
+    expect(env!['EGEON_FLAVOR'], 'stable');
 
     await launcher.stop();
     expect(process.killed, isTrue);
+  });
+
+  test('o dev passa o flavor ao core', () async {
+    Map<String, String>? env;
+    final launcher = EgeonAppLauncher(
+      paths: EgeonPaths({'HOME': '/Users/x', 'EGEON_FLAVOR': 'dev'}),
+      probe: FakeTransport()..refuse = true,
+      executable: '/bin/egeon-app',
+      environment: const {},
+      starter: (e, args, {environment, mode = ProcessStartMode.normal}) async {
+        env = environment;
+        return FakeProcess();
+      },
+    );
+    await launcher.ensureRunning();
+    expect(env!['EGEON_FLAVOR'], 'dev');
+    expect(env!['EGEON_HOME'], '/Users/x/.egeon-next-dev');
   });
 
   test('EGEON_APP_BIN indica o executável', () {

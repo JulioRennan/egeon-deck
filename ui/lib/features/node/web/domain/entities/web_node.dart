@@ -1,7 +1,7 @@
 /// O que o core sabe de um nó web: a página, o perfil de navegação (cookies e
 /// bancada isolados por nome) e os perfis que existem.
-class WebNodeState {
-  const WebNodeState({
+class WebNode {
+  const WebNode({
     required this.url,
     required this.profile,
     this.profiles = const [],
@@ -16,7 +16,7 @@ class WebNodeState {
   /// faz o mesmo perfil abrir logado depois de reiniciar.
   final String? profileId;
 
-  factory WebNodeState.fromMap(Map<String, Object?> map) => WebNodeState(
+  factory WebNode.fromMap(Map<String, Object?> map) => WebNode(
     url: map['url'] as String? ?? '',
     profile: map['profile'] as String? ?? 'pessoal',
     profiles: [

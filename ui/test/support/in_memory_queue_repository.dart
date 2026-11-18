@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:egeon_deck/features/node/queue/domain/entities/prompt_queue.dart';
 import 'package:egeon_deck/features/node/queue/domain/entities/queue_effect.dart';
 import 'package:egeon_deck/features/node/queue/domain/entities/queue_item.dart';
+import 'package:egeon_deck/features/node/queue/domain/errors/queue_error.dart';
 import 'package:egeon_deck/features/node/queue/domain/repository/queue_repository.dart';
 
 /// Fila em memória, com dados falsos e as regras que o core vai ter (mandar
@@ -178,16 +179,18 @@ class InMemoryQueueRepository implements QueueRepository {
       _replace(_with(_item(id), status: ItemStatus.pending, awaiting: false));
 
   @override
-  Future<String?> send(String nodeId, {String? id}) async {
+  Future<void> send(String nodeId, {String? id}) async {
     final destination = _queue.destination;
-    if (destination == null) return 'Ligue a fila a um agente para mandar';
+    if (destination == null) {
+      throw const QueueRefused('Ligue a fila a um agente para mandar');
+    }
     final item = id != null
         ? _item(id)
         : _queue.items
               .where((i) => i.status == ItemStatus.pending && !i.empty)
               .firstOrNull;
-    if (item == null) return 'Nada pendente para mandar';
-    if (item.empty) return 'Tarefa em branco';
+    if (item == null) throw const QueueRefused('Nada pendente para mandar');
+    if (item.empty) throw const QueueRefused('Tarefa em branco');
     // Mandar por cima de uma em andamento fecha a anterior.
     final items = [
       for (final i in _queue.items)
@@ -205,14 +208,13 @@ class InMemoryQueueRepository implements QueueRepository {
         sentAt: DateTime.now(),
       ),
     );
-    return null;
   }
 
   @override
-  Future<String?> reply(String nodeId, String id, String text) async {
+  Future<void> reply(String nodeId, String id, String text) async {
     final item = _item(id);
     if (_queue.destination == null) {
-      return 'Ligue a fila a um agente para responder';
+      throw const QueueRefused('Ligue a fila a um agente para responder');
     }
     _replace(
       _with(
@@ -224,7 +226,6 @@ class InMemoryQueueRepository implements QueueRepository {
         ],
       ),
     );
-    return null;
   }
 
   @override

@@ -1,19 +1,17 @@
 import 'package:egeon_deck/core/domain/entities/workbench_node.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
-import 'package:egeon_deck/features/canvas/domain/repository/canvas_repository.dart';
 
 import '../../../support/in_memory_canvas_repository.dart';
 
 import 'package:egeon_deck/features/canvas/presentation/page/canvas_page.dart';
-import 'package:egeon_deck/features/node/terminal/domain/repository/terminal_repository.dart';
 import 'package:egeon_deck/features/node/terminal/presentation/widgets/terminal_body.dart';
 import 'package:egeon_deck/features/node/terminal/presentation/widgets/terminal_view.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_terminal_repository.dart';
+import '../../../support/inject_fakes.dart';
 
 /// Vários terminais vivos no canvas ao mesmo tempo (US-402).
 void main() {
@@ -45,22 +43,17 @@ void main() {
       links: const [],
     );
     final terminals = FakeTerminalRepository();
+    injectFakes(canvas: canvas, terminals: terminals);
 
     await tester.pumpWidget(
-      MultiRepositoryProvider(
-        providers: [
-          RepositoryProvider<CanvasRepository>.value(value: canvas),
-          RepositoryProvider<TerminalRepository>.value(value: terminals),
-        ],
-        child: WidgetsApp(
-          color: const Color(0xFF000000),
-          textStyle: AppTheme.textStyle,
-          builder: (context, _) => CanvasPage(
-            workbenchId: 'b',
-            bodyBuilder: (context, card) => card.kind != NodeKind.web
-                ? TerminalBody(nodeId: card.id)
-                : const SizedBox.shrink(),
-          ),
+      WidgetsApp(
+        color: const Color(0xFF000000),
+        textStyle: AppTheme.textStyle,
+        builder: (context, _) => CanvasPage(
+          workbenchId: 'b',
+          bodyBuilder: (context, card) => card.kind != NodeKind.web
+              ? TerminalBody(nodeId: card.id)
+              : const SizedBox.shrink(),
         ),
       ),
     );

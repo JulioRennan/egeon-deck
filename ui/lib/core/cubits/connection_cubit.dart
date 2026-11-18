@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../domain/errors/core_error.dart';
 import '../domain/usecase/relaunch_core.dart';
 import '../domain/usecase/start_core.dart';
 import '../domain/usecase/stop_core.dart';
 import '../domain/usecase/watch_core_link.dart';
-import 'core_status.dart';
+
+part 'connection_state.dart';
 
 /// Global: sobe o core Rust e diz se o app está falando com ele. É o dono da
 /// assinatura da conexão e quem encerra o core ao fechar.
@@ -16,7 +18,7 @@ class ConnectionCubit extends Cubit<CoreStatus> {
     required WatchCoreLink watchLink,
     required this._relaunchCore,
     required this._stopCore,
-  }) : super(const CoreStatus(ConnectionPhase.starting)) {
+  }) : super(const CoreConnecting()) {
     _link = watchLink().listen(_onLink);
     unawaited(_start());
   }
@@ -29,17 +31,17 @@ class ConnectionCubit extends Cubit<CoreStatus> {
   Future<void> _start() async {
     try {
       await _startCore();
-    } catch (e) {
-      emit(CoreStatus(ConnectionPhase.failed, error: '$e'));
+    } on CoreError catch (error) {
+      emit(CoreFailed(error));
     }
   }
 
   void _onLink(bool connected) {
     if (connected) {
-      emit(const CoreStatus(ConnectionPhase.connected));
+      emit(const CoreConnected());
       return;
     }
-    emit(const CoreStatus(ConnectionPhase.starting));
+    emit(const CoreConnecting());
     unawaited(_relaunch());
   }
 
@@ -50,8 +52,8 @@ class ConnectionCubit extends Cubit<CoreStatus> {
     if (isClosed) return;
     try {
       await _relaunchCore();
-    } catch (e) {
-      if (!isClosed) emit(CoreStatus(ConnectionPhase.failed, error: '$e'));
+    } on CoreError catch (error) {
+      if (!isClosed) emit(CoreFailed(error));
     }
   }
 

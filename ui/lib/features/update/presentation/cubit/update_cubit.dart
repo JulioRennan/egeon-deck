@@ -3,24 +3,29 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/app_effect.dart';
-import '../../domain/entities/app_state.dart';
+import '../../domain/entities/app_snapshot.dart';
 import '../../domain/usecase/answer_app.dart';
+import '../../domain/errors/update_error.dart';
 import '../../domain/usecase/watch_app.dart';
+
+part 'update_state.dart';
 
 /// O cubit do app: a atualização (item de menu, aviso) e a limpeza de órfãos.
 /// É dono das duas assinaturas do tópico `app` — estado e efeitos — e as
 /// cancela no `close()`. Os efeitos não passam pelo estado: são avisos de uma
 /// vez só, e o hospedeiro os desenha.
-class UpdateCubit extends Cubit<AppState> {
+class UpdateCubit extends Cubit<UpdateState> {
   UpdateCubit({required WatchApp watch, required this._answer})
-    : super(const AppState()) {
-    _stateSubscription = watch.state().listen(emit);
+    : super(const UpdateState()) {
+    _stateSubscription = watch.state().listen(
+      (app) => emit(UpdateState(app: app)),
+    );
     _effectSubscription = watch.effects().listen(_effects.add);
   }
 
   final AnswerApp _answer;
   final _effects = StreamController<AppEffect>.broadcast();
-  StreamSubscription<AppState>? _stateSubscription;
+  StreamSubscription<AppSnapshot>? _stateSubscription;
   StreamSubscription<AppEffect>? _effectSubscription;
 
   Stream<AppEffect> get effects => _effects.stream;
@@ -45,7 +50,9 @@ class UpdateCubit extends Cubit<AppState> {
 
   /// Comando é "mande e siga": o estado que o core mandar a seguir corrige a
   /// tela se ele recusar.
-  void _fire(Future<void> future) => unawaited(future.catchError((_) {}));
+  void _fire(Future<void> future) => unawaited(
+    future.catchError((_) {}, test: (error) => error is UpdateError),
+  );
 
   @override
   Future<void> close() async {

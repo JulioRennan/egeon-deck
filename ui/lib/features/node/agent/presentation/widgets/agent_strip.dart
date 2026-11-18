@@ -185,7 +185,7 @@ class _UltracodePill extends StatelessWidget {
     required this.onTap,
   });
 
-  final UltracodeState state;
+  final Ultracode state;
   final Color tint;
   final VoidCallback onTap;
 

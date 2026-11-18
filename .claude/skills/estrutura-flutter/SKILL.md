@@ -18,15 +18,21 @@ ui/lib/
 ├─ features/
 │  └─ <feature>/
 │     ├─ presentation/
-│     │  ├─ cubit/        orquestra o estado da tela pelo retorno do usecase
+│     │  ├─ cubit/        orquestra o estado da tela pelo retorno do usecase;
+│     │  │                o estado é <x>_state.dart, part of do cubit
 │     │  ├─ page/         só compõe widgets; quase nada solto
 │     │  └─ widgets/      os componentes da página
+│     ├─ di/
+│     │  └─ <feature>_injection.dart   a DI do módulo: repositórios e domínio
 │     └─ domain/
-│        ├─ entities/     os modelos, com fromMap e toMap
+│        ├─ entities/     o que vem do core Rust, com fromMap e toMap
+│        ├─ errors/       <feature>_error.dart: as falhas, sealed
 │        ├─ repository/   faz as consultas pelo socket
 │        └─ usecase/      consulta os repositories para montar algo da tela
 ├─ core/
 │  ├─ adapters/           wrap de toda lib externa — menos as de UI
+│  ├─ di/                 injection.dart: a DI global — o core do front e a
+│  │                      chamada dos módulos
 │  ├─ domain/             mesma estrutura do domain, para o que é de mais de um módulo
 │  └─ cubits/             cubits globais (raro — costuma bastar o AppCubit na raiz)
 ├─ commons/
@@ -67,12 +73,16 @@ features/
 
 | Peça | Faz | Não faz |
 |---|---|---|
-| page | Compõe os widgets da feature | Lógica; widget solto |
+| page | Compõe os widgets; cria o cubit com `BlocProvider(create: (_) => inject<XCubit>(…))` | Lógica; widget solto; cubit em `initState`/`dispose` |
 | widgets | Componentes daquela página | O reutilizado vai para `commons/widgets` |
-| cubit | Orquestra o estado pelo retorno do usecase; é dono das assinaturas de stream | Falar com o socket |
-| usecase | Consulta repositories, combina e monta o que a tela precisa | — |
-| repository | Consulta o socket — `Future` para consulta e comando, `Stream` para evento | — |
-| entities | Modelos com `fromMap` e `toMap` escritos à mão | — |
+| cubit | Orquestra o estado pelo retorno do usecase; é dono das assinaturas de stream; captura o erro tipado da feature e o põe no estado | Falar com o socket; `catch` genérico; montar texto de erro |
+| state | `<x>_state.dart`, `part of '<x>_cubit.dart'`. Fases que se excluem são `sealed class` com uma subclasse por fase | Morar em `domain/entities` |
+| usecase | Consulta repositories, combina e monta o que a tela precisa; registrado no `di/` do módulo | Engolir erro: deixa passar; ser construído fora do `di/` |
+| repository | Consulta o socket — `Future` para consulta e comando, `Stream` para evento; converte a falha do socket no erro da feature (`failingAs`) | Deixar `EgeonCommandError`/`EgeonDisconnected` sair |
+| entities | O que vem do core Rust, com `fromMap` e `toMap` escritos à mão | Estado de tela |
+| errors | `sealed class <F>Error`, um tipo por falha que importa à tela (`<F>Refused(message)` com o texto do core, `<F>Offline`) | Mensagem inventada pela UI |
+| `di/<feature>_injection.dart` | Ao lado de `domain/` e `presentation/` (`features/node/queue/di/queue_injection.dart`): tudo dela, em duas funções — `register<F>Repositories()` (os reais de socket, a parte nativa) e `register<F>Domain()` (usecases, cubits, registros dela) | Registrar o que é de outra feature |
+| `core/di/injection.dart` | O global: `registerInfrastructure` (paths, transport, cliente do socket, lançador, `OrganizationFeed`, `PathPicker` e os `…Repositories()` de cada módulo) e `registerDomain` (`ConnectionCubit` e os `…Domain()`) | Ser importado por feature |
 
 ## Regras
 
@@ -81,8 +91,8 @@ features/
 2. **A UI não guarda regra de negócio.** Quem decide é o core Rust; a UI
    pergunta, mostra e captura gesto. Fica na UI só estado passageiro de tela
    (passo aberto, foco, ferramenta armada, zoom e pan, geometria das arestas).
-3. **Um cliente de socket só**, em `core/adapters`, criado na raiz e entregue
-   aos repositories. Nenhuma feature abre conexão.
+3. **Um cliente de socket só**, em `core/adapters`, registrado como único no
+   injector e entregue aos repositories. Nenhuma feature abre conexão.
 4. **Lib externa nunca é importada direto por uma feature.** As de UI ganham
    wrap em `commons/widgets`; as demais, em `core/adapters`.
 5. **Parte nativa** — nó web (`WKWebView`) em `commons/widgets`; janela, menus
@@ -93,6 +103,38 @@ features/
 8. **Exceções de volume** — no terminal o widget escuta o stream das linhas
    direto; no chat o core manda a diferença de blocos.
 9. **Onde se clica, o ponteiro diz** — mão em tudo que responde a clique.
+10. **Injeção pelo GetIt**, atrás do wrap `core/adapters/injector.dart`
+    (`inject<T>()`, `Injector.factory`/`factoryParam`/`lazySingleton`/
+    `singleton`/`reset`); só ele importa `get_it`. Nada de
+    `RepositoryProvider` nem `context.read` de repositório, usecase ou
+    registro — `context.read<XCubit>()` só para o cubit do `BlocProvider`.
+    - **Fábrica é o padrão**: repositório, usecase e cubit. O que depende da
+      bancada ou do item é `factoryParam` (o id; dois ids num record
+      `(workbenchId:, nodeId:)`). Usecase de bancada pede o `workbenchId`,
+      como o repositório dela.
+    - **Todo usecase está no injector**: a fábrica do cubit os pega com
+      `inject<…>()`; nenhum usecase é construído na mão fora de `di/`.
+    - **Único só com motivo**: o socket e o transport, o lançador do core, o
+      `OrganizationFeed`, o repositório que guarda cache (canvas), o
+      `ConnectionCubit` e os registros que a casca reparte.
+    - **Por módulo**: cada feature registra o que é dela no seu
+      `di/<feature>_injection.dart`; o global em `core/di/` só chama.
+    - **Teste** chama só `registerDomain` e registra os falsos
+      (`test/support/inject_fakes.dart`), com `reset` no fim.
+11. **Estado é do cubit, não do domínio.** Fica em `<x>_state.dart`, `part of`
+    do cubit (o cubit tem `part '<x>_state.dart';`). Entidade é só o que vem do
+    core Rust. Fases que se excluem (esperando × com dados, varrendo × com
+    lista) são `sealed class`, uma subclasse por fase com só os campos dela; o
+    widget faz `switch` exaustivo. Campo passageiro que vale em todas as fases
+    fica na base; o que só uma fase tem, na subclasse. Sem fase que a tela
+    distinga, uma `final class` só.
+12. **Erro tipado por feature.** `domain/errors/<feature>_error.dart` (sealed).
+    O repositório converte a falha do socket com
+    `.failingAs(refused: <F>Refused.new, offline: <F>Offline.new)`; o texto do
+    core vai dentro e a UI não inventa mensagem (decisão 33.3). O usecase deixa
+    passar; o cubit captura `on <F>Error` e o põe no estado (ou ignora, quando o
+    próximo estado do core corrige a tela). Nada de `on Object` virando
+    `String`.
 
 ## Ferramentas
 

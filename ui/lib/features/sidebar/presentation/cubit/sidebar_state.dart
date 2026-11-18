@@ -1,7 +1,7 @@
-import '../../domain/entities/sidebar_tree.dart';
-import '../widgets/sidebar_segments.dart';
+part of 'sidebar_cubit.dart';
 
-class SidebarState {
+/// A árvore que o core manda e a aba da barra na tela.
+final class SidebarState {
   const SidebarState({
     this.tree = const SidebarTree(),
     this.tab = SidebarTab.all,

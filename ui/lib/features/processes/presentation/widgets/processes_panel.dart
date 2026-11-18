@@ -5,22 +5,19 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../commons/widgets/app_dialog.dart';
 import '../../../../commons/widgets/hand_cursor.dart';
 import '../../../../commons/widgets/standard_dialogs.dart';
+import '../../../../core/adapters/injector.dart';
 import '../../../../theme/app_colors.dart';
 import '../../domain/entities/processes_view.dart';
-import '../../domain/repository/processes_repository.dart';
-import '../../domain/usecase/manage_processes.dart';
 import '../cubit/processes_cubit.dart';
-import '../cubit/processes_state.dart';
 
 /// Abre a janela "Processos" por cima da tela. Não é janela do sistema: o app
 /// tem uma só, e a lista cabe num painel modal que se fecha com Esc.
 Future<void> showProcessesPanel(BuildContext context) {
-  final repository = context.read<ProcessesRepository>();
   return showAppDialog<void>(
     context,
     width: 900,
     builder: (_, close) => BlocProvider(
-      create: (_) => ProcessesCubit(manage: ManageProcesses(repository)),
+      create: (_) => inject<ProcessesCubit>(),
       child: ProcessesPanel(onClose: close),
     ),
   );
@@ -40,7 +37,15 @@ class ProcessesPanel extends StatelessWidget {
     final cubit = context.read<ProcessesCubit>();
     return BlocBuilder<ProcessesCubit, ProcessesState>(
       builder: (context, state) {
-        final orphans = state.view.orphans;
+        final (rows, selected, summary, orphans) = switch (state) {
+          ProcessesScanning() => (const <ProcessRow>[], const <int>{}, '', 0),
+          ProcessesLoaded(:final rows, :final selected, :final view) => (
+            rows,
+            selected,
+            view.summary,
+            view.orphans,
+          ),
+        };
         return SizedBox(
           height: height,
           child: Column(
@@ -80,7 +85,7 @@ class ProcessesPanel extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        state.view.summary,
+                        summary,
                         key: const ValueKey('processes-summary'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -90,7 +95,7 @@ class ProcessesPanel extends StatelessWidget {
                     DialogButton(
                       'Encerrar selecionados',
                       small: true,
-                      enabled: state.selected.isNotEmpty,
+                      enabled: selected.isNotEmpty,
                       onTap: () => _killSelected(context),
                     ),
                     const SizedBox(width: 8),
@@ -106,23 +111,21 @@ class ProcessesPanel extends StatelessWidget {
               Container(height: 1, color: AppColors.white(0.08)),
               _Header(),
               Expanded(
-                child: state.rows.isEmpty
+                child: rows.isEmpty
                     ? Center(
-                        child: Text(
-                          state.loaded ? 'Nenhum processo.' : 'Varrendo…',
-                          style: _style(12, 0.4),
-                        ),
+                        child: Text(switch (state) {
+                          ProcessesScanning() => 'Varrendo…',
+                          ProcessesLoaded() => 'Nenhum processo.',
+                        }, style: _style(12, 0.4)),
                       )
                     : ListView.builder(
-                        itemCount: state.rows.length,
+                        itemCount: rows.length,
                         itemBuilder: (context, index) => _Row(
-                          row: state.rows[index],
-                          selected: state.selected.contains(
-                            state.rows[index].pid,
-                          ),
+                          row: rows[index],
+                          selected: selected.contains(rows[index].pid),
                           alternate: index.isOdd,
                           onTap: (additive, range) => cubit.select(
-                            state.rows[index].pid,
+                            rows[index].pid,
                             additive: additive,
                             range: range,
                           ),

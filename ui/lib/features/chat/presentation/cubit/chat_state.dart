@@ -1,20 +1,18 @@
-import '../../domain/entities/chat_block.dart';
-import '../../domain/entities/chat_participant.dart';
-import '../../domain/entities/chat_queue.dart';
-import '../../domain/entities/permission_request.dart';
+part of 'chat_cubit.dart';
 
-class ChatState {
+/// A thread como o core a manda e o que é só da tela: citação, foco, fila
+/// aberta e o aviso da última recusa.
+final class ChatState {
   const ChatState({
     this.blocks = const [],
     this.participants = const [],
     this.permission,
-    this.loaded = false,
     this.sends = 0,
     this.quote,
     this.focus,
     this.queues = const [],
     this.shownQueue,
-    this.notice,
+    this.queueFailure,
   });
 
   final List<ChatBlock> blocks;
@@ -22,9 +20,6 @@ class ChatState {
 
   /// O pedido de permissão em aberto, se houver.
   final PermissionRequest? permission;
-
-  /// Já chegou a primeira entrega do core.
-  final bool loaded;
 
   /// Quantas mensagens o usuário mandou: a thread desce até o fim a cada uma,
   /// mesmo vindo de um ponto acima dele.
@@ -43,8 +38,8 @@ class ChatState {
   /// vale enquanto a fila continua na lista.
   final String? shownQueue;
 
-  /// Um aviso de uma linha (a recusa do core ao criar uma fila); some sozinho.
-  final String? notice;
+  /// A falha ao criar uma fila, mostrada numa linha; some sozinha.
+  final ChatError? queueFailure;
 
   /// A fila aberta, ou nula se ela saiu da bancada.
   ChatQueueInfo? get openQueue {
@@ -74,7 +69,6 @@ class ChatState {
     List<ChatParticipantInfo>? participants,
     PermissionRequest? permission,
     bool clearPermission = false,
-    bool? loaded,
     int? sends,
     ChatBlock? quote,
     bool clearQuote = false,
@@ -82,18 +76,19 @@ class ChatState {
     List<ChatQueueInfo>? queues,
     String? shownQueue,
     bool clearShownQueue = false,
-    String? notice,
-    bool clearNotice = false,
+    ChatError? queueFailure,
+    bool clearQueueFailure = false,
   }) => ChatState(
     blocks: blocks ?? this.blocks,
     participants: participants ?? this.participants,
     permission: clearPermission ? null : (permission ?? this.permission),
-    loaded: loaded ?? this.loaded,
     sends: sends ?? this.sends,
     quote: clearQuote ? null : (quote ?? this.quote),
     focus: focus ?? this.focus,
     queues: queues ?? this.queues,
     shownQueue: clearShownQueue ? null : (shownQueue ?? this.shownQueue),
-    notice: clearNotice ? null : (notice ?? this.notice),
+    queueFailure: clearQueueFailure
+        ? null
+        : (queueFailure ?? this.queueFailure),
   );
 }

@@ -49,15 +49,18 @@ class UpdateView {
 }
 
 /// O estado inteiro do tópico `app`: vai na assinatura e a cada mudança.
-class AppState {
-  const AppState({this.update = const UpdateView(), this.reaperEnabled = true});
+class AppSnapshot {
+  const AppSnapshot({
+    this.update = const UpdateView(),
+    this.reaperEnabled = true,
+  });
 
   final UpdateView update;
 
   /// A limpeza automática de órfãos (ADR-083), do menu.
   final bool reaperEnabled;
 
-  factory AppState.fromMap(Map<String, Object?> map) => AppState(
+  factory AppSnapshot.fromMap(Map<String, Object?> map) => AppSnapshot(
     update: UpdateView.fromMap(
       map['update'] as Map<String, Object?>? ?? const {},
     ),

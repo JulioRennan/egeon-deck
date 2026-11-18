@@ -1,19 +1,17 @@
 import 'package:egeon_deck/core/domain/entities/workbench_node.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
-import 'package:egeon_deck/features/canvas/domain/repository/canvas_repository.dart';
 
 import '../../../support/in_memory_canvas_repository.dart';
 
 import 'package:egeon_deck/features/canvas/presentation/page/canvas_page.dart';
-import 'package:egeon_deck/features/node/agent/domain/repository/agent_repository.dart';
 import 'package:egeon_deck/features/node/agent/presentation/widgets/agent_accessory.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:egeon_deck/features/node/agent/domain/entities/model_choice.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_agent_repository.dart';
+import '../../../support/inject_fakes.dart';
 
 /// A faixa do agente dentro do card: o corpo desce, e os controles dela não
 /// arrastam o card.
@@ -35,25 +33,20 @@ void main() {
       links: const [],
     );
     final agent = FakeAgentRepository();
+    injectFakes(canvas: canvas, agent: (_) => agent);
     await tester.pumpWidget(
-      MultiRepositoryProvider(
-        providers: [
-          RepositoryProvider<CanvasRepository>.value(value: canvas),
-          RepositoryProvider<AgentRepository>.value(value: agent),
-        ],
-        child: WidgetsApp(
-          color: const Color(0xFF000000),
-          textStyle: AppTheme.textStyle,
-          builder: (context, _) => CanvasPage(
-            workbenchId: 'b',
-            bodyBuilder: (context, card) => ColoredBox(
-              key: const ValueKey('body'),
-              color: const Color(0xFF111111),
-            ),
-            accessoryBuilder: (context, card) => card.kind == NodeKind.agent
-                ? AgentAccessory(nodeId: card.id)
-                : null,
+      WidgetsApp(
+        color: const Color(0xFF000000),
+        textStyle: AppTheme.textStyle,
+        builder: (context, _) => CanvasPage(
+          workbenchId: 'b',
+          bodyBuilder: (context, card) => ColoredBox(
+            key: const ValueKey('body'),
+            color: const Color(0xFF111111),
           ),
+          accessoryBuilder: (context, card) => card.kind == NodeKind.agent
+              ? AgentAccessory(workbenchId: 'b', nodeId: card.id)
+              : null,
         ),
       ),
     );

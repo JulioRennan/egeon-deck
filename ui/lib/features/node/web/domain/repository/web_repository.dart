@@ -1,8 +1,8 @@
-import '../entities/web_node_state.dart';
+import '../entities/web_node.dart';
 
 abstract interface class WebRepository {
   /// O estado do nó web [nodeId]. O core manda o estado inteiro a cada mudança.
-  Stream<WebNodeState> watch(String nodeId);
+  Stream<WebNode> watch(String nodeId);
 
   /// O que se digitou na barra de endereço, cru: o core decide se é endereço
   /// (com esquema ou parecendo host) ou busca, e devolve a URL no estado.

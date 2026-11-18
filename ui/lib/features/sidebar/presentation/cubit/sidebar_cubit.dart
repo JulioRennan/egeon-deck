@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/sidebar_tree.dart';
-import '../../domain/repository/sidebar_repository.dart';
+import '../../domain/errors/sidebar_error.dart';
+import '../../domain/repository/sidebar_repository.dart' show MoveLanding;
 import '../../domain/usecase/move_item.dart';
 import '../../domain/usecase/plan_move.dart';
 import '../../domain/usecase/select_bench.dart';
@@ -11,18 +12,8 @@ import '../../domain/usecase/set_project_stored.dart';
 import '../../domain/usecase/toggle_group.dart';
 import '../../domain/usecase/watch_sidebar.dart';
 import '../widgets/sidebar_segments.dart';
-import 'sidebar_state.dart';
 
-/// O cubit da barra com os usecases do repositório. Quem o cria é a casca, que
-/// também precisa mudar a aba quando o core pede de fora.
-SidebarCubit createSidebarCubit(SidebarRepository repository) => SidebarCubit(
-  watch: WatchSidebar(repository),
-  select: SelectBench(repository),
-  toggle: ToggleGroup(repository),
-  setStored: SetProjectStored(repository),
-  move: MoveItem(repository),
-  plan: PlanMove(repository),
-);
+part 'sidebar_state.dart';
 
 /// Dono da assinatura da barra lateral: abre ao nascer e cancela no
 /// `close()`. Cada evento do core traz a árvore inteira.
@@ -83,10 +74,17 @@ class SidebarCubit extends Cubit<SidebarState> {
     String item, {
     String? parent,
     required int to,
-  }) => _plan(kind, item, parent: parent, to: to).catchError((_) => null);
+  }) => _plan(
+    kind,
+    item,
+    parent: parent,
+    to: to,
+  ).catchError((_) => null, test: (error) => error is SidebarError);
 
   /// Gesto é "mande e siga": o que vale é a árvore que o core devolve.
-  void _fire(Future<void> future) => unawaited(future.catchError((_) {}));
+  void _fire(Future<void> future) => unawaited(
+    future.catchError((_) {}, test: (error) => error is SidebarError),
+  );
 
   @override
   Future<void> close() async {

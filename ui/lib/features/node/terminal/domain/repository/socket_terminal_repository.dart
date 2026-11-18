@@ -8,6 +8,7 @@ import '../entities/terminal_info.dart';
 import '../entities/terminal_key.dart';
 import '../entities/terminal_pointer.dart';
 import 'terminal_repository.dart';
+import '../errors/terminal_error.dart';
 
 /// O terminal falando com o core Rust pelo cliente único do socket.
 class SocketTerminalRepository implements TerminalRepository {
@@ -15,9 +16,18 @@ class SocketTerminalRepository implements TerminalRepository {
 
   final EgeonSocketClient _client;
 
+  /// Recusa e queda do socket viram [TerminalError].
+  Future<EgeonMessage> _request(String cmd, [EgeonMessage args = const {}]) =>
+      _client
+          .request(cmd, args)
+          .failingAs(
+            refused: TerminalRefused.new,
+            offline: TerminalOffline.new,
+          );
+
   @override
   Future<List<TerminalInfo>> list() async {
-    final reply = await _client.request('list_terminals');
+    final reply = await _request('list_terminals');
     return [
       for (final t in reply['terminals']! as List<Object?>)
         TerminalInfo.fromMap(t! as Map<String, Object?>),
@@ -26,7 +36,7 @@ class SocketTerminalRepository implements TerminalRepository {
 
   @override
   Future<TerminalInfo> create({String? cwd}) async {
-    final reply = await _client.request('create_terminal', {'cwd': ?cwd});
+    final reply = await _request('create_terminal', {'cwd': ?cwd});
     return TerminalInfo.fromMap(reply);
   }
 
@@ -39,37 +49,35 @@ class SocketTerminalRepository implements TerminalRepository {
 
   @override
   Future<void> sendKey(String nodeId, TerminalKey key) =>
-      _client.request('key', {'node': nodeId, ...key.toMap()});
+      _request('key', {'node': nodeId, ...key.toMap()});
 
   @override
   Future<void> sendText(String nodeId, String text) =>
-      _client.request('input', {'node': nodeId, 'text': text});
+      _request('input', {'node': nodeId, 'text': text});
 
   @override
   Future<void> paste(String nodeId, String text) =>
-      _client.request('paste', {'node': nodeId, 'text': text});
+      _request('paste', {'node': nodeId, 'text': text});
 
   @override
-  Future<void> resize(String nodeId, int columns, int rows) => _client.request(
-    'resize',
-    {'node': nodeId, 'cols': columns, 'rows': rows},
-  );
+  Future<void> resize(String nodeId, int columns, int rows) =>
+      _request('resize', {'node': nodeId, 'cols': columns, 'rows': rows});
 
   @override
   Future<void> sendPointer(String nodeId, TerminalPointer pointer) =>
-      _client.request('pointer', {'node': nodeId, ...pointer.toMap()});
+      _request('pointer', {'node': nodeId, ...pointer.toMap()});
 
   @override
   Future<void> scroll(String nodeId, TerminalScroll scroll) =>
-      _client.request('scroll', {'node': nodeId, 'to': scroll.toWire()});
+      _request('scroll', {'node': nodeId, 'to': scroll.toWire()});
 
   @override
   Future<void> selectAll(String nodeId) =>
-      _client.request('select_all', {'node': nodeId});
+      _request('select_all', {'node': nodeId});
 
   @override
   Future<String?> copy(String nodeId) async {
-    final reply = await _client.request('copy', {'node': nodeId});
+    final reply = await _request('copy', {'node': nodeId});
     return reply['text'] as String?;
   }
 
@@ -83,11 +91,11 @@ class SocketTerminalRepository implements TerminalRepository {
 
   @override
   Future<void> sendClipboard(String nodeId, String text) =>
-      _client.request('clipboard_reply', {'node': nodeId, 'text': text});
+      _request('clipboard_reply', {'node': nodeId, 'text': text});
 
   @override
   Future<bool> linkHover(String nodeId, double x, double y) async {
-    final reply = await _client.request('link_hover', {
+    final reply = await _request('link_hover', {
       'node': nodeId,
       'x': x,
       'y': y,
@@ -97,9 +105,9 @@ class SocketTerminalRepository implements TerminalRepository {
 
   @override
   Future<void> dropFiles(String nodeId, List<String> paths) =>
-      _client.request('drop', {'node': nodeId, 'paths': paths});
+      _request('drop', {'node': nodeId, 'paths': paths});
 
   @override
   Future<void> dropImage(String nodeId, Uint8List png) =>
-      _client.request('drop', {'node': nodeId, 'png': base64Encode(png)});
+      _request('drop', {'node': nodeId, 'png': base64Encode(png)});
 }

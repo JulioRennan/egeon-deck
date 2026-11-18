@@ -2,20 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:egeon_deck/features/chat/domain/entities/chat_queue.dart';
+import 'package:egeon_deck/core/adapters/injector.dart';
 import 'package:egeon_deck/features/chat/presentation/cubit/queue_panel_width.dart';
 import 'package:egeon_deck/features/chat/presentation/widgets/chat_composer.dart';
 import 'package:egeon_deck/features/node/queue/presentation/widgets/queue_body.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_thread.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_update.dart';
-import 'package:egeon_deck/features/chat/domain/repository/chat_repository.dart';
 import 'package:egeon_deck/features/chat/presentation/page/chat_page.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/chat_fixtures.dart';
 import '../../support/fake_chat_repository.dart';
 import '../../support/in_memory_queue_repository.dart';
+import '../../support/inject_fakes.dart';
 import '../../support/overlay_host.dart';
 
 const _fila = ChatQueueInfo(id: 'fila1', summary: '2 pendentes · com front');
@@ -29,26 +29,18 @@ Future<FakeChatRepository> mount(
   WidgetTester tester, {
   Size size = const Size(1100, 600),
   bool withPanel = true,
-  QueuePanelWidth? width,
+  double? width,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final repository = FakeChatRepository();
+  final queues = InMemoryQueueRepository();
+  injectFakes(chat: repository, queue: (_) => queues);
+  inject<QueuePanelWidth>().notifier.value = width;
   await tester.pumpWidget(
     overlayHost(
-      RepositoryProvider<ChatRepository>.value(
-        value: repository,
-        child: ChatPage(
-          workbenchId: 'b1',
-          queues: withPanel
-              ? ChatQueues(
-                  repository: InMemoryQueueRepository(),
-                  width: width ?? QueuePanelWidth(),
-                )
-              : null,
-        ),
-      ),
+      ChatPage(workbenchId: 'b1', offerQueues: withPanel),
       size: size,
     ),
   );
@@ -281,8 +273,8 @@ void main() {
   testWidgets('a largura do painel é uma só e vem de fora do chat', (
     tester,
   ) async {
-    final width = QueuePanelWidth(440);
-    await mount(tester, width: width);
+    await mount(tester, width: 440);
+    final width = inject<QueuePanelWidth>();
     await tester.tap(find.byKey(const ValueKey('queue-fila1')));
     await tester.pump();
     final body = tester.getSize(find.byType(QueueBody)).width;

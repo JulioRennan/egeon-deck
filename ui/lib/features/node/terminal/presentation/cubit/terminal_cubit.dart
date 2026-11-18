@@ -7,11 +7,13 @@ import '../../domain/entities/terminal_effect.dart';
 import '../../domain/entities/terminal_frame.dart';
 import '../../domain/entities/terminal_key.dart';
 import '../../domain/entities/terminal_pointer.dart';
+import '../../domain/errors/terminal_error.dart';
 import '../../domain/usecase/resize_terminal.dart';
 import '../../domain/usecase/send_terminal_input.dart';
 import '../../domain/usecase/watch_terminal.dart';
 import '../../domain/usecase/watch_terminal_effects.dart';
-import 'terminal_state.dart';
+
+part 'terminal_state.dart';
 
 /// Um cubit por terminal. É dono da assinatura da tela: abre ao nascer e
 /// cancela no `close()`. As linhas não passam pelo estado — o widget as lê de
@@ -23,7 +25,7 @@ class TerminalCubit extends Cubit<TerminalState> {
     required this._input,
     required this._resize,
     WatchTerminalEffects? effects,
-  }) : super(const TerminalState()) {
+  }) : super(const TerminalWaiting()) {
     _subscription = watch(nodeId).listen(_onFrame);
     _effectsSubscription = effects?.call(nodeId).listen(_effects.add);
   }
@@ -50,13 +52,12 @@ class TerminalCubit extends Cubit<TerminalState> {
   void _onFrame(TerminalFrame frame) {
     _last = frame;
     _frames.add(frame);
-    if (!state.live ||
-        state.columns != frame.columns ||
-        state.rows != frame.rows) {
-      emit(
-        state.copyWith(live: true, columns: frame.columns, rows: frame.rows),
-      );
-    }
+    final same = switch (state) {
+      TerminalWaiting() => false,
+      TerminalLive(:final columns, :final rows) =>
+        columns == frame.columns && rows == frame.rows,
+    };
+    if (!same) emit(TerminalLive(columns: frame.columns, rows: frame.rows));
   }
 
   void sendKey(TerminalKey key) => _fire(_input.key(nodeId, key));
@@ -76,11 +77,14 @@ class TerminalCubit extends Cubit<TerminalState> {
   void selectAll() => _fire(_input.selectAll(nodeId));
 
   /// ⌘C: o core devolve o texto da seleção; vazio ou nulo é "nada a copiar".
-  Future<String?> copy() => _input.copy(nodeId).catchError((_) => null);
+  Future<String?> copy() => _input
+      .copy(nodeId)
+      .catchError((_) => null, test: (error) => error is TerminalError);
 
   /// Há link na célula? Com ⌘ sobre ela, a UI mostra a mão. Falha é "não há".
-  Future<bool> linkHover(double x, double y) =>
-      _input.linkHover(nodeId, x, y).catchError((_) => false);
+  Future<bool> linkHover(double x, double y) => _input
+      .linkHover(nodeId, x, y)
+      .catchError((_) => false, test: (error) => error is TerminalError);
 
   /// Arquivos soltos aqui; o core monta o texto que vai ao agente.
   void dropFiles(List<String> paths) => _fire(_input.dropFiles(nodeId, paths));
@@ -93,7 +97,9 @@ class TerminalCubit extends Cubit<TerminalState> {
 
   /// Tecla e resize são "mande e siga": se a conexão cair, o core reenvia a
   /// tela inteira ao reassinar e o próximo gesto já vale.
-  void _fire(Future<void> future) => unawaited(future.catchError((_) {}));
+  void _fire(Future<void> future) => unawaited(
+    future.catchError((_) {}, test: (error) => error is TerminalError),
+  );
 
   @override
   Future<void> close() async {

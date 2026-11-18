@@ -1,23 +1,32 @@
-import '../../domain/entities/processes_view.dart';
+part of 'processes_cubit.dart';
 
 enum ProcessFilter { all, orphans }
 
-class ProcessesState {
-  const ProcessesState({
-    this.view = const ProcessesView(),
-    this.filter = ProcessFilter.all,
+/// A janela Processos: varrendo pela primeira vez, ou com a lista do core. O
+/// filtro vale nas duas fases.
+sealed class ProcessesState {
+  const ProcessesState({this.filter = ProcessFilter.all});
+
+  final ProcessFilter filter;
+}
+
+/// Ainda não chegou lista nenhuma.
+final class ProcessesScanning extends ProcessesState {
+  const ProcessesScanning({super.filter});
+}
+
+/// A lista que o core mandou, com o que a pessoa escolheu nela.
+final class ProcessesLoaded extends ProcessesState {
+  const ProcessesLoaded({
+    required this.view,
+    super.filter,
     this.selected = const {},
-    this.loaded = false,
   });
 
   final ProcessesView view;
-  final ProcessFilter filter;
 
   /// Os pids escolhidos na tabela.
   final Set<int> selected;
-
-  /// Já chegou uma lista.
-  final bool loaded;
 
   /// As linhas da tabela, pelo filtro.
   List<ProcessRow> get rows => filter == ProcessFilter.orphans
@@ -27,15 +36,13 @@ class ProcessesState {
         ]
       : view.rows;
 
-  ProcessesState copyWith({
+  ProcessesLoaded copyWith({
     ProcessesView? view,
     ProcessFilter? filter,
     Set<int>? selected,
-    bool? loaded,
-  }) => ProcessesState(
+  }) => ProcessesLoaded(
     view: view ?? this.view,
     filter: filter ?? this.filter,
     selected: selected ?? this.selected,
-    loaded: loaded ?? this.loaded,
   );
 }

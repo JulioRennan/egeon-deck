@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:egeon_deck/core/domain/entities/command_failed.dart';
+import 'package:egeon_deck/features/chat/domain/errors/chat_error.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_block.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_completion.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_participant.dart';
@@ -132,7 +132,7 @@ class FakeChatRepository implements ChatRepository {
     newQueues++;
     newQueueAgents.add(agent);
     final reason = refuseNewQueue;
-    if (reason != null) throw CommandFailed(reason);
+    if (reason != null) throw ChatRefused(reason);
     return newQueueId;
   }
 

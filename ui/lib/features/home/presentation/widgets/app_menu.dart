@@ -8,7 +8,6 @@ import '../../../../core/adapters/native_edit.dart';
 import '../../../../core/domain/entities/view_mode.dart';
 import '../../../canvas/domain/entities/canvas_tool.dart';
 import '../../../canvas/presentation/cubit/canvas_commands.dart';
-import '../../../update/domain/entities/app_state.dart';
 import '../../../update/presentation/cubit/update_cubit.dart';
 import '../cubit/shell_cubit.dart';
 
@@ -93,10 +92,10 @@ class AppMenu extends StatelessWidget {
     final cubit = context.read<UpdateCubit>();
     // Em chat o canvas não está na tela: as ferramentas e o zoom não se aplicam.
     final inChat = context.select(
-      (ShellCubit shell) => shell.state.shell.bench?.view == ViewMode.chat,
+      (ShellCubit shell) => shell.state.snapshot.bench?.view == ViewMode.chat,
     );
-    return BlocBuilder<UpdateCubit, AppState>(
-      builder: (context, app) => PlatformMenuBar(
+    return BlocBuilder<UpdateCubit, UpdateState>(
+      builder: (context, state) => PlatformMenuBar(
         menus: [
           PlatformMenu(
             label: name,
@@ -105,15 +104,18 @@ class AppMenu extends StatelessWidget {
                 members: [
                   ..._provided(PlatformProvidedMenuItemType.about),
                   PlatformMenuItem(
-                    label: app.update.menu,
-                    onSelected: app.update.menuEnabled ? cubit.pressMenu : null,
+                    label: state.app.update.menu,
+                    onSelected: state.app.update.menuEnabled
+                        ? cubit.pressMenu
+                        : null,
                   ),
                   PlatformMenuItem(
                     label: _check(
                       'Atualizar automaticamente',
-                      on: app.update.auto,
+                      on: state.app.update.auto,
                     ),
-                    onSelected: () => cubit.setUpdateAuto(on: !app.update.auto),
+                    onSelected: () =>
+                        cubit.setUpdateAuto(on: !state.app.update.auto),
                   ),
                 ],
               ),
@@ -142,10 +144,10 @@ class AppMenu extends StatelessWidget {
                   PlatformMenuItem(
                     label: _check(
                       'Limpar órfãos automaticamente',
-                      on: app.reaperEnabled,
+                      on: state.app.reaperEnabled,
                     ),
                     onSelected: () =>
-                        cubit.setReaperEnabled(on: !app.reaperEnabled),
+                        cubit.setReaperEnabled(on: !state.app.reaperEnabled),
                   ),
                 ],
               ),

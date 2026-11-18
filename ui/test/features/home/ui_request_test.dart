@@ -8,6 +8,7 @@ import 'package:egeon_deck/features/home/domain/usecase/reply_ui_request.dart';
 import 'package:egeon_deck/features/home/domain/usecase/watch_ui_requests.dart';
 import 'package:egeon_deck/features/home/presentation/cubit/ui_request_cubit.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:egeon_deck/features/home/domain/errors/home_error.dart';
 
 class _Screen implements ScreenControl {
   String? layoutApplied = 'chat';
@@ -63,7 +64,7 @@ class _Repository implements UiRequestRepository {
 
   @override
   Future<void> reply(Object request, UiReply reply) async {
-    if (failReply) throw StateError('sem conexão');
+    if (failReply) throw const HomeOffline();
     replies.add((request, reply));
   }
 }

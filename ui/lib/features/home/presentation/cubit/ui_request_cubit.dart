@@ -6,6 +6,7 @@ import '../../domain/entities/ui_request.dart';
 import '../../domain/usecase/answer_ui_request.dart';
 import '../../domain/usecase/reply_ui_request.dart';
 import '../../domain/usecase/watch_ui_requests.dart';
+import '../../domain/errors/home_error.dart';
 
 /// Dono da assinatura dos pedidos do core: abre ao nascer, cancela no `close()`.
 /// Não tem estado — cada pedido é atendido e respondido na hora.
@@ -32,12 +33,17 @@ class UiRequestCubit extends Cubit<void> {
     try {
       reply = await _answer(request);
     } on Object {
-      // A tela não soube responder: para o core é "não deu".
+      // A resposta é da própria tela (captura, geometria), não do socket: o que
+      // quer que falhe nela, para o core é "não deu" — sem resposta, o cliente
+      // HTTP dele ficaria pendurado.
       reply = const UiReply(null);
     }
     // Sem resposta o cliente HTTP fica pendurado até o tempo esgotar; se a
     // conexão caiu, o core já respondeu por conta própria.
-    await _reply(request.id, reply).catchError((Object _) {});
+    await _reply(
+      request.id,
+      reply,
+    ).catchError((_) {}, test: (error) => error is HomeError);
   }
 
   @override

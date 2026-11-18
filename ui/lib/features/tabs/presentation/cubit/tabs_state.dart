@@ -1,6 +1,7 @@
-import '../../domain/entities/workbench_tab.dart';
+part of 'tabs_cubit.dart';
 
-class TabsState {
+/// As abas abertas, na ordem da faixa.
+final class TabsState {
   const TabsState({this.tabs = const []});
 
   final List<WorkbenchTab> tabs;

@@ -1,4 +1,4 @@
-import '../entities/shell_state.dart';
+import '../entities/shell_snapshot.dart';
 import '../repository/shell_repository.dart';
 
 class WatchShell {
@@ -6,5 +6,5 @@ class WatchShell {
 
   final ShellRepository _repository;
 
-  Stream<ShellState> call() => _repository.watch();
+  Stream<ShellSnapshot> call() => _repository.watch();
 }

@@ -5,12 +5,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/usage_view.dart';
 import '../../domain/usecase/watch_usage.dart';
 
+part 'usage_state.dart';
+
 /// Um cubit por bancada: dono da assinatura do consumo, abre ao nascer e
 /// cancela no `close()`. O core manda a pastilha e o painel prontos.
-class UsageCubit extends Cubit<UsageView> {
+class UsageCubit extends Cubit<UsageState> {
   UsageCubit({required this.workbenchId, required WatchUsage watch})
-    : super(const UsageView()) {
-    _subscription = watch(workbenchId).listen(emit);
+    : super(const UsageState()) {
+    _subscription = watch(workbenchId)
+        .listen((view) => emit(UsageState(view: view)));
   }
 
   final String workbenchId;

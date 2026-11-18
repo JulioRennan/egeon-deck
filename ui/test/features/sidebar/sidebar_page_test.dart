@@ -1,8 +1,10 @@
 import 'package:egeon_deck/commons/widgets/count_seal.dart';
+import 'package:egeon_deck/core/adapters/injector.dart';
 import 'package:egeon_deck/core/domain/entities/activity_summary.dart';
 import 'package:egeon_deck/features/sidebar/domain/entities/sidebar_bench.dart';
 import 'package:egeon_deck/features/sidebar/domain/entities/sidebar_tree.dart';
-import 'package:egeon_deck/features/sidebar/domain/repository/sidebar_repository.dart';
+import 'package:egeon_deck/features/sidebar/domain/repository/sidebar_repository.dart'
+    show MoveLanding;
 import 'package:egeon_deck/features/sidebar/presentation/cubit/sidebar_cubit.dart';
 import 'package:egeon_deck/features/sidebar/presentation/page/sidebar_page.dart';
 import 'package:egeon_deck/features/sidebar/presentation/widgets/sidebar_panel.dart';
@@ -13,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_sidebar_repository.dart';
 import '../../support/hand_cursor.dart';
+import '../../support/inject_fakes.dart';
 import '../../support/overlay_host.dart';
 import '../../support/sidebar_fixtures.dart';
 
@@ -46,15 +49,12 @@ Future<void> mount(
   SidebarTree? tree,
   bool compact = false,
 }) async {
+  injectFakes(sidebar: repository);
   await tester.pumpWidget(
     overlayHost(
-      RepositoryProvider<SidebarRepository>.value(
-        value: repository,
-        child: SidebarPage(
-          cubit: createSidebarCubit(repository),
-          commands: calls.commands,
-          compact: compact,
-        ),
+      BlocProvider(
+        create: (_) => inject<SidebarCubit>(),
+        child: SidebarPage(commands: calls.commands, compact: compact),
       ),
       size: const Size(308, 900),
     ),
@@ -531,10 +531,21 @@ void main() {
     expectHandOnEveryClickable(tester);
   });
 
-  testWidgets('a página não é dona do cubit: sair da tela não o fecha', (
+  testWidgets('a página usa o cubit de cima: sair da tela não o fecha', (
     tester,
   ) async {
-    await mount(tester, repository, calls);
+    injectFakes(sidebar: repository);
+    final cubit = inject<SidebarCubit>();
+    addTearDown(cubit.close);
+    await tester.pumpWidget(
+      overlayHost(
+        BlocProvider.value(
+          value: cubit,
+          child: SidebarPage(commands: calls.commands),
+        ),
+        size: const Size(308, 900),
+      ),
+    );
     expect(repository.watchers, 1);
     await tester.pumpWidget(const SizedBox());
     expect(repository.watchers, 1, reason: 'quem fecha é a casca');

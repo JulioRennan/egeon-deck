@@ -1,8 +1,8 @@
 import 'package:egeon_deck/core/adapters/egeon_socket_client.dart';
 import 'package:egeon_deck/core/adapters/organization_feed.dart';
-import 'package:egeon_deck/core/domain/entities/command_failed.dart';
+import 'package:egeon_deck/features/workspace/domain/errors/workspace_error.dart';
 import 'package:egeon_deck/core/domain/entities/organization.dart';
-import 'package:egeon_deck/features/home/domain/entities/shell_state.dart';
+import 'package:egeon_deck/features/home/domain/entities/shell_snapshot.dart';
 import 'package:egeon_deck/features/home/domain/repository/socket_shell_repository.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/edge_link.dart';
 import 'package:egeon_deck/features/canvas/domain/repository/socket_canvas_repository.dart';
@@ -134,13 +134,13 @@ void main() {
     },
   );
 
-  test('erro do core vira CommandFailed com o texto dele', () async {
+  test('erro do core chega ao repositório com o texto dele', () async {
     final feed = OrganizationFeed(client);
     final failing = feed.command('close_terminal', {'node': 't9'});
     final expectation = expectLater(
       failing,
       throwsA(
-        isA<CommandFailed>().having(
+        isA<EgeonCommandError>().having(
           (e) => e.message,
           'message',
           "terminal desconhecido 't9'",
@@ -159,7 +159,7 @@ void main() {
       final expectation = expectLater(
         removal,
         throwsA(
-          isA<CommandFailed>().having(
+          isA<WorkspaceRefused>().having(
             (e) => e.message,
             'message',
             allOf(contains('"Agro"'), contains('2 bancada(s)')),
@@ -203,7 +203,7 @@ void main() {
       final locked = org.bench('0c0c0c0c')!;
       expect(locked.access?.folder, 'Documentos');
       expect(
-        ShellState.fromOrganization(org).lock?.text,
+        ShellSnapshot.fromOrganization(org).lock?.text,
         locked.access!.message,
         reason: 'o texto da cortina é o do core',
       );

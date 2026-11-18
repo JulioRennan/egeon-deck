@@ -4,11 +4,13 @@ import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../../commons/widgets/web_surface.dart';
-import '../../domain/entities/web_node_state.dart';
+import '../../domain/entities/web_node.dart';
+import '../../domain/errors/web_error.dart';
 import '../../domain/usecase/edit_web.dart';
 import '../../domain/usecase/watch_web.dart';
 import 'web_capture_registry.dart';
-import 'web_state.dart';
+
+part 'web_state.dart';
 
 /// A fábrica da página nativa: o nome do perfil e o UUID do data store dele.
 typedef WebControllerFactory = WebSurfaceController Function(
@@ -28,7 +30,7 @@ class WebCubit extends Cubit<WebState> {
     required this._edit,
     required this._createController,
     this.captures,
-  }) : super(const WebState()) {
+  }) : super(const WebWaiting()) {
     _subscription = watch(nodeId).listen(_onNode);
   }
 
@@ -40,7 +42,7 @@ class WebCubit extends Cubit<WebState> {
   final WebCaptureRegistry? captures;
   Future<Uint8List?> Function()? _capture;
 
-  StreamSubscription<WebNodeState>? _subscription;
+  StreamSubscription<WebNode>? _subscription;
   StreamSubscription<WebPageState>? _pages;
   WebSurfaceController? _controller;
   String? _profile;
@@ -49,24 +51,32 @@ class WebCubit extends Cubit<WebState> {
   /// A página viva, ou nula antes de o core dizer o perfil.
   WebSurfaceController? get controller => _controller;
 
-  void _onNode(WebNodeState node) {
+  /// Onde a página nativa está, se já disse.
+  WebPageState? get _page => switch (state) {
+    WebWaiting() => null,
+    WebShown(:final page) => page,
+  };
+
+  void _showNode(WebNode node) => emit(WebShown(node: node, page: _page));
+
+  void _onNode(WebNode node) {
     // Sem o UUID do perfil (do `web-profiles.json`, no core) não há data store
     // para abrir: a página espera ele chegar em vez de inventar um.
     final profileId = node.profileId;
     if (profileId == null) {
-      emit(state.copyWith(node: node));
+      _showNode(node);
       return;
     }
     if (_controller == null || _profile != node.profile) {
       _mount(node, profileId);
-    } else if (node.url != _requested && node.url != state.page?.url) {
+    } else if (node.url != _requested && node.url != _page?.url) {
       _requested = node.url;
-      _fire(_controller!.load(node.url));
+      _drive(_controller!.load(node.url));
     }
-    emit(state.copyWith(node: node));
+    _showNode(node);
   }
 
-  void _mount(WebNodeState node, String profileId) {
+  void _mount(WebNode node, String profileId) {
     unawaited(_pages?.cancel());
     _unregisterCapture();
     _controller?.dispose();
@@ -77,12 +87,15 @@ class WebCubit extends Cubit<WebState> {
     _profile = node.profile;
     _requested = node.url;
     _pages = controller.states.listen(_onPage);
-    _fire(controller.load(node.url));
+    _drive(controller.load(node.url));
   }
 
   void _onPage(WebPageState page) {
-    final known = state.node?.url;
-    emit(state.copyWith(page: page));
+    // A página só nasce depois do nó: sem ele, não há o que mostrar.
+    final shown = state;
+    if (shown is! WebShown) return;
+    final known = shown.node.url;
+    emit(shown.copyWith(page: page));
     // A página navegou sozinha: o core grava para a bancada voltar onde estava.
     if (page.url.isNotEmpty && page.url != known && page.url != _requested) {
       _requested = page.url;
@@ -92,17 +105,22 @@ class WebCubit extends Cubit<WebState> {
 
   void submit(String typed) => _fire(_edit.navigate(nodeId, typed));
 
-  void back() => _fire(_controller?.goBack());
+  void back() => _drive(_controller?.goBack());
 
-  void forward() => _fire(_controller?.goForward());
+  void forward() => _drive(_controller?.goForward());
 
-  void reload() => _fire(_controller?.reload());
+  void reload() => _drive(_controller?.reload());
 
   void setProfile(String profile) => _fire(_edit.setProfile(nodeId, profile));
 
   /// Comando é "mande e siga": o estado que o core mandar a seguir corrige a
   /// tela se ele recusar.
-  void _fire(Future<void>? future) =>
+  void _fire(Future<void> future) =>
+      unawaited(future.catchError((_) {}, test: (error) => error is WebError));
+
+  /// A página nativa avisa o que fez pelo stream de estados; a falha de um
+  /// pedido a ela não tem o que mostrar além disso.
+  void _drive(Future<void>? future) =>
       unawaited(future?.catchError((_) {}) ?? Future<void>.value());
 
   void _unregisterCapture() {

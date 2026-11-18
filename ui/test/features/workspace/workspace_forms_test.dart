@@ -1,15 +1,13 @@
-import 'package:egeon_deck/core/adapters/path_picker.dart';
 import 'package:egeon_deck/features/home/presentation/forms/app_forms.dart';
 import 'package:egeon_deck/features/home/presentation/forms/form_request.dart';
 import 'package:egeon_deck/features/workspace/domain/entities/workspace_draft.dart';
-import 'package:egeon_deck/features/workspace/domain/repository/workspace_repository.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_path_picker.dart';
 import '../../support/fake_workspace_repository.dart';
 import '../../support/hand_cursor.dart';
+import '../../support/inject_fakes.dart';
 import '../../support/overlay_host.dart';
 
 class Env {
@@ -21,19 +19,14 @@ class Env {
     tester.view.physicalSize = const Size(1000, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    injectFakes(workspaces: workspace, paths: picker);
     await tester.pumpWidget(
       overlayHost(
-        MultiRepositoryProvider(
-          providers: [
-            RepositoryProvider<WorkspaceRepository>.value(value: workspace),
-            RepositoryProvider<PathPicker>.value(value: picker),
-          ],
-          child: Builder(
-            builder: (c) {
-              context = c;
-              return const SizedBox();
-            },
-          ),
+        Builder(
+          builder: (c) {
+            context = c;
+            return const SizedBox();
+          },
         ),
         size: const Size(1000, 1000),
       ),

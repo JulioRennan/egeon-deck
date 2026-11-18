@@ -4,6 +4,7 @@ import '../../../../commons/widgets/app_dialog.dart';
 import '../../../../commons/widgets/app_text_field.dart';
 import '../../../../theme/app_colors.dart';
 import '../../domain/entities/workspace_draft.dart';
+import '../../domain/errors/workspace_error.dart';
 
 /// Marca as pastas que a bancada vai ver juntas. Sem pasta no workspace não há
 /// o que juntar: avisa e devolve `null`.
@@ -83,7 +84,7 @@ class _EditorBodyState extends State<_EditorBody> {
     if (name.isEmpty) {
       try {
         name = await widget.suggestName(folders);
-      } on Object {
+      } on WorkspaceError {
         name = '';
       }
     }

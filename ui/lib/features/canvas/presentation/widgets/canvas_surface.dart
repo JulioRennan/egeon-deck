@@ -15,7 +15,6 @@ import '../../domain/entities/canvas_tool.dart';
 import '../../domain/entities/edge_link.dart';
 import '../cubit/canvas_commands.dart';
 import '../cubit/canvas_cubit.dart';
-import '../cubit/canvas_state.dart';
 import 'canvas_glow.dart';
 import 'canvas_grid.dart';
 import 'canvas_toolbar.dart';

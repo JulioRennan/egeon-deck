@@ -7,7 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../../../../core/adapters/png_file.dart';
 import '../../../node/card/presentation/widgets/card_frame.dart';
 import '../../domain/entities/canvas_probe.dart';
-import '../cubit/canvas_state.dart';
+import '../cubit/canvas_cubit.dart';
 
 /// O canvas respondendo `/geometry` e `/shot`: a geometria sai da vista e dos
 /// frames; a imagem de um card, do `RepaintBoundary` dele.

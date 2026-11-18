@@ -1,19 +1,16 @@
-import 'package:egeon_deck/core/adapters/path_picker.dart';
 import 'package:egeon_deck/features/home/presentation/forms/app_forms.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/bench_template.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/worktree_info.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/worktree_plan.dart';
 import 'package:egeon_deck/features/home/presentation/forms/form_request.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/removal_plan.dart';
-import 'package:egeon_deck/features/workbench/domain/repository/workbench_repository.dart';
-import 'package:egeon_deck/features/workspace/domain/repository/workspace_repository.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_path_picker.dart';
 import '../../support/fake_workbench_repository.dart';
 import '../../support/fake_workspace_repository.dart';
+import '../../support/inject_fakes.dart';
 import '../../support/overlay_host.dart';
 
 class Forms {
@@ -22,23 +19,19 @@ class Forms {
   final picker = FakePathPicker();
   late BuildContext context;
 
-  Future<void> mount(WidgetTester tester) => tester.pumpWidget(
-    overlayHost(
-      MultiRepositoryProvider(
-        providers: [
-          RepositoryProvider<WorkbenchRepository>.value(value: bench),
-          RepositoryProvider<WorkspaceRepository>.value(value: workspace),
-          RepositoryProvider<PathPicker>.value(value: picker),
-        ],
-        child: Builder(
+  Future<void> mount(WidgetTester tester) {
+    injectFakes(workbenches: bench, workspaces: workspace, paths: picker);
+    return tester.pumpWidget(
+      overlayHost(
+        Builder(
           builder: (c) {
             context = c;
             return const SizedBox();
           },
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Future<void> ask(WidgetTester tester, FormRequest request) async {
     handleForm(context, request);

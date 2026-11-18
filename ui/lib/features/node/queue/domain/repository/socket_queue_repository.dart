@@ -5,6 +5,7 @@ import '../../../../../core/adapters/egeon_socket_client.dart';
 import '../entities/prompt_queue.dart';
 import '../entities/queue_effect.dart';
 import 'queue_repository.dart';
+import '../errors/queue_error.dart';
 
 /// A fila de uma bancada falando com o core Rust. O tópico é
 /// `node/<bancada>/<nó>`: o estado inteiro a cada mudança, mais os efeitos
@@ -13,6 +14,12 @@ class SocketQueueRepository implements QueueRepository {
   SocketQueueRepository(this._client, this.workbenchId);
 
   final EgeonSocketClient _client;
+
+  /// Recusa e queda do socket viram [QueueError].
+  Future<EgeonMessage> _request(String cmd, [EgeonMessage args = const {}]) =>
+      _client
+          .request(cmd, args)
+          .failingAs(refused: QueueRefused.new, offline: QueueOffline.new);
   final String workbenchId;
 
   String _topic(String nodeId) => 'node/$workbenchId/$nodeId';
@@ -21,8 +28,7 @@ class SocketQueueRepository implements QueueRepository {
     String cmd,
     String nodeId, [
     EgeonMessage args = const {},
-  ]) =>
-      _client.request(cmd, {'workbench': workbenchId, 'node': nodeId, ...args});
+  ]) => _request(cmd, {'workbench': workbenchId, 'node': nodeId, ...args});
 
   @override
   Stream<PromptQueue> watch(String nodeId) => _client
@@ -70,24 +76,13 @@ class SocketQueueRepository implements QueueRepository {
   Future<void> reopen(String nodeId, String id) =>
       _send('queue_reopen', nodeId, {'item': id});
 
-  /// Recusa do core (sem ligação, agente ocupado) volta como texto para o
-  /// aviso da tela; só falha de verdade sobe como erro.
   @override
-  Future<String?> send(String nodeId, {String? id}) =>
-      _refusal(() => _send('queue_send', nodeId, {'item': ?id}));
+  Future<void> send(String nodeId, {String? id}) =>
+      _send('queue_send', nodeId, {'item': ?id});
 
   @override
-  Future<String?> reply(String nodeId, String id, String text) =>
-      _refusal(() => _send('queue_reply', nodeId, {'item': id, 'text': text}));
-
-  Future<String?> _refusal(Future<EgeonMessage> Function() act) async {
-    try {
-      await act();
-      return null;
-    } on EgeonCommandError catch (error) {
-      return error.reply['error'] as String? ?? 'O core recusou';
-    }
-  }
+  Future<void> reply(String nodeId, String id, String text) =>
+      _send('queue_reply', nodeId, {'item': id, 'text': text});
 
   @override
   Future<void> setAuto(String nodeId, {required bool on}) =>

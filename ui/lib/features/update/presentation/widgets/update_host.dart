@@ -7,10 +7,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../commons/widgets/app_dialog.dart';
 import '../../../../commons/widgets/standard_dialogs.dart';
+import '../../../../core/adapters/injector.dart';
 import '../../domain/entities/app_effect.dart';
-import '../../domain/repository/app_repository.dart';
-import '../../domain/usecase/answer_app.dart';
-import '../../domain/usecase/watch_app.dart';
 import '../cubit/update_cubit.dart';
 import 'update_prompt_body.dart';
 
@@ -20,7 +18,7 @@ import 'update_prompt_body.dart';
 ///
 /// Fica abaixo de um `Overlay` — [dialogContext] devolve o contexto que o tem,
 /// quando o do próprio widget não serve.
-class UpdateHost extends StatefulWidget {
+class UpdateHost extends StatelessWidget {
   const UpdateHost({
     required this.child,
     this.onShowProcesses,
@@ -40,33 +38,43 @@ class UpdateHost extends StatefulWidget {
   final BuildContext Function()? dialogContext;
 
   @override
-  State<UpdateHost> createState() => _UpdateHostState();
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => inject<UpdateCubit>(),
+    child: _UpdateEffects(host: this, child: child),
+  );
 }
 
-class _UpdateHostState extends State<UpdateHost> {
-  late final UpdateCubit _cubit;
+/// Escuta os efeitos do cubit de cima e os desenha.
+class _UpdateEffects extends StatefulWidget {
+  const _UpdateEffects({required this.host, required this.child});
+
+  final UpdateHost host;
+  final Widget child;
+
+  @override
+  State<_UpdateEffects> createState() => _UpdateEffectsState();
+}
+
+class _UpdateEffectsState extends State<_UpdateEffects> {
+  late final UpdateCubit _cubit = context.read<UpdateCubit>();
   StreamSubscription<AppEffect>? _effects;
   var _prompting = false;
+
+  UpdateHost get _host => widget.host;
 
   @override
   void initState() {
     super.initState();
-    final repository = context.read<AppRepository>();
-    _cubit = UpdateCubit(
-      watch: WatchApp(repository),
-      answer: AnswerApp(repository),
-    );
     _effects = _cubit.effects.listen(_onEffect);
   }
 
   @override
   void dispose() {
     unawaited(_effects?.cancel());
-    unawaited(_cubit.close());
     super.dispose();
   }
 
-  BuildContext get _dialogs => widget.dialogContext?.call() ?? context;
+  BuildContext get _dialogs => _host.dialogContext?.call() ?? context;
 
   void _onEffect(AppEffect effect) {
     switch (effect) {
@@ -75,9 +83,9 @@ class _UpdateHostState extends State<UpdateHost> {
       case UpdateMessage(:final title, :final text):
         unawaited(messageDialog(_dialogs, title: title, message: text));
       case Terminate():
-        (widget.onTerminate ?? _exit)();
+        (_host.onTerminate ?? _exit)();
       case ShowProcesses():
-        widget.onShowProcesses?.call();
+        _host.onShowProcesses?.call();
     }
   }
 
@@ -107,6 +115,5 @@ class _UpdateHostState extends State<UpdateHost> {
   );
 
   @override
-  Widget build(BuildContext context) =>
-      BlocProvider<UpdateCubit>.value(value: _cubit, child: widget.child);
+  Widget build(BuildContext context) => widget.child;
 }

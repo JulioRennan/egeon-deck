@@ -3,6 +3,7 @@ import 'dart:async';
 import '../entities/chat_thread.dart';
 import '../entities/chat_update.dart';
 import '../repository/chat_repository.dart';
+import '../errors/chat_error.dart';
 
 /// A thread de uma bancada, sempre inteira. Aplica o diff do core e, se uma
 /// revisão se perdeu pelo caminho, pede a thread de novo em vez de seguir com
@@ -26,7 +27,7 @@ class WatchChat {
       try {
         thread = await _repository.snapshot(workbenchId);
         if (!out.isClosed) out.add(thread);
-      } on Object {
+      } on ChatError {
         // O próximo evento tenta de novo.
       } finally {
         healing = false;

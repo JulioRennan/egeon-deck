@@ -1,16 +1,19 @@
-/// O que a tela do terminal precisa saber além das linhas, que vão direto do
-/// stream para o widget.
-class TerminalState {
-  const TerminalState({this.live = false, this.columns = 0, this.rows = 0});
+part of 'terminal_cubit.dart';
 
-  final bool live;
+/// O que a tela do terminal precisa saber além das linhas, que vão direto do
+/// stream para o widget: se o core já mandou a tela, e o tamanho dela.
+sealed class TerminalState {
+  const TerminalState();
+}
+
+/// Nenhum quadro ainda.
+final class TerminalWaiting extends TerminalState {
+  const TerminalWaiting();
+}
+
+final class TerminalLive extends TerminalState {
+  const TerminalLive({required this.columns, required this.rows});
+
   final int columns;
   final int rows;
-
-  TerminalState copyWith({bool? live, int? columns, int? rows}) =>
-      TerminalState(
-        live: live ?? this.live,
-        columns: columns ?? this.columns,
-        rows: rows ?? this.rows,
-      );
 }

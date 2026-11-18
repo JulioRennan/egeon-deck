@@ -2,13 +2,17 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/domain/entities/command_failed.dart';
 import '../../domain/entities/chat_block.dart';
 import '../../domain/entities/chat_completion.dart';
+import '../../domain/entities/chat_participant.dart';
+import '../../domain/entities/chat_queue.dart';
 import '../../domain/entities/chat_thread.dart';
+import '../../domain/entities/permission_request.dart';
+import '../../domain/errors/chat_error.dart';
 import '../../domain/usecase/chat_actions.dart';
 import '../../domain/usecase/watch_chat.dart';
-import 'chat_state.dart';
+
+part 'chat_state.dart';
 
 /// O chat de uma bancada. É dono da assinatura: abre ao nascer e cancela no
 /// `close()`. As linhas vêm do core inteiras; aqui só se guarda o que é da
@@ -33,7 +37,6 @@ class ChatCubit extends Cubit<ChatState> {
       queues: thread.queues,
       permission: thread.permission,
       clearPermission: thread.permission == null,
-      loaded: true,
     ),
   );
 
@@ -53,10 +56,8 @@ class ChatCubit extends Cubit<ChatState> {
     try {
       final node = await _actions.newQueue(workbenchId, agent: _queueAgent());
       if (!isClosed) emit(state.copyWith(shownQueue: node));
-    } on CommandFailed catch (failure) {
-      _warn(failure.message);
-    } on Object {
-      _warn('Não foi possível criar a fila.');
+    } on ChatError catch (failure) {
+      _warn(failure);
     }
   }
 
@@ -70,12 +71,12 @@ class ChatCubit extends Cubit<ChatState> {
 
   Timer? _noticeTimer;
 
-  void _warn(String text) {
+  void _warn(ChatError failure) {
     if (isClosed) return;
-    emit(state.copyWith(notice: text));
+    emit(state.copyWith(queueFailure: failure));
     _noticeTimer?.cancel();
     _noticeTimer = Timer(const Duration(seconds: 4), () {
-      if (!isClosed) emit(state.copyWith(clearNotice: true));
+      if (!isClosed) emit(state.copyWith(clearQueueFailure: true));
     });
   }
 
@@ -125,7 +126,10 @@ class ChatCubit extends Cubit<ChatState> {
             to: state.target?.id,
             search: search,
           )
-          .catchError((_) => ChatCompletion.none(caret));
+          .catchError(
+            (_) => ChatCompletion.none(caret),
+            test: (error) => error is ChatError,
+          );
 
   /// Arquiva a conversa; quem chama já confirmou.
   void clear() => _fire(_actions.clear(workbenchId));
@@ -152,7 +156,8 @@ class ChatCubit extends Cubit<ChatState> {
   }
 
   /// Gesto é "mande e siga": o que vale é a thread que o core devolve.
-  void _fire(Future<void> future) => unawaited(future.catchError((_) {}));
+  void _fire(Future<void> future) =>
+      unawaited(future.catchError((_) {}, test: (error) => error is ChatError));
 
   @override
   Future<void> close() async {

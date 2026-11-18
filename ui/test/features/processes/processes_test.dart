@@ -1,19 +1,22 @@
 import 'package:egeon_deck/features/processes/domain/entities/processes_view.dart';
+import 'package:egeon_deck/features/processes/domain/errors/processes_error.dart';
 import 'package:egeon_deck/features/processes/domain/repository/processes_repository.dart';
 import 'package:egeon_deck/features/processes/domain/usecase/manage_processes.dart';
 import 'package:egeon_deck/features/processes/presentation/cubit/processes_cubit.dart';
-import 'package:egeon_deck/features/processes/presentation/cubit/processes_state.dart';
 import 'package:egeon_deck/features/processes/presentation/widgets/processes_panel.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_processes_repository.dart';
+import '../../support/inject_fakes.dart';
 import '../../support/pump.dart';
+
+/// A lista na tela; o teste só lê depois da primeira varredura.
+ProcessesLoaded loaded(ProcessesCubit cubit) => cubit.state as ProcessesLoaded;
 
 void main() {
   late FakeProcessesRepository repo;
@@ -30,10 +33,10 @@ void main() {
 
     test('varre ao abrir e mostra a lista pronta do core', () async {
       final cubit = await make();
-      expect(cubit.state.loaded, isTrue);
-      expect(cubit.state.view.rows.map((r) => r.pid), [100, 200, 300, 400]);
-      expect(cubit.state.view.summary, '2 no app · 2 órfãos');
-      expect(cubit.state.view.orphans, 2, reason: 'o número vem do core');
+      expect(cubit.state, isA<ProcessesLoaded>());
+      expect(loaded(cubit).view.rows.map((r) => r.pid), [100, 200, 300, 400]);
+      expect(loaded(cubit).view.summary, '2 no app · 2 órfãos');
+      expect(loaded(cubit).view.orphans, 2, reason: 'o número vem do core');
       await cubit.close();
     });
 
@@ -50,24 +53,24 @@ void main() {
     test('o filtro de órfãos mostra só eles', () async {
       final cubit = await make();
       cubit.setFilter(ProcessFilter.orphans);
-      expect(cubit.state.rows.map((r) => r.pid), [300, 400]);
+      expect(loaded(cubit).rows.map((r) => r.pid), [300, 400]);
       cubit.setFilter(ProcessFilter.all);
-      expect(cubit.state.rows, hasLength(4));
+      expect(loaded(cubit).rows, hasLength(4));
       await cubit.close();
     });
 
     test('a seleção: um, vários com ⌘ e faixa com ⇧', () async {
       final cubit = await make();
       cubit.select(100);
-      expect(cubit.state.selected, {100});
+      expect(loaded(cubit).selected, {100});
       cubit.select(300, additive: true);
-      expect(cubit.state.selected, {100, 300});
+      expect(loaded(cubit).selected, {100, 300});
       cubit.select(300, additive: true);
-      expect(cubit.state.selected, {100});
+      expect(loaded(cubit).selected, {100});
       cubit.select(300, range: true);
-      expect(cubit.state.selected, {100, 200, 300});
+      expect(loaded(cubit).selected, {100, 200, 300});
       cubit.select(400);
-      expect(cubit.state.selected, {400});
+      expect(loaded(cubit).selected, {400});
       await cubit.close();
     });
 
@@ -80,7 +83,7 @@ void main() {
           if (r.pid != 200) r,
       ];
       await cubit.refresh();
-      expect(cubit.state.selected, {300});
+      expect(loaded(cubit).selected, {300});
       await cubit.close();
     });
 
@@ -89,7 +92,7 @@ void main() {
       cubit.select(100);
       cubit.select(300, additive: true);
       cubit.setFilter(ProcessFilter.orphans);
-      expect(cubit.state.selected, {300});
+      expect(loaded(cubit).selected, {300});
       await cubit.close();
     });
 
@@ -99,13 +102,13 @@ void main() {
         final cubit = await make();
         await cubit.reapOrphans();
         expect(repo.reaps, 1);
-        expect(cubit.state.view.rows.map((r) => r.pid), [100, 200]);
+        expect(loaded(cubit).view.rows.map((r) => r.pid), [100, 200]);
 
         cubit.select(200);
         await cubit.killSelected();
         expect(repo.kills.single, [200]);
-        expect(cubit.state.view.rows.map((r) => r.pid), [100]);
-        expect(cubit.state.selected, isEmpty);
+        expect(loaded(cubit).view.rows.map((r) => r.pid), [100]);
+        expect(loaded(cubit).selected, isEmpty);
         await cubit.close();
       },
     );
@@ -142,7 +145,7 @@ void main() {
       );
       await pump();
       await cubit.reapOrphans();
-      expect(cubit.state.loaded, isFalse);
+      expect(cubit.state, isA<ProcessesScanning>());
       await cubit.close();
     });
   });
@@ -156,28 +159,26 @@ void main() {
       addTearDown(tester.view.reset);
       var closed = 0;
       addTearDown(() => expect(closed >= 0, isTrue));
+      injectFakes(processes: repo);
       await tester.pumpWidget(
-        RepositoryProvider<ProcessesRepository>.value(
-          value: repo,
-          child: WidgetsApp(
-            color: const Color(0xFF000000),
-            textStyle: AppTheme.textStyle,
-            builder: (context, _) => Overlay(
-              initialEntries: [
-                OverlayEntry(
-                  builder: (context) => Center(
-                    child: Builder(
-                      builder: (context) => GestureDetector(
-                        key: const ValueKey('open'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => showProcessesPanel(context),
-                        child: const SizedBox(width: 40, height: 40),
-                      ),
+        WidgetsApp(
+          color: const Color(0xFF000000),
+          textStyle: AppTheme.textStyle,
+          builder: (context, _) => Overlay(
+            initialEntries: [
+              OverlayEntry(
+                builder: (context) => Center(
+                  child: Builder(
+                    builder: (context) => GestureDetector(
+                      key: const ValueKey('open'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => showProcessesPanel(context),
+                      child: const SizedBox(width: 40, height: 40),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
@@ -330,19 +331,20 @@ void main() {
 
 class _Failing implements ProcessesRepository {
   @override
-  Future<ProcessesView> list() => Future.error(StateError('core fora'));
+  Future<ProcessesView> list() => Future.error(const ProcessesOffline());
 
   @override
-  Future<ProcessesView> reap() => Future.error(StateError('core fora'));
+  Future<ProcessesView> reap() => Future.error(const ProcessesOffline());
 
   @override
-  Future<ProcessConfirm> confirmReap() => Future.error(StateError('core fora'));
+  Future<ProcessConfirm> confirmReap() =>
+      Future.error(const ProcessesOffline());
 
   @override
   Future<ProcessConfirm> confirmKill(List<int> pids) =>
-      Future.error(StateError('core fora'));
+      Future.error(const ProcessesOffline());
 
   @override
   Future<ProcessesView> kill(List<int> pids) =>
-      Future.error(StateError('core fora'));
+      Future.error(const ProcessesOffline());
 }

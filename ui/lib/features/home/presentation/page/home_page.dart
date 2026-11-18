@@ -1,16 +1,12 @@
 import 'package:flutter/widgets.dart';
+
+import '../../../../core/domain/entities/workbench.dart';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/cubits/connection_cubit.dart';
-import '../../../../core/cubits/core_status.dart';
 import '../../../../theme/app_colors.dart';
-import '../../../node/terminal/domain/repository/terminal_repository.dart';
-import '../../../node/terminal/domain/usecase/open_terminal.dart';
-import '../cubit/home_cubit.dart';
 import '../cubit/shell_cubit.dart';
 import '../widgets/root_layout.dart';
-import '../../../chat/presentation/cubit/queue_panel_width.dart';
-import '../../domain/repository/node_repositories.dart';
 import '../widgets/home_content.dart';
 import '../widgets/workbench_canvas.dart';
 import '../../../chat/presentation/page/chat_page.dart';
@@ -21,43 +17,39 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final repository = context.read<TerminalRepository>();
-    return BlocProvider(
-      create: (context) {
-        final home = HomeCubit(OpenTerminal(repository));
-        final phase = context.read<ConnectionCubit>().state.phase;
-        if (phase == ConnectionPhase.connected) home.openTerminal();
-        return home;
-      },
-      child: BlocListener<ConnectionCubit, CoreStatus>(
-        listenWhen: (_, now) => now.phase == ConnectionPhase.connected,
-        listener: (context, _) => context.read<HomeCubit>().openTerminal(),
-        // Sem bancada na tela, o terminal único; com ela, o canvas ou o chat.
-        child: ColoredBox(
-          color: AppColors.background,
-          child: HomeShellPage(
-            canvas: (context, bench) => bench == null
-                ? const HomeContent()
-                : WorkbenchCanvas(
-                    bench: bench,
-                    // A barra flutuante cobre a esquerda do canvas; enquadrar
-                    // desconta, e recolher a barra reenquadra.
-                    sidebarInset: RootLayout.floatingInset(
-                      collapsed: context.select(
-                        (ShellCubit shell) => shell.state.collapsed,
-                      ),
-                      beside: false,
-                    ),
-                  ),
-            chat: (context, bench) => ChatPage(
-              workbenchId: bench.id,
-              queues: ChatQueues(
-                repository: context.read<NodeRepositories>().queue(bench.id),
-                width: context.read<QueuePanelWidth>(),
-              ),
-            ),
-          ),
-        ),
+    // Sem bancada na tela, o vazio com o aviso de conexão; com ela, o canvas
+    // ou o chat.
+    return ColoredBox(
+      color: AppColors.background,
+      child: HomeShellPage(
+        canvas: (context, bench) =>
+            bench == null ? const HomeContent() : _BenchCanvas(bench: bench),
+        chat: (context, bench) =>
+            ChatPage(workbenchId: bench.id, offerQueues: true),
+      ),
+    );
+  }
+}
+
+/// O recuo da barra é lido aqui, no `build` deste widget: no construtor do
+/// canvas o `context` é de quem chama, e o `select` fora do build dele estoura.
+class _BenchCanvas extends StatelessWidget {
+  const _BenchCanvas({required this.bench});
+
+  final Workbench bench;
+
+  @override
+  Widget build(BuildContext context) {
+    final collapsed = context.select(
+      (ShellCubit shell) => shell.state.collapsed,
+    );
+    return WorkbenchCanvas(
+      bench: bench,
+      // A barra flutuante cobre a esquerda do canvas; enquadrar desconta, e
+      // recolher a barra reenquadra.
+      sidebarInset: RootLayout.floatingInset(
+        collapsed: collapsed,
+        beside: false,
       ),
     );
   }

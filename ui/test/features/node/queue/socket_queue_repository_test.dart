@@ -12,6 +12,8 @@ import '../../../support/protocol_fixtures.dart';
 import '../../../support/pump.dart';
 import '../../../support/socket_fixture_harness.dart';
 
+import 'package:egeon_deck/features/node/queue/domain/errors/queue_error.dart';
+
 void main() {
   late SocketHarness harness;
   late SocketQueueRepository repository;
@@ -202,7 +204,7 @@ void main() {
     },
   );
 
-  test('a recusa do core volta como texto, para o aviso da tela', () async {
+  test('a recusa do core vira QueueRefused com o texto dele', () async {
     final error = replies['erro_fila']!['error']! as String;
     final future = repository.send('fila', id: 'a1b2c3');
     await pump();
@@ -211,7 +213,10 @@ void main() {
       'ok': false,
       'error': error,
     });
-    expect(await future, error);
+    await expectLater(
+      future,
+      throwsA(isA<QueueRefused>().having((e) => e.message, 'message', error)),
+    );
   });
 
   test('anotar devolve o id que o core responde (fixture queue_add)', () async {

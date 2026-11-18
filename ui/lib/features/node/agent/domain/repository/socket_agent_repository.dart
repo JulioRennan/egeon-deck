@@ -2,6 +2,7 @@ import '../../../../../core/adapters/egeon_socket_client.dart';
 import '../entities/agent_status.dart';
 import '../entities/model_choice.dart';
 import 'agent_repository.dart';
+import '../errors/agent_error.dart';
 
 /// O agente de uma bancada falando com o core Rust. O tópico é
 /// `node/<bancada>/<nó>`: o estado inteiro a cada mudança. Um repositório por
@@ -10,6 +11,12 @@ class SocketAgentRepository implements AgentRepository {
   SocketAgentRepository(this._client, this.workbenchId);
 
   final EgeonSocketClient _client;
+
+  /// Recusa e queda do socket viram [AgentError].
+  Future<EgeonMessage> _request(String cmd, [EgeonMessage args = const {}]) =>
+      _client
+          .request(cmd, args)
+          .failingAs(refused: AgentRefused.new, offline: AgentOffline.new);
   final String workbenchId;
 
   @override
@@ -24,8 +31,7 @@ class SocketAgentRepository implements AgentRepository {
     String cmd,
     String nodeId, [
     EgeonMessage args = const {},
-  ]) =>
-      _client.request(cmd, {'workbench': workbenchId, 'node': nodeId, ...args});
+  ]) => _request(cmd, {'workbench': workbenchId, 'node': nodeId, ...args});
 
   /// Modelo e ultracode vão em `set_node`; o esforço são as intenções do
   /// seletor, cuja regra é do core.

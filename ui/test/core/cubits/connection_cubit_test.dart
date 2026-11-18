@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:egeon_deck/core/adapters/egeon_app_launcher.dart';
 import 'package:egeon_deck/core/adapters/egeon_paths.dart';
 import 'package:egeon_deck/core/adapters/egeon_socket_client.dart';
+import 'package:egeon_deck/core/cubits/connection_cubit.dart';
 
 import '../../support/connection_cubit_for.dart';
 import '../../support/fake_process.dart';
 import '../../support/pump.dart';
 
-import 'package:egeon_deck/core/cubits/core_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_transport.dart';
@@ -25,15 +25,15 @@ void main() {
         retryDelay: const Duration(milliseconds: 10),
       ),
     );
-    expect(cubit.state.phase, ConnectionPhase.starting);
+    expect(cubit.state, isA<CoreConnecting>());
     await pump();
     transport.connections.last.upgrade();
     await pump();
-    expect(cubit.state.phase, ConnectionPhase.connected);
+    expect(cubit.state, isA<CoreConnected>());
 
     await transport.connections.last.drop();
     await pump();
-    expect(cubit.state.phase, isNot(ConnectionPhase.connected));
+    expect(cubit.state, isNot(isA<CoreConnected>()));
     await cubit.close();
   });
 

@@ -53,13 +53,13 @@ class ModelEntry {
 }
 
 /// O ultracode de um agente: existe só em modelo com esforço.
-class UltracodeState {
-  const UltracodeState({required this.on, required this.available});
+class Ultracode {
+  const Ultracode({required this.on, required this.available});
 
   final bool on;
   final bool available;
 
-  factory UltracodeState.fromMap(Map<String, Object?> map) => UltracodeState(
+  factory Ultracode.fromMap(Map<String, Object?> map) => Ultracode(
     on: map['on'] as bool? ?? false,
     available: map['available'] as bool? ?? true,
   );
@@ -96,7 +96,7 @@ class AgentStatus {
   /// O seletor de esforço, pronto, como o core o descreve.
   final EffortDialView dial;
   final bool offersEffort;
-  final UltracodeState? ultracode;
+  final Ultracode? ultracode;
 
   /// Nulo é "não se sabe": anel vazio e travessão.
   final ContextReading? context;
@@ -116,7 +116,7 @@ class AgentStatus {
           ? const EffortDialView()
           : EffortDialView.fromMap(map['dial']! as Map<String, Object?>),
       offersEffort: map['offers_effort'] as bool? ?? true,
-      ultracode: ultracode == null ? null : UltracodeState.fromMap(ultracode),
+      ultracode: ultracode == null ? null : Ultracode.fromMap(ultracode),
       context: context == null ? null : ContextReading.fromMap(context),
       clearable: map['clearable'] as bool? ?? true,
     );

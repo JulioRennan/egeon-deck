@@ -1,6 +1,5 @@
 import 'package:egeon_deck/features/update/domain/entities/app_effect.dart';
-import 'package:egeon_deck/features/update/domain/entities/app_state.dart';
-import 'package:egeon_deck/features/update/domain/repository/app_repository.dart';
+import 'package:egeon_deck/features/update/domain/entities/app_snapshot.dart';
 import 'package:egeon_deck/features/update/presentation/cubit/update_cubit.dart';
 import 'package:egeon_deck/features/update/presentation/widgets/update_host.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
@@ -12,6 +11,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_app_repository.dart';
+import '../../support/inject_fakes.dart';
 
 const _prompt = UpdatePrompt(
   version: '1.7.0',
@@ -37,33 +37,31 @@ void main() {
       ..physicalSize = const Size(800, 600)
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    injectFakes(app: repo);
     await tester.pumpWidget(
-      RepositoryProvider<AppRepository>.value(
-        value: repo,
-        // Um Overlay próprio, como o da casca: sem rota por baixo, o Esc do
-        // diálogo é do diálogo.
-        child: WidgetsApp(
-          color: const Color(0xFF000000),
-          textStyle: AppTheme.textStyle,
-          builder: (context, _) => Overlay(
-            initialEntries: [
-              OverlayEntry(
-                builder: (context) => UpdateHost(
-                  onShowProcesses: () => processes++,
-                  onTerminate: () => terminated++,
-                  child: Builder(
-                    builder: (context) {
-                      cubit = context.read<UpdateCubit>();
-                      return BlocBuilder<UpdateCubit, AppState>(
-                        builder: (context, state) =>
-                            Text('menu: ${state.update.menu}'),
-                      );
-                    },
-                  ),
+      // Um Overlay próprio, como o da casca: sem rota por baixo, o Esc do
+      // diálogo é do diálogo.
+      WidgetsApp(
+        color: const Color(0xFF000000),
+        textStyle: AppTheme.textStyle,
+        builder: (context, _) => Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (context) => UpdateHost(
+                onShowProcesses: () => processes++,
+                onTerminate: () => terminated++,
+                child: Builder(
+                  builder: (context) {
+                    cubit = context.read<UpdateCubit>();
+                    return BlocBuilder<UpdateCubit, UpdateState>(
+                      builder: (context, state) =>
+                          Text('menu: ${state.app.update.menu}'),
+                    );
+                  },
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -73,7 +71,7 @@ void main() {
   testWidgets('o menu mostra o que o core mandou', (tester) async {
     await pumpHost(tester);
     repo.push(
-      const AppState(
+      const AppSnapshot(
         update: UpdateView(
           phase: UpdatePhase.ready,
           menu: 'Reiniciar para atualizar para a versão 1.7.0',

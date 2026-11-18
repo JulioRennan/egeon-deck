@@ -1,10 +1,13 @@
+import '../errors/core_error.dart';
+
 /// O core Rust visto pela UI: garantir que ele roda, ligar o canal e saber se
 /// a conexão está de pé.
 abstract interface class CoreRepository {
   /// `true` quando o canal com o core abre, `false` quando cai.
   Stream<bool> watchLink();
 
-  /// Garante um core atendendo: lança o `egeon-app` se nada responde.
+  /// Garante um core atendendo: lança o `egeon-app` se nada responde. Falha
+  /// com [CoreLaunchFailed].
   Future<void> launch();
 
   /// Liga o canal; ele reconecta sozinho depois de uma queda.

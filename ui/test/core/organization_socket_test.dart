@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:egeon_deck/core/adapters/egeon_socket_client.dart';
 import 'package:egeon_deck/core/adapters/organization_feed.dart';
-import 'package:egeon_deck/core/domain/entities/command_failed.dart';
+import 'package:egeon_deck/features/workbench/domain/errors/workbench_error.dart';
+import 'package:egeon_deck/features/workspace/domain/errors/workspace_error.dart';
 import 'package:egeon_deck/core/domain/entities/view_mode.dart';
 import 'package:egeon_deck/features/home/domain/repository/socket_shell_repository.dart';
 import 'package:egeon_deck/features/sidebar/domain/repository/socket_sidebar_repository.dart';
@@ -330,7 +331,7 @@ void main() {
     expect(await bench.agentCount(deck), 3);
     expect(await bench.rules(deck), 'português');
     expect(await bench.rules('5e6f7a8b'), '', reason: 'sem regras é vazio');
-    await expectLater(bench.agentCount('x'), throwsA(isA<CommandFailed>()));
+    await expectLater(bench.agentCount('x'), throwsA(isA<WorkbenchRefused>()));
     expect(connection.sent.where((m) => m['cmd'] != 'subscribe'), isEmpty);
     await sub.cancel();
   });
@@ -426,7 +427,7 @@ void main() {
     expect(draft.multis.single.name, 'nexus');
     expect(draft.multis.single.id, 'p9');
     expect(draft.multis.single.folders, ['~/Documents/agro/nexus-backend']);
-    await expectLater(workspace.draft('x'), throwsA(isA<CommandFailed>()));
+    await expectLater(workspace.draft('x'), throwsA(isA<WorkspaceRefused>()));
     await sub.cancel();
   });
 
@@ -453,7 +454,7 @@ void main() {
     expect(await future, '~/Documents/agro');
   });
 
-  test('a recusa do core vira CommandFailed com o texto dele', () async {
+  test('a recusa do core vira WorkbenchRefused com o texto dele', () async {
     final bench = SocketWorkbenchRepository(feed);
     final future = bench.rename(deck, 'deck');
     await pump();
@@ -462,7 +463,7 @@ void main() {
     await expectLater(
       future,
       throwsA(
-        isA<CommandFailed>().having(
+        isA<WorkbenchRefused>().having(
           (e) => e.message,
           'message',
           reply['error'],

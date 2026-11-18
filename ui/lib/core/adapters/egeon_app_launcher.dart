@@ -64,7 +64,13 @@ class EgeonAppLauncher {
     final child = await _starter(
       executable,
       const [watchStdinFlag],
-      environment: {..._environment, 'EGEON_HOME': paths.home},
+      // O core decide identificador e nome pelo flavor; a pasta ele recebe
+      // pronta, para os dois lados nunca discordarem dela.
+      environment: {
+        ..._environment,
+        'EGEON_HOME': paths.home,
+        'EGEON_FLAVOR': paths.flavor.name,
+      },
       mode: ProcessStartMode.normal,
     );
     _child = child;

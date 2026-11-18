@@ -1,5 +1,6 @@
 import '../../adapters/egeon_app_launcher.dart';
 import '../../adapters/egeon_socket_client.dart';
+import '../errors/core_error.dart';
 import 'core_repository.dart';
 
 class SocketCoreRepository implements CoreRepository {
@@ -12,8 +13,16 @@ class SocketCoreRepository implements CoreRepository {
   Stream<bool> watchLink() =>
       _client.links.map((link) => link == EgeonLink.connected);
 
+  // O lançador falha com o que o sistema disser (binário ausente, processo
+  // que não abre); a tela mostra esse texto.
   @override
-  Future<void> launch() => _launcher.ensureRunning();
+  Future<void> launch() async {
+    try {
+      await _launcher.ensureRunning();
+    } on Object catch (error) {
+      throw CoreLaunchFailed('$error');
+    }
+  }
 
   @override
   void connect() => _client.start();

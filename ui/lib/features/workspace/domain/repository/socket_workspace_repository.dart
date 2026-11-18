@@ -1,7 +1,8 @@
 import '../../../../core/adapters/organization_feed.dart';
-import '../../../../core/domain/entities/command_failed.dart';
 import '../entities/workspace_draft.dart';
 import 'workspace_repository.dart';
+import '../../../../core/adapters/egeon_socket_client.dart';
+import '../errors/workspace_error.dart';
 
 /// Workspaces e projetos falando com o core Rust.
 class SocketWorkspaceRepository implements WorkspaceRepository {
@@ -9,19 +10,25 @@ class SocketWorkspaceRepository implements WorkspaceRepository {
 
   final OrganizationFeed _feed;
 
+  /// Recusa e queda do socket viram [WorkspaceError].
+  Future<EgeonMessage> _command(String cmd, [EgeonMessage args = const {}]) =>
+      _feed
+          .command(cmd, args)
+          .failingAs(
+            refused: WorkspaceRefused.new,
+            offline: WorkspaceOffline.new,
+          );
+
   @override
   Future<void> removeWorkspace(String id, {bool dryRun = false}) =>
-      _feed.command('remove_workspace', {'workspace': id, 'dry_run': dryRun});
+      _command('remove_workspace', {'workspace': id, 'dry_run': dryRun});
 
   @override
   Future<void> removeProject(
     String workspaceId,
     String projectId, {
     bool dryRun = false,
-  }) => _feed.command('remove_project', {
-    'project': projectId,
-    'dry_run': dryRun,
-  });
+  }) => _command('remove_project', {'project': projectId, 'dry_run': dryRun});
 
   /// O rascunho nasce do que a organização já tem: as pastas são os projetos
   /// simples; cada multi-projeto leva as pastas dos seus membros.
@@ -30,7 +37,7 @@ class SocketWorkspaceRepository implements WorkspaceRepository {
     final org = _feed.last;
     final ws = org?.workspace(id);
     if (org == null || ws == null) {
-      throw const CommandFailed('workspace desconhecido');
+      throw const WorkspaceRefused('workspace desconhecido');
     }
     return WorkspaceDraft(
       name: ws.name,
@@ -55,7 +62,7 @@ class SocketWorkspaceRepository implements WorkspaceRepository {
   /// multi-projetos como o Swift aplicava.
   @override
   Future<void> save(WorkspaceDraft draft, {String? id}) =>
-      _feed.command('save_workspace', {
+      _command('save_workspace', {
         'workspace': ?id,
         'name': draft.name,
         if (draft.iconSource != null)
@@ -75,15 +82,13 @@ class SocketWorkspaceRepository implements WorkspaceRepository {
 
   @override
   Future<String> suggestedParent(String workspaceId) async {
-    final reply = await _feed.command('suggest_parent', {
-      'workspace': workspaceId,
-    });
+    final reply = await _command('suggest_parent', {'workspace': workspaceId});
     return reply['parent']! as String;
   }
 
   @override
   Future<String> multiName(String? workspaceId, List<String> folders) async {
-    final reply = await _feed.command('multi_name', {
+    final reply = await _command('multi_name', {
       'workspace': ?workspaceId,
       'folders': folders,
     });
@@ -96,7 +101,7 @@ class SocketWorkspaceRepository implements WorkspaceRepository {
     required String name,
     required String parent,
     required bool git,
-  }) => _feed.command('create_project', {
+  }) => _command('create_project', {
     'workspace': workspaceId,
     'name': name,
     'parent': parent,

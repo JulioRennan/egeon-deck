@@ -4,10 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../commons/widgets/app_dialog.dart';
 import '../../../../commons/widgets/app_text_field.dart';
 import '../../../../commons/widgets/form_label.dart';
+import '../../../../core/adapters/injector.dart';
 import '../../../../theme/app_colors.dart';
 import '../../domain/entities/worktree_info.dart';
 import '../../domain/entities/worktree_plan.dart';
-import '../../domain/usecase/bench_creation.dart';
 import '../cubit/worktree_form_cubit.dart';
 
 /// O que o formulário de worktree devolve.
@@ -29,12 +29,11 @@ Future<WorktreeInput?> showWorktreeForm(
   BuildContext context, {
   required String benchId,
   required String benchName,
-  required WorktreeActions actions,
 }) => showAppDialog<WorktreeInput>(
   context,
   width: 460,
   builder: (_, close) => BlocProvider(
-    create: (_) => WorktreeFormCubit(benchId: benchId, actions: actions),
+    create: (_) => inject<WorktreeFormCubit>(benchId),
     child: _Body(benchName: benchName, close: close),
   ),
 );
@@ -79,11 +78,16 @@ class _BodyState extends State<_Body> {
     BuildContext context,
   ) => BlocConsumer<WorktreeFormCubit, WorktreeFormState>(
     listenWhen: (before, now) =>
-        before.info == null && now.info != null && _branch.text.isEmpty,
+        before is WorktreeFormOpening &&
+        now is WorktreeFormReady &&
+        _branch.text.isEmpty,
     listener: (context, state) => _branch.text = state.branch,
     builder: (context, state) {
       final cubit = context.read<WorktreeFormCubit>();
-      final info = state.info;
+      final info = switch (state) {
+        WorktreeFormOpening() => null,
+        WorktreeFormReady(:final info) => info,
+      };
       return DialogBody(
         title: 'Worktree de ${widget.benchName}',
         message: info?.summary,

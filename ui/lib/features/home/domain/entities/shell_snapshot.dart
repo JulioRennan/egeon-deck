@@ -11,9 +11,9 @@ class AccessLock {
   final bool asking;
 }
 
-/// O que a casca mostra agora: a bancada na tela e as duas cortinas.
-class ShellState {
-  const ShellState({this.bench, this.busy, this.lock});
+/// O que o core diz da casca agora: a bancada na tela e as duas cortinas.
+class ShellSnapshot {
+  const ShellSnapshot({this.bench, this.busy, this.lock});
 
   final Workbench? bench;
 
@@ -23,9 +23,9 @@ class ShellState {
 
   /// A bancada na tela é a da aba ativa. A cortina de acesso vem do core, com o
   /// texto pronto; a de "um instante" ainda não.
-  factory ShellState.fromOrganization(Organization org) {
+  factory ShellSnapshot.fromOrganization(Organization org) {
     final b = org.activeBench;
-    return ShellState(
+    return ShellSnapshot(
       bench: b == null
           ? null
           : Workbench(

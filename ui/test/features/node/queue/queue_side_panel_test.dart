@@ -1,11 +1,10 @@
-import 'package:egeon_deck/features/node/queue/domain/repository/queue_repository.dart';
 import 'package:egeon_deck/features/node/queue/presentation/widgets/queue_side_panel.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/in_memory_queue_repository.dart';
+import '../../../support/inject_fakes.dart';
 import 'queue_body_test.dart' show seeded;
 
 /// A conversa com a fila ao lado: divisória, largura e fechar.
@@ -22,23 +21,22 @@ void main() {
     addTearDown(tester.view.reset);
     final widths = <double?>[];
     final repo = InMemoryQueueRepository(queue: seeded());
+    injectFakes(queue: (_) => repo);
     await tester.pumpWidget(
-      RepositoryProvider<QueueRepository>.value(
-        value: repo,
-        child: WidgetsApp(
-          color: const Color(0xFF000000),
-          textStyle: AppTheme.textStyle,
-          pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-            settings: settings,
-            pageBuilder: (context, _, _) => builder(context),
-          ),
-          home: QueueSidePanel(
-            thread: const SizedBox(key: ValueKey('thread')),
-            queueNodeId: 'fila',
-            preferredWidth: preferred,
-            onWidth: widths.add,
-            onClose: onClose ?? () {},
-          ),
+      WidgetsApp(
+        color: const Color(0xFF000000),
+        textStyle: AppTheme.textStyle,
+        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
+          settings: settings,
+          pageBuilder: (context, _, _) => builder(context),
+        ),
+        home: QueueSidePanel(
+          thread: const SizedBox(key: ValueKey('thread')),
+          workbenchId: 'bancada',
+          queueNodeId: 'fila',
+          preferredWidth: preferred,
+          onWidth: widths.add,
+          onClose: onClose ?? () {},
         ),
       ),
     );

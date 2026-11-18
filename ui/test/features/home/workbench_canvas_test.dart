@@ -1,14 +1,9 @@
 import 'package:egeon_deck/core/domain/entities/workbench.dart';
 import 'package:egeon_deck/core/domain/entities/workbench_node.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
-import 'package:egeon_deck/features/canvas/domain/entities/canvas_probe.dart';
-import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_commands.dart';
 import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_cubit.dart';
 import 'package:egeon_deck/features/canvas/presentation/widgets/canvas_surface.dart';
-import 'package:egeon_deck/features/home/domain/repository/node_repositories.dart';
-import 'package:egeon_deck/features/node/web/presentation/cubit/web_capture_registry.dart';
 import 'package:egeon_deck/features/node/agent/presentation/widgets/agent_accessory.dart';
-import 'package:egeon_deck/features/node/terminal/domain/repository/terminal_repository.dart';
 import 'package:egeon_deck/features/node/terminal/presentation/widgets/terminal_body.dart';
 import 'package:egeon_deck/features/node/web/presentation/widgets/web_body.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/edge_link.dart';
@@ -21,8 +16,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/fake_node_repositories.dart';
+import '../../support/fake_agent_repository.dart';
 import '../../support/fake_terminal_repository.dart';
+import '../../support/fake_web_surface.dart';
+import '../../support/in_memory_queue_repository.dart';
+import '../../support/in_memory_web_repository.dart';
+import '../../support/inject_fakes.dart';
 import '../../support/overlay_host.dart';
 
 const bench = Workbench(id: 'b1', name: 'deck', path: '~/deck');
@@ -61,17 +60,15 @@ void main() {
     WidgetTester tester,
   ) async {
     final repository = InMemoryCanvasRepository();
+    injectFakes(canvas: repository);
     late BuildContext context;
     await tester.pumpWidget(
       overlayHost(
-        RepositoryProvider<CanvasRepository>.value(
-          value: repository,
-          child: Builder(
-            builder: (c) {
-              context = c;
-              return const SizedBox();
-            },
-          ),
+        Builder(
+          builder: (c) {
+            context = c;
+            return const SizedBox();
+          },
         ),
       ),
     );
@@ -174,85 +171,61 @@ void main() {
   });
 
   group('os corpos de cada tipo de nó', () {
-    Future<FakeNodeRepositories> mountCanvas(
-      WidgetTester tester,
-      Workbench shown,
-    ) async {
+    /// Registra os falsos do canvas e devolve as bancadas de cada repositório
+    /// de agente pedido.
+    List<String> injectCanvas() {
+      final benches = <String>[];
+      injectFakes(
+        canvas: InMemoryCanvasRepository(),
+        terminals: FakeTerminalRepository(),
+        agent: (workbenchId) {
+          benches.add(workbenchId);
+          return FakeAgentRepository();
+        },
+        queue: (_) => InMemoryQueueRepository(),
+        web: (_) => InMemoryWebRepository(),
+        createWebController: (profile, _) => FakeWebSurface(profile),
+      );
+      return benches;
+    }
+
+    Future<void> mountCanvas(WidgetTester tester, Workbench shown) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final nodes = FakeNodeRepositories();
+      injectCanvas();
       await tester.pumpWidget(
-        overlayHost(
-          MultiRepositoryProvider(
-            providers: [
-              RepositoryProvider<CanvasRepository>.value(
-                value: InMemoryCanvasRepository(),
-              ),
-              RepositoryProvider<TerminalRepository>.value(
-                value: FakeTerminalRepository(),
-              ),
-              RepositoryProvider<NodeRepositories>.value(value: nodes),
-              RepositoryProvider<CanvasProbeRegistry>.value(
-                value: CanvasProbeRegistry(),
-              ),
-              RepositoryProvider<CanvasCommands>.value(value: CanvasCommands()),
-              RepositoryProvider<WebCaptureRegistry>.value(
-                value: WebCaptureRegistry(),
-              ),
-            ],
-            child: WorkbenchCanvas(bench: shown),
-          ),
-          size: const Size(1400, 900),
-        ),
+        overlayHost(WorkbenchCanvas(bench: shown), size: const Size(1400, 900)),
       );
       await tester.pump();
       await tester.pump();
-      return nodes;
     }
 
-    testWidgets('cada bancada na tela ganha o seu conjunto de repositórios', (
+    testWidgets('os nós de cada bancada falam pelos repositórios dela', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final nodes = FakeNodeRepositories();
+      final benches = injectCanvas();
       final shown = ValueNotifier(bench);
       await tester.pumpWidget(
         overlayHost(
-          MultiRepositoryProvider(
-            providers: [
-              RepositoryProvider<CanvasRepository>.value(
-                value: InMemoryCanvasRepository(),
-              ),
-              RepositoryProvider<TerminalRepository>.value(
-                value: FakeTerminalRepository(),
-              ),
-              RepositoryProvider<NodeRepositories>.value(value: nodes),
-              RepositoryProvider<CanvasProbeRegistry>.value(
-                value: CanvasProbeRegistry(),
-              ),
-              RepositoryProvider<CanvasCommands>.value(value: CanvasCommands()),
-              RepositoryProvider<WebCaptureRegistry>.value(
-                value: WebCaptureRegistry(),
-              ),
-            ],
-            child: ValueListenableBuilder(
-              valueListenable: shown,
-              builder: (_, value, _) => WorkbenchCanvas(bench: value),
-            ),
+          ValueListenableBuilder(
+            valueListenable: shown,
+            builder: (_, value, _) => WorkbenchCanvas(bench: value),
           ),
           size: const Size(1400, 900),
         ),
       );
       await tester.pump();
-      expect(nodes.benches, ['b1']);
+      expect(benches.toSet(), {'b1'});
 
       shown.value = const Workbench(id: 'b2', name: 'outra', path: '~/o');
       await tester.pump();
       await tester.pump();
-      expect(nodes.benches, ['b1', 'b2']);
+      expect(benches.toSet(), {'b1', 'b2'});
+      expect(benches.last, 'b2');
     });
 
     testWidgets(
@@ -261,35 +234,14 @@ void main() {
         tester.view.physicalSize = const Size(1400, 900);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
+        injectCanvas();
         final inset = ValueNotifier(300.0);
         await tester.pumpWidget(
           overlayHost(
-            MultiRepositoryProvider(
-              providers: [
-                RepositoryProvider<CanvasRepository>.value(
-                  value: InMemoryCanvasRepository(),
-                ),
-                RepositoryProvider<TerminalRepository>.value(
-                  value: FakeTerminalRepository(),
-                ),
-                RepositoryProvider<NodeRepositories>.value(
-                  value: FakeNodeRepositories(),
-                ),
-                RepositoryProvider<CanvasProbeRegistry>.value(
-                  value: CanvasProbeRegistry(),
-                ),
-                RepositoryProvider<CanvasCommands>.value(
-                  value: CanvasCommands(),
-                ),
-                RepositoryProvider<WebCaptureRegistry>.value(
-                  value: WebCaptureRegistry(),
-                ),
-              ],
-              child: ValueListenableBuilder(
-                valueListenable: inset,
-                builder: (_, value, _) =>
-                    WorkbenchCanvas(bench: bench, sidebarInset: value),
-              ),
+            ValueListenableBuilder(
+              valueListenable: inset,
+              builder: (_, value, _) =>
+                  WorkbenchCanvas(bench: bench, sidebarInset: value),
             ),
             size: const Size(1400, 900),
           ),

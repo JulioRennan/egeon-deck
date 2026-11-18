@@ -3,7 +3,7 @@ import 'package:egeon_deck/features/node/card/presentation/widgets/card_motion.d
 
 import '../../../support/in_memory_web_repository.dart';
 
-import 'package:egeon_deck/features/node/web/domain/repository/web_repository.dart';
+import 'package:egeon_deck/core/adapters/injector.dart';
 import 'package:egeon_deck/features/node/web/presentation/cubit/web_capture_registry.dart';
 import 'package:egeon_deck/features/node/web/presentation/widgets/web_body.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
@@ -11,16 +11,15 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_web_surface.dart';
+import '../../../support/inject_fakes.dart';
 
 void main() {
   late InMemoryWebRepository repository;
   late List<FakeWebSurface> surfaces;
   var live = true;
-  WebCaptureRegistry? captures;
 
   Future<void> pumpWeb(WidgetTester tester) async {
     tester.view
@@ -29,29 +28,26 @@ void main() {
     addTearDown(tester.view.reset);
     surfaces = [];
     repository = InMemoryWebRepository();
+    injectFakes(
+      web: (_) => repository,
+      createWebController: (profile, _) {
+        final surface = FakeWebSurface(profile);
+        surfaces.add(surface);
+        return surface;
+      },
+    );
     await tester.pumpWidget(
-      RepositoryProvider<WebRepository>.value(
-        value: repository,
-        child: WidgetsApp(
-          color: const Color(0xFF000000),
-          textStyle: AppTheme.textStyle,
-          pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-            settings: settings,
-            pageBuilder: (context, _, _) => builder(context),
-          ),
-          home: StatefulBuilder(
-            builder: (context, setState) => CardMotion(
-              live: live,
-              child: WebBody(
-                nodeId: 'web1',
-                captures: captures,
-                createController: (profile, _) {
-                  final surface = FakeWebSurface(profile);
-                  surfaces.add(surface);
-                  return surface;
-                },
-              ),
-            ),
+      WidgetsApp(
+        color: const Color(0xFF000000),
+        textStyle: AppTheme.textStyle,
+        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
+          settings: settings,
+          pageBuilder: (context, _, _) => builder(context),
+        ),
+        home: StatefulBuilder(
+          builder: (context, setState) => CardMotion(
+            live: live,
+            child: const WebBody(workbenchId: 'bancada', nodeId: 'web1'),
           ),
         ),
       ),
@@ -60,10 +56,7 @@ void main() {
     await tester.pump();
   }
 
-  setUp(() {
-    live = true;
-    captures = null;
-  });
+  setUp(() => live = true);
 
   testWidgets('abre a página do perfil do nó na URL que o core guardou', (
     tester,
@@ -175,22 +168,16 @@ void main() {
 
     live = false;
     await tester.pumpWidget(
-      RepositoryProvider<WebRepository>.value(
-        value: repository,
-        child: WidgetsApp(
-          color: const Color(0xFF000000),
-          textStyle: AppTheme.textStyle,
-          pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-            settings: settings,
-            pageBuilder: (context, _, _) => builder(context),
-          ),
-          home: CardMotion(
-            live: false,
-            child: WebBody(
-              nodeId: 'web1',
-              createController: (profile, _) => surfaces.last,
-            ),
-          ),
+      WidgetsApp(
+        color: const Color(0xFF000000),
+        textStyle: AppTheme.textStyle,
+        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
+          settings: settings,
+          pageBuilder: (context, _, _) => builder(context),
+        ),
+        home: CardMotion(
+          live: false,
+          child: const WebBody(workbenchId: 'bancada', nodeId: 'web1'),
         ),
       ),
     );
@@ -203,10 +190,10 @@ void main() {
   testWidgets('a página viva se registra para o /shot e sai com o nó', (
     tester,
   ) async {
-    captures = WebCaptureRegistry();
     await pumpWeb(tester);
-    expect(await tester.runAsync(() => captures!.capture('web1')), isNotNull);
-    expect(await captures!.capture('outro'), isNull);
+    final captures = inject<WebCaptureRegistry>();
+    expect(await tester.runAsync(() => captures.capture('web1')), isNotNull);
+    expect(await captures.capture('outro'), isNull);
 
     // Trocar de perfil: a página nova assume o registro.
     await tester.tap(find.byKey(const ValueKey('web-profile')));
@@ -216,10 +203,10 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(surfaces, hasLength(2));
-    expect(await tester.runAsync(() => captures!.capture('web1')), isNotNull);
+    expect(await tester.runAsync(() => captures.capture('web1')), isNotNull);
 
     await tester.pumpWidget(const SizedBox());
-    expect(await captures!.capture('web1'), isNull);
+    expect(await captures.capture('web1'), isNull);
   });
 
   testWidgets('mão em tudo que responde a clique', (tester) async {

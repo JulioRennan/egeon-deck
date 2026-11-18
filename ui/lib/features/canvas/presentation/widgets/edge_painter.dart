@@ -7,7 +7,7 @@ import '../../../../theme/app_colors.dart';
 import '../../domain/entities/edge_curve.dart';
 import '../../domain/entities/edge_layout.dart';
 import '../../domain/entities/edge_link.dart';
-import '../cubit/canvas_state.dart';
+import '../cubit/canvas_cubit.dart';
 
 /// Desenha as arestas atrás dos nós, no espaço do documento.
 ///

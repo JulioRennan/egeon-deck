@@ -1,9 +1,9 @@
 import '../entities/app_effect.dart';
-import '../entities/app_state.dart';
+import '../entities/app_snapshot.dart';
 
 abstract interface class AppRepository {
   /// O estado do app (atualização e limpeza de órfãos): inteiro a cada mudança.
-  Stream<AppState> watch();
+  Stream<AppSnapshot> watch();
 
   /// Aviso de versão nova, mensagem, encerrar e abrir Processos.
   Stream<AppEffect> effects();

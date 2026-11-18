@@ -6,7 +6,6 @@ import 'package:egeon_deck/features/chat/domain/entities/chat_participant.dart';
 import 'package:egeon_deck/features/chat/domain/entities/permission_request.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_thread.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_update.dart';
-import 'package:egeon_deck/features/chat/domain/repository/chat_repository.dart';
 import 'package:egeon_deck/features/chat/presentation/page/chat_page.dart';
 import 'package:egeon_deck/features/chat/presentation/widgets/chat_thread_view.dart';
 import 'package:flutter/foundation.dart'
@@ -14,12 +13,12 @@ import 'package:flutter/foundation.dart'
 import 'package:egeon_deck/theme/code_palette.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/chat_fixtures.dart';
 import '../../support/fake_chat_repository.dart';
 import '../../support/hand_cursor.dart';
+import '../../support/inject_fakes.dart';
 import '../../support/overlay_host.dart';
 
 Map<String, Object?> blockMap(Map<String, Object?> extra) => {
@@ -39,14 +38,9 @@ Future<FakeChatRepository> mount(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final repository = FakeChatRepository();
+  injectFakes(chat: repository);
   await tester.pumpWidget(
-    overlayHost(
-      RepositoryProvider<ChatRepository>.value(
-        value: repository,
-        child: const ChatPage(workbenchId: 'b1'),
-      ),
-      size: size,
-    ),
+    overlayHost(const ChatPage(workbenchId: 'b1'), size: size),
   );
   return repository;
 }

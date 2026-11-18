@@ -1,37 +1,37 @@
 import 'dart:async';
 
-import 'package:egeon_deck/features/node/web/domain/entities/web_node_state.dart';
+import 'package:egeon_deck/features/node/web/domain/entities/web_node.dart';
 import 'package:egeon_deck/features/node/web/domain/repository/web_repository.dart';
 
 /// Nó web em memória, com a regra de endereço que o core vai ter, até o
 /// contrato.
 class InMemoryWebRepository implements WebRepository {
-  InMemoryWebRepository({WebNodeState? state})
+  InMemoryWebRepository({WebNode? state})
     : _state =
           state ??
-          const WebNodeState(
+          const WebNode(
             url: 'https://www.google.com',
             profile: 'pessoal',
             profiles: ['pessoal', 'trabalho'],
             profileId: '3f2a9c1e-5b7d-4e8a-9c0b-1d2e3f4a5b6c',
           );
 
-  WebNodeState _state;
+  WebNode _state;
   final _changes = StreamController<void>.broadcast();
   final reported = <String>[];
 
-  WebNodeState get state => _state;
+  WebNode get state => _state;
 
-  void _set(WebNodeState state) {
+  void _set(WebNode state) {
     _state = state;
     _changes.add(null);
   }
 
   @override
-  Stream<WebNodeState> watch(String nodeId) {
-    late final StreamController<WebNodeState> controller;
+  Stream<WebNode> watch(String nodeId) {
+    late final StreamController<WebNode> controller;
     StreamSubscription<void>? changes;
-    controller = StreamController<WebNodeState>(
+    controller = StreamController<WebNode>(
       onListen: () {
         controller.add(_state);
         changes = _changes.stream.listen((_) => controller.add(_state));
@@ -62,7 +62,7 @@ class InMemoryWebRepository implements WebRepository {
     final url = normalize(typed);
     if (url == null) return;
     _set(
-      WebNodeState(
+      WebNode(
         url: url,
         profile: _state.profile,
         profiles: _state.profiles,
@@ -75,7 +75,7 @@ class InMemoryWebRepository implements WebRepository {
   Future<void> reportNavigated(String nodeId, String url) async {
     reported.add(url);
     _set(
-      WebNodeState(
+      WebNode(
         url: url,
         profile: _state.profile,
         profiles: _state.profiles,
@@ -86,7 +86,7 @@ class InMemoryWebRepository implements WebRepository {
 
   @override
   Future<void> setProfile(String nodeId, String profile) async => _set(
-    WebNodeState(
+    WebNode(
       url: _state.url,
       profile: profile,
       profiles: {..._state.profiles, profile}.toList(),

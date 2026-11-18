@@ -1,17 +1,16 @@
 import 'package:egeon_deck/features/node/agent/domain/entities/agent_status.dart';
 import 'package:egeon_deck/features/node/agent/domain/entities/effort_dial_view.dart';
 import 'package:egeon_deck/features/node/agent/domain/entities/model_choice.dart';
-import 'package:egeon_deck/features/node/agent/domain/repository/agent_repository.dart';
 import 'package:egeon_deck/features/node/agent/presentation/widgets/agent_accessory.dart';
 import 'package:egeon_deck/features/node/agent/presentation/widgets/effort_dial.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_agent_repository.dart';
+import '../../../support/inject_fakes.dart';
 
 Future<FakeAgentRepository> pumpStrip(
   WidgetTester tester, {
@@ -19,22 +18,21 @@ Future<FakeAgentRepository> pumpStrip(
   void Function(VoidCallback)? onRequestClear,
 }) async {
   final repo = repository ?? FakeAgentRepository();
+  injectFakes(agent: (_) => repo);
   await tester.pumpWidget(
-    RepositoryProvider<AgentRepository>.value(
-      value: repo,
-      child: WidgetsApp(
-        color: const Color(0xFF000000),
-        textStyle: AppTheme.textStyle,
-        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-          settings: settings,
-          pageBuilder: (context, _, _) => builder(context),
-        ),
-        home: Align(
-          alignment: Alignment.topLeft,
-          child: AgentAccessory(
-            nodeId: 'claude',
-            onRequestClear: onRequestClear,
-          ),
+    WidgetsApp(
+      color: const Color(0xFF000000),
+      textStyle: AppTheme.textStyle,
+      pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
+        settings: settings,
+        pageBuilder: (context, _, _) => builder(context),
+      ),
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: AgentAccessory(
+          workbenchId: 'bancada',
+          nodeId: 'claude',
+          onRequestClear: onRequestClear,
         ),
       ),
     ),

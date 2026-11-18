@@ -36,7 +36,7 @@ class FakeAgentRepository implements AgentRepository {
       auto: true,
       label: 'medium',
     ),
-    ultracode: UltracodeState(on: false, available: true),
+    ultracode: Ultracode(on: false, available: true),
     context: ContextReading(used: 170500, window: 1000000),
   );
 

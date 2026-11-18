@@ -1,6 +1,5 @@
 import 'package:egeon_deck/commons/utils/agent_palette.dart';
 import 'package:egeon_deck/features/usage/domain/entities/usage_view.dart';
-import 'package:egeon_deck/features/usage/domain/repository/usage_repository.dart';
 import 'package:egeon_deck/features/usage/domain/usecase/watch_usage.dart';
 import 'package:egeon_deck/features/usage/presentation/cubit/usage_cubit.dart';
 import 'package:egeon_deck/features/usage/presentation/widgets/usage_panel.dart';
@@ -14,6 +13,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_usage_repository.dart';
+import '../../support/inject_fakes.dart';
 
 void main() {
   late FakeUsageRepository repo;
@@ -27,31 +27,29 @@ void main() {
       ..physicalSize = const Size(1000, 800)
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    injectFakes(usage: repo);
     await tester.pumpWidget(
-      RepositoryProvider<UsageRepository>.value(
-        value: repo,
-        child: WidgetsApp(
-          color: const Color(0xFF000000),
-          textStyle: AppTheme.textStyle,
-          builder: (context, _) => Overlay(
-            initialEntries: [
-              OverlayEntry(
-                builder: (context) => Align(
-                  alignment: Alignment.topCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: BlocProvider(
-                      create: (_) => UsageCubit(
-                        workbenchId: 'bancada',
-                        watch: WatchUsage(repo),
-                      ),
-                      child: const UsagePill(),
+      WidgetsApp(
+        color: const Color(0xFF000000),
+        textStyle: AppTheme.textStyle,
+        builder: (context, _) => Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (context) => Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: BlocProvider(
+                    create: (_) => UsageCubit(
+                      workbenchId: 'bancada',
+                      watch: WatchUsage(repo),
                     ),
+                    child: const UsagePill(),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

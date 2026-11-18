@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../../../commons/widgets/glass_panel.dart';
 import '../../../../commons/widgets/spinner.dart';
 import '../../../../theme/app_colors.dart';
-import '../../domain/entities/shell_state.dart';
+import '../../domain/entities/shell_snapshot.dart';
 
 /// "Um instante": cobre o conteúdo enquanto o core faz algo demorado.
 class BusyCurtain extends StatelessWidget {

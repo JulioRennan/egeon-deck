@@ -4,13 +4,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../../commons/widgets/file_drop_target.dart';
+import '../../../../../core/adapters/injector.dart';
 import '../../../../../theme/app_colors.dart';
-import '../../domain/repository/queue_repository.dart';
-import '../../domain/usecase/edit_queue.dart';
-import '../../domain/usecase/watch_queue.dart';
-import '../../domain/usecase/watch_queue_effects.dart';
+import '../../domain/errors/queue_error.dart';
 import '../cubit/queue_cubit.dart';
-import '../cubit/queue_state.dart';
 import 'queue_bar.dart';
 import 'queue_row.dart';
 import 'queue_text_field.dart';
@@ -19,8 +16,15 @@ import 'queue_text_field.dart';
 /// lista de tarefas: cada uma é um texto corrido, e o clique deixa editar ali
 /// mesmo, com os prints e a conversa embaixo.
 class QueueBody extends StatelessWidget {
-  const QueueBody({required this.nodeId, this.onClose, super.key});
+  const QueueBody({
+    required this.workbenchId,
+    required this.nodeId,
+    this.onClose,
+    super.key,
+  });
 
+  /// A bancada da fila: os comandos dela vão por esta bancada.
+  final String workbenchId;
   final String nodeId;
 
   /// No painel ao lado da conversa, o ✕ da barra; no card não há.
@@ -28,15 +32,10 @@ class QueueBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final repository = context.read<QueueRepository>();
     return BlocProvider(
-      key: ValueKey(nodeId),
-      create: (_) => QueueCubit(
-        nodeId: nodeId,
-        watch: WatchQueue(repository),
-        edit: EditQueue(repository),
-        effects: WatchQueueEffects(repository),
-      ),
+      key: ValueKey((workbenchId, nodeId)),
+      create: (_) =>
+          inject<QueueCubit>((workbenchId: workbenchId, nodeId: nodeId)),
       child: _QueueView(onClose: onClose),
     );
   }
@@ -60,7 +59,14 @@ class _QueueView extends StatelessWidget {
         child: BlocBuilder<QueueCubit, QueueState>(
           builder: (context, state) {
             final queue = state.queue;
-            final notice = state.shownNotice;
+            // O erro recente, senão por que a fila não anda.
+            final notice = switch (state.failure) {
+              QueueSendFailure(error: QueueRefused(:final message)) => message,
+              QueueSendFailure(error: QueueOffline(), reply: true) =>
+                'Falha ao responder',
+              QueueSendFailure(error: QueueOffline()) => 'Falha ao enviar',
+              null => queue.blocker,
+            };
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

@@ -6,6 +6,7 @@ import '../entities/canvas_card.dart';
 import '../entities/canvas_tool.dart';
 import '../entities/edge_link.dart';
 import 'canvas_repository.dart';
+import '../errors/canvas_error.dart';
 
 /// O canvas falando com o core Rust pelo cliente único do socket: o tópico
 /// `workbench/<id>/nodes` traz o estado inteiro a cada mudança, e os gestos
@@ -15,6 +16,12 @@ class SocketCanvasRepository implements CanvasRepository {
   SocketCanvasRepository(this._client);
 
   final EgeonSocketClient _client;
+
+  /// Recusa e queda do socket viram [CanvasError].
+  Future<EgeonMessage> _request(String cmd, [EgeonMessage args = const {}]) =>
+      _client
+          .request(cmd, args)
+          .failingAs(refused: CanvasRefused.new, offline: CanvasOffline.new);
 
   /// Os frames que o core tem, por bancada e nó. Só o que mudou vai em
   /// `move_node`.
@@ -41,7 +48,7 @@ class SocketCanvasRepository implements CanvasRepository {
   }
 
   Future<void> _move(String workbenchId, String node, Rect frame) async {
-    await _client.request('move_node', {
+    await _request('move_node', {
       'workbench': workbenchId,
       'node': node,
       'frame': {
@@ -71,7 +78,7 @@ class SocketCanvasRepository implements CanvasRepository {
   }) async {
     final kind = tool.nodeKind;
     if (kind == null) return;
-    await _client.request('create_node', {
+    await _request('create_node', {
       'workbench': workbenchId,
       'type': kind.wire,
       'frame': {
@@ -86,7 +93,7 @@ class SocketCanvasRepository implements CanvasRepository {
 
   @override
   Future<void> createLink(String workbenchId, String from, String to) =>
-      _client.request('link', {
+      _request('link', {
         'workbench': workbenchId,
         'from': from,
         'to': to,
@@ -96,14 +103,14 @@ class SocketCanvasRepository implements CanvasRepository {
   /// Remove a ligação inteira — os dois sentidos, porque na tela ela é uma
   /// linha só.
   @override
-  Future<void> removeLink(String workbenchId, EdgeLink link) => _client.request(
+  Future<void> removeLink(String workbenchId, EdgeLink link) => _request(
     'unlink',
     {'workbench': workbenchId, 'from': link.a, 'to': link.b, 'both': true},
   );
 
   @override
   Future<void> cycleLink(String workbenchId, EdgeLink link) =>
-      _client.request('set_edge', {
+      _request('set_edge', {
         'workbench': workbenchId,
         'from': link.a,
         'to': link.b,
@@ -113,7 +120,7 @@ class SocketCanvasRepository implements CanvasRepository {
   /// `max_sends: null` é "sem limite próprio": a chave vai mesmo vazia.
   @override
   Future<void> setLinkLimit(String workbenchId, EdgeLink link, int? maxSends) =>
-      _client.request('set_edge', {
+      _request('set_edge', {
         'workbench': workbenchId,
         'from': link.a,
         'to': link.b,
@@ -121,10 +128,8 @@ class SocketCanvasRepository implements CanvasRepository {
       });
 
   @override
-  Future<void> removeNode(String workbenchId, String nodeId) => _client.request(
-    'remove_node',
-    {'workbench': workbenchId, 'node': nodeId},
-  );
+  Future<void> removeNode(String workbenchId, String nodeId) =>
+      _request('remove_node', {'workbench': workbenchId, 'node': nodeId});
 
   /// `ui_focus`: o nó só vai quando há (o app em segundo plano não tem foco de
   /// teclado em nenhum).
@@ -135,7 +140,7 @@ class SocketCanvasRepository implements CanvasRepository {
     String? nodeId,
     Size? window,
   }) async {
-    await _client.request('ui_focus', {
+    await _request('ui_focus', {
       'app_active': appActive,
       if (workbenchId != null && nodeId != null)
         'node': {'workbench': workbenchId, 'node': nodeId},

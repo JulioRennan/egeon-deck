@@ -116,7 +116,7 @@ void main() {
     repository.refuse = 'sem git';
     final cubit = open();
     await settle();
-    expect(cubit.state.info, isNull);
+    expect(cubit.state, isA<WorktreeFormOpening>());
   });
 
   test('fechar antes da resposta não emite', () async {

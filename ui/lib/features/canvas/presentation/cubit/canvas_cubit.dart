@@ -11,6 +11,7 @@ import '../../domain/entities/canvas_tool.dart';
 import '../../domain/entities/canvas_viewport.dart';
 import '../../domain/entities/edge_layout.dart';
 import '../../domain/entities/edge_link.dart';
+import '../../domain/errors/canvas_error.dart';
 import '../../domain/repository/canvas_repository.dart';
 import '../../domain/usecase/edit_links.dart';
 import '../../domain/usecase/place_node.dart';
@@ -18,7 +19,8 @@ import '../../domain/usecase/remove_node.dart';
 import '../../domain/usecase/save_frames.dart';
 import '../../domain/usecase/set_ui_focus.dart';
 import '../../domain/usecase/watch_canvas.dart';
-import 'canvas_state.dart';
+
+part 'canvas_state.dart';
 
 /// Um cubit por canvas (uma bancada). É dono da assinatura do core: abre ao
 /// nascer e cancela no `close()`. Todos os pontos que entram aqui estão em
@@ -502,7 +504,8 @@ class CanvasCubit extends Cubit<CanvasState> {
 
   /// Comando é "mande e siga": se o core recusar, o próximo estado que ele
   /// mandar já corrige a tela.
-  Future<void> _fire(Future<void> future) => future.catchError((_) {});
+  Future<void> _fire(Future<void> future) =>
+      future.catchError((_) {}, test: (error) => error is CanvasError);
 
   @override
   Future<void> close() async {

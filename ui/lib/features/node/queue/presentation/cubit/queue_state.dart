@@ -1,10 +1,22 @@
-import '../../domain/entities/prompt_queue.dart';
+part of 'queue_cubit.dart';
 
-class QueueState {
+/// O último envio que não foi: o que se tentou e o erro do core.
+final class QueueSendFailure {
+  const QueueSendFailure(this.error, {required this.reply});
+
+  final QueueError error;
+
+  /// Era uma resposta ao agente, não um envio.
+  final bool reply;
+}
+
+/// A fila como o core a manda e o que é só da tela: a tarefa aberta, a falha
+/// do último envio e o rascunho vindo de fora.
+final class QueueState {
   const QueueState({
     this.queue = const PromptQueue(),
     this.expanded,
-    this.notice,
+    this.failure,
     this.draft,
     this.draftSerial = 0,
   });
@@ -15,25 +27,22 @@ class QueueState {
   final String? expanded;
 
   /// O erro do último envio; some sozinho e deixa o que a fila diz de si.
-  final String? notice;
+  final QueueSendFailure? failure;
 
   /// Rascunho vindo de fora para a linha de baixo. O [draftSerial] muda a cada
   /// um, para o mesmo texto de novo também valer.
   final String? draft;
   final int draftSerial;
 
-  /// O que mostrar acima da lista: o erro recente, senão por que a fila não anda.
-  String? get shownNotice => notice ?? queue.blocker;
-
   QueueState copyWith({
     PromptQueue? queue,
     String? Function()? expanded,
-    String? Function()? notice,
+    QueueSendFailure? Function()? failure,
     String? draft,
   }) => QueueState(
     queue: queue ?? this.queue,
     expanded: expanded != null ? expanded() : this.expanded,
-    notice: notice != null ? notice() : this.notice,
+    failure: failure != null ? failure() : this.failure,
     draft: draft ?? this.draft,
     draftSerial: draft != null ? draftSerial + 1 : draftSerial,
   );

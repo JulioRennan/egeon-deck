@@ -6,13 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/canvas_card.dart';
 import '../../domain/entities/canvas_probe.dart';
 import '../../domain/entities/edge_link.dart';
-import '../../domain/repository/canvas_repository.dart';
-import '../../domain/usecase/edit_links.dart';
-import '../../domain/usecase/place_node.dart';
-import '../../domain/usecase/remove_node.dart';
-import '../../domain/usecase/save_frames.dart';
-import '../../domain/usecase/set_ui_focus.dart';
-import '../../domain/usecase/watch_canvas.dart';
+import '../../../../core/adapters/injector.dart';
 import '../cubit/canvas_commands.dart';
 import '../cubit/canvas_cubit.dart';
 import '../widgets/canvas_surface.dart';
@@ -62,18 +56,9 @@ class CanvasPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final repository = context.read<CanvasRepository>();
     return BlocProvider(
       key: ValueKey(workbenchId),
-      create: (_) => CanvasCubit(
-        workbenchId: workbenchId,
-        watch: WatchCanvas(repository),
-        saveFrames: SaveFrames(repository),
-        placeNode: PlaceNode(repository),
-        links: EditLinks(repository),
-        removeNode: RemoveNode(repository),
-        setFocus: SetUiFocus(repository),
-      ),
+      create: (_) => inject<CanvasCubit>(workbenchId),
       child: CanvasSurface(
         bodyBuilder: bodyBuilder,
         accessoryBuilder: accessoryBuilder,

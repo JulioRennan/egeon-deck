@@ -2,6 +2,8 @@ import '../../../../core/adapters/organization_feed.dart';
 import '../../../../core/domain/entities/organization.dart';
 import '../entities/workbench_tab.dart';
 import 'tabs_repository.dart';
+import '../../../../core/adapters/egeon_socket_client.dart';
+import '../errors/tabs_error.dart';
 
 /// As abas falando com o core Rust: saem do tópico `workspaces`, das bancadas
 /// que têm posição de aba.
@@ -10,16 +12,22 @@ class SocketTabsRepository implements TabsRepository {
 
   final OrganizationFeed _feed;
 
+  /// Recusa e queda do socket viram [TabsError].
+  Future<EgeonMessage> _command(String cmd, [EgeonMessage args = const {}]) =>
+      _feed
+          .command(cmd, args)
+          .failingAs(refused: TabsRefused.new, offline: TabsOffline.new);
+
   @override
   Stream<List<WorkbenchTab>> watch() => _feed.watch().map(WorkbenchTab.listOf);
 
   @override
   Future<void> pick(String id) =>
-      _feed.command('activate_workbench', {'workbench': id});
+      _command('activate_workbench', {'workbench': id});
 
   @override
   Future<void> close(String id) =>
-      _feed.command('close_workbench', {'workbench': id});
+      _command('close_workbench', {'workbench': id});
 
   /// O arrasto entrega a ordem final; o core quer um movimento só. Acha qual
   /// aba mudou de lugar comparando com a ordem de agora.
@@ -34,7 +42,7 @@ class SocketTabsRepository implements TabsRepository {
       final moved = [...now]..remove(ids[i]);
       final candidate = [...moved]..insert(i, ids[i]);
       if (_same(candidate, ids)) {
-        await _feed.command('move_tab', {'workbench': ids[i], 'to': i});
+        await _command('move_tab', {'workbench': ids[i], 'to': i});
         return;
       }
     }

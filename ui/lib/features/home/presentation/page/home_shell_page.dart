@@ -5,29 +5,18 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../commons/widgets/screen_captures.dart';
+import '../../../../core/adapters/injector.dart';
 import '../../../../core/adapters/png_file.dart' as png_file;
 import '../../../../core/adapters/window_frame.dart';
 import '../../../../core/domain/entities/view_mode.dart';
 import '../../../../core/domain/entities/workbench.dart';
 import '../../../canvas/domain/entities/canvas_probe.dart';
 import '../../../canvas/presentation/cubit/canvas_commands.dart';
-import '../../../chat/presentation/cubit/queue_panel_width.dart';
-import '../../../node/web/presentation/cubit/web_capture_registry.dart';
-import '../../../sidebar/domain/repository/sidebar_repository.dart';
 import '../../../sidebar/presentation/cubit/sidebar_cubit.dart';
 import '../../../sidebar/presentation/page/sidebar_page.dart';
 import '../../../sidebar/presentation/widgets/sidebar_panel.dart';
-import '../../../tabs/domain/repository/tabs_repository.dart';
 import '../../../tabs/presentation/cubit/tabs_cubit.dart';
 import '../../../tabs/presentation/page/tabs_page.dart';
-import '../../domain/repository/shell_repository.dart';
-import '../../domain/repository/ui_request_repository.dart';
-import '../../domain/usecase/answer_ui_request.dart';
-import '../../domain/usecase/reply_ui_request.dart';
-import '../../domain/usecase/watch_ui_requests.dart';
-import '../../domain/usecase/resolve_access_lock.dart';
-import '../../domain/usecase/set_view_mode.dart';
-import '../../domain/usecase/watch_shell.dart';
 import '../cubit/shell_cubit.dart';
 import '../cubit/ui_request_cubit.dart';
 import '../forms/app_forms.dart';
@@ -83,54 +72,7 @@ class HomeShellPage extends StatefulWidget {
 
 class _HomeShellPageState extends State<HomeShellPage> {
   late final OverlayEntry _entry = OverlayEntry(builder: _build);
-  late final ShellCubit _cubit;
-  late final TabsCubit _tabs;
-  late final SidebarCubit _sidebar;
-  late final UiRequestCubit _requests;
   final _captures = ScreenCaptures();
-
-  /// O canvas da bancada na tela se registra aqui; `/geometry` e `/shot` de
-  /// card perguntam a ele.
-  final probes = CanvasProbeRegistry();
-
-  /// As páginas web vivas, para o `/shot` de um nó web incluir a página.
-  final webCaptures = WebCaptureRegistry();
-
-  /// Ferramentas e zoom do canvas ao vivo, para o menu Canvas.
-  final canvasCommands = CanvasCommands();
-
-  /// A largura do painel da fila no chat: uma só para todas as bancadas.
-  final queuePanelWidth = QueuePanelWidth();
-
-  @override
-  void initState() {
-    super.initState();
-    final repository = context.read<ShellRepository>();
-    _tabs = createTabsCubit(context.read<TabsRepository>());
-    _cubit = ShellCubit(
-      watch: WatchShell(repository),
-      setView: SetViewMode(repository),
-      access: ResolveAccessLock(repository),
-    );
-    _sidebar = createSidebarCubit(context.read<SidebarRepository>());
-    final requests = context.read<UiRequestRepository>();
-    _requests = UiRequestCubit(
-      watch: WatchUiRequests(requests),
-      answer: AnswerUiRequest(
-        ShellScreenControl(
-          shell: _cubit,
-          sidebar: _sidebar,
-          captures: _captures,
-          window: widget.window,
-          writePng: widget.writePng,
-          canvas: () => probes.active,
-        ),
-      ),
-      reply: ReplyUiRequest(requests),
-      activate: widget.activator.activate,
-      activations: requests.activations(),
-    );
-  }
 
   @override
   void didUpdateWidget(HomeShellPage old) {
@@ -141,48 +83,60 @@ class _HomeShellPageState extends State<HomeShellPage> {
   @override
   void dispose() {
     _entry.remove();
-    unawaited(_cubit.close());
-    unawaited(_tabs.close());
-    queuePanelWidth.dispose();
-    unawaited(_sidebar.close());
-    unawaited(_requests.close());
     super.dispose();
   }
 
+  // Os cubits da casca nascem com ela, não quando alguém os lê: as assinaturas
+  // e os pedidos de tela do core precisam estar abertos desde o começo.
   @override
-  Widget build(BuildContext context) => Overlay(initialEntries: [_entry]);
+  Widget build(BuildContext context) => MultiBlocProvider(
+    providers: [
+      BlocProvider(lazy: false, create: (_) => inject<ShellCubit>()),
+      BlocProvider(lazy: false, create: (_) => inject<TabsCubit>()),
+      BlocProvider(lazy: false, create: (_) => inject<SidebarCubit>()),
+      BlocProvider(
+        lazy: false,
+        create: (context) => inject<UiRequestCubit>((
+          screen: ShellScreenControl(
+            shell: context.read<ShellCubit>(),
+            sidebar: context.read<SidebarCubit>(),
+            captures: _captures,
+            window: widget.window,
+            writePng: widget.writePng,
+            canvas: () => inject<CanvasProbeRegistry>().active,
+          ),
+          activate: widget.activator.activate,
+        )),
+      ),
+    ],
+    child: Overlay(initialEntries: [_entry]),
+  );
 
   /// Roda abaixo do `Overlay`: é este `context` que as janelas usam.
-  Widget _build(BuildContext overlayContext) => UpdateHost(
-    dialogContext: () => overlayContext,
-    onShowProcesses: () => unawaited(showProcessesPanel(overlayContext)),
-    child: MultiBlocProvider(
-      providers: [
-        BlocProvider.value(value: _cubit),
-        BlocProvider.value(value: _tabs),
-        RepositoryProvider.value(value: probes),
-        RepositoryProvider.value(value: webCaptures),
-        RepositoryProvider.value(value: canvasCommands),
-        RepositoryProvider.value(value: queuePanelWidth),
-      ],
+  Widget _build(BuildContext overlayContext) {
+    final shell = overlayContext.read<ShellCubit>();
+    final tabs = overlayContext.read<TabsCubit>();
+    return UpdateHost(
+      dialogContext: () => overlayContext,
+      onShowProcesses: () => unawaited(showProcessesPanel(overlayContext)),
       child: AppMenu(
         name: widget.appName,
         actions: AppMenuActions(
-          showCanvas: () => _cubit.setView(ViewMode.canvas),
-          showChat: () => _cubit.setView(ViewMode.chat),
-          toggleSidebar: _cubit.toggleCollapsed,
-          nextTab: _tabs.next,
-          previousTab: _tabs.previous,
-          closeTab: _tabs.closeActive,
+          showCanvas: () => shell.setView(ViewMode.canvas),
+          showChat: () => shell.setView(ViewMode.chat),
+          toggleSidebar: shell.toggleCollapsed,
+          nextTab: tabs.next,
+          previousTab: tabs.previous,
+          closeTab: tabs.closeActive,
           showProcesses: () => unawaited(showProcessesPanel(overlayContext)),
-          canvas: canvasCommands,
+          canvas: inject<CanvasCommands>(),
         ),
-        child: BlocBuilder<ShellCubit, ShellView>(
+        child: BlocBuilder<ShellCubit, ShellState>(
           builder: (context, view) {
-            final bench = view.shell.bench;
+            final bench = view.snapshot.bench;
             final mode = bench?.view ?? ViewMode.canvas;
-            final busy = view.shell.busy;
-            final lock = view.shell.lock;
+            final busy = view.snapshot.busy;
+            final lock = view.snapshot.lock;
             void ask(FormRequest request) =>
                 widget.onForm(overlayContext, request);
             final layout = RootLayout(
@@ -191,9 +145,8 @@ class _HomeShellPageState extends State<HomeShellPage> {
               sidebar: RepaintBoundary(
                 key: _captures.keyFor('sidebar'),
                 child: SidebarPage(
-                  cubit: _sidebar,
                   compact: view.collapsed,
-                  commands: _commands(_cubit, ask),
+                  commands: _commands(shell, ask),
                 ),
               ),
               shell: (contentInset, tabsInset) => WorkbenchShell(
@@ -203,7 +156,7 @@ class _HomeShellPageState extends State<HomeShellPage> {
                   trailing: bench == null
                       ? null
                       : UsageCorner(workbenchId: bench.id),
-                  onSelect: _cubit.setView,
+                  onSelect: shell.setView,
                   onPickColor: () {
                     if (bench != null) {
                       ask(
@@ -225,8 +178,8 @@ class _HomeShellPageState extends State<HomeShellPage> {
                   if (lock != null)
                     AccessCurtain(
                       lock: lock,
-                      onOpenSettings: _cubit.openSettings,
-                      onAskAgain: _cubit.askAccessAgain,
+                      onOpenSettings: shell.openSettings,
+                      onAskAgain: shell.askAccessAgain,
                     ),
                 ],
               ),
@@ -235,12 +188,12 @@ class _HomeShellPageState extends State<HomeShellPage> {
             // composer…); o terminal, quando focado, deixa passar tudo o que tem ⌘.
             return ShellShortcuts(
               actions: ShellShortcutActions(
-                toggleSidebar: _cubit.toggleCollapsed,
-                showView: _cubit.setView,
-                nextTab: _tabs.next,
-                previousTab: _tabs.previous,
-                closeTab: _tabs.closeActive,
-                pickTab: _tabs.selectNumber,
+                toggleSidebar: shell.toggleCollapsed,
+                showView: shell.setView,
+                nextTab: tabs.next,
+                previousTab: tabs.previous,
+                closeTab: tabs.closeActive,
+                pickTab: tabs.selectNumber,
               ),
               child: RepaintBoundary(
                 key: _captures.keyFor('window'),
@@ -250,8 +203,8 @@ class _HomeShellPageState extends State<HomeShellPage> {
           },
         ),
       ),
-    ),
-  );
+    );
+  }
 
   SidebarCommands _commands(
     ShellCubit cubit,

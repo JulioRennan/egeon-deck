@@ -1,4 +1,4 @@
-import 'package:egeon_deck/core/domain/entities/command_failed.dart';
+import 'package:egeon_deck/features/workspace/domain/errors/workspace_error.dart';
 import 'package:egeon_deck/features/workspace/domain/entities/workspace_draft.dart';
 import 'package:egeon_deck/features/workspace/domain/repository/workspace_repository.dart';
 
@@ -9,7 +9,7 @@ class FakeWorkspaceRepository implements WorkspaceRepository {
 
   Future<void> _run(String entry) async {
     final reason = refuse;
-    if (reason != null) throw CommandFailed(reason);
+    if (reason != null) throw WorkspaceRefused(reason);
     log.add(entry);
   }
 

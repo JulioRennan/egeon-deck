@@ -16,6 +16,9 @@ class EgeonCommandError implements Exception {
   final String cmd;
   final EgeonMessage reply;
 
+  /// O motivo, no texto do core Rust.
+  String get message => '${reply['error'] ?? 'O core recusou.'}';
+
   @override
   String toString() => 'EgeonCommandError($cmd): ${reply['error']}';
 }
@@ -24,6 +27,23 @@ class EgeonCommandError implements Exception {
 class EgeonDisconnected implements Exception {
   @override
   String toString() => 'EgeonDisconnected';
+}
+
+/// Para o repositório trocar as falhas do socket pelos erros do domínio dele:
+/// a recusa do core leva o texto do core; a queda, nada.
+extension EgeonFailures<T> on Future<T> {
+  Future<T> failingAs({
+    required Exception Function(String message) refused,
+    required Exception Function() offline,
+  }) async {
+    try {
+      return await this;
+    } on EgeonCommandError catch (error) {
+      throw refused(error.message);
+    } on EgeonDisconnected {
+      throw offline();
+    }
+  }
 }
 
 /// O único cliente do socket do core Rust. Nenhuma feature abre conexão.

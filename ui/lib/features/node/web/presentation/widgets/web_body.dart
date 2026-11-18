@@ -6,52 +6,32 @@ import '../../../../../commons/widgets/glyphs.dart';
 import '../../../../../commons/widgets/hand_cursor.dart';
 import '../../../../../commons/widgets/standard_dialogs.dart';
 import '../../../../../commons/widgets/web_surface.dart';
+import '../../../../../core/adapters/injector.dart';
 import '../../../../../theme/app_colors.dart';
 import '../../../card/presentation/widgets/card_motion.dart';
-import '../../domain/repository/web_repository.dart';
-import '../../domain/usecase/edit_web.dart';
-import '../../domain/usecase/watch_web.dart';
-import '../cubit/web_capture_registry.dart';
+import '../../domain/entities/web_node.dart';
 import '../cubit/web_cubit.dart';
-import '../cubit/web_state.dart';
 import 'address_field.dart';
 
 /// O corpo de um card web: a barra de navegação em cima e a página embaixo. Um
 /// cubit por nó, que é também o dono da página nativa.
 class WebBody extends StatelessWidget {
-  const WebBody({
-    required this.nodeId,
-    required this.createController,
-    this.captures,
-    super.key,
-  });
+  const WebBody({required this.workbenchId, required this.nodeId, super.key});
 
+  /// A bancada do nó: os comandos da página vão por ela.
+  final String workbenchId;
   final String nodeId;
-
-  /// A fábrica da página nativa, por perfil. Quem compõe a tela a entrega: o
-  /// nó não conhece a biblioteca por trás dela.
-  final WebControllerFactory createController;
-
-  /// Onde a página se registra para o `/shot` fotografá-la.
-  final WebCaptureRegistry? captures;
 
   static const barHeight = 30.0;
 
+  // A fábrica da página nativa e o registro do `/shot` vêm do injector: o nó
+  // não conhece a biblioteca por trás da página.
   @override
-  Widget build(BuildContext context) {
-    final repository = context.read<WebRepository>();
-    return BlocProvider(
-      key: ValueKey(nodeId),
-      create: (_) => WebCubit(
-        nodeId: nodeId,
-        watch: WatchWeb(repository),
-        edit: EditWeb(repository),
-        createController: createController,
-        captures: captures,
-      ),
-      child: const _WebView(),
-    );
-  }
+  Widget build(BuildContext context) => BlocProvider(
+    key: ValueKey((workbenchId, nodeId)),
+    create: (_) => inject<WebCubit>((workbenchId: workbenchId, nodeId: nodeId)),
+    child: const _WebView(),
+  );
 }
 
 class _WebView extends StatelessWidget {
@@ -63,7 +43,14 @@ class _WebView extends StatelessWidget {
     return BlocBuilder<WebCubit, WebState>(
       builder: (context, state) {
         final controller = cubit.controller;
-        final page = state.page;
+        final (node, page, address) = switch (state) {
+          WebWaiting() => (null, null, ''),
+          WebShown(:final node, :final page, :final address) => (
+            node,
+            page,
+            address,
+          ),
+        };
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -105,12 +92,12 @@ class _WebView extends StatelessWidget {
                   const SizedBox(width: 4),
                   Expanded(
                     child: AddressField(
-                      address: state.address,
+                      address: address,
                       onSubmit: cubit.submit,
                     ),
                   ),
                   const SizedBox(width: 6),
-                  _ProfilePicker(state: state, cubit: cubit),
+                  _ProfilePicker(node: node, cubit: cubit),
                 ],
               ),
             ),
@@ -189,14 +176,15 @@ class _ReloadPainter extends CustomPainter {
 
 /// O perfil de navegação: cookies e bancada isolados por nome.
 class _ProfilePicker extends StatelessWidget {
-  const _ProfilePicker({required this.state, required this.cubit});
+  const _ProfilePicker({required this.node, required this.cubit});
 
-  final WebState state;
+  /// Nulo até o core mandar o nó: sem perfil, sem menu.
+  final WebNode? node;
   final WebCubit cubit;
 
   @override
   Widget build(BuildContext context) {
-    final node = state.node;
+    final node = this.node;
     if (node == null) return const SizedBox.shrink();
     return HandCursor(
       child: GestureDetector(

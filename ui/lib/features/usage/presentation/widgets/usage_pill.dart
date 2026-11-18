@@ -28,15 +28,15 @@ class _UsagePillState extends State<UsagePill> {
   }
 
   @override
-  Widget build(BuildContext context) => BlocBuilder<UsageCubit, UsageView>(
-    builder: (context, view) => HandCursor(
+  Widget build(BuildContext context) => BlocBuilder<UsageCubit, UsageState>(
+    builder: (context, state) => HandCursor(
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovering = true),
         onExit: (_) => setState(() => _hovering = false),
         child: GestureDetector(
           key: const ValueKey('usage-pill'),
           behavior: HitTestBehavior.opaque,
-          onTap: () => _open(view),
+          onTap: () => _open(state.view),
           child: Container(
             height: 26,
             padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -53,7 +53,7 @@ class _UsagePillState extends State<UsagePill> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  view.pill.text,
+                  state.view.pill.text,
                   key: const ValueKey('usage-pill-text'),
                   maxLines: 1,
                   style: TextStyle(

@@ -1,12 +1,7 @@
-import 'dart:ui';
-
-import '../../domain/entities/canvas_card.dart';
-import '../../domain/entities/canvas_tool.dart';
-import '../../domain/entities/canvas_viewport.dart';
-import '../../domain/entities/edge_link.dart';
+part of 'canvas_cubit.dart';
 
 /// Ligação sendo desenhada agora: origem fixa, ponta seguindo o mouse.
-class PendingLink {
+final class PendingLink {
   const PendingLink({required this.from, required this.to});
 
   final String from;
@@ -18,7 +13,7 @@ class PendingLink {
 /// O estado do canvas: os cards com o frame vivo (que acompanha o arrasto
 /// antes de o core gravar), as ligações e o estado passageiro de tela —
 /// vista, ferramenta armada, realce.
-class CanvasState {
+final class CanvasState {
   const CanvasState({
     this.viewport = const CanvasViewport(),
     this.cards = const [],

@@ -63,8 +63,10 @@ void main() {
     await tester.pump();
 
     expect(rowPaints(tester), hasLength(4));
-    expect(cubit.state.live, isTrue);
-    expect(cubit.state.columns, 20);
+    expect(
+      cubit.state,
+      isA<TerminalLive>().having((s) => s.columns, 'columns', 20),
+    );
     expect(cubit.lastFrame!.lines[1]!.runs.single.text, 'oi');
   });
 
