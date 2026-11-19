@@ -32,6 +32,7 @@ import '../../support/fake_sidebar_repository.dart';
 import '../../support/hand_cursor.dart';
 import '../../support/inject_fakes.dart';
 import '../../support/fake_app_repository.dart';
+import '../../support/fake_menu.dart';
 import '../../support/fake_processes_repository.dart';
 import '../../support/fake_usage_repository.dart';
 import '../../support/fake_tabs_repository.dart';
@@ -76,8 +77,13 @@ class Shell {
       app: app,
       usage: usage,
       processes: FakeProcessesRepository(const []),
+      menu: menu,
+      clipboard: clipboard,
     );
   }
+
+  final menu = FakeMenuRepository('deck/claude\ndeck/sh');
+  final clipboard = FakeClipboard();
 
   /// O que ocupa o lugar do canvas; sem isso, um texto.
   final Widget? content;
@@ -129,8 +135,56 @@ Future<Shell> mount(WidgetTester tester, [ShellSnapshot? state]) async {
   return s;
 }
 
+/// A casca com três abas, a do meio na frente.
+Future<Shell> withTabs(WidgetTester tester) async {
+  final s = await mount(tester);
+  s.tabs.push([
+    const WorkbenchTab(id: 'a', name: 'a'),
+    const WorkbenchTab(id: 'b', name: 'b', isActive: true),
+    const WorkbenchTab(id: 'c', name: 'c'),
+  ]);
+  await tester.pump();
+  await tester.pump();
+  return s;
+}
+
 /// O que a casca mandou ao AppKit pelo canal de menu, uma entrada por envio.
 final menuCalls = <String>[];
+
+/// O último menu mandado, como o AppKit o recebe.
+Object? menuSent;
+
+/// O item de menu com [label], em qualquer nível.
+Map<Object?, Object?>? menuItem(Object? node, String label) {
+  if (node is Map) {
+    if (node['label'] == label) return node;
+    for (final value in node.values) {
+      final found = menuItem(value, label);
+      if (found != null) return found;
+    }
+  } else if (node is List) {
+    for (final value in node) {
+      final found = menuItem(value, label);
+      if (found != null) return found;
+    }
+  }
+  return null;
+}
+
+/// O AppKit avisando que o item foi escolhido — pelo clique ou pelo key
+/// equivalent, sem passar pelo foco da Flutter.
+Future<void> chooseMenu(WidgetTester tester, String label) async {
+  final id = menuItem(menuSent, label)!['id'];
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    SystemChannels.menu.name,
+    SystemChannels.menu.codec.encodeMethodCall(
+      MethodCall('Menu.selectedCallback', id),
+    ),
+    (_) {},
+  );
+  await tester.pump();
+  await tester.pump();
+}
 
 void main() {
   setUp(() {
@@ -139,6 +193,7 @@ void main() {
         .setMockMethodCallHandler(SystemChannels.menu, (call) async {
           if (call.method == 'Menu.setMenus') {
             menuCalls.add('${call.arguments}');
+            menuSent = call.arguments;
           }
           return null;
         });
@@ -305,6 +360,33 @@ void main() {
     expect(s.shell.views, [ViewMode.chat]);
   });
 
+  testWidgets('a faixa do core aparece sobre o conteúdo sem travá-lo', (
+    tester,
+  ) async {
+    await mount(
+      tester,
+      const ShellSnapshot(
+        bench: bench,
+        banner: 'Copiando o que o git não versiona em repo (.env, node_modules, build…)',
+      ),
+    );
+    expect(find.byKey(const ValueKey('shell-banner')), findsOneWidget);
+    expect(
+      find.textContaining('Copiando o que o git não versiona'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('canvas')), findsOneWidget);
+    // No canvas, abaixo das barras de ação e informativa: não tapa o
+    // cronômetro (`topInset + 110` no Swift).
+    final content = tester.getTopLeft(
+      find.byKey(const ValueKey('shell-content')),
+    );
+    final banner = tester.getTopLeft(
+      find.byKey(const ValueKey('shell-banner')),
+    );
+    expect(banner.dy - content.dy, 110);
+  });
+
   testWidgets('o macOS perguntando: o aviso é dele e "pedir de novo" some', (
     tester,
   ) async {
@@ -356,18 +438,6 @@ void main() {
   });
 
   group('atalhos', () {
-    Future<Shell> withTabs(WidgetTester tester) async {
-      final s = await mount(tester);
-      s.tabs.push([
-        const WorkbenchTab(id: 'a', name: 'a'),
-        const WorkbenchTab(id: 'b', name: 'b', isActive: true),
-        const WorkbenchTab(id: 'c', name: 'c'),
-      ]);
-      await tester.pump();
-      await tester.pump();
-      return s;
-    }
-
     Future<void> keys(
       WidgetTester tester,
       LogicalKeyboardKey key, {
@@ -417,6 +487,27 @@ void main() {
       await keys(tester, LogicalKeyboardKey.digit1);
       await keys(tester, LogicalKeyboardKey.digit9);
       expect(s.tabs.picked, ['c', 'a']);
+    });
+
+    testWidgets('⇧⌘T copia os alvos de dispatch que o core diz', (
+      tester,
+    ) async {
+      final s = await mount(tester);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyT);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+      await tester.pump();
+      expect(s.clipboard.written, ['deck/claude\ndeck/sh']);
+    });
+
+    testWidgets('⌥⌘P abre Processos com o nome do app', (tester) async {
+      await mount(tester);
+      await keys(tester, LogicalKeyboardKey.keyP, alt: true);
+      await tester.pump();
+      expect(find.text('Processos do Egeon Deck'), findsOneWidget);
     });
 
     testWidgets('⌘W fecha a aba da frente, não a janela', (tester) async {
@@ -524,7 +615,11 @@ void main() {
       await tester.pumpWidget(s.build());
       await s.show(tester, const ShellSnapshot(bench: bench));
 
-      expect(s.usage.watched, ['b1']);
+      expect(
+        s.usage.watched,
+        contains('b1'),
+        reason: 'o canto assina a da tela; a barra lateral, a de cada linha',
+      );
       expect(
         find.descendant(
           of: find.byType(ViewToolbar),
@@ -535,9 +630,8 @@ void main() {
     });
 
     testWidgets('sem bancada não há pastilha', (tester) async {
-      final s = await mount(tester, const ShellSnapshot());
+      await mount(tester, const ShellSnapshot());
       expect(find.byKey(const ValueKey('usage-pill')), findsNothing);
-      expect(s.usage.watched, isEmpty);
     });
 
     testWidgets('o menu oferece Processos…', (tester) async {
@@ -549,6 +643,56 @@ void main() {
   });
 
   group('o menu do app', () {
+    testWidgets(
+      'os atalhos moram nos itens, como os key equivalents do Swift',
+      (tester) async {
+        final s = await mount(tester);
+        s.app.push(const AppSnapshot());
+        await tester.pump();
+        const meta = 1, shift = 2, alt = 4;
+        for (final (label, key, modifiers) in [
+          ('Aba à direita', LogicalKeyboardKey.arrowRight, meta),
+          ('Aba à esquerda', LogicalKeyboardKey.arrowLeft, meta),
+          ('Próxima bancada', LogicalKeyboardKey.bracketRight, meta),
+          ('Bancada anterior', LogicalKeyboardKey.bracketLeft, meta),
+          ('Fechar a aba', LogicalKeyboardKey.keyW, meta),
+          ('Aba 1', LogicalKeyboardKey.digit1, meta),
+          ('Aba 9', LogicalKeyboardKey.digit9, meta),
+          ('Copiar alvos de dispatch', LogicalKeyboardKey.keyT, meta | shift),
+          ('Processos…', LogicalKeyboardKey.keyP, meta | alt),
+          ('Ver no canvas', LogicalKeyboardKey.digit1, meta | alt),
+          ('Ver como chat', LogicalKeyboardKey.digit2, meta | alt),
+          ('Recolher a barra de bancadas', LogicalKeyboardKey.slash, meta),
+          ('Aproximar', LogicalKeyboardKey.equal, meta),
+          ('Afastar', LogicalKeyboardKey.minus, meta),
+          ('Zoom 100%', LogicalKeyboardKey.digit0, meta),
+        ]) {
+          final item = menuItem(menuSent, label);
+          expect(item, isNotNull, reason: label);
+          expect(item!['shortcutTrigger'], key.keyId, reason: label);
+          expect(item['shortcutModifiers'], modifiers, reason: label);
+        }
+      },
+    );
+
+    testWidgets('sem foco na casca (o nó web), o menu atende o atalho', (
+      tester,
+    ) async {
+      final s = await withTabs(tester);
+      s.app.push(const AppSnapshot());
+      await tester.pump();
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      await chooseMenu(tester, 'Aba 3');
+      await chooseMenu(tester, 'Fechar a aba');
+      expect(s.tabs.picked, ['c']);
+      expect(s.tabs.closed, isNotEmpty);
+      await chooseMenu(tester, 'Copiar alvos de dispatch');
+      expect(s.clipboard.written, ['deck/claude\ndeck/sh']);
+      await chooseMenu(tester, 'Processos…');
+      expect(find.text('Processos do Egeon Deck'), findsOneWidget);
+    });
+
     testWidgets('tem Editar com os atalhos do macOS e o menu Canvas completo', (
       tester,
     ) async {

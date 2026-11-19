@@ -135,4 +135,8 @@ class SocketQueueRepository implements QueueRepository {
   @override
   Future<void> detach(String nodeId, String id, String image) =>
       _send('queue_detach', nodeId, {'item': id, 'image': image});
+
+  @override
+  Future<void> openImage(String nodeId, String id, String image) =>
+      _send('queue_open_image', nodeId, {'item': id, 'image': image});
 }

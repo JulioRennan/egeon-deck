@@ -43,18 +43,21 @@ class ProcessesCubit extends Cubit<ProcessesState> {
     ProcessesLoaded(:final selected) => selected,
   };
 
+  /// A lista com [selected]: escolhendo, ou só listando quando nada sobrou.
+  static ProcessesLoaded _listed(
+    ProcessesView view,
+    ProcessFilter filter,
+    Set<int> selected,
+  ) => selected.isEmpty
+      ? ProcessesListing(view: view, filter: filter)
+      : ProcessesSelecting(view: view, filter: filter, selected: selected);
+
   /// Mantém a seleção pelo pid: a lista se refaz a cada varredura, e o que
   /// você marcou continua marcado enquanto o processo existir.
   void _show(ProcessesView view) {
     if (isClosed) return;
     final alive = {for (final r in view.rows) r.pid};
-    emit(
-      ProcessesLoaded(
-        view: view,
-        filter: state.filter,
-        selected: _selected.where(alive.contains).toSet(),
-      ),
-    );
+    emit(_listed(view, state.filter, _selected.where(alive.contains).toSet()));
   }
 
   void setFilter(ProcessFilter filter) {
@@ -62,11 +65,13 @@ class ProcessesCubit extends Cubit<ProcessesState> {
       case ProcessesScanning():
         emit(ProcessesScanning(filter: filter));
       case final ProcessesLoaded loaded:
-        final shown = loaded.copyWith(filter: filter);
+        final shown = ProcessesListing(view: loaded.view, filter: filter);
         final visible = {for (final r in shown.rows) r.pid};
         emit(
-          shown.copyWith(
-            selected: loaded.selected.where(visible.contains).toSet(),
+          _listed(
+            loaded.view,
+            filter,
+            loaded.selected.where(visible.contains).toSet(),
           ),
         );
     }
@@ -76,7 +81,13 @@ class ProcessesCubit extends Cubit<ProcessesState> {
   /// desliga; com [range] (⇧) vai da última escolhida até ela.
   void select(int pid, {bool additive = false, bool range = false}) {
     if (state case final ProcessesLoaded loaded) {
-      emit(loaded.copyWith(selected: _picked(loaded, pid, additive, range)));
+      emit(
+        _listed(
+          loaded.view,
+          loaded.filter,
+          _picked(loaded, pid, additive, range),
+        ),
+      );
     }
   }
 

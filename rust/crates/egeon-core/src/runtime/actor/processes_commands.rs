@@ -383,6 +383,7 @@ pub(super) mod support {
         pub actor: Actor,
         pub rx: mpsc::Receiver<Msg>,
         pub procs: Arc<FakeProcs>,
+        pub opener: Arc<FakeOpener>,
         pub data: PathBuf,
         pub dir: tempfile::TempDir,
     }
@@ -410,6 +411,7 @@ pub(super) mod support {
             std::fs::create_dir_all(&data).unwrap();
             let pty = Arc::new(FakePty::default());
             let procs = Arc::new(FakeProcs::sharing(pty.journal.clone()));
+            let opener = Arc::new(FakeOpener::default());
             let apps: Arc<dyn AppDriver> = match apps {
                 Some(make) => make(&data),
                 None => Arc::new(FakeApps),
@@ -422,7 +424,7 @@ pub(super) mod support {
                 notifier: Arc::new(FakeNotifier::default()),
                 apps,
                 installer: Arc::new(FakeApps),
-                opener: Arc::new(FakeOpener::default()),
+                opener: opener.clone(),
                 cloner: Arc::new(FakeCloner),
                 links: Arc::new(FakeLinks),
                 is_executable: fake_executable,
@@ -442,6 +444,7 @@ pub(super) mod support {
                 actor: Actor::new(config, drivers, tx),
                 rx,
                 procs,
+                opener,
                 data,
                 dir,
             }

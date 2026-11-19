@@ -9,6 +9,9 @@ import '../../domain/entities/edge_link.dart';
 import '../../../../core/adapters/injector.dart';
 import '../cubit/canvas_commands.dart';
 import '../cubit/canvas_cubit.dart';
+import '../cubit/canvas_motion_cubit.dart';
+import '../cubit/canvas_tool_cubit.dart';
+import '../widgets/canvas_bench_actions.dart';
 import '../widgets/canvas_surface.dart';
 
 /// O canvas de uma bancada. O cubit nasce aqui, preso à bancada: trocar de
@@ -22,10 +25,17 @@ class CanvasPage extends StatelessWidget {
     required this.bodyBuilder,
     this.accessoryBuilder,
     this.glow,
-    this.componentNames = const [],
+    this.componentNames,
     this.onConfigureTerminal,
+    this.onConfigureTerminalAt,
+    this.benchActions,
+    this.infoBar,
+    this.onRequestConfigure,
     this.onEditLimit,
     this.onRequestClose,
+    this.onRetry,
+    this.onOpenFolder,
+    this.onRequestWorktree,
     this.probes,
     this.nativeCapture,
     this.commands,
@@ -37,10 +47,36 @@ class CanvasPage extends StatelessWidget {
   final CardBodyBuilder bodyBuilder;
   final CardAccessoryBuilder? accessoryBuilder;
   final Color? glow;
-  final List<String> componentNames;
-  final VoidCallback? onConfigureTerminal;
+
+  /// Os componentes salvos, pedidos quando o menu do Terminal abre.
+  final Future<List<String>> Function()? componentNames;
+
+  /// "Configurar novo terminal…", com o que está à vista no canvas.
+  final ValueChanged<Rect>? onConfigureTerminal;
+
+  /// Terminal solto sem componente: o formulário para aquele lugar.
+  final ValueChanged<Rect>? onConfigureTerminalAt;
+
+  /// Os botões de template e worktree da barra.
+  final CanvasBenchActions? benchActions;
+
+  /// A faixa informativa sob a barra de ações (ADR-085): quem compõe a tela a
+  /// monta, para o canvas não conhecer a bancada.
+  final Widget? infoBar;
+
+  /// O lápis do card de terminal.
+  final ValueChanged<CanvasCard>? onRequestConfigure;
   final ValueChanged<EdgeLink>? onEditLimit;
   final ValueChanged<CanvasCard>? onRequestClose;
+
+  /// "Tentar agora" / "Cancelar tentativa" no status de um agente.
+  final void Function(CanvasCard card, {required bool now})? onRetry;
+
+  /// O ⌘-clique no subtítulo de um terminal: a pasta dele no Finder.
+  final ValueChanged<CanvasCard>? onOpenFolder;
+
+  /// "Nova worktree para este terminal…" de um shell ou agente.
+  final ValueChanged<CanvasCard>? onRequestWorktree;
 
   /// Os comandos do menu da casca: ferramentas e zoom.
   final CanvasCommands? commands;
@@ -56,17 +92,33 @@ class CanvasPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
+    // Três assuntos, três cubits: o que a mão faz no canvas, a ferramenta
+    // armada e o movimento (o realce de uma ligação convive com o zoom).
+    return MultiBlocProvider(
       key: ValueKey(workbenchId),
-      create: (_) => inject<CanvasCubit>(workbenchId),
+      providers: [
+        BlocProvider(create: (_) => inject<CanvasCubit>(workbenchId)),
+        BlocProvider(create: (_) => inject<CanvasToolCubit>(workbenchId)),
+        BlocProvider(
+          create: (context) =>
+              inject<CanvasMotionCubit>(context.read<CanvasCubit>().motion),
+        ),
+      ],
       child: CanvasSurface(
         bodyBuilder: bodyBuilder,
         accessoryBuilder: accessoryBuilder,
         glow: glow,
         componentNames: componentNames,
         onConfigureTerminal: onConfigureTerminal,
+        onConfigureTerminalAt: onConfigureTerminalAt,
+        benchActions: benchActions,
+        infoBar: infoBar,
+        onRequestConfigure: onRequestConfigure,
         onEditLimit: onEditLimit,
         onRequestClose: onRequestClose,
+        onRetry: onRetry,
+        onOpenFolder: onOpenFolder,
+        onRequestWorktree: onRequestWorktree,
         probes: probes,
         commands: commands,
         sidebarInset: sidebarInset,

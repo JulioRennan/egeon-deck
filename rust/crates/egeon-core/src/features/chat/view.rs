@@ -18,8 +18,9 @@
 //! O tópico é por bancada: `chat/<id da bancada>` (decisão 29). Além dos blocos há
 //! dois ops de estado, que sempre levam o valor inteiro: `participants`, a barra
 //! de quem está na conversa com o estado de cada um, `queues`, as filas da
-//! bancada (`{"op":"queues","list":[{id,summary,asking}]}`) e `permission`, a
-//! bandeja (`{"op":"permission","request":{…}|null}`).
+//! bancada (`{"op":"queues","list":[{id,summary,asking}]}`) e `permissions`, a
+//! bandeja com os pedidos abertos, empilhados como no Swift
+//! (`{"op":"permissions","list":[{…}]}`).
 //!
 //! `reset` leva a lista inteira e vale na primeira entrega, quando a ordem dos
 //! ids comuns muda (a resposta ao vivo muda de hora e pode trocar de lugar), na
@@ -66,9 +67,10 @@ pub enum BlockOp {
     Queues {
         list: Vec<QueueInfo>,
     },
-    /// O pedido de permissão em aberto, ou `null` quando não há.
-    Permission {
-        request: Option<Value>,
+    /// Os pedidos de permissão em aberto, na ordem do `PermissionDesk`; vazia,
+    /// a bandeja some.
+    Permissions {
+        list: Vec<Value>,
     },
     Remove {
         id: String,
@@ -112,7 +114,7 @@ pub struct ChatView {
     blocks: Vec<ChatBlock>,
     participants: Vec<ParticipantInfo>,
     queues: Vec<QueueInfo>,
-    permission: Option<Value>,
+    permissions: Vec<Value>,
 }
 
 impl ChatView {
@@ -129,7 +131,7 @@ impl ChatView {
             blocks: Vec::new(),
             participants: Vec::new(),
             queues: Vec::new(),
-            permission: None,
+            permissions: Vec::new(),
         }
     }
 
@@ -156,8 +158,8 @@ impl ChatView {
         &self.queues
     }
 
-    pub fn permission(&self) -> Option<&Value> {
-        self.permission.as_ref()
+    pub fn permissions(&self) -> &[Value] {
+        &self.permissions
     }
 
     /// A barra de quem está na conversa mudou? Só sai evento quando a lista (ou o
@@ -170,7 +172,7 @@ impl ChatView {
         Some(self.update(vec![BlockOp::Participants { list }]))
     }
 
-    /// A bandeja de permissão mudou? `None` esvazia.
+    /// As filas da bancada mudaram?
     pub fn set_queues(&mut self, list: Vec<QueueInfo>) -> Option<ChatUpdate> {
         if list == self.queues {
             return None;
@@ -179,12 +181,13 @@ impl ChatView {
         Some(self.update(vec![BlockOp::Queues { list }]))
     }
 
-    pub fn set_permission(&mut self, request: Option<Value>) -> Option<ChatUpdate> {
-        if request == self.permission {
+    /// A bandeja de permissão mudou? Lista vazia a esvazia.
+    pub fn set_permissions(&mut self, list: Vec<Value>) -> Option<ChatUpdate> {
+        if list == self.permissions {
             return None;
         }
-        self.permission = request.clone();
-        Some(self.update(vec![BlockOp::Permission { request }]))
+        self.permissions = list.clone();
+        Some(self.update(vec![BlockOp::Permissions { list }]))
     }
 
     pub fn blocks(&self) -> &[ChatBlock] {
@@ -288,7 +291,7 @@ impl ChatView {
     pub fn snapshot(&self) -> Value {
         json!({"rev": self.rev, "blocks": self.blocks,
                "participants": self.participants, "queues": self.queues,
-               "permission": self.permission})
+               "permissions": self.permissions})
     }
 
     /// O mesmo que [`ChatView::snapshot`], no formato do canal: um `reset` com a
@@ -309,8 +312,8 @@ impl ChatView {
                 BlockOp::Queues {
                     list: self.queues.clone(),
                 },
-                BlockOp::Permission {
-                    request: self.permission.clone(),
+                BlockOp::Permissions {
+                    list: self.permissions.clone(),
                 },
             ],
         }
@@ -616,7 +619,8 @@ pub fn apply_ops(blocks: &mut Vec<ChatBlock>, ops: &[BlockOp]) {
         match op {
             BlockOp::Reset { blocks: all } => *blocks = all.clone(),
             // Estado fora da lista de blocos: quem aplica na UI guarda à parte.
-            BlockOp::Participants { .. } | BlockOp::Queues { .. } | BlockOp::Permission { .. } => {}
+            BlockOp::Participants { .. } | BlockOp::Queues { .. } | BlockOp::Permissions { .. } => {
+            }
             BlockOp::Remove { id } => blocks.retain(|b| &b.id != id),
             BlockOp::Insert { index, block } => {
                 let at = (*index).min(blocks.len());

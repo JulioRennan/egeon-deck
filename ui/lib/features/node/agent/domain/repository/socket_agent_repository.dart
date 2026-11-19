@@ -46,4 +46,8 @@ class SocketAgentRepository implements AgentRepository {
 
   @override
   Future<void> clear(String nodeId) => _send('node_clear', nodeId);
+
+  @override
+  Future<void> retry(String nodeId, {required bool now}) =>
+      _send('retry', nodeId, {'now': now});
 }

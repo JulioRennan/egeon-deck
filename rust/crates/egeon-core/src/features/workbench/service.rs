@@ -103,6 +103,30 @@ pub fn capture_template(workbench: &WorkbenchConfig) -> WorkbenchTemplate {
     }
 }
 
+/// Diz o que está sendo salvo como template, em uma linha: sem isso o diálogo
+/// pede um nome para algo que o usuário não vê (`templateSummary`). A fila não
+/// entra na conta, como no Swift.
+pub fn template_summary(workbench: &WorkbenchConfig) -> String {
+    let count = |kind: NodeKind| workbench.nodes.iter().filter(|n| n.kind == kind).count();
+    let labels = [
+        (NodeKind::Agent, "agente", "agentes"),
+        (NodeKind::Shell, "terminal", "terminais"),
+        (NodeKind::Web, "web", "webs"),
+    ];
+    let parts: Vec<String> = labels
+        .into_iter()
+        .filter_map(|(kind, singular, plural)| {
+            let n = count(kind);
+            (n > 0).then(|| format!("{n} {}", if n == 1 { singular } else { plural }))
+        })
+        .collect();
+    format!(
+        "{} — com posição, tamanho, pasta de cada nó e {} como pasta inicial.",
+        parts.join(", "),
+        workbench.path
+    )
+}
+
 /// `http://localhost:3000/farms/123` → `http://localhost:3000`.
 ///
 /// Um preset que reabrisse a rota exata carregaria o estado de navegação de

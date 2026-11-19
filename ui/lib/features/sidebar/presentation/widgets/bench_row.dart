@@ -9,6 +9,7 @@ import '../../../../theme/app_colors.dart';
 import '../../../../theme/workbench_palette.dart';
 import '../../domain/entities/sidebar_bench.dart';
 import '../../../../commons/widgets/press_drag.dart';
+import '../../../usage/presentation/widgets/bench_cost.dart';
 import '../../../workbench/presentation/widgets/clock_text.dart';
 import 'bench_actions.dart';
 import 'drag_hooks.dart';
@@ -236,10 +237,18 @@ class _Expanded extends StatelessWidget {
                         decoration: TextDecoration.none,
                       ),
                     )
-                  // Pasta que existe: a linha é do cronômetro.
-                  : bench.clock == null
-                  ? const SizedBox(height: 13)
-                  : ClockText(bench.clock!, size: 10),
+                  // Pasta que existe: a linha é do cronômetro, com o custo na
+                  // ponta direita.
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: bench.clock == null
+                              ? const SizedBox(height: 13)
+                              : ClockText(bench.clock!, size: 10),
+                        ),
+                        BenchCost(workbenchId: bench.id),
+                      ],
+                    ),
             ),
           ],
         ),

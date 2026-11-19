@@ -20,6 +20,7 @@ class ChatComposer extends StatefulWidget {
     this.onComplete,
     this.quote,
     this.onClearQuote,
+    this.focusNode,
     super.key,
   });
 
@@ -36,6 +37,10 @@ class ChatComposer extends StatefulWidget {
   final Future<ChatCompletion> Function(String text, int caret)? onComplete;
   final ChatBlock? quote;
   final VoidCallback? onClearQuote;
+
+  /// O teclado do campo: entrar no chat e escolher um participante o trazem
+  /// para cá.
+  final FocusNode? focusNode;
 
   @override
   State<ChatComposer> createState() => _ChatComposerState();
@@ -153,6 +158,7 @@ class _ChatComposerState extends State<ChatComposer> {
           CompletionMenu(
             items: _completion.items,
             selected: _picked,
+            targetName: widget.target?.id,
             onPick: (item) => setState(() => _insert(item)),
           ),
         if (widget.quote != null) _quote(widget.quote!),
@@ -164,6 +170,8 @@ class _ChatComposerState extends State<ChatComposer> {
               child: AppTextField(
                 key: const ValueKey('composer-field'),
                 controller: _text,
+                focusNode: widget.focusNode,
+                autofocus: true,
                 placeholder: widget.target == null
                     ? 'Ninguém na conversa ainda'
                     : 'Mensagem',

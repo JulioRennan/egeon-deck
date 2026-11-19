@@ -10,7 +10,10 @@
               "id": "front",
               "isAgent": true,
               "needsAttention": false,
-              "role": null
+              "role": null,
+              "screen": "w1.front",
+              "status": "trabalhando…",
+              "statusTone": "agent"
             },
             {
               "activity": "waiting",
@@ -19,6 +22,8 @@
               "isAgent": true,
               "needsAttention": false,
               "role": null,
+              "screen": "w1.back",
+              "status": "",
               "tone": "green"
             }
           ],
@@ -71,12 +76,28 @@
     {
       "ops": [
         {
-          "op": "permission",
-          "request": {
-            "detail": "rm -rf x",
-            "id": "p1",
-            "tool": "Bash"
-          }
+          "list": [
+            {
+              "detail": "rm -rf x",
+              "id": "p1",
+              "tool": "Bash"
+            },
+            {
+              "id": "p2",
+              "questions": [
+                {
+                  "multiSelect": false,
+                  "options": [
+                    "azul",
+                    "verde"
+                  ],
+                  "question": "Qual cor?"
+                }
+              ],
+              "tool": "AskUserQuestion"
+            }
+          ],
+          "op": "permissions"
         }
       ],
       "rev": 4,
@@ -86,8 +107,8 @@
     {
       "ops": [
         {
-          "op": "permission",
-          "request": null
+          "list": [],
+          "op": "permissions"
         }
       ],
       "rev": 5,
@@ -109,7 +130,10 @@
             "id": "front",
             "isAgent": true,
             "needsAttention": false,
-            "role": null
+            "role": null,
+            "screen": "w1.front",
+            "status": "trabalhando…",
+            "statusTone": "agent"
           },
           {
             "activity": "waiting",
@@ -118,6 +142,8 @@
             "isAgent": true,
             "needsAttention": false,
             "role": null,
+            "screen": "w1.back",
+            "status": "",
             "tone": "green"
           }
         ],
@@ -139,8 +165,8 @@
         "op": "queues"
       },
       {
-        "op": "permission",
-        "request": null
+        "list": [],
+        "op": "permissions"
       }
     ],
     "rev": 5,

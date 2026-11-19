@@ -12,9 +12,11 @@ Future<bool> confirmDialog(
   required String message,
   required String confirmLabel,
   bool destructive = false,
+  double width = 360,
 }) async {
   final result = await showAppDialog<bool>(
     context,
+    width: width,
     builder: (_, close) => DialogBody(
       title: title,
       message: message,
@@ -157,6 +159,7 @@ Future<({bool confirmed, bool option})> confirmWithOptionDialog(
   required String confirmLabel,
   required String optionLabel,
   bool destructive = false,
+  String? optionHint,
 }) async {
   final result = await showAppDialog<({bool confirmed, bool option})>(
     context,
@@ -165,6 +168,7 @@ Future<({bool confirmed, bool option})> confirmWithOptionDialog(
       message: message,
       confirmLabel: confirmLabel,
       optionLabel: optionLabel,
+      optionHint: optionHint,
       destructive: destructive,
       close: close,
     ),
@@ -180,12 +184,16 @@ class _OptionBody extends StatefulWidget {
     required this.optionLabel,
     required this.destructive,
     required this.close,
+    this.optionHint,
   });
 
   final String title;
   final String message;
   final String confirmLabel;
   final String optionLabel;
+
+  /// Linhas miúdas embaixo da opção, recuadas sob o texto dela.
+  final String? optionHint;
   final bool destructive;
   final void Function([({bool confirmed, bool option})? result]) close;
 
@@ -209,51 +217,74 @@ class _OptionBodyState extends State<_OptionBody> {
         onTap: () => widget.close((confirmed: true, option: _option)),
       ),
     ],
-    child: MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _option = !_option),
-        child: Row(
-          children: [
-            Container(
-              key: const ValueKey('option-box'),
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: _option ? AppColors.accent : null,
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(
-                  color: _option ? AppColors.accent : AppColors.white(0.4),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: _option
-                  ? const Text(
-                      '✓',
-                      style: TextStyle(
-                        fontSize: 10,
-                        height: 1,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFFFFFFF),
-                        decoration: TextDecoration.none,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                widget.optionLabel,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.white(0.85),
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ),
-          ],
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [_optionRow(), ?_hint()],
+    ),
+  );
+
+  Widget? _hint() {
+    final hint = widget.optionHint;
+    if (hint == null) return null;
+    return Padding(
+      padding: const EdgeInsets.only(left: 22, top: 4),
+      child: Text(
+        hint,
+        key: const ValueKey('option-hint'),
+        style: TextStyle(
+          fontSize: 10,
+          color: AppColors.white(0.5),
+          decoration: TextDecoration.none,
         ),
+      ),
+    );
+  }
+
+  Widget _optionRow() => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _option = !_option),
+      child: Row(
+        children: [
+          Container(
+            key: const ValueKey('option-box'),
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              color: _option ? AppColors.accent : null,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(
+                color: _option ? AppColors.accent : AppColors.white(0.4),
+              ),
+            ),
+            alignment: Alignment.center,
+            child: _option
+                ? const Text(
+                    '✓',
+                    style: TextStyle(
+                      fontSize: 10,
+                      height: 1,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFFFFFFF),
+                      decoration: TextDecoration.none,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              widget.optionLabel,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.white(0.85),
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+        ],
       ),
     ),
   );

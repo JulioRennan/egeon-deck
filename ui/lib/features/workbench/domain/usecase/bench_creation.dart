@@ -1,6 +1,7 @@
 import '../entities/bench_template.dart';
 import '../entities/worktree_info.dart';
 import '../entities/worktree_plan.dart';
+import '../entities/worktree_source.dart';
 import '../repository/workbench_repository.dart';
 
 /// Os templates que o formulário de bancada nova oferece.
@@ -31,26 +32,32 @@ class CreateWorkbench {
   );
 }
 
-/// As três perguntas e o gesto do formulário de worktree.
+/// As três perguntas e o gesto do formulário de worktree, com ou sem bancada
+/// de origem.
 class WorktreeActions {
   const WorktreeActions(this._repository);
 
   final WorkbenchRepository _repository;
 
-  Future<WorktreeInfo> info(String id) => _repository.worktreeInfo(id);
+  Future<WorktreeInfo> info(WorktreeSource source) =>
+      _repository.worktreeInfo(source);
 
-  Future<WorktreePlan> plan(String id, String branch) =>
-      _repository.worktreePlan(id, branch);
+  Future<WorktreePlan> plan(WorktreeSource source, String branch) =>
+      _repository.worktreePlan(source, branch);
 
-  Future<String> create(
-    String id,
+  Future<WorktreeCreated> create(
+    WorktreeSource source,
     String branch, {
-    required WorktreeDestination destination,
+    WorktreeDestination destination = WorktreeDestination.newWorkbench,
     Map<String, String> nodes = const {},
+    Map<String, String> repos = const {},
+    String? template,
   }) => _repository.createWorktree(
-    id,
+    source,
     branch,
     destination: destination,
     nodes: nodes,
+    repos: repos,
+    template: template,
   );
 }

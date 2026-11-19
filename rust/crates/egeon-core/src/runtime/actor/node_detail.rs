@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime};
 use super::{Actor, ClientId};
 use crate::commons::ids::{NodeId, WorkbenchId};
 use crate::features::agent::claude::catalog::{self, CatalogMemo};
+use crate::features::agent::claude::command_registry::CommandRegistry;
 use crate::features::agent::claude::transcript::{context_tokens_at, last_model_at};
 use crate::features::agent::effort_dial::EffortDialState;
 use crate::features::agent::model_catalog::ModelCatalog;
@@ -49,6 +50,13 @@ const PROBE_EVERY: Duration = Duration::from_secs(2);
 const CATALOG_EVERY: Duration = Duration::from_secs(30);
 /// Quanto do fim do transcript se lê para achar o último modelo e o contexto.
 const TAIL_BYTES: u64 = 512 * 1024;
+
+impl DetailState {
+    /// O `/` do binário do Claude, do cache do catálogo.
+    pub(super) fn commands(&self) -> Option<&CommandRegistry> {
+        self.memo.as_ref()?.commands()
+    }
+}
 
 impl Actor {
     pub(super) fn config_of(

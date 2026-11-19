@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use super::model::ChatTurn;
 use super::time::{iso, swift_double, unix_f64};
+use crate::commons::ids::NodeId;
 use crate::features::activity::model::Activity;
+use crate::features::dispatch::failure::MAX_ATTEMPTS;
 use crate::features::node::model::{NodeConfig, NodeKind};
 use crate::features::queue::chat::ChatQueue;
 
@@ -23,6 +25,9 @@ pub struct ChatParticipant {
     /// O que aparece embaixo do nome: papel do agente ou comando do shell.
     pub role: Option<String>,
     pub activity: Activity,
+    /// O terminal que a UI assina em `screen/<id>`: o chat mostra o shell em
+    /// foco no lugar da thread.
+    pub screen: Option<String>,
 }
 
 /// O participante como a linha o mostra. Sem `activity`: ela muda a cada turno de
@@ -56,6 +61,17 @@ pub struct ParticipantInfo {
     /// Interrompe: borda e som (`Activity.needsAttention`).
     #[serde(default)]
     pub needs_attention: bool,
+    /// O id da tela do terminal (`screen/<id>`), o mesmo do nó no canvas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screen: Option<String>,
+    /// A linha embaixo do nome, pronta: o que o participante faz agora ou,
+    /// parado, o papel (`roleText` do Swift).
+    #[serde(default)]
+    pub status: String,
+    /// A cor dessa linha: `orange` pedindo você, `red` falhou, `agent` (a cor
+    /// do agente) trabalhando; ausente, o cinza de sempre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_tone: Option<String>,
 }
 
 /// O `"\(p.activity)"` do Swift: o nome do caso em minúsculas, sem os valores
@@ -95,6 +111,41 @@ impl From<&ChatQueue> for QueueInfo {
     }
 }
 
+/// A linha embaixo do nome na coluna (`ParticipantsColumn.roleText` do
+/// Swift): o estado quando ele diz algo, senão o papel.
+pub fn status_text(activity: &Activity, role: Option<&str>) -> String {
+    match activity {
+        Activity::Dead => "terminal fechado".to_owned(),
+        Activity::Working => "trabalhando…".to_owned(),
+        Activity::Starting => "preparando…".to_owned(),
+        Activity::Asking => "precisa de você".to_owned(),
+        Activity::Background => "em segundo plano".to_owned(),
+        Activity::Awaiting(peers) => format!(
+            "aguardando {}",
+            if peers.is_empty() {
+                "vizinho".to_owned()
+            } else {
+                peers.join(", ")
+            }
+        ),
+        Activity::Retrying { attempt, .. } => {
+            format!("tentando de novo ({attempt}/{MAX_ATTEMPTS})")
+        }
+        Activity::Failed(why) => format!("falhou — {why}"),
+        Activity::Ready | Activity::Waiting => role.unwrap_or_default().to_owned(),
+    }
+}
+
+/// A cor dessa linha (`roleColor` do Swift).
+pub fn status_tone(activity: &Activity) -> Option<&'static str> {
+    match activity {
+        Activity::Asking => Some("orange"),
+        Activity::Failed(_) => Some("red"),
+        Activity::Working => Some("agent"),
+        _ => None,
+    }
+}
+
 /// A tabela de cor do `Activity` do Swift; a mesma que `runtime::org::activity_view`
 /// põe no `tone` do nó.
 pub fn activity_tone(activity: &Activity) -> Option<&'static str> {
@@ -116,6 +167,9 @@ impl ChatParticipant {
             activity: activity_name(&self.activity).to_owned(),
             tone: activity_tone(&self.activity).map(str::to_owned),
             needs_attention: self.activity.needs_attention(),
+            screen: self.screen.clone(),
+            status: status_text(&self.activity, self.role.as_deref()),
+            status_tone: status_tone(&self.activity).map(str::to_owned),
         }
     }
 
@@ -134,9 +188,11 @@ impl ChatParticipant {
     }
 
     /// Quem entra no grupo: agentes e shells. `activity` devolve o estado do
-    /// terminal; sem alvo no Dispatcher é terminal morto.
+    /// terminal; sem alvo no Dispatcher é terminal morto. O endereço usa o nome
+    /// da bancada; a tela, o id.
     pub fn from_nodes(
         nodes: &[NodeConfig],
+        workbench_id: &str,
         workbench: &str,
         activity: impl Fn(&str) -> Option<Activity>,
     ) -> Vec<ChatParticipant> {
@@ -158,6 +214,7 @@ impl ChatParticipant {
                 };
                 ChatParticipant {
                     id: node.id.clone(),
+                    screen: NodeId::screen(workbench_id, &node.id).map(String::from),
                     activity: activity(&address).unwrap_or(Activity::Dead),
                     address,
                     is_agent,

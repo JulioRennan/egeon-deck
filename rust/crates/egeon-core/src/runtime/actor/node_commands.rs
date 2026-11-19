@@ -1,6 +1,6 @@
 //! Dono: `org`. Liga ao ator criar e remover bancada, nó, workspace e projeto, o worktree, o limpar e o set_node (com o relançamento que o Swift faz).
 //!
-//! Comandos do `/ui` que chegam aqui: create_workbench, remove_workbench, plan_remove_workbench, clear_workbench, worktree, create_node, remove_node, set_node, node_clear, create_workspace, remove_workspace, save_workspace, create_project, add_project, remove_project e multi_project. `None` quer dizer que a
+//! Comandos do `/ui` que chegam aqui: create_workbench, remove_workbench, plan_remove_workbench, removal_losses, clear_workbench, worktree, create_node, remove_node, set_node, node_clear, create_workspace, remove_workspace, save_workspace, create_project, add_project, remove_project e multi_project. `None` quer dizer que a
 //! resposta sai depois (trabalho fora do ator, pela [`Actor::run_later`]).
 //! O core mantém a assinatura; o corpo é do dono.
 //!
@@ -25,7 +25,7 @@ use crate::features::node::{service as node_service, store as components};
 use crate::features::path_text::{abbreviate_tilde, last_component, normalize};
 use crate::features::workbench::clock::WorkbenchClocks;
 use crate::features::workbench::frames;
-use crate::features::workbench::model::{ViewMode as ConfigView, WorkbenchConfig};
+use crate::features::workbench::model::WorkbenchConfig;
 use crate::features::workbench::removal::{Removal, RemovalTarget, purge, sweep};
 use crate::features::workbench::service::colored_among;
 use crate::features::workbench::store as bench_store;
@@ -36,7 +36,7 @@ use crate::features::workspace::service::reconcile;
 use crate::features::workspace::store as space_store;
 use crate::features::workspace::tree::WorkspaceTree;
 use crate::features::worktree::removal_plan::{
-    BenchWorktree, RemovalContext, involved, loss_lines, multi_roots, payload,
+    BenchWorktree, RemovalContext, involved, multi_roots, payload,
 };
 use crate::features::worktree::service as worktree_service;
 use crate::protocol::handler::{RouteReply, RouteRequest};
@@ -44,12 +44,12 @@ use crate::protocol::message::{CommandKind, Reply};
 use crate::protocol::org::{
     AddProject, CreateNode, CreateProject, CreateWorkbench, CreateWorkspace, Link, MultiProject,
     NodeKind, NodeRef, RemoveProject, RemoveWorkbench, RemoveWorkspace, SaveWorkspace, SetNode,
-    TemplateView, ViewMode, WorkbenchRef, Worktree, WorktreeDestination, WorktreePlanRequest,
+    Worktree, WorktreeDestination,
 };
 use crate::protocol::routes::FeatureRoute;
 use crate::runtime::org::screen_id;
 
-fn config_kind(kind: NodeKind) -> ConfigKind {
+pub(super) fn config_kind(kind: NodeKind) -> ConfigKind {
     match kind {
         NodeKind::Shell => ConfigKind::Shell,
         NodeKind::Agent => ConfigKind::Agent,
@@ -58,11 +58,11 @@ fn config_kind(kind: NodeKind) -> ConfigKind {
     }
 }
 
-fn unknown_bench(re: u64, id: &WorkbenchId) -> Reply {
+pub(super) fn unknown_bench(re: u64, id: &WorkbenchId) -> Reply {
     Reply::err(re, format!("bancada desconhecida '{id}'"))
 }
 
-fn unknown_node(re: u64, id: &str) -> Reply {
+pub(super) fn unknown_node(re: u64, id: &str) -> Reply {
     Reply::err(re, format!("nó desconhecido '{id}'"))
 }
 
@@ -76,6 +76,7 @@ impl Actor {
         Some(match kind {
             CommandKind::CreateWorkbench(c) => return self.create_workbench(client, re, c),
             CommandKind::PlanRemoveWorkbench(r) => return self.plan_remove(client, re, r),
+            CommandKind::RemovalLosses(r) => return self.removal_losses(client, re, r),
             CommandKind::RemoveWorkbench(r) => return self.remove_workbench_command(client, re, r),
             CommandKind::Worktree(w) => return self.worktree_command(client, re, w),
             CommandKind::ClearWorkbench(r) => {
@@ -84,8 +85,26 @@ impl Actor {
                     None => Some(unknown_bench(re, &r.workbench)),
                 };
             }
+            CommandKind::Retry(r) => match self.org.name_of(&r.workbench) {
+                None => unknown_bench(re, &r.workbench),
+                Some(bench) => match self.retry_node(&format!("{bench}/{}", r.node), r.now) {
+                    Ok(()) => Reply::ok(re),
+                    Err(error) => Reply::err(re, error),
+                },
+            },
+            CommandKind::OpenNodeFolder(n) => self.open_node_folder(re, &n),
+            CommandKind::ResetClock(r) => {
+                if self.org.index_of(&r.workbench).is_none() {
+                    return Some(unknown_bench(re, &r.workbench));
+                }
+                self.reset_clock(r.workbench.as_str());
+                crate::log!("bancada {}: cronômetro zerado", r.workbench);
+                self.publish_org();
+                Reply::ok(re)
+            }
             CommandKind::Templates => self.templates(re),
-            CommandKind::WorktreeInfo(r) => return self.worktree_info(client, re, r),
+            CommandKind::WorktreeInfo(r) => return self.worktree_info(client, re, &r),
+            CommandKind::SaveTemplate(s) => self.save_template(re, s),
             CommandKind::WorktreePlan(r) => return self.worktree_plan(client, re, r),
             CommandKind::NodeClear(n) => {
                 let target = self
@@ -109,6 +128,11 @@ impl Actor {
             CommandKind::MultiProject(m) => self.multi_project(re, m),
             CommandKind::CreateNode(c) => self.create_node(re, c),
             CommandKind::SetNode(s) => self.set_node(re, s),
+            CommandKind::NodeForm(f) => self.node_form(re, f),
+            CommandKind::NodeFormScreen(s) => self.node_form_screen(re, *s),
+            CommandKind::NodeFolder(f) => self.node_folder(re, f),
+            CommandKind::ApplyNode(a) => self.apply_node(re, *a),
+            CommandKind::Components => self.components(re),
             CommandKind::RemoveNode(r) => self.remove_node(re, r),
             CommandKind::Link(l) => self.link_nodes(re, l),
             other => Reply::err(re, format!("{} ainda não portado", other.name())),
@@ -154,30 +178,52 @@ impl Actor {
             .cloned()
     }
 
-    /// Cria um nó: do componente escolhido (que já traz tipo, agente, comando,
-    /// pasta e papel) ou do tipo pedido, com o id livre da bancada. Sobe o
-    /// terminal se a bancada já está de pé.
-    fn create_node(&mut self, re: u64, c: CreateNode) -> Reply {
+    /// Cria um nó: do formulário confirmado, do componente escolhido (que já
+    /// traz tipo, agente, comando, pasta e papel) ou do tipo pedido, com o id
+    /// livre da bancada. Sobe o terminal se a bancada já está de pé.
+    fn create_node(&mut self, re: u64, mut c: CreateNode) -> Reply {
         let Some(index) = self.org.index_of(&c.workbench) else {
             return unknown_bench(re, &c.workbench);
         };
+        let formed = c
+            .form
+            .take()
+            .map(|submit| self.form_component(index, *submit, None));
         let bench = &self.org.state.workbenches[index];
         // O arrasto da tela vem como está, ajustado ao mínimo do cartão; sem
-        // frame, o nó entra na coluna do layout padrão (`apply_default_frames`).
-        let frame = c.frame.map(|r| {
-            placement::fit(Frame {
-                x: r.x,
-                y: r.y,
-                w: r.w,
-                h: r.h,
-            })
-        });
-        let mut node = match &c.component {
-            Some(name) => {
+        // frame mas com o que está à vista, o primeiro lugar livre ali; sem
+        // nada, o nó entra na coluna do layout padrão (`apply_default_frames`).
+        let as_frame = |r: crate::protocol::org::Rect| Frame {
+            x: r.x,
+            y: r.y,
+            w: r.w,
+            h: r.h,
+        };
+        let frame = match (c.frame, c.visible) {
+            (Some(r), _) => Some(placement::fit(as_frame(r))),
+            (None, Some(v)) => {
+                let taken: Vec<Frame> = bench.nodes.iter().filter_map(|n| n.frame()).collect();
+                Some(placement::spawn(
+                    as_frame(v),
+                    &taken,
+                    placement::TERMINAL_SIZE,
+                ))
+            }
+            (None, None) => None,
+        };
+        let saved = match (&formed, &c.component) {
+            (Some(component), _) => Some(component.clone()),
+            (None, Some(name)) => {
                 let file = self.config.paths.config(components::FILE);
                 let Some(component) = components::component(&file, name) else {
                     return Reply::err(re, format!("componente desconhecido '{name}'"));
                 };
+                Some(component)
+            }
+            (None, None) => None,
+        };
+        let mut node = match saved {
+            Some(component) => {
                 // O id vem do nome, então o endereço de dispatch fica legível:
                 // `deck/revisor`.
                 let prefix = crate::commons::ids::NodeId::slug(&component.name);
@@ -266,7 +312,7 @@ impl Actor {
     /// Recomeça o terminal de um nó já gravado em `position`: o processo é
     /// outro, mas a conversa do agente fica — o CLI retoma a mesma sessão. Só
     /// sobe de novo se a bancada está de pé.
-    fn restart_node(&mut self, index: usize, position: usize, mut updated: NodeConfig) {
+    pub(super) fn restart_node(&mut self, index: usize, position: usize, mut updated: NodeConfig) {
         let bench_id = self.org.state.workbenches[index].id.clone();
         if let Some(terminal) = screen_id(&bench_id, &updated.id) {
             let _ = self.close(&terminal);
@@ -420,7 +466,7 @@ impl Actor {
     }
 
     /// O catálogo de modelos do Claude Code, o que o ator já guarda (`detail`).
-    fn model_catalog(&self, profile: &AgentProfile) -> Option<ModelCatalog> {
+    pub(super) fn model_catalog(&self, profile: &AgentProfile) -> Option<ModelCatalog> {
         if !claude_catalog::applies_to(profile) {
             return None;
         }
@@ -455,9 +501,39 @@ impl Actor {
                 None => EdgeConfig::with_default_limit(from, to),
             });
         }
+        // O aviso de ciclo é o mesmo do `/edge`: a ligação nova pode fechar uma
+        // roda de três nós ou mais.
+        let first = list.len() - if l.both { 2 } else { 1 };
+        let warning = edges::cycle_warning(&bench.name, &list[first], &list);
         bench.edges = Some(list);
         crate::log!("aresta[{}]: {} → {}", bench.name, l.from, l.to);
-        self.apply_org(vec![OrgEffect::PersistWorkbenches]);
+        let mut effects = vec![OrgEffect::PersistWorkbenches];
+        if let Some((text, note)) = warning {
+            crate::log!("{note}");
+            effects.push(OrgEffect::Banner {
+                workbench: bench.id.clone(),
+                text,
+            });
+        }
+        self.apply_org(effects);
+        Reply::ok(re)
+    }
+
+    /// O ⌘-clique no subtítulo (`NodeView.swift`): a pasta que o card mostra,
+    /// inteira, com o app padrão do sistema. O que o sistema faz com ela não
+    /// volta: o Swift também não diz nada se o Finder não abrir.
+    fn open_node_folder(&mut self, re: u64, n: &crate::protocol::node::NodeTarget) -> Reply {
+        let Some(index) = self.org.index_of(&n.workbench) else {
+            return unknown_bench(re, &n.workbench);
+        };
+        let path = match self.org.node_directory(index, n.node.as_str()) {
+            Ok(path) => path,
+            Err(error) => return Reply::err(re, error),
+        };
+        crate::log!("nó[{}]: ⌘-clique no subtítulo abre {path}", n.node);
+        self.drivers
+            .opener
+            .open(&crate::ports::opener::OpenTarget::File(path.into()));
         Reply::ok(re)
     }
 
@@ -541,7 +617,7 @@ impl Actor {
     /// Trabalho que bloqueia (git, disco) fora do ator; o resultado volta como
     /// mensagem e `then` roda no ator — com `Err` quando o trabalho morreu (pânico),
     /// para quem pediu sempre ter resposta e nenhuma marca ficar para trás.
-    fn blocking<T: Send + 'static>(
+    pub(super) fn blocking<T: Send + 'static>(
         &self,
         work: impl FnOnce() -> T + Send + 'static,
         then: Then<Result<T, String>>,
@@ -702,51 +778,7 @@ impl Actor {
         None
     }
 
-    /// O que remover a bancada leva: as worktrees que ela usa, com o que cada
-    /// uma perde, e se ela tem terminais de pé. Git em cada pasta, fora do
-    /// ator.
-    fn plan_remove(&mut self, client: ClientId, re: u64, r: WorkbenchRef) -> Option<Reply> {
-        let Some(index) = self.org.index_of(&r.workbench) else {
-            return Some(unknown_bench(re, &r.workbench));
-        };
-        let bench = self.org.state.workbenches[index].clone();
-        let live = self.org.live.contains(&bench.id);
-        let context = self.removal_context(&bench);
-        let (git, home) = (self.user_git(), self.org.home.clone());
-        self.blocking(
-            move || {
-                let worktrees = involved(&git, &bench, &context, &home);
-                worktrees
-                    .iter()
-                    .map(|w| {
-                        json!({
-                            "path": w.path, "repo": w.repo, "branch": w.branch,
-                            "owners": w.owners, "used_by": w.used_by,
-                            "losses": loss_lines(&git, std::slice::from_ref(w)),
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            },
-            Box::new(
-                move |actor: &mut Actor, worktrees: Result<Vec<Value>, String>| {
-                    let worktrees = match worktrees {
-                        Ok(list) => list,
-                        Err(error) => {
-                            actor.send_reply(client, &Reply::err(re, error));
-                            return;
-                        }
-                    };
-                    actor.send_reply(
-                        client,
-                        &Reply::with(re, &json!({"live": live, "worktrees": worktrees})),
-                    );
-                },
-            ),
-        );
-        None
-    }
-
-    fn removal_context(&self, bench: &WorkbenchConfig) -> RemovalContext {
+    pub(super) fn removal_context(&self, bench: &WorkbenchConfig) -> RemovalContext {
         let is_multi = bench
             .project
             .as_deref()
@@ -784,7 +816,12 @@ impl Actor {
             &name,
             r.worktrees,
             Box::new(move |actor, body: Value| {
-                actor.send_reply(client, &Reply::with(re, &body));
+                let reply = if body["ok"] == false {
+                    Reply::err(re, removal_failure(&body))
+                } else {
+                    Reply::with(re, &body)
+                };
+                actor.send_reply(client, &reply);
             }),
         );
         None
@@ -991,6 +1028,36 @@ impl Actor {
 }
 
 // ── Workspaces e projetos ──────────────────────────────────────────────────
+
+/// O texto de "A bancada não foi removida" (`purgeAndRemove` do Swift): o que
+/// já saiu e o que resistiu. Sem worktree no meio, o erro da remoção.
+fn removal_failure(body: &Value) -> String {
+    let lines = |key: &str| -> Vec<String> {
+        body[key]
+            .as_array()
+            .map(|list| {
+                list.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let failed = lines("failed");
+    if failed.is_empty() {
+        return body["error"]
+            .as_str()
+            .unwrap_or("remoção falhou")
+            .to_owned();
+    }
+    let removed = lines("removed");
+    let done = if removed.is_empty() {
+        String::new()
+    } else {
+        format!("Já apagadas: {}.\n\n", removed.join(", "))
+    };
+    format!("{done}Não consegui apagar:\n{}", failed.join("\n"))
+}
 
 fn blank(re: u64, text: &str) -> Option<Reply> {
     text.trim()
@@ -1336,7 +1403,6 @@ impl Actor {
 // ── Worktree, cópia do não versionado e links do multi-projeto ─────────────
 
 use crate::features::worktree::duplicate::Target;
-use crate::features::worktree::form;
 use crate::features::worktree::from_folder;
 use crate::features::worktree::merge;
 use crate::features::worktree::routes::{
@@ -1353,14 +1419,25 @@ impl Actor {
         let Some(name) = self.org.name_of(&workbench) else {
             return Some(unknown_bench(re, &workbench));
         };
+        // `bancada/nó` na rota: só aquele terminal é reapontado.
+        let name = match &w.node {
+            Some(node) => format!("{name}/{node}"),
+            None => name,
+        };
         let choice = match self.form_choice(&w) {
             Ok(choice) => choice,
             Err(error) => return Some(Reply::err(re, error)),
         };
+        // Na rota, `nodes` de bancada multi-projeto são os repositórios.
         let nodes: Vec<String> = w
             .nodes
             .iter()
             .map(|(id, branch)| format!("{id}:{branch}"))
+            .chain(
+                w.repos
+                    .iter()
+                    .map(|(repo, branch)| format!("{repo}:{branch}")),
+            )
             .collect();
         let mut query = vec![("target", name), ("branch", w.branch)];
         if !nodes.is_empty() {
@@ -1398,7 +1475,8 @@ impl Actor {
             Ok(choice) => choice,
             Err(error) => return Some(Reply::err(re, error)),
         };
-        let (path, project, branch) = (w.path, w.project.map(|p| p.to_string()), w.branch);
+        let (path, project, branch, repos) =
+            (w.path, w.project.map(|p| p.to_string()), w.branch, w.repos);
         self.run_worktree(
             move |snapshot, home, git, links| {
                 from_folder::from_folder(
@@ -1408,7 +1486,10 @@ impl Actor {
                         path: path.as_deref(),
                         project: project.as_deref(),
                     },
-                    &branch,
+                    from_folder::Branches {
+                        branch: &branch,
+                        repos: &repos,
+                    },
                     choice.template.as_ref(),
                     home,
                     &|target, link| links.symlink(target, link),
@@ -1459,6 +1540,22 @@ impl Actor {
             .map(|w| w.id.clone());
         if let (Some(id), Some(object)) = (id, json.as_object_mut()) {
             object.insert("workbench".to_owned(), Value::String(id));
+        }
+        // Multi-projeto em que nenhum repositório aceitou: o "Nenhuma worktree
+        // foi criada" do Swift lista o motivo de cada um.
+        if json["ok"] == false && json.get("error").is_none() {
+            let failed = json["failed"]
+                .as_array()
+                .map(|list| {
+                    list.iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_default();
+            if let (false, Some(object)) = (failed.is_empty(), json.as_object_mut()) {
+                object.insert("error".to_owned(), Value::String(failed));
+            }
         }
         json
     }
@@ -1559,9 +1656,9 @@ impl Actor {
                 self.apply_org(vec![
                     OrgEffect::SaveWorkspaces,
                     OrgEffect::PersistWorkbenches,
-                    OrgEffect::Activate { id },
+                    OrgEffect::Activate { id: id.clone() },
                 ]);
-                self.copy_unversioned(copies);
+                self.copy_unversioned(&id, copies);
             }
             WorktreeEffect::RepointNode {
                 workbench_id,
@@ -1601,7 +1698,7 @@ impl Actor {
                     self.open_terminal(&bench, &node);
                 }
                 self.apply_org(vec![OrgEffect::PersistWorkbenches]);
-                self.copy_unversioned(copies);
+                self.copy_unversioned(&workbench_id, copies);
             }
             WorktreeEffect::MoveWorkbench { config, copies } => {
                 let Some(index) = self
@@ -1638,49 +1735,9 @@ impl Actor {
                     OrgEffect::PersistWorkbenches,
                     OrgEffect::Activate { id },
                 ]);
-                self.copy_unversioned(copies);
+                self.copy_unversioned(&config.id, copies);
             }
         }
-    }
-
-    /// Copia o que o git não versiona (`.env`, `node_modules`, `Pods`…) para
-    /// cada worktree criada, uma depois da outra — com clone do APFS cada uma
-    /// leva um ou dois segundos. Worktree reaproveitada nem chega aqui.
-    fn copy_unversioned(&mut self, pending: Vec<(String, String)>) {
-        if pending.is_empty() {
-            return;
-        }
-        let script = self.config.paths.config("worktree-copy.sh");
-        let (git, cloner, links) = (
-            self.user_git(),
-            self.drivers.cloner.clone(),
-            self.drivers.links.clone(),
-        );
-        self.blocking(
-            move || {
-                for (repo, path) in &pending {
-                    crate::log!(
-                        "worktree: copiando o que o git não versiona em {}",
-                        last_component(repo)
-                    );
-                    crate::features::worktree::copy::copy_unversioned(
-                        &git,
-                        &script,
-                        repo,
-                        path,
-                        &*cloner,
-                        &|file| {
-                            let _ = links.make_executable(file);
-                        },
-                    );
-                }
-            },
-            Box::new(|_, done: Result<(), String>| {
-                if let Err(error) = done {
-                    crate::log!("worktree: a cópia do que o git não versiona falhou — {error}");
-                }
-            }),
-        );
     }
 
     /// Deixa cada pasta de multi-projeto com um link por repositório. Na carga
@@ -1744,93 +1801,6 @@ fn split_target(target: &str) -> (Option<&str>, Option<&str>) {
     match target.split_once('/') {
         Some((bench, node)) if !bench.is_empty() && !node.is_empty() => (Some(bench), Some(node)),
         _ => (None, None),
-    }
-}
-
-// ── Formulários de bancada e de worktree (decisão 37) ──────────────────────
-
-impl Actor {
-    /// Os templates salvos, para o formulário de bancada nova.
-    fn templates(&self, re: u64) -> Reply {
-        let file = self.config.paths.config(bench_store::TEMPLATES_FILE);
-        let templates: Vec<TemplateView> = bench_store::load_templates(&file)
-            .into_iter()
-            .map(|(name, template)| TemplateView {
-                name,
-                nodes: u32::try_from(template.nodes.len()).unwrap_or(u32::MAX),
-                base_path: template.base_path,
-                view: template.view.map(|view| match view {
-                    ConfigView::Canvas => ViewMode::Canvas,
-                    ConfigView::Chat => ViewMode::Chat,
-                }),
-            })
-            .collect();
-        Reply::with(re, &json!({"templates": templates}))
-    }
-
-    /// O resumo do formulário de worktree. O git roda fora do ator, sobre uma
-    /// cópia da bancada.
-    fn worktree_info(&mut self, client: ClientId, re: u64, r: WorkbenchRef) -> Option<Reply> {
-        let Some(bench) = self.bench_by_id(&r.workbench) else {
-            return Some(unknown_bench(re, &r.workbench));
-        };
-        let (git, home) = (self.user_git(), self.org.home.clone());
-        let script = self
-            .config
-            .paths
-            .config("worktree-copy.sh")
-            .to_string_lossy()
-            .into_owned();
-        self.answer_form(client, re, move || form::info(&git, &bench, &home, &script));
-        None
-    }
-
-    /// O veredito do nome da branch, a cada tecla do formulário.
-    fn worktree_plan(
-        &mut self,
-        client: ClientId,
-        re: u64,
-        r: WorktreePlanRequest,
-    ) -> Option<Reply> {
-        let Some(bench) = self.bench_by_id(&r.workbench) else {
-            return Some(unknown_bench(re, &r.workbench));
-        };
-        let (git, home) = (self.user_git(), self.org.home.clone());
-        self.answer_form(client, re, move || {
-            form::plan(&git, &bench, &r.branch, &home)
-        });
-        None
-    }
-
-    fn bench_by_id(&self, id: &WorkbenchId) -> Option<WorkbenchConfig> {
-        self.org
-            .state
-            .workbenches
-            .iter()
-            .find(|w| w.id == id.as_str())
-            .cloned()
-    }
-
-    /// Roda a leitura do formulário fora do ator e responde com o resultado, ou
-    /// com o erro dela.
-    fn answer_form<T: serde::Serialize + Send + 'static>(
-        &self,
-        client: ClientId,
-        re: u64,
-        read: impl FnOnce() -> Result<T, String> + Send + 'static,
-    ) {
-        self.blocking(
-            read,
-            Box::new(
-                move |actor: &mut Actor, done: Result<Result<T, String>, String>| {
-                    let reply = match done.and_then(|read| read) {
-                        Ok(value) => Reply::with(re, &value),
-                        Err(error) => Reply::err(re, error),
-                    };
-                    actor.send_reply(client, &reply);
-                },
-            ),
-        );
     }
 }
 

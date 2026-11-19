@@ -14,6 +14,7 @@ class AppTextField extends StatefulWidget {
     this.onKeyEvent,
     this.onSubmitted,
     this.onChanged,
+    this.focusNode,
     super.key,
   });
 
@@ -31,12 +32,16 @@ class AppTextField extends StatefulWidget {
   final VoidCallback? onSubmitted;
   final ValueChanged<String>? onChanged;
 
+  /// De fora, para quem compõe pôr o teclado no campo depois de um gesto.
+  final FocusNode? focusNode;
+
   @override
   State<AppTextField> createState() => _AppTextFieldState();
 }
 
 class _AppTextFieldState extends State<AppTextField> {
-  final _focus = FocusNode();
+  FocusNode? _own;
+  FocusNode get _focus => widget.focusNode ?? (_own ??= FocusNode());
 
   @override
   void initState() {
@@ -52,7 +57,7 @@ class _AppTextFieldState extends State<AppTextField> {
 
   @override
   void dispose() {
-    _focus.dispose();
+    _own?.dispose();
     super.dispose();
   }
 

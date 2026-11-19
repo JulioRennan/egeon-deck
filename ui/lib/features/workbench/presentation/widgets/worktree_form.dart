@@ -7,8 +7,12 @@ import '../../../../commons/widgets/form_label.dart';
 import '../../../../core/adapters/injector.dart';
 import '../../../../theme/app_colors.dart';
 import '../../domain/entities/worktree_info.dart';
+import '../../domain/entities/bench_template.dart';
 import '../../domain/entities/worktree_plan.dart';
+import '../../domain/entities/worktree_source.dart';
+import '../cubit/worktree_branch_cubit.dart';
 import '../cubit/worktree_form_cubit.dart';
+import 'template_pick_list.dart';
 
 /// O que o formulário de worktree devolve.
 class WorktreeInput {
@@ -16,32 +20,67 @@ class WorktreeInput {
     required this.branch,
     required this.destination,
     required this.nodes,
+    this.template,
   });
 
   final String branch;
   final WorktreeDestination destination;
   final Map<String, String> nodes;
+
+  /// Sem bancada de origem: o template da bancada nova, ou nenhum.
+  final String? template;
 }
 
-/// Abre o formulário de worktree da bancada [benchId]: o resumo do repositório,
-/// a branch com o veredito do core, o destino e uma linha por terminal.
+/// Abre o formulário de worktree: o resumo do repositório, a branch com o
+/// veredito do core e, duplicando uma bancada, o destino e uma linha por
+/// terminal; a partir de uma pasta, o template da bancada nova. [title] é o
+/// `Worktree de <repo>`; [info], quando já lido, poupa a segunda leitura.
 Future<WorktreeInput?> showWorktreeForm(
   BuildContext context, {
-  required String benchId,
-  required String benchName,
+  required WorktreeSource source,
+  required String title,
+  WorktreeInfo? info,
+  List<BenchTemplate> templates = const [],
 }) => showAppDialog<WorktreeInput>(
   context,
   width: 460,
-  builder: (_, close) => BlocProvider(
-    create: (_) => inject<WorktreeFormCubit>(benchId),
-    child: _Body(benchName: benchName, close: close),
+  builder: (_, close) => MultiBlocProvider(
+    providers: [
+      BlocProvider(
+        create: (_) => inject<WorktreeFormCubit>((source: source, info: info)),
+      ),
+      BlocProvider(
+        create: (_) => inject<WorktreeBranchCubit>((
+          source: source,
+          suggested: info?.suggestedBranch,
+        )),
+      ),
+    ],
+    child: _Body(
+      title: title,
+      offersMove: source.hasOrigin,
+      templates: source.hasOrigin ? null : templates,
+      close: close,
+    ),
   ),
 );
 
 class _Body extends StatefulWidget {
-  const _Body({required this.benchName, required this.close});
+  const _Body({
+    required this.title,
+    required this.offersMove,
+    required this.templates,
+    required this.close,
+  });
 
-  final String benchName;
+  final String title;
+
+  /// Duplicando há duas saídas; sem bancada de origem, só abrir uma nova.
+  final bool offersMove;
+
+  /// Sem bancada de origem, o seletor de template; duplicando, os nós vêm da
+  /// bancada e não há o que escolher.
+  final List<BenchTemplate>? templates;
   final void Function([WorktreeInput? result]) close;
 
   @override
@@ -49,8 +88,11 @@ class _Body extends StatefulWidget {
 }
 
 class _BodyState extends State<_Body> {
-  final _branch = TextEditingController();
+  late final _branch = TextEditingController(
+    text: context.read<WorktreeBranchCubit>().branch,
+  );
   final _rows = <String, TextEditingController>{};
+  String? _template;
 
   @override
   void dispose() {
@@ -61,49 +103,89 @@ class _BodyState extends State<_Body> {
     super.dispose();
   }
 
-  void _submit(WorktreeFormState state) {
-    final branch = state.branch.trim();
+  void _submit(WorktreeFormState state, String branch) {
     if (branch.isEmpty) return;
     widget.close(
       WorktreeInput(
         branch: branch,
         destination: state.destination,
-        nodes: state.nodes,
+        nodes: state.nodes(branch),
+        template: _template,
       ),
     );
   }
 
+  /// O resumo chegou: a branch que o core sugere entra no campo, se a pessoa
+  /// ainda não escreveu nada, e o veredito dela já é pedido.
+  void _onForm(BuildContext context, WorktreeFormState state) {
+    if (state is! WorktreeFormReady || _branch.text.isNotEmpty) return;
+    final suggested = state.info.suggestedBranch;
+    _branch.text = suggested;
+    context.read<WorktreeBranchCubit>().suggest(suggested);
+  }
+
+  /// A branch da bancada mudou: as linhas que ninguém tocou a acompanham
+  /// (`NodeWorktreeRow.suggest`).
+  void _onBranch(BuildContext context, WorktreeBranchState state) {
+    final branch = switch (state) {
+      BranchEmpty() => '',
+      BranchAsking(:final branch) => branch,
+      BranchJudged(:final branch) => branch,
+    };
+    final edited = context.read<WorktreeFormCubit>().state.edited;
+    for (final MapEntry(key: node, value: controller) in _rows.entries) {
+      if (!edited.containsKey(node) && controller.text != branch) {
+        controller.text = branch;
+      }
+    }
+  }
+
   @override
-  Widget build(
-    BuildContext context,
-  ) => BlocConsumer<WorktreeFormCubit, WorktreeFormState>(
-    listenWhen: (before, now) =>
-        before is WorktreeFormOpening &&
-        now is WorktreeFormReady &&
-        _branch.text.isEmpty,
-    listener: (context, state) => _branch.text = state.branch,
-    builder: (context, state) {
-      final cubit = context.read<WorktreeFormCubit>();
-      final info = switch (state) {
-        WorktreeFormOpening() => null,
-        WorktreeFormReady(:final info) => info,
-      };
-      return DialogBody(
-        title: 'Worktree de ${widget.benchName}',
-        message: info?.summary,
-        actions: [
-          DialogButton('Cancelar', onTap: widget.close),
-          DialogButton(
-            'Abrir',
-            primary: true,
-            enabled: state.branch.trim().isNotEmpty,
-            onTap: () => _submit(state),
-          ),
-        ],
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+  Widget build(BuildContext context) => MultiBlocListener(
+    listeners: [
+      BlocListener<WorktreeFormCubit, WorktreeFormState>(
+        listenWhen: (before, now) =>
+            before is WorktreeFormOpening && now is WorktreeFormReady,
+        listener: _onForm,
+      ),
+      BlocListener<WorktreeBranchCubit, WorktreeBranchState>(
+        listener: _onBranch,
+      ),
+    ],
+    child: Builder(builder: _content),
+  );
+
+  Widget _content(BuildContext context) {
+    final state = context.watch<WorktreeFormCubit>().state;
+    final cubit = context.read<WorktreeFormCubit>();
+    final branches = context.read<WorktreeBranchCubit>();
+    final (branch, plan) = switch (context.watch<WorktreeBranchCubit>().state) {
+      BranchEmpty() => ('', null),
+      BranchAsking(:final branch) => (branch, null),
+      BranchJudged(:final branch, :final plan) => (branch, plan),
+    };
+    final info = switch (state) {
+      WorktreeFormOpening() => null,
+      WorktreeFormReady(:final info) => info,
+    };
+    final templates = widget.templates;
+    return DialogBody(
+      title: widget.title,
+      message: info?.summary,
+      actions: [
+        DialogButton('Cancelar', onTap: widget.close),
+        DialogButton(
+          'Abrir',
+          primary: true,
+          enabled: branch.isNotEmpty,
+          onTap: () => _submit(state, branch),
+        ),
+      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.offersMove) ...[
             const FormLabel('O QUE FAZER'),
             _Radio(
               key: const ValueKey('destination-new'),
@@ -126,80 +208,105 @@ class _BodyState extends State<_Body> {
                   cubit.setDestination(WorktreeDestination.moveCurrent),
             ),
             const SizedBox(height: 10),
-            const FormLabel('BRANCH DA BANCADA'),
-            AppTextField(
-              controller: _branch,
-              placeholder: 'nome da branch',
-              autofocus: true,
-              onChanged: cubit.setBranch,
-              onSubmitted: () => _submit(state),
+          ],
+          const FormLabel('BRANCH DA BANCADA'),
+          AppTextField(
+            key: const ValueKey('worktree-branch'),
+            controller: _branch,
+            placeholder: 'nome da branch',
+            autofocus: true,
+            onChanged: branches.setBranch,
+            onSubmitted: () => _submit(state, branch),
+          ),
+          const SizedBox(height: 6),
+          _Verdict(plan: plan),
+          if (info != null && info.nodes.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const FormLabel('TERMINAIS'),
+            Text(
+              'Todos vão. Na mesma branch da bancada, junto com ela; com '
+              'outra branch, em worktree própria do repositório dele. Em '
+              'branco, fica onde está.',
+              style: _hint,
             ),
             const SizedBox(height: 6),
-            _Verdict(plan: state.plan),
-            if (info != null && info.nodes.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              const FormLabel('TERMINAIS'),
-              Text(
-                'Todos vão. Na mesma branch da bancada, junto com ela; com '
-                'outra branch, em worktree própria do repositório dele. Em '
-                'branco, acompanha a bancada.',
-                style: _hint,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 150),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final node in info.nodes)
+                    _row(cubit, state, node, branch),
+                ],
               ),
-              const SizedBox(height: 6),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 150),
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final node in info.nodes) _row(cubit, state, node),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ],
-        ),
-      );
-    },
-  );
+          if (templates != null) ...[
+            const SizedBox(height: 10),
+            const FormLabel('TEMPLATE'),
+            TemplatePickList(
+              templates: templates,
+              chosen: _template,
+              height: 90,
+              onChoose: (name) => setState(() => _template = name),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _row(
     WorktreeFormCubit cubit,
     WorktreeFormState state,
     NodeWorktree node,
+    String branch,
   ) {
+    final text = state.rowText(node, branch);
     final controller = _rows.putIfAbsent(
       node.node,
-      () => TextEditingController(text: state.rowText(node)),
+      () => TextEditingController(text: text),
     );
+    final choice = node.choice(text, branch);
+    final warns = choice.warns || (!node.editable && !node.exists);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              node.node,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: _mono,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  node.node,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _mono,
+                ),
+                Text(
+                  node.detail(choice),
+                  key: ValueKey('node-${node.node}-detail'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _hint.copyWith(
+                    color: warns ? AppColors.attention : null,
+                  ),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: node.editable
-                ? AppTextField(
-                    key: ValueKey('node-${node.node}'),
-                    controller: controller,
-                    placeholder: state.branch.trim().isEmpty
-                        ? 'branch'
-                        : state.branch.trim(),
-                    onChanged: (text) => cubit.editNode(node.node, text),
-                  )
-                : Text(
-                    'fora de um repositório — fica onde está',
-                    key: ValueKey('node-${node.node}-norepo'),
-                    style: _hint,
-                  ),
-          ),
+          if (node.editable) ...[
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 170,
+              child: AppTextField(
+                key: ValueKey('node-${node.node}'),
+                controller: controller,
+                placeholder: 'não levar',
+                onChanged: (text) => cubit.editNode(node.node, text),
+              ),
+            ),
+          ],
         ],
       ),
     );

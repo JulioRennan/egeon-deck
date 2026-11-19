@@ -1738,7 +1738,10 @@ fn pasta_escolhida_vira_bancada_nova_com_os_nos_do_template() {
         &git(),
         &org,
         source,
-        "feature/x",
+        from_folder::Branches {
+            branch: "feature/x",
+            repos: &BTreeMap::new(),
+        },
         Some(&template),
         &s.home(),
         &no_link,
@@ -1787,7 +1790,10 @@ fn projeto_de_pasta_da_o_repositorio_e_a_bancada_fica_nele() {
             path: None,
             project: Some(&project_id),
         },
-        "",
+        from_folder::Branches {
+            branch: "",
+            repos: &BTreeMap::new(),
+        },
         None,
         &s.home(),
         &no_link,
@@ -1819,15 +1825,28 @@ fn multi_projeto_sem_origem_abre_uma_worktree_por_repo_e_usa_o_template() {
         project: Some(&multi_id),
     };
 
-    let (refused, _) =
-        from_folder::from_folder(&git(), &org, source, "", None, &s.home(), &no_link);
+    let (refused, _) = from_folder::from_folder(
+        &git(),
+        &org,
+        source,
+        from_folder::Branches {
+            branch: "",
+            repos: &BTreeMap::new(),
+        },
+        None,
+        &s.home(),
+        &no_link,
+    );
     assert_eq!(refused.json["error"], "multi-projeto pede branch");
 
     let (reply, effects) = from_folder::from_folder(
         &git(),
         &org,
         source,
-        "frente",
+        from_folder::Branches {
+            branch: "frente",
+            repos: &BTreeMap::new(),
+        },
         Some(&template),
         &s.home(),
         &no_link,
@@ -1847,9 +1866,20 @@ fn pasta_sem_git_projeto_ou_pasta_ausentes_sao_recusados() {
     let s = Sandbox::new();
     let org = snapshot(vec![]);
     let run = |source: from_folder::Source<'_>| {
-        from_folder::from_folder(&git(), &org, source, "x", None, &s.home(), &no_link)
-            .0
-            .json["error"]
+        from_folder::from_folder(
+            &git(),
+            &org,
+            source,
+            from_folder::Branches {
+                branch: "x",
+                repos: &BTreeMap::new(),
+            },
+            None,
+            &s.home(),
+            &no_link,
+        )
+        .0
+        .json["error"]
             .as_str()
             .unwrap()
             .to_owned()
@@ -1926,4 +1956,88 @@ fn mover_a_bancada_viva_guarda_o_que_mudou_e_o_que_nasceu_durante_o_git() {
     );
     assert_eq!(merged.nodes[1].x, Some(900.0));
     assert_eq!(merged.nodes[0].cwd.as_deref(), Some("api"));
+}
+
+#[test]
+fn multi_projeto_sem_origem_respeita_a_branch_de_cada_repositorio() {
+    let s = Sandbox::new();
+    let (a, b) = (s.repo("api"), s.repo("web"));
+    let (pa, pb) = (ProjectConfig::new("api", a), ProjectConfig::new("web", b));
+    let mut multi = ProjectConfig::new("Nexus", s.path("links"));
+    multi.members = Some(vec![pa.id.clone(), pb.id.clone()]);
+    let multi_id = multi.id.clone();
+    let mut space = WorkspaceConfig::new("w");
+    space.projects = vec![pa, pb, multi];
+    let org = snapshot(vec![space]);
+    let repos = BTreeMap::from([("web".to_owned(), "fix/web".to_owned())]);
+    let (reply, effects) = from_folder::from_folder(
+        &git(),
+        &org,
+        from_folder::Source {
+            path: None,
+            project: Some(&multi_id),
+        },
+        from_folder::Branches {
+            branch: "frente",
+            repos: &repos,
+        },
+        None,
+        &s.home(),
+        &no_link,
+    );
+    assert_eq!(reply.status, 200, "{}", reply.json);
+    assert!(matches!(effects[0], WorktreeEffect::AddWorkbench { .. }));
+    let root = reply.json["path"].as_str().unwrap().to_owned();
+    let branch_of = |repo: &str| s.git(&["branch", "--show-current"], &format!("{root}/{repo}"));
+    assert_eq!(branch_of("api").trim(), "frente");
+    assert_eq!(branch_of("web").trim(), "fix/web", "a do repositório vence");
+    assert!(
+        root.ends_with("frente"),
+        "a raiz é da branch da bancada: {root}"
+    );
+}
+
+#[test]
+fn formulario_sem_origem_le_a_pasta_e_da_o_nome_do_repositorio() {
+    let s = Sandbox::new();
+    let repo = s.repo("repo");
+    let info = form::info_at(&git(), &repo, "~/repo", "copia.sh").unwrap();
+    assert_eq!(info.suggested_branch, "main-2");
+    assert_eq!(info.repo, "repo");
+    assert!(info.nodes.is_empty(), "sem bancada não há terminais");
+    assert!(info.multi.is_none());
+    let plan = form::plan_at(&git(), &repo, "~/repo", "nova", &s.home()).unwrap();
+    assert_eq!(plan.verdict, crate::protocol::org::BranchVerdict::Create);
+    assert_eq!(plan.folder, "~/worktrees/repo/nova");
+
+    let plain = s.path("solta");
+    fs::create_dir_all(&plain).unwrap();
+    assert_eq!(
+        form::info_at(&git(), &plain, "~/solta", "x").unwrap_err(),
+        "~/solta não é repositório git"
+    );
+}
+
+#[test]
+fn formulario_de_multi_projeto_da_um_campo_por_repositorio() {
+    let s = Sandbox::new();
+    let (pa, pb) = (
+        ProjectConfig::new("api", s.path("a/api")),
+        ProjectConfig::new("api", s.path("b/api")),
+    );
+    let mut multi = ProjectConfig::new("Nexus", s.path("links"));
+    multi.members = Some(vec![pa.id.clone(), pb.id.clone()]);
+    let info = form::multi_info(&multi, &[&pa, &pb], &s.home()).unwrap();
+    let detail = info.multi.unwrap();
+    assert_eq!(detail.project, "Nexus");
+    assert_eq!(
+        detail.repos,
+        ["api", "api-2"],
+        "o nome do link, sem repetir"
+    );
+    assert!(info.suggested_branch.is_empty());
+    assert_eq!(
+        form::multi_info(&multi, &[], &s.home()).unwrap_err(),
+        "\"Nexus\" não junta pasta nenhuma"
+    );
 }

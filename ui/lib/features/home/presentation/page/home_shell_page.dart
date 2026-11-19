@@ -47,6 +47,7 @@ class HomeShellPage extends StatefulWidget {
     required this.chat,
     this.onForm = handleForm,
     this.appName = 'EgeonDeck Next',
+    this.title = 'Egeon Deck',
     this.window = const ChannelWindowFrame(),
     this.activator = const ChannelWindowFrame(),
     this.writePng = png_file.writePng,
@@ -60,6 +61,9 @@ class HomeShellPage extends StatefulWidget {
 
   /// O título do menu do app.
   final String appName;
+
+  /// O nome do flavor, para os títulos que dizem de qual app é (Processos).
+  final String title;
 
   /// De onde vem a posição da janela, e como o PNG vai ao disco: o teste troca.
   final WindowFrameSource window;
@@ -118,7 +122,8 @@ class _HomeShellPageState extends State<HomeShellPage> {
     final tabs = overlayContext.read<TabsCubit>();
     return UpdateHost(
       dialogContext: () => overlayContext,
-      onShowProcesses: () => unawaited(showProcessesPanel(overlayContext)),
+      onShowProcesses: () =>
+          unawaited(showProcessesPanel(overlayContext, appName: widget.title)),
       child: AppMenu(
         name: widget.appName,
         actions: AppMenuActions(
@@ -128,24 +133,33 @@ class _HomeShellPageState extends State<HomeShellPage> {
           nextTab: tabs.next,
           previousTab: tabs.previous,
           closeTab: tabs.closeActive,
-          showProcesses: () => unawaited(showProcessesPanel(overlayContext)),
+          pickTab: tabs.selectNumber,
+          showProcesses: () => unawaited(
+            showProcessesPanel(overlayContext, appName: widget.title),
+          ),
           canvas: inject<CanvasCommands>(),
+          copyTargets: shell.copyTargets,
         ),
         child: BlocBuilder<ShellCubit, ShellState>(
           builder: (context, view) {
             final bench = view.snapshot.bench;
             final mode = bench?.view ?? ViewMode.canvas;
             final busy = view.snapshot.busy;
+            final banner = view.snapshot.banner;
             final lock = view.snapshot.lock;
+            final collapsed = switch (view) {
+              ShellExpanded() => false,
+              ShellCollapsed() => true,
+            };
             void ask(FormRequest request) =>
                 widget.onForm(overlayContext, request);
             final layout = RootLayout(
-              collapsed: view.collapsed,
+              collapsed: collapsed,
               beside: mode == ViewMode.chat,
               sidebar: RepaintBoundary(
                 key: _captures.keyFor('sidebar'),
                 child: SidebarPage(
-                  compact: view.collapsed,
+                  compact: collapsed,
                   commands: _commands(shell, ask),
                 ),
               ),
@@ -174,6 +188,13 @@ class _HomeShellPageState extends State<HomeShellPage> {
                     ? widget.chat(context, bench)
                     : widget.canvas(context, bench),
                 curtains: [
+                  if (banner != null)
+                    ShellBanner(
+                      banner,
+                      top: mode == ViewMode.canvas
+                          ? ShellBanner.belowCanvasBars
+                          : ShellBanner.chatTop,
+                    ),
                   if (busy != null) BusyCurtain(busy),
                   if (lock != null)
                     AccessCurtain(
@@ -184,8 +205,9 @@ class _HomeShellPageState extends State<HomeShellPage> {
                 ],
               ),
             );
-            // Os atalhos valem enquanto o foco estiver dentro da casca (o terminal, o
-            // composer…); o terminal, quando focado, deixa passar tudo o que tem ⌘.
+            // Com o foco na casca (o terminal, o composer…) os atalhos chegam
+            // aqui primeiro — o terminal deixa passar tudo o que tem ⌘. Sem foco
+            // na Flutter (o nó web) quem atende é o mesmo atalho no menu.
             return ShellShortcuts(
               actions: ShellShortcutActions(
                 toggleSidebar: shell.toggleCollapsed,
@@ -194,6 +216,13 @@ class _HomeShellPageState extends State<HomeShellPage> {
                 previousTab: tabs.previous,
                 closeTab: tabs.closeActive,
                 pickTab: tabs.selectNumber,
+                copyTargets: shell.copyTargets,
+                showProcesses: () => unawaited(
+                  showProcessesPanel(overlayContext, appName: widget.title),
+                ),
+                zoomIn: inject<CanvasCommands>().zoomIn,
+                zoomOut: inject<CanvasCommands>().zoomOut,
+                resetZoom: inject<CanvasCommands>().resetZoom,
               ),
               child: RepaintBoundary(
                 key: _captures.keyFor('window'),

@@ -70,17 +70,22 @@ List<ChatBlock> conversation(int count, {int start = 0}) => [
   ],
 ];
 
+// O `status` é o que o core manda na linha de baixo: o estado, ou o papel
+// quando está parado.
 const frontInfo = ChatParticipantInfo(
   id: 'front',
   address: 'deck/front',
   isAgent: true,
   activity: 'working',
+  status: 'trabalhando…',
+  statusTone: StatusTone.agent,
 );
 const backInfo = ChatParticipantInfo(
   id: 'back',
   address: 'deck/back',
   isAgent: true,
   role: 'revisor',
+  status: 'revisor',
 );
 const shellInfo = ChatParticipantInfo(
   id: 'sh1',

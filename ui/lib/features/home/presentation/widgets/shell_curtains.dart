@@ -51,6 +51,55 @@ class BusyCurtain extends StatelessWidget {
   );
 }
 
+/// A faixa laranja do shell (`showBanner`): avisa sem travar nada. No canvas
+/// desce para debaixo da barra de ações e da informativa (cronômetro e
+/// custo); no chat fica encostada no topo.
+class ShellBanner extends StatelessWidget {
+  const ShellBanner(this.text, {required this.top, super.key});
+
+  /// `topInset + 110` do `WorkbenchShell.layout()`, medido do topo do conteúdo.
+  static const belowCanvasBars = 110.0;
+  static const chatTop = 12.0;
+
+  final String text;
+  final double top;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: EdgeInsets.only(top: top, left: 16, right: 16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760, minHeight: 30),
+          child: DecoratedBox(
+            key: const ValueKey('shell-banner'),
+            decoration: BoxDecoration(
+              color: AppColors.attention,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              child: Text(
+                text,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF000000),
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// "Sem acesso à pasta": o macOS negou ou está perguntando.
 class AccessCurtain extends StatelessWidget {
   const AccessCurtain({

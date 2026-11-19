@@ -1,5 +1,6 @@
 import '../../../../core/adapters/organization_feed.dart';
 import '../entities/workspace_draft.dart';
+import '../entities/workspace_saved.dart';
 import 'workspace_repository.dart';
 import '../../../../core/adapters/egeon_socket_client.dart';
 import '../errors/workspace_error.dart';
@@ -61,24 +62,26 @@ class SocketWorkspaceRepository implements WorkspaceRepository {
   /// O formulário salva de uma vez: o core aplica as pastas e os
   /// multi-projetos como o Swift aplicava.
   @override
-  Future<void> save(WorkspaceDraft draft, {String? id}) =>
-      _command('save_workspace', {
-        'workspace': ?id,
-        'name': draft.name,
-        if (draft.iconSource != null)
-          'icon': draft.iconSource
-        else if (draft.clearIcon)
-          'icon': null,
-        'folders': draft.folders,
-        'multis': [
-          for (final m in draft.multis)
-            {
-              'id': ?m.id,
-              if (m.name.isNotEmpty) 'name': m.name,
-              'folders': m.folders,
-            },
-        ],
-      });
+  Future<WorkspaceSaved> save(WorkspaceDraft draft, {String? id}) async =>
+      WorkspaceSaved.fromMap(
+        await _command('save_workspace', {
+          'workspace': ?id,
+          'name': draft.name,
+          if (draft.iconSource != null)
+            'icon': draft.iconSource
+          else if (draft.clearIcon)
+            'icon': null,
+          'folders': draft.folders,
+          'multis': [
+            for (final m in draft.multis)
+              {
+                'id': ?m.id,
+                if (m.name.isNotEmpty) 'name': m.name,
+                'folders': m.folders,
+              },
+          ],
+        }),
+      );
 
   @override
   Future<String> suggestedParent(String workspaceId) async {

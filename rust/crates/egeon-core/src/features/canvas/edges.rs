@@ -113,24 +113,34 @@ pub fn add(cfg: &mut WorkbenchConfig, edge: EdgeConfig) -> EdgeOutcome {
         notes: vec![format!("aresta[{}]: {} ↔ {}", cfg.name, edge.from, edge.to)],
         banner: None,
     };
-    // Ciclo é legítimo — revisor e implementador são exatamente isso — mas não
-    // pode ser silencioso: é ele que faz duas máquinas conversarem sem você no
-    // meio. Par conversando é o padrão, e `maxSends` é quem segura ele: avisar
-    // em toda ligação criada transformaria o banner em ruído, e ruído não avisa
-    // nada. O que ainda merece aviso é o ciclo de três nós ou mais, seguro só
-    // pelo limite de cada seta (ADR-012, ADR-077).
-    if let Some(path) = cycle(&edge, &edges)
-        && path.len() > 3
-    {
-        let text = path.join(" → ");
-        outcome.banner = Some(format!(
-            "Ciclo: {text} — cada ligação dispara até o limite dela na mesma cadeia, depois recusa"
-        ));
-        outcome
-            .notes
-            .push(format!("aresta[{}]: ciclo {text}", cfg.name));
+    if let Some((banner, note)) = cycle_warning(&cfg.name, &edge, &edges) {
+        outcome.banner = Some(banner);
+        outcome.notes.push(note);
     }
     outcome
+}
+
+/// O aviso de ciclo que [edge] fecha em [edges], e a linha de log dele.
+///
+/// Ciclo é legítimo — revisor e implementador são exatamente isso — mas não
+/// pode ser silencioso: é ele que faz duas máquinas conversarem sem você no
+/// meio. Par conversando é o padrão, e `maxSends` é quem segura ele: avisar em
+/// toda ligação criada transformaria o banner em ruído, e ruído não avisa nada.
+/// O que ainda merece aviso é o ciclo de três nós ou mais, seguro só pelo
+/// limite de cada seta (ADR-012, ADR-077).
+pub fn cycle_warning(
+    bench: &str,
+    edge: &EdgeConfig,
+    edges: &[EdgeConfig],
+) -> Option<(String, String)> {
+    let path = cycle(edge, edges).filter(|p| p.len() > 3)?;
+    let text = path.join(" → ");
+    Some((
+        format!(
+            "Ciclo: {text} — cada ligação dispara até o limite dela na mesma cadeia, depois recusa"
+        ),
+        format!("aresta[{bench}]: ciclo {text}"),
+    ))
 }
 
 /// Remove a ligação inteira, os dois sentidos. Na tela é uma linha só, e tirar

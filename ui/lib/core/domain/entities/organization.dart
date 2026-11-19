@@ -10,6 +10,7 @@ class OrgBench {
     required this.name,
     required this.path,
     this.project,
+    this.template,
     this.color,
     this.view = ViewMode.canvas,
     this.tabOrder,
@@ -22,6 +23,8 @@ class OrgBench {
     this.activity = ActivitySummary.none,
     this.clock,
     this.access,
+    this.busy,
+    this.banner,
   });
 
   final String id;
@@ -30,6 +33,9 @@ class OrgBench {
 
   /// Id do projeto a que pertence; ausente é órfã.
   final String? project;
+
+  /// O template de bancada de que nasceu; ausente, nenhum.
+  final String? template;
   final String? color;
   final ViewMode view;
 
@@ -59,11 +65,18 @@ class OrgBench {
   /// Sem acesso à pasta: o aviso pronto do core. Ausente, tudo certo.
   final FolderAccess? access;
 
+  /// O "um instante" (limpando, removendo): o texto pronto do core.
+  final String? busy;
+
+  /// A faixa do shell (a cópia do que o git não versiona), pronta do core.
+  final String? banner;
+
   factory OrgBench.fromMap(Map<String, Object?> map) => OrgBench(
     id: map['id']! as String,
     name: map['name']! as String,
     path: map['path']! as String,
     project: map['project'] as String?,
+    template: map['template'] as String?,
     color: map['color'] as String?,
     view: ViewMode.fromWire(map['view']),
     tabOrder: map['tab_order'] as int?,
@@ -82,6 +95,8 @@ class OrgBench {
     access: map['access'] == null
         ? null
         : FolderAccess.fromMap(map['access']! as Map<String, Object?>),
+    busy: map['busy'] as String?,
+    banner: map['banner'] as String?,
   );
 }
 

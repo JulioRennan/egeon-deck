@@ -1,3 +1,4 @@
+import 'package:egeon_deck/features/workspace/domain/entities/workspace_saved.dart';
 import 'package:egeon_deck/features/workspace/domain/errors/workspace_error.dart';
 import 'package:egeon_deck/features/workspace/domain/entities/workspace_draft.dart';
 import 'package:egeon_deck/features/workspace/domain/repository/workspace_repository.dart';
@@ -37,10 +38,14 @@ class FakeWorkspaceRepository implements WorkspaceRepository {
     return existing;
   }
 
+  /// O que o próximo "salvar" diz que não aplicou.
+  var saveAnswer = const WorkspaceSaved();
+
   @override
-  Future<void> save(WorkspaceDraft draft, {String? id}) async {
+  Future<WorkspaceSaved> save(WorkspaceDraft draft, {String? id}) async {
     await _run('salvar:$id');
     saved.add((id, draft));
+    return saveAnswer;
   }
 
   /// O nome que o "core" dá ao multi-projeto sem nome.

@@ -131,6 +131,10 @@ class SocketCanvasRepository implements CanvasRepository {
   Future<void> removeNode(String workbenchId, String nodeId) =>
       _request('remove_node', {'workbench': workbenchId, 'node': nodeId});
 
+  @override
+  Future<void> openFolder(String workbenchId, String nodeId) =>
+      _request('open_node_folder', {'workbench': workbenchId, 'node': nodeId});
+
   /// `ui_focus`: o nó só vai quando há (o app em segundo plano não tem foco de
   /// teclado em nenhum).
   @override

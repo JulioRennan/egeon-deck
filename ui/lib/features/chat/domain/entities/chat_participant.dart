@@ -11,6 +11,9 @@ class ChatParticipantInfo {
     this.activity = 'waiting',
     this.tone,
     this.needsAttention = false,
+    this.screen,
+    this.status = '',
+    this.statusTone,
   });
 
   final String id;
@@ -29,7 +32,21 @@ class ChatParticipantInfo {
   final ActivityTone? tone;
   final bool needsAttention;
 
+  /// O id da tela do terminal, que se assina em `screen/<id>`: o mesmo do nó
+  /// no canvas. O core o monta; a UI não junta bancada e nó.
+  final String? screen;
+
+  /// A linha embaixo do nome, pronta do core: o que faz agora ("precisa de
+  /// você", "falhou — motivo"…) ou, parado, o papel. Vazia, não se desenha.
+  final String status;
+
+  /// A cor dessa linha; sem ela, o cinza de sempre.
+  final StatusTone? statusTone;
+
   bool get isWorking => activity == 'working' || activity == 'starting';
+
+  /// Terminal fechado: fica na coluna, mas não recebe nem entra no Tab.
+  bool get isDead => activity == 'dead';
 
   factory ChatParticipantInfo.fromMap(Map<String, Object?> map) =>
       ChatParticipantInfo(
@@ -40,5 +57,23 @@ class ChatParticipantInfo {
         activity: map['activity'] as String? ?? 'waiting',
         tone: ActivityTone.parse(map['tone']),
         needsAttention: map['needsAttention'] as bool? ?? false,
+        screen: map['screen'] as String?,
+        status: map['status'] as String? ?? '',
+        statusTone: StatusTone.parse(map['statusTone']),
       );
+}
+
+/// A cor da linha de estado como o core a nomeia: laranja pede você, vermelho
+/// falhou, `agent` é a cor do próprio agente (trabalhando).
+enum StatusTone {
+  orange,
+  red,
+  agent;
+
+  static StatusTone? parse(Object? raw) => switch (raw) {
+    'orange' => orange,
+    'red' => red,
+    'agent' => agent,
+    _ => null,
+  };
 }

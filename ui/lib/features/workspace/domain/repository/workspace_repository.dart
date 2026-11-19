@@ -1,3 +1,4 @@
+import '../entities/workspace_saved.dart';
 import '../entities/workspace_draft.dart';
 
 /// Os gestos sobre workspaces e projetos. Quem decide se vale é o core Rust;
@@ -16,7 +17,8 @@ abstract interface class WorkspaceRepository {
   Future<WorkspaceDraft> draft(String id);
 
   /// Cria (sem [id]) ou grava o workspace do formulário.
-  Future<void> save(WorkspaceDraft draft, {String? id});
+  /// Salva o formulário; devolve o que não deu para aplicar.
+  Future<WorkspaceSaved> save(WorkspaceDraft draft, {String? id});
 
   /// Onde sugerir criar o próximo projeto deste workspace.
   Future<String> suggestedParent(String workspaceId);

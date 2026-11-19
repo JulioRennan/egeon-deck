@@ -29,43 +29,48 @@ class _UsagePillState extends State<UsagePill> {
 
   @override
   Widget build(BuildContext context) => BlocBuilder<UsageCubit, UsageState>(
-    builder: (context, state) => HandCursor(
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovering = true),
-        onExit: (_) => setState(() => _hovering = false),
-        child: GestureDetector(
-          key: const ValueKey('usage-pill'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _open(state.view),
-          child: Container(
-            height: 26,
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            decoration: BoxDecoration(
-              color: AppColors.white(_hovering ? 0.12 : 0.06),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomPaint(
-                  size: const Size.square(14),
-                  painter: _DollarPainter(AppColors.white(0.6)),
+    builder: (context, state) => _pill(switch (state) {
+      UsageWaiting() => const UsageView(),
+      UsageShown(:final view) => view,
+    }),
+  );
+
+  Widget _pill(UsageView view) => HandCursor(
+    child: MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        key: const ValueKey('usage-pill'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _open(view),
+        child: Container(
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            color: AppColors.white(_hovering ? 0.12 : 0.06),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CustomPaint(
+                size: const Size.square(14),
+                painter: _DollarPainter(AppColors.white(0.6)),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                view.pill.text,
+                key: const ValueKey('usage-pill-text'),
+                maxLines: 1,
+                style: TextStyle(
+                  color: AppColors.white(0.85),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  decoration: TextDecoration.none,
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  state.view.pill.text,
-                  key: const ValueKey('usage-pill-text'),
-                  maxLines: 1,
-                  style: TextStyle(
-                    color: AppColors.white(0.85),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

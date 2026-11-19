@@ -1,6 +1,17 @@
 import 'package:flutter/widgets.dart';
 
-enum ToolGlyphKind { cursor, terminal, web, queue, minus, plus, fit }
+enum ToolGlyphKind {
+  cursor,
+  terminal,
+  web,
+  queue,
+  minus,
+  plus,
+  fit,
+  saveTemplate,
+  updateTemplate,
+  branch,
+}
 
 /// Os ícones da barra, desenhados: não há fonte de símbolos no app.
 class ToolGlyph extends StatelessWidget {
@@ -115,6 +126,59 @@ class _ToolGlyphPainter extends CustomPainter {
             stroke,
           );
         }
+      case ToolGlyphKind.saveTemplate:
+        // Bandeja com a seta descendo: guardar a montagem.
+        canvas
+          ..drawPath(
+            Path()
+              ..moveTo(s * 0.16, s * 0.56)
+              ..lineTo(s * 0.16, s * 0.84)
+              ..lineTo(s * 0.84, s * 0.84)
+              ..lineTo(s * 0.84, s * 0.56),
+            stroke,
+          )
+          ..drawLine(Offset(s / 2, s * 0.14), Offset(s / 2, s * 0.64), stroke)
+          ..drawPath(
+            Path()
+              ..moveTo(s * 0.32, s * 0.46)
+              ..lineTo(s / 2, s * 0.64)
+              ..lineTo(s * 0.68, s * 0.46),
+            stroke,
+          );
+      case ToolGlyphKind.updateTemplate:
+        final c = Offset(s / 2, s / 2);
+        final r = s * 0.32;
+        canvas
+          ..drawArc(
+            Rect.fromCircle(center: c, radius: r),
+            -1.2,
+            5.2,
+            false,
+            stroke,
+          )
+          ..drawPath(
+            Path()
+              ..moveTo(s * 0.62, s * 0.12)
+              ..lineTo(s * 0.66, s * 0.22)
+              ..lineTo(s * 0.54, s * 0.27),
+            stroke,
+          );
+      case ToolGlyphKind.branch:
+        canvas
+          ..drawCircle(Offset(s * 0.3, s * 0.2), s * 0.09, stroke)
+          ..drawCircle(Offset(s * 0.3, s * 0.8), s * 0.09, stroke)
+          ..drawCircle(Offset(s * 0.72, s * 0.32), s * 0.09, stroke)
+          ..drawLine(
+            Offset(s * 0.3, s * 0.29),
+            Offset(s * 0.3, s * 0.71),
+            stroke,
+          )
+          ..drawPath(
+            Path()
+              ..moveTo(s * 0.72, s * 0.41)
+              ..quadraticBezierTo(s * 0.72, s * 0.62, s * 0.3, s * 0.66),
+            stroke,
+          );
     }
   }
 

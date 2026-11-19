@@ -46,6 +46,10 @@ pub struct Org {
     pub live: HashSet<String>,
     /// Bancadas sendo removidas.
     pub removing: HashSet<String>,
+    /// O texto da cortina "um instante" por bancada (a fase da limpeza).
+    pub busy: HashMap<String, String>,
+    /// A faixa do shell por bancada (a cópia do não versionado).
+    pub banners: HashMap<String, String>,
     /// Os perfis de agente (`agents.json`): como cada CLI sobe.
     pub profiles: Profiles,
     /// `web-profiles.json`, lido na partida e entregue ao ator.
@@ -172,7 +176,7 @@ pub fn save(
 /// O id do terminal de um nó, que a UI assina em `screen/<id>`: único entre
 /// as bancadas e válido como [`NodeId`].
 pub fn screen_id(workbench: &str, node: &str) -> Option<NodeId> {
-    NodeId::new(format!("{workbench}.{node}")).ok()
+    NodeId::screen(workbench, node)
 }
 
 impl Org {
@@ -224,6 +228,26 @@ impl Org {
 
     /// O `directory` da bancada, com o disco do cache: o `cwd` que não
     /// existe abre na raiz.
+    /// A pasta inteira em que o terminal [node] abre — o que o subtítulo do
+    /// card mostra encurtado. Só shell e agente têm pasta; o erro já vem no
+    /// texto da rota.
+    pub fn node_directory(&self, index: usize, node: &str) -> Result<String, String> {
+        let bench = self
+            .state
+            .workbenches
+            .get(index)
+            .ok_or_else(|| "bancada desconhecida".to_owned())?;
+        let found = bench
+            .nodes
+            .iter()
+            .find(|n| n.id == node)
+            .ok_or_else(|| format!("nó desconhecido '{node}'"))?;
+        match found.kind {
+            ConfigKind::Shell | ConfigKind::Agent => Ok(self.directory_of(bench, found).0),
+            ConfigKind::Web | ConfigKind::Queue => Err(format!("'{node}' não abre numa pasta")),
+        }
+    }
+
     fn directory_of(&self, bench: &WorkbenchConfig, node: &NodeConfig) -> (String, bool) {
         let root = bench.url_path(&self.home);
         if node.cwd.is_none() {
@@ -394,6 +418,12 @@ impl Org {
                 .count() as u32,
             clock: clock.map(|c| clock_view(&c, &summary.unwrap_or_default())),
             access: self.access_of(bench),
+            busy: self.busy.get(&bench.id).cloned().or_else(|| {
+                self.removing
+                    .contains(&bench.id)
+                    .then(|| "Removendo a bancada…".to_owned())
+            }),
+            banner: self.banners.get(&bench.id).cloned(),
         })
     }
 
@@ -453,7 +483,16 @@ impl Org {
                 ConfigKind::Web => NodeKind::Web,
                 ConfigKind::Queue => NodeKind::Queue,
             },
+            address: bench.address_of(node),
             agent: node.agent.clone(),
+            cli_name: match node.kind {
+                ConfigKind::Agent => node
+                    .agent
+                    .as_ref()
+                    .and_then(|name| self.profiles.get(name))
+                    .map(|p| p.display_name.clone()),
+                ConfigKind::Shell | ConfigKind::Web | ConfigKind::Queue => None,
+            },
             cwd: node.cwd.clone(),
             dir: abbreviate_tilde(&directory, &self.home),
             cmd: node.cmd.clone(),

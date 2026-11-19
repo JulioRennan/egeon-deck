@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 
 import '../../../../../commons/widgets/context_menu.dart';
 import '../../../../../commons/widgets/hand_cursor.dart';
+import '../../../../../commons/widgets/pasted_image.dart';
 import '../../../../../theme/app_colors.dart';
 import '../../domain/entities/queue_item.dart';
 import 'queue_text_field.dart';
@@ -23,10 +26,13 @@ class QueueRow extends StatefulWidget {
     required this.onMove,
     required this.onEdit,
     required this.onDetach,
+    required this.onOpenImage,
     required this.onReply,
     required this.onCommit,
     required this.onCollapse,
+    required this.onPaste,
     this.destinationLabel,
+    this.imagesDir = '',
     super.key,
   });
 
@@ -43,11 +49,21 @@ class QueueRow extends StatefulWidget {
   final ValueChanged<int> onMove;
   final ValueChanged<String> onEdit;
   final ValueChanged<String> onDetach;
+
+  /// O clique na miniatura abre o print.
+  final ValueChanged<String> onOpenImage;
+
+  /// A pasta dos prints, de onde a miniatura se lê.
+  final String imagesDir;
   final ValueChanged<String> onReply;
 
   /// Enter no editor.
   final VoidCallback onCommit;
   final VoidCallback onCollapse;
+
+  /// ⌘V no editor ou na resposta: o print vai para esta tarefa. Devolve se
+  /// havia imagem que servisse.
+  final bool Function(PastedClipboard pasted) onPaste;
 
   @override
   State<QueueRow> createState() => _QueueRowState();
@@ -55,6 +71,7 @@ class QueueRow extends StatefulWidget {
 
 class _QueueRowState extends State<QueueRow> {
   final _editorFocus = FocusNode(debugLabel: 'queue-editor');
+  final _replyFocus = FocusNode(debugLabel: 'queue-reply');
   var _reply = '';
   var _replyKey = 0;
 
@@ -71,23 +88,36 @@ class _QueueRowState extends State<QueueRow> {
   @override
   void dispose() {
     _editorFocus.dispose();
+    _replyFocus.dispose();
     super.dispose();
   }
+
+  /// Aberta, o clique em qualquer parte do cartão é escrever, nunca fechar:
+  /// a tarefa, ou a resposta quando ela já foi enviada.
+  void _focusEditor() =>
+      (widget.item.locked ? _replyFocus : _editorFocus).requestFocus();
 
   void _menu(Offset position) {
     final item = widget.item;
     showContextMenu(
       context,
       position: position,
+      // Tarefa travada (já enviada) não volta nem vai de novo; e a que está
+      // com o agente não se apaga por aqui.
       entries: [
-        if (item.status == ItemStatus.pending && !item.empty)
-          MenuEntry('Enviar agora', widget.onSend),
-        if (item.status != ItemStatus.pending)
-          MenuEntry('Reabrir', widget.onReopen),
-        MenuEntry('Subir', () => widget.onMove(-1)),
-        MenuEntry('Descer', () => widget.onMove(1)),
-        const MenuEntry.separator(),
-        MenuEntry('Remover', widget.onRemove),
+        if (!item.locked) ...[
+          if (item.status == ItemStatus.pending)
+            MenuEntry('Enviar agora', widget.onSend)
+          else
+            MenuEntry('Voltar para pendente', widget.onReopen),
+          const MenuEntry.separator(),
+        ],
+        MenuEntry('Mover para cima', () => widget.onMove(-1)),
+        MenuEntry('Mover para baixo', () => widget.onMove(1)),
+        if (item.status != ItemStatus.sent) ...[
+          const MenuEntry.separator(),
+          MenuEntry('Apagar', widget.onRemove),
+        ],
       ],
     );
   }
@@ -111,6 +141,9 @@ class _QueueRowState extends State<QueueRow> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onSecondaryTapUp: (d) => _menu(d.globalPosition),
+      // No `mouseDown`, como o Swift; e sem mão, que ali o clique é escrever.
+      // Ter o toque aqui é o que impede o vazio da lista de fechar a tarefa.
+      onTapDown: widget.expanded ? (_) => _focusEditor() : null,
       child: Container(
         margin: EdgeInsets.symmetric(
           horizontal: 8,
@@ -199,19 +232,22 @@ class _QueueRowState extends State<QueueRow> {
           onChanged: widget.onEdit,
           onSubmit: widget.onCommit,
           onEscape: widget.onCollapse,
+          onPasteImage: widget.onPaste,
         ),
       ),
       if (item.images.isNotEmpty)
         Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 4),
           child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: 10,
+            runSpacing: 10,
             children: [
               for (final image in item.images)
                 _Thumb(
                   name: image,
+                  path: '${widget.imagesDir}/$image',
                   removable: !item.locked,
+                  onOpen: () => widget.onOpenImage(image),
                   onRemove: () => widget.onDetach(image),
                 ),
             ],
@@ -222,33 +258,39 @@ class _QueueRowState extends State<QueueRow> {
           padding: const EdgeInsets.only(top: 6),
           child: ThreadView(messages: item.thread),
         ),
-      if (item.locked)
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.white(0.06),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: QueueTextField(
-              key: ValueKey('reply-${item.id}-$_replyKey'),
-              text: '',
-              hint: item.awaiting ? 'Responder ao agente' : 'Comentar',
-              fontSize: 12,
-              onChanged: (text) => _reply = text,
-              onSubmit: () {
-                final text = _reply.trim();
-                if (text.isEmpty) return;
-                widget.onReply(text);
-                setState(() {
-                  _reply = '';
-                  _replyKey++;
-                });
-              },
-            ),
+      // Pendente também: o comentário vai junto quando a tarefa for enviada.
+      Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.white(0.06),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: QueueTextField(
+            key: ValueKey('reply-${item.id}-$_replyKey'),
+            text: '',
+            hint: item.awaiting
+                ? 'Responder a pergunta…'
+                : item.sentTo != null
+                ? 'Responder ao ${item.sentTo}…'
+                : 'Comentar — vai junto quando enviar',
+            fontSize: 12,
+            focusNode: _replyFocus,
+            onChanged: (text) => _reply = text,
+            onPasteImage: widget.onPaste,
+            onSubmit: () {
+              final text = _reply.trim();
+              if (text.isEmpty) return;
+              widget.onReply(text);
+              setState(() {
+                _reply = '';
+                _replyKey++;
+              });
+            },
           ),
         ),
+      ),
       Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Row(
@@ -302,57 +344,103 @@ class _SendButton extends StatelessWidget {
   );
 }
 
-/// O print: o arquivo mora na pasta da fila, e a miniatura ainda não vem do
-/// core — mostra o nome. O X tira o print da tarefa (só antes de enviar).
+/// O print, na altura padrão e na largura da proporção dele; o clique o abre.
+/// O X no canto tira o print da tarefa (só antes de enviar). Arquivo que
+/// sumiu da pasta mostra o nome no lugar.
 class _Thumb extends StatelessWidget {
   const _Thumb({
     required this.name,
+    required this.path,
     required this.removable,
+    required this.onOpen,
     required this.onRemove,
   });
 
   final String name;
+  final String path;
   final bool removable;
+  final VoidCallback onOpen;
   final VoidCallback onRemove;
 
+  static const height = 200.0;
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
-    decoration: BoxDecoration(
-      color: AppColors.white(0.08),
-      borderRadius: BorderRadius.circular(5),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          name,
-          style: TextStyle(
-            color: AppColors.white(0.7),
-            fontSize: 10,
-            decoration: TextDecoration.none,
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      HandCursor(
+        child: GestureDetector(
+          key: ValueKey('thumb-$name'),
+          behavior: HitTestBehavior.opaque,
+          onTap: onOpen,
+          child: Container(
+            // Antes de a imagem carregar ela não tem largura: o mínimo deixa
+            // o X do canto dentro da caixa, onde o clique chega.
+            constraints: const BoxConstraints(
+              minWidth: 64,
+              minHeight: 38,
+              maxHeight: height,
+            ),
+            clipBehavior: Clip.antiAlias,
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppColors.white(0.14)),
+            ),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(6)),
+            child: Image.file(
+              File(path),
+              height: height,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => _name(),
+            ),
           ),
         ),
-        if (removable)
-          HandCursor(
+      ),
+      if (removable)
+        Positioned(
+          top: 6,
+          right: 6,
+          child: HandCursor(
             child: GestureDetector(
               key: ValueKey('detach-$name'),
               behavior: HitTestBehavior.opaque,
               onTap: onRemove,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
+              child: Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xB3000000),
+                ),
+                child: const Text(
                   '✕',
                   style: TextStyle(
-                    color: AppColors.white(0.6),
-                    fontSize: 10,
+                    color: Color(0xFFFFFFFF),
+                    fontSize: 12,
                     decoration: TextDecoration.none,
                   ),
                 ),
               ),
             ),
           ),
-      ],
+        ),
+    ],
+  );
+
+  // Alto o bastante para o X do canto caber dentro (e receber o clique).
+  Widget _name() => Container(
+    height: 38,
+    alignment: Alignment.centerLeft,
+    padding: const EdgeInsets.fromLTRB(8, 0, 40, 0),
+    color: AppColors.white(0.08),
+    child: Text(
+      name,
+      style: TextStyle(
+        color: AppColors.white(0.7),
+        fontSize: 10,
+        decoration: TextDecoration.none,
+      ),
     ),
   );
 }

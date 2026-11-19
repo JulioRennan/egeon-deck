@@ -76,7 +76,7 @@ features/
 | page | Compõe os widgets; cria o cubit com `BlocProvider(create: (_) => inject<XCubit>(…))` | Lógica; widget solto; cubit em `initState`/`dispose` |
 | widgets | Componentes daquela página | O reutilizado vai para `commons/widgets` |
 | cubit | Orquestra o estado pelo retorno do usecase; é dono das assinaturas de stream; captura o erro tipado da feature e o põe no estado | Falar com o socket; `catch` genérico; montar texto de erro |
-| state | `<x>_state.dart`, `part of '<x>_cubit.dart'`. Fases que se excluem são `sealed class` com uma subclasse por fase | Morar em `domain/entities` |
+| state | `<x>_state.dart`, `part of '<x>_cubit.dart'`. `sealed class`: o comum na base, uma subclasse por situação | Morar em `domain/entities`; `copyWith`; flag que descreve situação |
 | usecase | Consulta repositories, combina e monta o que a tela precisa; registrado no `di/` do módulo | Engolir erro: deixa passar; ser construído fora do `di/` |
 | repository | Consulta o socket — `Future` para consulta e comando, `Stream` para evento; converte a falha do socket no erro da feature (`failingAs`) | Deixar `EgeonCommandError`/`EgeonDisconnected` sair |
 | entities | O que vem do core Rust, com `fromMap` e `toMap` escritos à mão | Estado de tela |
@@ -121,13 +121,21 @@ features/
       `di/<feature>_injection.dart`; o global em `core/di/` só chama.
     - **Teste** chama só `registerDomain` e registra os falsos
       (`test/support/inject_fakes.dart`), com `reset` no fim.
-11. **Estado é do cubit, não do domínio.** Fica em `<x>_state.dart`, `part of`
-    do cubit (o cubit tem `part '<x>_state.dart';`). Entidade é só o que vem do
-    core Rust. Fases que se excluem (esperando × com dados, varrendo × com
-    lista) são `sealed class`, uma subclasse por fase com só os campos dela; o
-    widget faz `switch` exaustivo. Campo passageiro que vale em todas as fases
-    fica na base; o que só uma fase tem, na subclasse. Sem fase que a tela
-    distinga, uma `final class` só.
+11. **Estado é do cubit, não do domínio, e é derivado.** Fica em
+    `<x>_state.dart`, `part of` do cubit (o cubit tem
+    `part '<x>_state.dart';`). Entidade é só o que vem do core Rust.
+    - **Sem `copyWith`.** Cada `emit` é um estado nomeado que diz o que está
+      acontecendo (`CanvasPanning`, `ProcessesSelecting`), não a cópia do
+      anterior com um campo trocado.
+    - O que vale em qualquer situação fica na base `sealed` (no canvas:
+      cards, ligações, vista); flag e opcional que descrevem uma situação
+      viram subclasse, com só os campos dela. O widget faz `switch`
+      exaustivo.
+    - Duas coisas que variam independentes (a ferramenta armada e o que a mão
+      faz; a interação e o movimento) não viram combinações: **divida o cubit
+      por assunto** (`CanvasCubit`, `CanvasToolCubit`, `CanvasMotionCubit`).
+    - Comando de uma vez (rolar até o fim, rascunho vindo de fora) é stream
+      de evento do cubit, não campo do estado.
 12. **Erro tipado por feature.** `domain/errors/<feature>_error.dart` (sealed).
     O repositório converte a falha do socket com
     `.failingAs(refused: <F>Refused.new, offline: <F>Offline.new)`; o texto do

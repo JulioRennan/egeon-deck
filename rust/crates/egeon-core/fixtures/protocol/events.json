@@ -241,8 +241,10 @@
           "state": "asking",
           "tone": "orange"
         },
+        "address": "deck/claude",
         "agent": "claude",
         "alive": true,
+        "cli_name": "Claude Code",
         "component": "core",
         "dir": "~/Documents/agro/deck",
         "effort": "high",
@@ -274,6 +276,7 @@
           "pending": 2,
           "state": "working"
         },
+        "address": "deck/sh",
         "alive": true,
         "cwd": "../nexus-backend",
         "dir": "~/Documents/agro/deck",
@@ -288,6 +291,7 @@
         "type": "shell"
       },
       {
+        "address": "deck/docs",
         "alive": false,
         "dir": "~/Documents/agro/deck",
         "exists": true,
@@ -628,6 +632,8 @@
           "working": 1
         },
         "agents": 2,
+        "banner": "Copiando o que o git não versiona em nexus-backend (.env, node_modules, build…)",
+        "busy": "Removendo a bancada…",
         "clock": {
           "failed": 0,
           "running": 754,

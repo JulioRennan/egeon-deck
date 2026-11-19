@@ -21,6 +21,10 @@ pub struct Pill {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tooltip: Option<String>,
+    /// Nada consumido ainda: a linha da barra lateral não mostra custo
+    /// (`refreshUsage` só põe na lista o que tem total).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub empty: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -106,6 +110,7 @@ pub fn pill(ledger: &UsageLedger, prices: &PriceTable) -> Pill {
             "Consumo da bancada: {}",
             text::breakdown(&total_usage(&total))
         )),
+        empty: total.is_empty(),
     }
 }
 

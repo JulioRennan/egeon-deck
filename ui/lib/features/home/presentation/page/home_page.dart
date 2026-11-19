@@ -13,7 +13,10 @@ import '../../../chat/presentation/page/chat_page.dart';
 import 'home_shell_page.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  const HomePage({this.title = 'Egeon Deck', super.key});
+
+  /// O nome do flavor ("Egeon Deck (dev)"), para o que diz de qual app é.
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +25,7 @@ class HomePage extends StatelessWidget {
     return ColoredBox(
       color: AppColors.background,
       child: HomeShellPage(
+        title: title,
         canvas: (context, bench) =>
             bench == null ? const HomeContent() : _BenchCanvas(bench: bench),
         chat: (context, bench) =>
@@ -40,11 +44,13 @@ class _BenchCanvas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final collapsed = context.select(
-      (ShellCubit shell) => shell.state.collapsed,
+    final collapsed = context.select((ShellCubit shell) => shell.collapsed);
+    final clock = context.select(
+      (ShellCubit shell) => shell.state.snapshot.clock,
     );
     return WorkbenchCanvas(
       bench: bench,
+      clock: clock,
       // A barra flutuante cobre a esquerda do canvas; enquadrar desconta, e
       // recolher a barra reenquadra.
       sidebarInset: RootLayout.floatingInset(

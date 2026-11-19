@@ -85,6 +85,13 @@ void main() {
     );
   });
 
+  test('tentar agora é retry com now', () async {
+    expect(
+      await harness.sent(() => repository.retry('claude', now: true)),
+      withoutId(commands['retry']!),
+    );
+  });
+
   test('modelo e ultracode vão em set_node, só o campo mexido', () async {
     final model = await harness.sent(
       () => repository.choose('claude', const ModelPick('sonnet')),

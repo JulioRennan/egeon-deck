@@ -11,6 +11,7 @@
 //! Sem eles o chat monta a thread só do histórico gravado.
 
 use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 use std::time::SystemTime;
 
 use serde_json::Value;
@@ -20,6 +21,7 @@ use super::dispatch_commands::DispatchState;
 use super::{Actor, ClientId, Replier, WireLine, not_ported};
 use crate::commons::ids::WorkbenchId;
 use crate::features::activity::model::Activity;
+use crate::features::agent::claude::command_registry::CommandRegistry;
 use crate::features::chat::routes::{chat_compose, chat_get};
 use crate::features::chat::runtime::{
     Answer, BenchInfo, ChatDone, ChatHost, ChatJob, ChatRuntime, Complete, Identity, JobKind, Out,
@@ -50,12 +52,12 @@ pub(super) struct ChatState {
     next_token: u64,
 }
 
-/// O que o chat lê do ator: a organização e o dispatch (atividade, conversa e
-/// bandeja de permissão). A lista de `/` depende do catálogo do CLI, que ainda não
-/// está no ator.
+/// O que o chat lê do ator: a organização, o dispatch (atividade, conversa e
+/// bandeja de permissão) e o `/` lido do binário do CLI.
 struct OrgHost<'a> {
     org: &'a Org,
     dispatch: &'a DispatchState,
+    commands: Option<&'a CommandRegistry>,
     /// As filas de cada bancada, já lidas do ator: o host só empresta `&self`.
     queues: BTreeMap<String, Vec<ChatQueue>>,
     now: SystemTime,
@@ -114,14 +116,27 @@ impl ChatHost for OrgHost<'_> {
         self.queues.get(workbench).cloned().unwrap_or_default()
     }
 
-    /// O primeiro pedido de permissão aberto da bancada, para a bandeja.
-    fn permission(&self, workbench: &str) -> Option<Value> {
-        self.dispatch.permission(self.bench(workbench)?, self.now)
+    /// Os pedidos de permissão abertos da bancada, para a bandeja.
+    fn permissions(&self, workbench: &str) -> Vec<Value> {
+        self.bench(workbench)
+            .map(|bench| self.dispatch.permissions(bench, self.now))
+            .unwrap_or_default()
     }
 
-    // catálogo do CLI: o perfil, a pasta de config e o registro do binário.
-    fn slash(&self, _workbench: &str, _node: &str) -> Option<SlashInputs> {
-        None
+    /// Como o `chat.slashCommands` do Swift: o perfil do agente, a config que
+    /// o nó escolheu, a pasta em que ele roda e o transcript dele.
+    fn slash(&self, workbench: &str, node: &str) -> Option<SlashInputs> {
+        let bench = self.bench(workbench)?;
+        let config = bench.nodes.iter().find(|n| n.id == node)?;
+        let profile = self.org.profiles.get(config.agent.as_ref()?)?;
+        Some(SlashInputs {
+            profile: profile.clone(),
+            node_config: config.config.clone(),
+            cwd: PathBuf::from(bench.directory(config, &self.org.home).path),
+            transcript: config.transcript.as_ref().map(PathBuf::from),
+            binary: self.commands.cloned(),
+            home: PathBuf::from(&self.org.home),
+        })
     }
 
     fn prices(&self) -> PriceTable {
@@ -350,6 +365,7 @@ impl Actor {
         let host = OrgHost {
             org: &self.org,
             dispatch: &self.dispatch,
+            commands: self.detail.commands(),
             queues,
             now: SystemTime::now(),
         };
@@ -460,5 +476,81 @@ impl Actor {
         let now = SystemTime::now();
         let out = self.chat_with(|rt, host| rt.failed(host, token, kind, now));
         self.chat_out(out);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use super::super::processes_commands::support::Rig;
+    use crate::features::agent::claude::profile::claude_code;
+    use crate::features::agent::claude::slash_catalog;
+    use crate::features::node::model::{NodeConfig, NodeKind};
+    use crate::features::workbench::model::WorkbenchConfig;
+
+    #[tokio::test]
+    async fn a_barra_do_chat_le_o_catalogo_do_agente() {
+        let mut rig = Rig::new();
+        let root = rig.dir.path().to_path_buf();
+        let repo = root.join("deck");
+        fs::create_dir_all(repo.join(".claude/commands")).unwrap();
+        fs::write(
+            repo.join(".claude/commands/deploy.md"),
+            "---\ndescription: sobe o app\n---\n",
+        )
+        .unwrap();
+        let config = root.join("claude-x");
+        fs::create_dir_all(config.join("commands")).unwrap();
+        fs::write(config.join("commands/meu.md"), "do usuário\n").unwrap();
+        // O home do teste: nada de varrer o `~/.claude` de verdade.
+        rig.actor.org.home = root.to_string_lossy().into_owned();
+        rig.actor
+            .org
+            .profiles
+            .insert("claude".into(), claude_code());
+        let mut agent = NodeConfig::new(NodeKind::Agent, "dev");
+        agent.agent = Some("claude".into());
+        agent.config = Some(config.to_string_lossy().into_owned());
+        agent.transcript = Some("/nao/existe.jsonl".into());
+        let shell = NodeConfig::new(NodeKind::Shell, "sh");
+        let bench =
+            WorkbenchConfig::new("deck", repo.to_string_lossy().as_ref(), vec![agent, shell]);
+        let id = bench.id.clone();
+        rig.actor.org.state.workbenches.push(bench);
+
+        let (inputs, of_shell) = rig
+            .actor
+            .chat_with(|_, host| (host.slash(&id, "dev"), host.slash(&id, "sh")));
+        assert!(of_shell.is_none(), "shell não tem `/`");
+        let inputs = inputs.expect("o agente tem `/`");
+        assert_eq!(inputs.cwd, repo);
+        assert_eq!(inputs.node_config, agent_config(&config));
+        assert_eq!(
+            inputs.transcript.as_deref(),
+            Some(Path::new("/nao/existe.jsonl"))
+        );
+        assert!(inputs.binary.is_none(), "o binário ainda não foi lido");
+
+        let names: Vec<String> = slash_catalog::commands_for_profile(
+            &inputs.profile,
+            inputs.node_config.as_deref(),
+            &inputs.cwd,
+            inputs.transcript.as_deref(),
+            inputs.binary.as_ref(),
+            &inputs.home,
+        )
+        .expect("perfil do Claude Code")
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+        for name in ["deploy", "meu", "clear"] {
+            assert!(names.iter().any(|n| n == name), "falta /{name}: {names:?}");
+        }
+    }
+
+    fn agent_config(config: &Path) -> Option<String> {
+        Some(config.to_string_lossy().into_owned())
     }
 }

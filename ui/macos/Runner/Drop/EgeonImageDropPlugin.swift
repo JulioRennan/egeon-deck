@@ -5,7 +5,8 @@ import FlutterMacOS
 /// promessa), mas um print arrastado de certos apps só deixa PNG ou TIFF na área
 /// de arrasto. Este plugin faz duas coisas: manda o alvo de drop do pacote
 /// aceitar esses tipos, e devolve a imagem como PNG quando o Dart pede (no
-/// `onDragDone` sem arquivos).
+/// `onDragDone` sem arquivos). Também lê a área de transferência para o ⌘V da
+/// fila, que o `Clipboard` do Flutter não sabe ler: ele só entende texto.
 final class EgeonImageDropPlugin: NSObject, FlutterPlugin {
     static let channelName = "egeon/image-drop"
 
@@ -33,6 +34,8 @@ final class EgeonImageDropPlugin: NSObject, FlutterPlugin {
         switch call.method {
         case "draggedImage":
             result(Self.draggedPNG().map { FlutterStandardTypedData(bytes: $0) })
+        case "pastedImage":
+            result(Self.pasted(from: .general))
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -57,6 +60,23 @@ final class EgeonImageDropPlugin: NSObject, FlutterPlugin {
         if let png = pasteboard.data(forType: .png) { return png }
         guard let tiff = pasteboard.data(forType: .tiff) else { return nil }
         return pngData(fromTIFF: tiff)
+    }
+
+    /// O que a área de transferência traz para colar como imagem, como no
+    /// `QueueStore.images(in:)` do legado: os arquivos copiados no Finder
+    /// (`files`, todos — quem filtra por extensão é o Dart, com a lista do core)
+    /// ou a imagem em si em PNG (`png`, print com ⌃⇧⌘4). Nulo sem nenhum dos dois.
+    static func pasted(from pasteboard: NSPasteboard) -> [String: Any]? {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL],
+           !urls.isEmpty {
+            return ["files": urls.map(\.path)]
+        }
+        guard let image = NSImage(pasteboard: pasteboard),
+              let tiff = image.tiffRepresentation,
+              let png = pngData(fromTIFF: tiff)
+        else { return nil }
+        return ["png": FlutterStandardTypedData(bytes: png)]
     }
 
     static func pngData(fromTIFF tiff: Data) -> Data? {

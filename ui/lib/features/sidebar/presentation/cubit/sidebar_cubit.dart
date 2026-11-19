@@ -25,7 +25,7 @@ class SidebarCubit extends Cubit<SidebarState> {
     required this._setStored,
     required this._move,
     required this._plan,
-  }) : super(const SidebarState()) {
+  }) : super(const SidebarAll()) {
     _subscription = watch().listen(_onTree);
   }
 
@@ -36,9 +36,15 @@ class SidebarCubit extends Cubit<SidebarState> {
   final PlanMove _plan;
   StreamSubscription<SidebarTree>? _subscription;
 
-  void _onTree(SidebarTree tree) => emit(state.copyWith(tree: tree));
+  void _onTree(SidebarTree tree) => emit(switch (state) {
+    SidebarAll() => SidebarAll(tree),
+    SidebarActive() => SidebarActive(tree),
+  });
 
-  void showTab(SidebarTab tab) => emit(state.copyWith(tab: tab));
+  void showTab(SidebarTab tab) => emit(switch (tab) {
+    SidebarTab.all => SidebarAll(state.tree),
+    SidebarTab.active => SidebarActive(state.tree),
+  });
 
   void select(String benchId) => _fire(_select(benchId));
 

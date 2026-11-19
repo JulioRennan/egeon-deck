@@ -4,6 +4,9 @@
 #
 #   ui/scripts/dev.sh [debug|release] [dev|stable]
 #
+# DART_DEFINES vai para o `flutter build` (flags de teste, como
+# DART_DEFINES=--dart-define=EGEON_WEB_LIVE_ZOOM=true).
+#
 # Dev por padrão de propósito: é ele que se derruba a cada mudança. O estável
 # fica de pé com os seus agentes, e é de lá que você pede as mudanças.
 set -euo pipefail
@@ -28,7 +31,8 @@ CORE_PATTERN="$APP_NAME.app/Contents/MacOS/egeon-app"
 
 # Compilar antes de derrubar: build quebrado com o app já morto te deixa sem
 # nada.
-fvm flutter build macos "--$CONFIG"
+# shellcheck disable=SC2086 # DART_DEFINES pode trazer vários --dart-define.
+fvm flutter build macos "--$CONFIG" ${DART_DEFINES:-}
 
 if pgrep -f "$UI_PATTERN" >/dev/null; then
   # A UI não guarda estado: quem grava o workbenches.json é o core, que sai

@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../../../theme/app_colors.dart';
 import '../../domain/entities/effort_dial_view.dart';
+import '../../../../../commons/widgets/app_tooltip.dart';
 
 /// O esforço do agente no cabeçalho do card: um slider com uma marca por nível,
 /// o nome do nível ao lado e a pílula "auto". Arrastar, clicar na trilha ou
@@ -91,17 +92,31 @@ class _EffortDialState extends State<EffortDial> {
     _move(count == 1 ? 0 : ((dx - inset) / span * (count - 1)).round());
   }
 
-  void _wheel(PointerScrollEvent event) {
-    final step = event.kind == PointerDeviceKind.mouse
-        ? EffortDial.wheelStep
-        : EffortDial.preciseStep;
+  void _wheel(PointerScrollEvent event) =>
+      _roll(event.scrollDelta.dy, mouse: event.kind == PointerDeviceKind.mouse);
+
+  /// [dy] como o da roda: positivo desce. O trackpad (dois dedos) chega como
+  /// pan-zoom, com o deslocamento dos dedos, o contrário do da roda.
+  void _roll(double dy, {required bool mouse}) {
+    final step = mouse ? EffortDial.wheelStep : EffortDial.preciseStep;
     // Rolar para cima sobe o nível.
-    _scroll -= event.scrollDelta.dy;
+    _scroll -= dy;
     while (_scroll.abs() >= step) {
       final direction = _scroll > 0 ? 1 : -1;
       _scroll -= direction * step;
       _move(widget.view.markIndex + direction);
     }
+  }
+
+  /// A dica do seletor, como no Swift: o nível, como mexer, e que trocar
+  /// reinicia o terminal com a conversa.
+  static String _tooltip(EffortDialView view) {
+    if (!view.usable) return 'Este modelo não aceita nível de esforço';
+    return view.auto
+        ? 'Esforço: auto (${view.label}) — arraste ou role para fixar um '
+              'nível. Trocar reinicia o terminal; a conversa continua'
+        : 'Esforço: ${view.label} — arraste ou role para ajustar. Trocar '
+              'reinicia o terminal; a conversa continua';
   }
 
   @override
@@ -127,53 +142,67 @@ class _EffortDialState extends State<EffortDial> {
           ),
         ),
         const SizedBox(width: 5),
-        MouseRegion(
-          cursor: view.usable ? SystemMouseCursors.click : MouseCursor.defer,
-          child: Listener(
-            key: const ValueKey('effort-slider'),
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: view.usable
-                ? (e) {
-                    _pressed = true;
-                    _dragTo(e.localPosition.dx);
-                  }
-                : null,
-            onPointerMove: view.usable
-                ? (e) => _dragTo(e.localPosition.dx)
-                : null,
-            onPointerUp: (_) => _pressed = false,
-            onPointerCancel: (_) => _pressed = false,
-            onPointerSignal: view.usable
-                ? (e) {
-                    if (e is PointerScrollEvent) {
-                      GestureBinding.instance.pointerSignalResolver.register(
-                        e,
-                        (_) => _wheel(e),
-                      );
+        AppTooltip(
+          message: _tooltip(view),
+          child: MouseRegion(
+            cursor: view.usable ? SystemMouseCursors.click : MouseCursor.defer,
+            child: Listener(
+              key: const ValueKey('effort-slider'),
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: view.usable
+                  ? (e) {
+                      _pressed = true;
+                      _dragTo(e.localPosition.dx);
                     }
-                  }
-                : null,
-            child: CustomPaint(
-              size: const Size(EffortDial.sliderWidth, EffortDial.height),
-              painter: EffortSliderPainter(
-                count: view.levels.length,
-                index: view.markIndex,
-                auto: view.auto,
-                enabled: view.usable,
-                tint: widget.tint,
+                  : null,
+              onPointerMove: view.usable
+                  ? (e) => _dragTo(e.localPosition.dx)
+                  : null,
+              onPointerUp: (_) => _pressed = false,
+              onPointerCancel: (_) => _pressed = false,
+              onPointerPanZoomUpdate: view.usable
+                  ? (e) {
+                      if (e.scale == 1) _roll(-e.panDelta.dy, mouse: false);
+                    }
+                  : null,
+              onPointerSignal: view.usable
+                  ? (e) {
+                      if (e is PointerScrollEvent) {
+                        GestureBinding.instance.pointerSignalResolver.register(
+                          e,
+                          (_) => _wheel(e),
+                        );
+                      }
+                    }
+                  : null,
+              child: CustomPaint(
+                size: const Size(EffortDial.sliderWidth, EffortDial.height),
+                painter: EffortSliderPainter(
+                  count: view.levels.length,
+                  index: view.markIndex,
+                  auto: view.auto,
+                  enabled: view.usable,
+                  tint: widget.tint,
+                ),
               ),
             ),
           ),
         ),
         if (view.usable) ...[
           const SizedBox(width: 8),
-          _AutoPill(
-            on: view.auto,
-            tint: widget.tint,
-            onTap: () {
-              widget.onToggleAuto();
-              _schedule();
-            },
+          AppTooltip(
+            message: view.auto
+                ? 'Auto ligado: o modelo decide o esforço. Clique para fixar '
+                      'um nível'
+                : 'Auto desligado: clique para voltar ao padrão do modelo',
+            child: _AutoPill(
+              on: view.auto,
+              tint: widget.tint,
+              onTap: () {
+                widget.onToggleAuto();
+                _schedule();
+              },
+            ),
           ),
         ],
       ],

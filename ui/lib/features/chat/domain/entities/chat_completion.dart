@@ -14,16 +14,17 @@ class CompletionItem {
   /// O texto que entra no lugar do trecho digitado.
   final String insert;
 
-  /// `mention` (@agente) ou `slash` (/comando).
+  /// `agent` (@menção, o rótulo já traz o `@`) ou a origem do /comando:
+  /// `builtin`, `bundled`, `user`, `project` ou `plugin:<nome>`.
   final String kind;
   final String? detail;
 
-  bool get isSlash => kind == 'slash';
+  bool get isSlash => kind != 'agent';
 
   factory CompletionItem.fromMap(Map<String, Object?> map) => CompletionItem(
     label: map['label']! as String,
     insert: map['insert']! as String,
-    kind: map['kind'] as String? ?? 'mention',
+    kind: map['kind'] as String? ?? 'agent',
     detail: map['detail'] as String?,
   );
 }

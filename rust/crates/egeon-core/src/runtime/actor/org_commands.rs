@@ -65,6 +65,9 @@ fn reply_of(re: u64, reply: &RouteReply) -> Reply {
     Reply::with(re, &reply.json)
 }
 
+/// Quanto o aviso de ciclo fica na faixa da bancada (`EdgeController.swift`).
+const CYCLE_BANNER: std::time::Duration = std::time::Duration::from_secs(6);
+
 impl Actor {
     pub(super) fn org_command(&mut self, re: u64, kind: CommandKind) -> Reply {
         let name = kind.name();
@@ -431,6 +434,22 @@ impl Actor {
 
     /// Cumpre o que os handlers do `org` pediram e manda o estado novo a quem
     /// assina.
+    /// O aviso de uma linha no canvas da bancada: um evento no tópico dos nós
+    /// dela, sem mexer no estado (o canvas o mostra por uns segundos).
+    pub(super) fn banner(&mut self, workbench: &str, text: String) {
+        crate::log!("aviso: {text}");
+        self.set_banner(workbench, Some(text));
+        // Porte fiel do `EdgeController`: apaga depois de 6 s sem olhar o texto
+        // — e leva junto a faixa de uma cópia do não versionado que tenha
+        // entrado no meio (defeito do Swift, anotado para o Julio decidir).
+        let (inbox, bench) = (self.inbox.clone(), workbench.to_owned());
+        tokio::spawn(async move {
+            tokio::time::sleep(CYCLE_BANNER).await;
+            let job = move |actor: &mut Actor| actor.set_banner(&bench, None);
+            let _ = inbox.send(super::Msg::Run(Box::new(job))).await;
+        });
+    }
+
     pub(super) fn apply_org(&mut self, effects: Vec<OrgEffect>) {
         let mut persist = false;
         for effect in effects {
@@ -478,7 +497,7 @@ impl Actor {
                     persist = true;
                 }
                 OrgEffect::Log { line } => crate::log!("{line}"),
-                OrgEffect::Banner { text } => crate::log!("aviso: {text}"),
+                OrgEffect::Banner { workbench, text } => self.banner(&workbench, text),
                 OrgEffect::ShowPalette => {}
             }
         }

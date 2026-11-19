@@ -71,4 +71,11 @@ class FakeAgentRepository implements AgentRepository {
 
   @override
   Future<void> clear(String nodeId) async => cleared++;
+
+  /// Os pedidos de "tentar agora" (true) e "cancelar tentativa" (false).
+  final retries = <bool>[];
+
+  @override
+  Future<void> retry(String nodeId, {required bool now}) async =>
+      retries.add(now);
 }

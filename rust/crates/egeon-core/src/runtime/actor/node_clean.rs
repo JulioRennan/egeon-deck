@@ -78,12 +78,24 @@ impl CleanerHost for Host<'_> {
     }
 
     fn on_phase(&mut self, phase: Phase) {
-        if let Some(label) = phase.label() {
-            crate::log!("limpar[{}]: {label}", self.bench_id);
+        // A cortina segura cliques e mensagens enquanto os agentes assentam:
+        // escrever na conversa que está saindo é o que a limpeza evita.
+        match phase.label() {
+            Some(label) => {
+                crate::log!("limpar[{}]: {label}", self.bench_id);
+                self.actor.org.busy.insert(self.bench_id.clone(), label);
+            }
+            None => {
+                self.actor.org.busy.remove(&self.bench_id);
+            }
         }
+        self.actor.publish_org();
     }
 
     fn on_finish(&mut self, result: CleanResult) {
+        if self.actor.org.busy.remove(&self.bench_id).is_some() {
+            self.actor.publish_org();
+        }
         self.finished = Some(result);
     }
 }
@@ -244,7 +256,7 @@ impl Actor {
         }
     }
 
-    fn reset_clock(&mut self, bench_id: &str) {
+    pub(super) fn reset_clock(&mut self, bench_id: &str) {
         if let Err(error) = self.clocks().reset(bench_id, SystemTime::now()) {
             crate::log!("cronômetro: não gravei — {error}");
         }

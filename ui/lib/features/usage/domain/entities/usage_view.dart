@@ -1,13 +1,17 @@
 /// A pastilha do custo da bancada (ADR-085): o texto e o que o ponteiro diz.
 class UsagePillView {
-  const UsagePillView({this.text = 'US\$ —', this.tooltip});
+  const UsagePillView({this.text = 'US\$ —', this.tooltip, this.empty = false});
 
   final String text;
   final String? tooltip;
 
+  /// Nada consumido ainda: a barra lateral não mostra custo.
+  final bool empty;
+
   factory UsagePillView.fromMap(Map<String, Object?>? map) => UsagePillView(
     text: map?['text'] as String? ?? 'US\$ —',
     tooltip: map?['tooltip'] as String?,
+    empty: map?['empty'] as bool? ?? false,
   );
 }
 

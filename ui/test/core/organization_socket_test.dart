@@ -11,6 +11,7 @@ import 'package:egeon_deck/features/tabs/domain/repository/socket_tabs_repositor
 import 'package:egeon_deck/features/workbench/domain/repository/socket_workbench_repository.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/worktree_info.dart';
 import 'package:egeon_deck/features/workbench/domain/entities/worktree_plan.dart';
+import 'package:egeon_deck/features/workbench/domain/entities/worktree_source.dart';
 import 'package:egeon_deck/features/workspace/domain/entities/workspace_draft.dart';
 import 'package:egeon_deck/features/workspace/domain/repository/socket_workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -295,6 +296,7 @@ void main() {
       'set_workbench',
     );
     expectLike((await serve(bench.clear(deck))).single, 'clear_workbench');
+    expectLike((await serve(bench.resetClock(deck))).single, 'reset_clock');
     expectLike(
       (await serve(bench.remove(deck, deleteWorktrees: true))).single,
       'remove_workbench',
@@ -346,7 +348,41 @@ void main() {
     connection.say({...replies['plan_remove_workbench']!, 're': sent['id']});
     final p = await plan;
     expect(p.live, isTrue);
-    expect(p.worktrees, 2);
+    expect(p.worktrees.map((w) => w.repo), ['nexus-backend', 'nexus-front']);
+    expect(p.worktrees.last.usedBy, 'front-fix');
+    expect(p.deletable.single.branch, 'feat/login');
+    expect(p.deletable.single.owners, ['bancada']);
+  });
+
+  test('o que se perde vem depois, pelo core', () async {
+    final bench = SocketWorkbenchRepository(feed);
+    final losses = bench.removalLosses(deck);
+    await pump();
+    final sent = connection.sent.last;
+    expect(withoutId(sent), withoutId(commands['removal_losses']!));
+    connection.say({...replies['removal_losses']!, 're': sent['id']});
+    final lines = await losses;
+    expect(lines.first, 'nexus-backend · feat/login');
+    expect(lines, contains(''), reason: 'uma seção por worktree');
+  });
+
+  test('remover que falha devolve o texto do core', () async {
+    final bench = SocketWorkbenchRepository(feed);
+    final removal = bench.remove(deck, deleteWorktrees: true);
+    await pump();
+    final sent = connection.sent.last;
+    expect(withoutId(sent), withoutId(commands['remove_workbench']!));
+    connection.say({...replies['erro_remover_bancada']!, 're': sent['id']});
+    await expectLater(
+      removal,
+      throwsA(
+        isA<WorkbenchRefused>().having(
+          (e) => e.message,
+          'message',
+          contains('Não consegui apagar'),
+        ),
+      ),
+    );
   });
 
   test(
@@ -509,7 +545,7 @@ void main() {
       );
       expect(await created, '5e6f7a8b');
 
-      final info = bench.worktreeInfo(deck);
+      final info = bench.worktreeInfo(const WorktreeSource.bench(deck));
       expectLike(
         (await serve(
           info,
@@ -530,7 +566,10 @@ void main() {
       expect(read.nodes.first.branch, 'fix/api');
       expect(read.nodes.last.editable, isFalse);
 
-      final plan = bench.worktreePlan(deck, 'feature/PROJ-1234');
+      final plan = bench.worktreePlan(
+        const WorktreeSource.bench(deck),
+        'feature/PROJ-1234',
+      );
       expectLike(
         (await serve(
           plan,
@@ -546,7 +585,7 @@ void main() {
       expect(verdict.message, 'segue origin/feature/PROJ-1234');
 
       final made = bench.createWorktree(
-        deck,
+        const WorktreeSource.bench(deck),
         'feature/PROJ-1234',
         destination: WorktreeDestination.moveCurrent,
         nodes: {'back': 'fix/api', 'sub': ''},
@@ -560,7 +599,139 @@ void main() {
         )).single,
         'worktree',
       );
-      expect(await made, '5e6f7a8b');
+      expect((await made).workbench, '5e6f7a8b');
     },
   );
+
+  test('worktree de um terminal só: a origem leva o nó', () async {
+    final bench = SocketWorkbenchRepository(feed);
+    const source = WorktreeSource.node(deck, 'back');
+    final info = bench.worktreeInfo(source);
+    expectLike(
+      (await serve(
+        info,
+        answers: {
+          'worktree_info': [replies['worktree_info']!],
+        },
+      )).single,
+      'worktree_info_no',
+    );
+    await info;
+    final plan = bench.worktreePlan(source, 'fix/api');
+    expectLike(
+      (await serve(
+        plan,
+        answers: {
+          'worktree_plan': [replies['worktree_plan']!],
+        },
+      )).single,
+      'worktree_plan_no',
+    );
+    await plan;
+    final made = bench.createWorktree(source, 'fix/api');
+    expectLike(
+      (await serve(
+        made,
+        answers: {
+          'worktree': [replies['worktree_criada']!],
+        },
+      )).single,
+      'worktree_no',
+    );
+    await made;
+  });
+
+  test('worktree sem bancada de origem e multi-projeto', () async {
+    final bench = SocketWorkbenchRepository(feed);
+
+    final info = bench.worktreeInfo(
+      const WorktreeSource.folder(path: '~/Documents/agro/nexus-backend'),
+    );
+    expectSubsetOf(
+      (await serve(
+        info,
+        answers: {
+          'worktree_info': [replies['worktree_info_multi']!],
+        },
+      )).single,
+      'worktree_info_de_pasta',
+    );
+    final multi = (await info).multi!;
+    expect(multi.project, 'Nexus');
+    expect(multi.repos, ['nexus-backend', 'nexus-front']);
+
+    final plan = bench.worktreePlan(
+      const WorktreeSource.folder(project: 'p1'),
+      'feature/PROJ-1234',
+    );
+    expectLike(
+      (await serve(
+        plan,
+        answers: {
+          'worktree_plan': [replies['worktree_plan']!],
+        },
+      )).single,
+      'worktree_plan_de_pasta',
+    );
+
+    final made = bench.createWorktree(
+      const WorktreeSource.folder(project: 'm1'),
+      'feat/login',
+      repos: {'nexus-front': 'fix/front'},
+      template: 'dupla',
+    );
+    expectLike(
+      (await serve(
+        made,
+        answers: {
+          'worktree': [replies['worktree_criada']!],
+        },
+      )).single,
+      'worktree_multi',
+    );
+    expect((await made).failed, isEmpty);
+  });
+
+  test('salvar template: plano, salvar como e atualizar o de origem', () async {
+    final bench = SocketWorkbenchRepository(feed);
+
+    final plan = bench.planTemplate(deck, name: 'dupla');
+    expectLike(
+      (await serve(
+        plan,
+        answers: {
+          'save_template': [replies['template_plan']!],
+        },
+      )).single,
+      'save_template_dry_run',
+    );
+    final read = await plan;
+    expect(read.nodes, 3);
+    expect(read.exists, isTrue);
+    expect(read.template, 'dupla');
+    expect(read.summary, startsWith('2 agentes, 1 terminal'));
+
+    final saved = bench.saveTemplate(deck, name: 'dupla');
+    expectSubsetOf(
+      (await serve(
+        saved,
+        answers: {
+          'save_template': [replies['template_salvo']!],
+        },
+      )).single,
+      'save_template',
+    );
+    expect(await saved, 'dupla');
+
+    final updated = bench.saveTemplate(deck);
+    expectSubsetOf(
+      (await serve(
+        updated,
+        answers: {
+          'save_template': [replies['template_salvo']!],
+        },
+      )).single,
+      'save_template_origem',
+    );
+  });
 }

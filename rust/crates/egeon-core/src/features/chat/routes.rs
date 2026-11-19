@@ -145,14 +145,14 @@ impl ChatRoutes {
             .collect()
     }
 
-    /// A bandeja de permissão da bancada (op `permission`); `None` a esvazia.
-    pub fn set_permission(&mut self, id: &str, request: Option<Value>) -> Vec<ChatEffect> {
+    /// A bandeja de permissão da bancada (op `permissions`); vazia a esvazia.
+    pub fn set_permissions(&mut self, id: &str, list: Vec<Value>) -> Vec<ChatEffect> {
         let Some(bench) = self.benches.get_mut(id) else {
             return Vec::new();
         };
         bench
             .view
-            .set_permission(request)
+            .set_permissions(list)
             .into_iter()
             .map(ChatEffect::Ui)
             .collect()
@@ -160,7 +160,7 @@ impl ChatRoutes {
 
     // ---- comandos do canal `/ui` (protocol/chat.rs) --------------------------
 
-    /// `chat_snapshot{workbench}` → `{rev, blocks, participants, queues, permission}`.
+    /// `chat_snapshot{workbench}` → `{rev, blocks, participants, queues, permissions}`.
     pub fn snapshot_of(&self, id: &str) -> Option<Value> {
         self.benches.get(id).map(|b| b.view.snapshot())
     }
@@ -515,6 +515,7 @@ mod tests {
             is_agent: true,
             role: Some("front-end".into()),
             activity,
+            screen: None,
         }
     }
 

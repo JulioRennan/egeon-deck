@@ -11,6 +11,8 @@ class CanvasCard {
     required this.kind,
     required this.frame,
     this.title = '',
+    this.address = '',
+    this.cliName,
     this.subtitle = '',
     this.screen,
     this.url,
@@ -35,6 +37,18 @@ class CanvasCard {
 
   /// O id do nó, como no Swift.
   final String title;
+
+  /// `bancada/nó`, o endereço de dispatch, como o core o monta.
+  final String address;
+
+  /// O nome do CLI do agente; nulo em shell, web e fila.
+  final String? cliName;
+
+  /// A dica do título, como no Swift: o endereço e, no agente, o CLI.
+  String get titleTooltip => switch (cliName) {
+    final cli? => '$address · $cli',
+    null => address,
+  };
 
   /// A pasta (com `~`) ou, no nó web, o endereço.
   final String subtitle;
@@ -62,6 +76,8 @@ class CanvasCard {
       id: id,
       kind: kind,
       title: id,
+      address: map['address'] as String? ?? '',
+      cliName: map['cli_name'] as String?,
       subtitle: kind == NodeKind.web
           ? map['url'] as String? ?? ''
           : map['dir'] as String? ?? '',
@@ -92,6 +108,8 @@ class CanvasCard {
         kind: kind,
         frame: frame ?? this.frame,
         title: title,
+        address: address,
+        cliName: cliName,
         subtitle: subtitle,
         screen: screen,
         url: url,

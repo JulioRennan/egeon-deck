@@ -5,6 +5,7 @@ import '../../../support/in_memory_queue_repository.dart';
 import '../../../support/inject_fakes.dart';
 
 import 'package:egeon_deck/features/node/queue/presentation/widgets/queue_body.dart';
+import 'package:egeon_deck/features/node/queue/presentation/widgets/queue_row.dart';
 import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
@@ -159,7 +160,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('Qual z-index?'), findsOneWidget);
-    expect(find.text('Responder ao agente'), findsOneWidget);
+    expect(find.text('Responder a pergunta…'), findsOneWidget);
 
     final reply = find.descendant(
       of: find.byKey(const ValueKey('reply-a1-0')),
@@ -239,12 +240,14 @@ void main() {
     expect(repo.queue.items.map((i) => i.id), ['b2', 'a1']);
   });
 
-  testWidgets('botão direito: subir, descer, remover', (tester) async {
+  testWidgets('botão direito: mover para cima e apagar', (tester) async {
     final repo = InMemoryQueueRepository(queue: seeded());
     await pumpQueue(tester, repo);
     await tester.tap(find.text('Segunda tarefa'), buttons: kSecondaryButton);
     await tester.pump();
-    await tester.tap(find.text('Subir'));
+    expect(find.text('Enviar agora'), findsOneWidget);
+    expect(find.text('Mover para baixo'), findsOneWidget);
+    await tester.tap(find.text('Mover para cima'));
     await tester.pump();
     await tester.pump();
     expect(repo.queue.items.map((i) => i.id), ['b2', 'a1']);
@@ -254,10 +257,59 @@ void main() {
       buttons: kSecondaryButton,
     );
     await tester.pump();
-    await tester.tap(find.text('Remover'));
+    await tester.tap(find.text('Apagar'));
     await tester.pump();
     await tester.pump();
     expect(repo.queue.items.map((i) => i.id), ['b2']);
+  });
+
+  testWidgets(
+    'tarefa enviada: o menu não apaga, não reenvia nem volta a pendente',
+    (tester) async {
+      final repo = InMemoryQueueRepository(
+        queue: PromptQueue(
+          items: [
+            QueueItem(
+              id: 'a1',
+              text: 'Toast',
+              status: ItemStatus.sent,
+              sentTo: 'dev',
+              sentAt: DateTime(2026),
+            ),
+          ],
+          targets: const [QueueTarget(id: 'dev', label: 'Dev')],
+        ),
+      );
+      await pumpQueue(tester, repo);
+      await tester.tap(find.text('Toast'), buttons: kSecondaryButton);
+      await tester.pump();
+      expect(find.text('Mover para cima'), findsOneWidget);
+      expect(find.text('Apagar'), findsNothing);
+      expect(find.text('Enviar agora'), findsNothing);
+      expect(find.text('Voltar para pendente'), findsNothing);
+    },
+  );
+
+  testWidgets('comentar uma tarefa pendente: vai junto quando enviar', (
+    tester,
+  ) async {
+    final repo = InMemoryQueueRepository(queue: seeded());
+    await pumpQueue(tester, repo);
+    await tester.tap(find.text('Segunda tarefa'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Comentar — vai junto quando enviar'), findsOneWidget);
+    final reply = find.descendant(
+      of: find.byKey(const ValueKey('reply-b2-0')),
+      matching: find.byType(EditableText),
+    );
+    await tester.tap(reply);
+    await tester.pump();
+    await tester.enterText(reply, 'olha o mobile também');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.pump();
+    expect(repo.queue.items[1].thread.last.text, 'olha o mobile também');
   });
 
   testWidgets('mão em tudo que responde a clique', (tester) async {
@@ -299,5 +351,165 @@ void main() {
     await tester.pump();
     await expectHand(find.byKey(const ValueKey('send-item')), 'enviar');
     await expectHand(find.byKey(const ValueKey('detach-p.png')), 'tirar print');
+    await expectHand(find.byKey(const ValueKey('thumb-p.png')), 'abrir print');
+    await tester.tap(find.byKey(const ValueKey('thumb-p.png')));
+    await tester.pump();
+    expect(repo.openedImages.single.$2, 'p.png');
   });
+
+  group('⌘V', () {
+    /// A área de transferência como o plugin do runner a lê (`pastedImage`) e o
+    /// texto que o `Clipboard` do Flutter devolve.
+    void clipboard(
+      WidgetTester tester, {
+      Map<String, Object?>? image,
+      String text = '',
+    }) {
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('egeon/image-drop'),
+        (call) async => call.method == 'pastedImage' ? image : null,
+      );
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.getData') return {'text': text};
+        if (call.method == 'Clipboard.hasStrings') {
+          return {'value': text.isNotEmpty};
+        }
+        return null;
+      });
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(
+          const MethodChannel('egeon/image-drop'),
+          null,
+        );
+        messenger.setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+    }
+
+    Future<void> commandV(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+    }
+
+    Finder field(String key) => find.descendant(
+      of: find.byKey(ValueKey(key)),
+      matching: find.byType(EditableText),
+    );
+
+    testWidgets('print na linha de baixo vira tarefa aberta com o texto', (
+      tester,
+    ) async {
+      final repo = InMemoryQueueRepository(queue: seeded());
+      await pumpQueue(tester, repo);
+      clipboard(
+        tester,
+        image: {
+          'png': Uint8List.fromList([9, 9]),
+        },
+      );
+      final typing = field('new-field-0');
+      await tester.tap(typing);
+      await tester.enterText(typing, 'olha o header');
+      await commandV(tester);
+
+      final created = repo.queue.items.last;
+      expect(created.text, 'olha o header');
+      expect(repo.attached[created.id]!.single.bytes, [9, 9]);
+      expect(repo.attached[created.id]!.single.path, isNull);
+      // A tarefa abre, e a linha de baixo se esvazia para a próxima.
+      expect(field('editor-${created.id}'), findsOneWidget);
+      final newRow = find.descendant(
+        of: find.byKey(const ValueKey('new-row')),
+        matching: find.byType(EditableText),
+      );
+      expect(tester.widget<EditableText>(newRow).controller.text, isEmpty);
+    });
+
+    testWidgets('no editor, só os arquivos de imagem vão para a tarefa', (
+      tester,
+    ) async {
+      final repo = InMemoryQueueRepository(queue: seeded());
+      await pumpQueue(tester, repo);
+      clipboard(
+        tester,
+        image: {
+          'files': ['/tmp/tela.PNG', '/tmp/notas.txt'],
+        },
+      );
+      await tester.tap(find.text('Segunda tarefa'));
+      await tester.pump();
+      await tester.pump();
+      await commandV(tester);
+
+      expect(repo.attached['b2']!.map((i) => i.path), ['/tmp/tela.PNG']);
+      expect(repo.queue.items, hasLength(2));
+    });
+
+    testWidgets('sem imagem que sirva, cola o texto', (tester) async {
+      final repo = InMemoryQueueRepository(queue: seeded());
+      await pumpQueue(tester, repo);
+      clipboard(
+        tester,
+        image: {
+          'files': ['/tmp/notas.txt'],
+        },
+        text: '/tmp/notas.txt',
+      );
+      final newRow = field('new-field-0');
+      await tester.tap(newRow);
+      await tester.pump();
+      await commandV(tester);
+
+      expect(repo.attached, isEmpty);
+      expect(repo.queue.items, hasLength(2));
+      expect(
+        tester.widget<EditableText>(field('new-field-0')).controller.text,
+        '/tmp/notas.txt',
+      );
+    });
+  });
+
+  testWidgets(
+    'aberta, o clique no vazio do cartão é escrever, não fechar; fora dele '
+    'fecha',
+    (tester) async {
+      await pumpQueue(tester, InMemoryQueueRepository(queue: seeded()));
+      await tester.tap(find.text('Toast atrás do header'));
+      await tester.pump();
+      await tester.pump();
+      final editor = find.byKey(const ValueKey('editor-a1'));
+      expect(editor, findsOneWidget);
+      FocusNode focusOf(Finder of) => tester
+          .widget<EditableText>(
+            find.descendant(of: of, matching: find.byType(EditableText)),
+          )
+          .focusNode;
+
+      // O teclado na resposta; o vazio do cartão o traz de volta à tarefa.
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('reply-a1-0')),
+          matching: find.byType(EditableText),
+        ),
+      );
+      await tester.pump();
+      expect(focusOf(editor).hasFocus, isFalse);
+      final card = find.byType(QueueRow).first;
+      await tester.tapAt(tester.getBottomLeft(card) + const Offset(40, -10));
+      await tester.pump();
+      await tester.pump();
+      expect(editor, findsOneWidget, reason: 'continua aberta');
+      expect(focusOf(editor).hasFocus, isTrue);
+
+      // O vazio da lista, abaixo da linha nova, fecha.
+      await tester.tapAt(const Offset(270, 780));
+      await tester.pump();
+      await tester.pump();
+      expect(editor, findsNothing);
+    },
+  );
 }

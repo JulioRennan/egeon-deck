@@ -6,7 +6,8 @@
 //! só se junta, se publica e se despacha o gesto da UI para a feature certa.
 
 use super::Actor;
-use crate::protocol::app::{AppEffect, AppState};
+use crate::ports::opener::OpenTarget;
+use crate::protocol::app::{AppEffect, AppState, OpenUrl};
 use crate::protocol::message::{CommandKind, Event, EventBody, Reply, Topic};
 
 impl Actor {
@@ -69,6 +70,17 @@ impl Actor {
         match outcome {
             Ok(()) => Reply::ok(re),
             Err(error) => Reply::err(re, error),
+        }
+    }
+
+    /// O link no navegador: quem decide se abre é o sistema, e o texto
+    /// inválido (o `URL(string:)` do Swift dá nulo) volta como recusa.
+    pub(super) fn open_url(&mut self, re: u64, open: OpenUrl) -> Reply {
+        if self.drivers.opener.open(&OpenTarget::Url(open.url.clone())) {
+            Reply::ok(re)
+        } else {
+            crate::log!("chat: o sistema não abriu {}", open.url);
+            Reply::err(re, "o sistema não abriu o link")
         }
     }
 }
@@ -364,6 +376,26 @@ mod tests {
                 "title": "Você está na última versão", "text": "Egeon Deck (dev) 9.9.9.",
             })),
             "{got:?}"
+        );
+    }
+
+    /// O link da resposta do chat vai ao abridor do sistema, e a resposta é
+    /// só o ok: o `app` não republica por isso.
+    #[tokio::test]
+    async fn open_url_entrega_o_link_ao_abridor() {
+        let mut rig = Rig::new();
+        let mut ui = ui(&mut rig).await;
+        send(
+            &mut rig,
+            &ui,
+            json!({"id": 1, "cmd": "open_url", "url": "https://example.com/docs"}),
+        );
+        assert_eq!(drain(&mut ui), [json!({"re": 1, "ok": true})]);
+        assert_eq!(
+            *rig.opener.opened.lock().unwrap(),
+            [crate::ports::opener::OpenTarget::Url(
+                "https://example.com/docs".into()
+            )]
         );
     }
 }

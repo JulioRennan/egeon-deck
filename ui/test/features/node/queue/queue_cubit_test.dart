@@ -8,12 +8,19 @@ import 'package:egeon_deck/features/node/queue/domain/usecase/edit_queue.dart';
 import 'package:egeon_deck/features/node/queue/domain/usecase/watch_queue.dart';
 import 'package:egeon_deck/features/node/queue/domain/usecase/watch_queue_effects.dart';
 import 'package:egeon_deck/features/node/queue/presentation/cubit/queue_cubit.dart';
+import 'package:egeon_deck/features/node/queue/presentation/cubit/queue_notice_cubit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/pasted_image_fake.dart';
 import '../../../support/pump.dart';
 
 import 'package:egeon_deck/features/node/queue/domain/errors/queue_error.dart';
+
+/// A tarefa aberta, ou nula.
+String? openOf(QueueCubit cubit) => switch (cubit.state) {
+  QueueEditing(:final open) => open,
+  QueueWaiting() || QueueBrowsing() => null,
+};
 
 void main() {
   Future<(QueueCubit, InMemoryQueueRepository)> make({
@@ -36,11 +43,11 @@ void main() {
     await cubit.create(text: 'primeira');
     await pump();
     expect(cubit.state.queue.items.single.text, 'primeira');
-    expect(cubit.state.expanded, isNull);
+    expect(openOf(cubit), isNull);
 
     await cubit.create();
     await pump();
-    expect(cubit.state.expanded, cubit.state.queue.items.last.id);
+    expect(openOf(cubit), cubit.state.queue.items.last.id);
     await cubit.close();
   });
 
@@ -75,25 +82,57 @@ void main() {
     cubit.collapse();
     await pump();
     expect(cubit.state.queue.items, isEmpty);
-    expect(cubit.state.expanded, isNull);
+    expect(openOf(cubit), isNull);
     await cubit.close();
   });
 
   test('sem ligação, mandar mostra o aviso e ele some sozinho', () async {
     final (cubit, _) = await make();
+    final notice = QueueNoticeCubit(
+      cubit.notices,
+      failureTime: const Duration(milliseconds: 30),
+    );
     await cubit.create(text: 'a');
     await pump();
     await cubit.send(id: cubit.state.queue.items.single.id);
+    await pump();
     expect(
-      cubit.state.failure?.error,
-      isA<QueueRefused>().having(
-        (e) => e.message,
-        'message',
-        contains('Ligue a fila'),
+      notice.state,
+      isA<QueueSendFailed>().having(
+        (s) => s.failure.error,
+        'erro',
+        isA<QueueRefused>().having(
+          (e) => e.message,
+          'message',
+          contains('Ligue a fila'),
+        ),
       ),
     );
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(notice.state, isNot(isA<QueueSendFailed>()));
+    await notice.close();
     await cubit.close();
   });
+
+  test(
+    'o aviso mostra por que a fila não anda, e o erro passa na frente',
+    () async {
+      final (cubit, _) = await make(
+        queue: const PromptQueue(blocker: 'Esperando o agente'),
+      );
+      final notice = QueueNoticeCubit(cubit.notices);
+      await pump();
+      expect(notice.state, isA<QueueBlocked>());
+      expect((notice.state as QueueBlocked).text, 'Esperando o agente');
+      await cubit.create(text: 'a');
+      await pump();
+      await cubit.send(id: cubit.state.queue.items.single.id);
+      await pump();
+      expect(notice.state, isA<QueueSendFailed>());
+      await notice.close();
+      await cubit.close();
+    },
+  );
 
   test('com ligação, mandar marca como enviada e trava', () async {
     final (cubit, _) = await make(queue: const PromptQueue(targets: linked));
@@ -105,7 +144,6 @@ void main() {
     expect(item.status, ItemStatus.sent);
     expect(item.locked, isTrue);
     expect(item.sentTo, 'dev');
-    expect(cubit.state.failure, isNull);
     await cubit.close();
   });
 
@@ -178,7 +216,7 @@ void main() {
     final id = cubit.state.queue.items.single.id;
     cubit.remove(id);
     await pump();
-    expect(cubit.state.expanded, isNull);
+    expect(openOf(cubit), isNull);
     await cubit.close();
   });
 
@@ -188,7 +226,7 @@ void main() {
     await pump();
     final item = cubit.state.queue.items.single;
     expect(item.images, ['a.png']);
-    expect(cubit.state.expanded, item.id);
+    expect(openOf(cubit), item.id);
     expect(repo.attached[item.id], hasLength(1));
     await cubit.close();
   });
@@ -219,20 +257,22 @@ void main() {
       edit: EditQueue(repo),
       effects: WatchQueueEffects(repo),
     );
+    final drafts = <String>[];
+    final listening = cubit.drafts.listen(drafts.add);
     await pump();
 
     repo.effectsController.add(const QueueDraft('rascunho vindo do egeon'));
     await pump();
-    expect(cubit.state.draft, 'rascunho vindo do egeon');
-    expect(cubit.state.draftSerial, 1);
+    expect(drafts, ['rascunho vindo do egeon']);
     // O mesmo texto de novo também vale.
     repo.effectsController.add(const QueueDraft('rascunho vindo do egeon'));
     await pump();
-    expect(cubit.state.draftSerial, 2);
+    expect(drafts, hasLength(2));
+    await listening.cancel();
 
     repo.effectsController.add(const QueueOpenItem('a1'));
     await pump();
-    expect(cubit.state.expanded, 'a1');
+    expect(openOf(cubit), 'a1');
     await cubit.close();
   });
 
@@ -249,7 +289,7 @@ void main() {
 
         final item = cubit.state.queue.items.single;
         expect(item.images, ['Tela 1.PNG']);
-        expect(cubit.state.expanded, item.id);
+        expect(openOf(cubit), item.id);
         expect(
           repo.attached[item.id]!.single.path,
           '/Users/eu/Desktop/Tela 1.PNG',

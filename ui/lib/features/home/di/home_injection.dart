@@ -1,10 +1,13 @@
 import '../../../core/adapters/injector.dart';
+import '../domain/repository/menu_repository.dart';
 import '../domain/repository/screen_control.dart';
 import '../domain/repository/shell_repository.dart';
+import '../domain/repository/socket_menu_repository.dart';
 import '../domain/repository/socket_shell_repository.dart';
 import '../domain/repository/socket_ui_request_repository.dart';
 import '../domain/repository/ui_request_repository.dart';
 import '../domain/usecase/answer_ui_request.dart';
+import '../domain/usecase/copy_dispatch_targets.dart';
 import '../domain/usecase/reply_ui_request.dart';
 import '../domain/usecase/resolve_access_lock.dart';
 import '../domain/usecase/set_view_mode.dart';
@@ -23,6 +26,7 @@ typedef UiRequestHost = ({
 /// A casca falando com o core Rust: a vista da bancada e os pedidos de tela.
 void registerHomeRepositories() {
   Injector.factory<ShellRepository>(() => SocketShellRepository(inject()));
+  Injector.factory<MenuRepository>(() => SocketMenuRepository(inject()));
   Injector.factory<UiRequestRepository>(
     () => SocketUiRequestRepository(inject()),
   );
@@ -30,10 +34,16 @@ void registerHomeRepositories() {
 
 void registerHomeDomain() {
   Injector.factory(() => WatchShell(inject()));
+  Injector.factory(() => CopyDispatchTargets(inject(), inject()));
   Injector.factory(() => SetViewMode(inject()));
   Injector.factory(() => ResolveAccessLock(inject()));
   Injector.factory(
-    () => ShellCubit(watch: inject(), setView: inject(), access: inject()),
+    () => ShellCubit(
+      watch: inject(),
+      setView: inject(),
+      access: inject(),
+      copyTargets: inject(),
+    ),
   );
 
   Injector.factory(() => WatchUiRequests(inject()));

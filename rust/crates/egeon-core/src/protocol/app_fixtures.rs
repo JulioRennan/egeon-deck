@@ -30,6 +30,15 @@ pub fn commands() -> Vec<(&'static str, Command)> {
             "reaper_enabled",
             c(404, CommandKind::ReaperEnabled(ReaperEnabled { on: false })),
         ),
+        (
+            "open_url",
+            c(
+                450,
+                CommandKind::OpenUrl(OpenUrl {
+                    url: "https://example.com/docs".into(),
+                }),
+            ),
+        ),
     ]
 }
 

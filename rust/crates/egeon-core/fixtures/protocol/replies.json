@@ -5,6 +5,11 @@
     "ok": true,
     "re": 407
   },
+  "alvos_copiados": {
+    "ok": true,
+    "re": 166,
+    "text": "deck/claude\ndeck/sh"
+  },
   "bancada_criada": {
     "ok": true,
     "re": 118,
@@ -13,10 +18,10 @@
   "chat_complete": {
     "items": [
       {
-        "detail": "revisor",
+        "detail": "deck/rev",
         "insert": "@rev ",
-        "kind": "mention",
-        "label": "rev"
+        "kind": "agent",
+        "label": "@rev"
       }
     ],
     "ok": true,
@@ -37,6 +42,30 @@
     "re": 201,
     "rev": 42
   },
+  "components": {
+    "components": [
+      {
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core",
+        "subtitle": "Claude Code",
+        "template": {
+          "agent": "claude",
+          "byAgent": {
+            "claude": {
+              "model": "claude-opus-5-5"
+            }
+          },
+          "cwd": "api",
+          "kind": "agent",
+          "name": "revisor",
+          "prompt": "revisa o core"
+        }
+      }
+    ],
+    "ok": true,
+    "re": 156
+  },
   "copy": {
     "ok": true,
     "re": 325,
@@ -56,6 +85,11 @@
     "error": "item a1b2c3 não existe na fila",
     "ok": false,
     "re": 307
+  },
+  "erro_remover_bancada": {
+    "error": "Já apagadas: /Users/eu/Documents/worktrees/nexus-api/x.\n\nNão consegui apagar:\n/Users/eu/Documents/worktrees/nexus-backend/x: permissão negada",
+    "ok": false,
+    "re": 122
   },
   "erro_workspace_com_bancadas": {
     "error": "\"Agro\" ainda tem 2 bancada(s). Remova as bancadas antes de remover o workspace.",
@@ -96,10 +130,166 @@
     "ok": true,
     "re": 138
   },
+  "no_aplicado": {
+    "node": "revisor",
+    "ok": true,
+    "re": 155
+  },
   "no_criado": {
     "node": "revisor",
     "ok": true,
     "re": 125
+  },
+  "node_folder": {
+    "cwd": "api",
+    "ok": true,
+    "re": 153,
+    "shown": "api"
+  },
+  "node_form": {
+    "cli": "claude",
+    "clis": [
+      {
+        "key": "claude",
+        "name": "Claude Code"
+      },
+      {
+        "key": "codex",
+        "name": "Codex"
+      }
+    ],
+    "components": [
+      {
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core",
+        "subtitle": "Claude Code",
+        "template": {
+          "agent": "claude",
+          "byAgent": {
+            "claude": {
+              "model": "claude-opus-5-5"
+            }
+          },
+          "cwd": "api",
+          "kind": "agent",
+          "name": "revisor",
+          "prompt": "revisa o core"
+        }
+      }
+    ],
+    "folders": [
+      {
+        "shown": "root",
+        "value": ""
+      },
+      {
+        "shown": "api",
+        "value": "api"
+      }
+    ],
+    "ok": true,
+    "re": 150,
+    "screen": {
+      "config_env": "CLAUDE_CONFIG_DIR",
+      "config_items": [
+        {
+          "title": "~/.claude"
+        },
+        {
+          "title": "~/.claude-agro",
+          "value": "/Users/voce/.claude-agro"
+        }
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "fields": {
+        "effort": "high",
+        "model": "claude-opus-5-5",
+        "prompt": "revisa o core"
+      },
+      "models": [
+        {
+          "label": "padrão do CLI"
+        },
+        {
+          "id": "claude-opus-5-5",
+          "label": "Opus 5.5"
+        }
+      ],
+      "template": {
+        "agent": "claude",
+        "byAgent": {
+          "claude": {
+            "model": "claude-opus-5-5"
+          }
+        },
+        "cwd": "api",
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core"
+      }
+    },
+    "template": {
+      "agent": "claude",
+      "byAgent": {
+        "claude": {
+          "model": "claude-opus-5-5"
+        }
+      },
+      "cwd": "api",
+      "kind": "agent",
+      "name": "revisor",
+      "prompt": "revisa o core"
+    }
+  },
+  "node_form_screen": {
+    "config_env": "CLAUDE_CONFIG_DIR",
+    "config_items": [
+      {
+        "title": "~/.claude"
+      },
+      {
+        "title": "~/.claude-agro",
+        "value": "/Users/voce/.claude-agro"
+      }
+    ],
+    "efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "fields": {
+      "effort": "high",
+      "model": "claude-opus-5-5",
+      "prompt": "revisa o core"
+    },
+    "models": [
+      {
+        "label": "padrão do CLI"
+      },
+      {
+        "id": "claude-opus-5-5",
+        "label": "Opus 5.5"
+      }
+    ],
+    "ok": true,
+    "re": 152,
+    "template": {
+      "agent": "claude",
+      "byAgent": {
+        "claude": {
+          "model": "claude-opus-5-5"
+        }
+      },
+      "cwd": "api",
+      "kind": "agent",
+      "name": "revisor",
+      "prompt": "revisa o core"
+    }
   },
   "ok": {
     "ok": true,
@@ -117,7 +307,26 @@
     "live": true,
     "ok": true,
     "re": 135,
-    "worktrees": 2
+    "worktrees": [
+      {
+        "branch": "feat/login",
+        "owners": [
+          "bancada"
+        ],
+        "path": "/Users/eu/Documents/worktrees/nexus-backend/feat-login",
+        "repo": "nexus-backend",
+        "used_by": null
+      },
+      {
+        "branch": "fix/front",
+        "owners": [
+          "front"
+        ],
+        "path": "/Users/eu/Documents/worktrees/nexus-front/fix-front",
+        "repo": "nexus-front",
+        "used_by": "front-fix"
+      }
+    ]
   },
   "processes": {
     "enabled": true,
@@ -162,10 +371,35 @@
     "ok": true,
     "re": 305
   },
+  "removal_losses": {
+    "losses": [
+      "nexus-backend · feat/login",
+      "1 arquivo(s) com mudanças não commitadas:",
+      "   M src/main.rs",
+      "",
+      "nexus-api · feat/login",
+      "1 arquivo(s) novo(s), nunca commitados."
+    ],
+    "ok": true,
+    "re": 167
+  },
   "suggest_parent": {
     "ok": true,
     "parent": "~/Documents/agro",
     "re": 137
+  },
+  "template_plan": {
+    "exists": true,
+    "nodes": 3,
+    "ok": true,
+    "re": 163,
+    "summary": "2 agentes, 1 terminal — com posição, tamanho, pasta de cada nó e ~/Documents/agro como pasta inicial.",
+    "template": "dupla"
+  },
+  "template_salvo": {
+    "ok": true,
+    "re": 164,
+    "template": "dupla"
   },
   "templates": {
     "ok": true,
@@ -203,22 +437,48 @@
     "nodes": [
       {
         "branch": "fix/api",
+        "exists": true,
+        "inside": false,
         "node": "back",
+        "path": "~/Documents/agro/nexus-api",
+        "repo": "nexus-api",
         "state": "own_worktree"
       },
       {
+        "exists": true,
+        "inside": true,
         "node": "claude",
+        "path": "~/Documents/agro/nexus-backend",
+        "repo": "nexus-backend",
         "state": "follows_workbench"
       },
       {
+        "exists": false,
+        "inside": false,
         "node": "docs",
+        "path": "~/Documents/notas",
         "state": "no_repo"
       }
     ],
     "ok": true,
     "re": 140,
+    "repo": "nexus-backend",
     "suggested_branch": "main-2",
     "summary": "nexus-backend · main · limpo · 2 worktrees"
+  },
+  "worktree_info_multi": {
+    "multi": {
+      "project": "Nexus",
+      "repos": [
+        "nexus-backend",
+        "nexus-front"
+      ]
+    },
+    "nodes": [],
+    "ok": true,
+    "re": 160,
+    "suggested_branch": "",
+    "summary": ""
   },
   "worktree_plan": {
     "folder": "~/Documents/worktrees/nexus-backend/feature-PROJ-1234",

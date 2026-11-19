@@ -35,4 +35,6 @@ class EditQueue {
   }) => _repository.attachLoose(nodeId, images, open: open);
   Future<void> detach(String nodeId, String id, String image) =>
       _repository.detach(nodeId, id, image);
+  Future<void> openImage(String nodeId, String id, String image) =>
+      _repository.openImage(nodeId, id, image);
 }

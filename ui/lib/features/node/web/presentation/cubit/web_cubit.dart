@@ -53,11 +53,14 @@ class WebCubit extends Cubit<WebState> {
 
   /// Onde a página nativa está, se já disse.
   WebPageState? get _page => switch (state) {
-    WebWaiting() => null,
+    WebWaiting() || WebOpening() => null,
     WebShown(:final page) => page,
   };
 
-  void _showNode(WebNode node) => emit(WebShown(node: node, page: _page));
+  void _showNode(WebNode node) {
+    final page = _page;
+    emit(page == null ? WebOpening(node) : WebShown(node, page));
+  }
 
   void _onNode(WebNode node) {
     // Sem o UUID do perfil (do `web-profiles.json`, no core) não há data store
@@ -93,9 +96,9 @@ class WebCubit extends Cubit<WebState> {
   void _onPage(WebPageState page) {
     // A página só nasce depois do nó: sem ele, não há o que mostrar.
     final shown = state;
-    if (shown is! WebShown) return;
+    if (shown is! WebWithNode) return;
     final known = shown.node.url;
-    emit(shown.copyWith(page: page));
+    emit(WebShown(shown.node, page));
     // A página navegou sozinha: o core grava para a bancada voltar onde estava.
     if (page.url.isNotEmpty && page.url != known && page.url != _requested) {
       _requested = page.url;

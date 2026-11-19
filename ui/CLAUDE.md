@@ -79,9 +79,10 @@ Como no Swift: dois apps lado a lado (decisão 41).
   `RepositoryProvider` nem `context.read` de repositório ou usecase. Fábrica
   por padrão; único só com estado repartido. Teste: `injectFakes(…)`.
 - **O cubit é dono da assinatura:** abre ao nascer, cancela no `close()`.
-- **Estado é do cubit:** `<x>_state.dart` como `part of` do cubit, nunca em
-  `domain/entities`. Fases que se excluem são `sealed class` e o widget faz
-  `switch` exaustivo.
+- **Estado é do cubit e derivado:** `<x>_state.dart` como `part of` do cubit,
+  nunca em `domain/entities`. Sem `copyWith`: cada `emit` é um estado nomeado
+  (`sealed`, o comum na base, uma subclasse por situação) e o widget faz
+  `switch` exaustivo. O que varia independente vira outro cubit.
 - **Erro tipado por feature:** `domain/errors/<feature>_error.dart` (sealed). O
   repositório converte a falha do socket (`failingAs`) com o texto do core
   dentro; o cubit captura `on <F>Error`. Nada de `catch` genérico virando

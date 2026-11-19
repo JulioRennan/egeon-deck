@@ -1,4 +1,5 @@
 import '../entities/workspace_draft.dart';
+import '../entities/workspace_saved.dart';
 import '../repository/workspace_repository.dart';
 
 class SaveWorkspace {
@@ -11,6 +12,6 @@ class SaveWorkspace {
   Future<String> multiName(String? workspaceId, List<String> folders) =>
       _repository.multiName(workspaceId, folders);
 
-  Future<void> call(WorkspaceDraft draft, {String? id}) =>
+  Future<WorkspaceSaved> call(WorkspaceDraft draft, {String? id}) =>
       _repository.save(draft, id: id);
 }

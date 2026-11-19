@@ -41,6 +41,9 @@ abstract interface class CanvasRepository {
 
   Future<void> removeNode(String workbenchId, String nodeId);
 
+  /// O ⌘-clique no subtítulo: a pasta do terminal no Finder.
+  Future<void> openFolder(String workbenchId, String nodeId);
+
   /// O foco da interface, para o core decidir notificação e o que é tecla do
   /// usuário: o app ganhou ou perdeu o foco, e qual nó tem o foco de teclado
   /// (clique no card ou no terminal). Sem nó, o app está em segundo plano.

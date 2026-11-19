@@ -140,6 +140,24 @@ void main() {
     },
   );
 
+  testWidgets('dois dedos no trackpad mudam o nível, como a roda', (
+    tester,
+  ) async {
+    final repo = await pumpStrip(tester);
+    final slider = tester.getCenter(
+      find.byKey(const ValueKey('effort-slider')),
+    );
+    final gesture = await tester.createGesture(
+      kind: PointerDeviceKind.trackpad,
+    );
+    await gesture.panZoomStart(slider);
+    // Dedos para cima sobem o nível.
+    await gesture.panZoomUpdate(slider, pan: const Offset(0, 80));
+    await gesture.panZoomEnd();
+    await tester.pump();
+    expect(repo.choices.whereType<EffortMove>(), isNotEmpty);
+  });
+
   testWidgets('sem nada por assentar, a pausa não manda nada', (tester) async {
     final repo = await pumpStrip(tester);
     final rect = tester.getRect(find.byKey(const ValueKey('effort-slider')));

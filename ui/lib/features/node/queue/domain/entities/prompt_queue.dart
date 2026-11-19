@@ -29,6 +29,7 @@ class PromptQueue {
     this.summary = '',
     this.subtitle = '',
     this.imageExtensions = const [],
+    this.imagesDir = '',
   });
 
   final List<QueueItem> items;
@@ -65,6 +66,10 @@ class PromptQueue {
   /// As extensões de arquivo que viram print da tarefa.
   final List<String> imageExtensions;
 
+  /// A pasta dos prints da fila: os `images` das tarefas são nomes dentro
+  /// dela, e a miniatura se lê de `<imagesDir>/<nome>`.
+  final String imagesDir;
+
   factory PromptQueue.fromMap(Map<String, Object?> map) => PromptQueue(
     items: [
       for (final i in (map['items'] as List<Object?>? ?? const []))
@@ -86,6 +91,7 @@ class PromptQueue {
       for (final e in (map['image_extensions'] as List<Object?>? ?? const []))
         e! as String,
     ],
+    imagesDir: map['images_dir'] as String? ?? '',
   );
 
   Map<String, Object?> toMap() => {
@@ -100,6 +106,7 @@ class PromptQueue {
     'summary': summary,
     'subtitle': subtitle,
     'image_extensions': imageExtensions,
+    'images_dir': imagesDir,
   };
 
   int? indexOf(String id) {
@@ -135,5 +142,6 @@ class PromptQueue {
     target: target,
     targets: targets,
     blocker: blocker,
+    imagesDir: imagesDir,
   );
 }

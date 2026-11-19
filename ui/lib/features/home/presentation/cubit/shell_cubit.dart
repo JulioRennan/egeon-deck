@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/domain/entities/view_mode.dart';
 import '../../domain/entities/shell_snapshot.dart';
 import '../../domain/errors/home_error.dart';
+import '../../domain/usecase/copy_dispatch_targets.dart';
 import '../../domain/usecase/resolve_access_lock.dart';
 import '../../domain/usecase/set_view_mode.dart';
 import '../../domain/usecase/watch_shell.dart';
@@ -17,26 +18,36 @@ class ShellCubit extends Cubit<ShellState> {
     required WatchShell watch,
     required this._setView,
     required this._access,
-  }) : super(const ShellState()) {
+    required this._copyTargets,
+  }) : super(const ShellExpanded()) {
     _subscription = watch().listen(
-      (snapshot) => emit(state.copyWith(snapshot: snapshot)),
+      (snapshot) =>
+          emit(collapsed ? ShellCollapsed(snapshot) : ShellExpanded(snapshot)),
     );
   }
 
   final SetViewMode _setView;
   final ResolveAccessLock _access;
+  final CopyDispatchTargets _copyTargets;
   StreamSubscription<ShellSnapshot>? _subscription;
 
-  void toggleCollapsed() => setCollapsed(!state.collapsed);
+  /// A barra lateral está recolhida ao trilho.
+  bool get collapsed => state is ShellCollapsed;
 
-  void setCollapsed(bool collapsed) =>
-      emit(state.copyWith(collapsed: collapsed));
+  void toggleCollapsed() => setCollapsed(!collapsed);
+
+  void setCollapsed(bool collapsed) => emit(
+    collapsed ? ShellCollapsed(state.snapshot) : ShellExpanded(state.snapshot),
+  );
 
   void setView(ViewMode mode) => _fire(_setView(mode));
 
   void openSettings() => _fire(_access.openSettings());
 
   void askAccessAgain() => _fire(_access.askAgain());
+
+  /// ⇧⌘T: sem core, não há o que copiar e a área de transferência fica.
+  void copyTargets() => _fire(_copyTargets());
 
   /// Gesto é "mande e siga": o que vale é o estado que o core devolve.
   void _fire(Future<void> future) =>

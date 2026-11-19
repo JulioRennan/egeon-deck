@@ -7,18 +7,17 @@ import 'package:flutter/painting.dart' show EdgeInsets;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/canvas_card.dart';
-import '../../domain/entities/canvas_tool.dart';
 import '../../domain/entities/canvas_viewport.dart';
 import '../../domain/entities/edge_layout.dart';
 import '../../domain/entities/edge_link.dart';
 import '../../domain/errors/canvas_error.dart';
 import '../../domain/repository/canvas_repository.dart';
 import '../../domain/usecase/edit_links.dart';
-import '../../domain/usecase/place_node.dart';
 import '../../domain/usecase/remove_node.dart';
 import '../../domain/usecase/save_frames.dart';
 import '../../domain/usecase/set_ui_focus.dart';
 import '../../domain/usecase/watch_canvas.dart';
+import 'canvas_memory.dart';
 
 part 'canvas_state.dart';
 
@@ -30,26 +29,30 @@ class CanvasCubit extends Cubit<CanvasState> {
     required this.workbenchId,
     required WatchCanvas watch,
     required this._saveFrames,
-    required this._placeNode,
     required this._links,
     required this._removeNode,
     required this._setFocus,
     this.visibleInsets = const EdgeInsets.fromLTRB(0, defaultTopInset, 0, 0),
-  }) : super(const CanvasState()) {
+    CanvasMemory? memory,
+  }) : _memory = memory,
+       super(
+         CanvasIdle(
+           viewport: memory?.view(workbenchId) ?? const CanvasViewport(),
+         ),
+       ) {
+    // Já esteve na tela: volta onde estava, sem reenquadrar.
+    _needsFit = memory?.view(workbenchId) == null;
     _subscription = watch(workbenchId).listen(_onSnapshot);
   }
+
+  final CanvasMemory? _memory;
 
   /// O que cobre o canvas por cima: as barras de ação e de informação. Enquadrar
   /// usa só o que sobra.
   static const defaultTopInset = 108.0;
 
-  /// Tamanho mínimo do arrasto para valer como retângulo desenhado: abaixo
-  /// disso o clique cria o nó no tamanho padrão da ferramenta.
-  static const dragThreshold = 24.0;
-
   final String workbenchId;
   final SaveFrames _saveFrames;
-  final PlaceNode _placeNode;
   final EditLinks _links;
   final RemoveNode _removeNode;
   final SetUiFocus _setFocus;
@@ -71,8 +74,11 @@ class CanvasCubit extends Cubit<CanvasState> {
   }
 
   StreamSubscription<CanvasSnapshot>? _subscription;
-  Timer? _bannerTimer;
   Timer? _settleTimer;
+  final _motion = StreamController<bool>.broadcast();
+
+  /// `true` quando a vista ou um card se mexe; `false` quando assenta.
+  Stream<bool> get motion => _motion.stream;
   Timer? _windowTimer;
 
   /// Quanto esperar parado antes de avisar o core do tamanho novo da janela.
@@ -83,11 +89,51 @@ class CanvasCubit extends Cubit<CanvasState> {
 
   /// A bancada abre enquadrada: em (0,0) você caía num canto vazio e tinha de
   /// procurar os cards.
-  var _needsFit = true;
+  late bool _needsFit;
   var _framesDirty = false;
 
   ({Offset mouse, Offset origin})? _panAnchor;
   ({String id, Offset offset})? _dragging;
+
+  /// A mesma fase de agora, com os cards, as ligações ou a vista novos.
+  CanvasState _with({
+    List<CanvasCard>? cards,
+    List<EdgeLink>? links,
+    CanvasViewport? viewport,
+  }) {
+    final c = cards ?? state.cards;
+    final l = links ?? state.links;
+    final v = viewport ?? state.viewport;
+    return switch (state) {
+      CanvasIdle() => CanvasIdle(cards: c, links: l, viewport: v),
+      CanvasPanning() => CanvasPanning(cards: c, links: l, viewport: v),
+      CanvasDraggingCard(:final cardId) => CanvasDraggingCard(
+        cardId: cardId,
+        cards: c,
+        links: l,
+        viewport: v,
+      ),
+      CanvasLinking(:final pending) => CanvasLinking(
+        pending: pending,
+        cards: c,
+        links: l,
+        viewport: v,
+      ),
+      CanvasLinkHovered(:final link) => CanvasLinkHovered(
+        link: link,
+        cards: c,
+        links: l,
+        viewport: v,
+      ),
+    };
+  }
+
+  /// Nada mais na mão.
+  CanvasIdle get _idle => CanvasIdle(
+    cards: state.cards,
+    links: state.links,
+    viewport: state.viewport,
+  );
 
   // ---- estado vindo do core ------------------------------------------------
 
@@ -108,19 +154,28 @@ class CanvasCubit extends Cubit<CanvasState> {
     viewport = viewport.copyWith(
       origin: viewport.clampedOrigin(viewport.origin),
     );
-    final hovered = state.hovered;
-    emit(
-      state.copyWith(
-        cards: cards,
-        links: snapshot.links,
-        viewport: viewport,
-        // O realce guarda a ligação do arquivo anterior com os flags velhos:
-        // resolve de novo contra a lista nova, ou some se o par saiu.
-        hovered: () => hovered == null
-            ? null
-            : snapshot.links.where((l) => l == hovered).firstOrNull,
-      ),
-    );
+    final current = state;
+    if (current is CanvasLinkHovered) {
+      // O realce guarda a ligação do arquivo anterior com os flags velhos:
+      // resolve de novo contra a lista nova, ou some se o par saiu.
+      final link = snapshot.links.where((l) => l == current.link).firstOrNull;
+      emit(
+        link == null
+            ? CanvasIdle(
+                cards: cards,
+                links: snapshot.links,
+                viewport: viewport,
+              )
+            : CanvasLinkHovered(
+                link: link,
+                cards: cards,
+                links: snapshot.links,
+                viewport: viewport,
+              ),
+      );
+    } else {
+      emit(_with(cards: cards, links: snapshot.links, viewport: viewport));
+    }
     if (_needsFit && cards.isNotEmpty) _fitIfSized();
   }
 
@@ -129,7 +184,7 @@ class CanvasCubit extends Cubit<CanvasState> {
   void resize(Size size) {
     if (size == state.viewport.size) return;
     emit(
-      state.copyWith(
+      _with(
         viewport: state.viewport.resized(size, state.cards.map((c) => c.frame)),
       ),
     );
@@ -168,6 +223,16 @@ class CanvasCubit extends Cubit<CanvasState> {
     fitAll();
   }
 
+  /// O que está à vista, no espaço do canvas (sem a faixa da barra de ações
+  /// nem a barra lateral por cima): onde nasce um nó sem desenho.
+  Rect get visibleDocument {
+    final area = _visibleArea;
+    return Rect.fromPoints(
+      state.viewport.toDocument(area.topLeft),
+      state.viewport.toDocument(area.bottomRight),
+    );
+  }
+
   Rect get _visibleArea {
     final size = state.viewport.size;
     return Rect.fromLTRB(
@@ -191,16 +256,17 @@ class CanvasCubit extends Cubit<CanvasState> {
   Iterable<Rect> get _frames => state.cards.map((c) => c.frame);
 
   void _view(CanvasViewport viewport) {
-    emit(state.copyWith(viewport: viewport, moving: true));
+    emit(_with(viewport: viewport));
     _settleLater();
   }
 
   /// A vista ou um card se mexeu: some o "ao vivo" e agenda a volta.
   void _settleLater() {
+    if (!_motion.isClosed) _motion.add(true);
     _settleTimer?.cancel();
     _settleTimer = Timer(settleDelay, () {
-      if (!isClosed && !state.panning && _dragging == null) {
-        emit(state.copyWith(moving: false));
+      if (!isClosed && state is! CanvasPanning && _dragging == null) {
+        _motion.add(false);
       }
     });
   }
@@ -224,7 +290,13 @@ class CanvasCubit extends Cubit<CanvasState> {
 
   void beginPan(Offset point) {
     _panAnchor = (mouse: point, origin: state.viewport.origin);
-    emit(state.copyWith(panning: true));
+    emit(
+      CanvasPanning(
+        cards: state.cards,
+        links: state.links,
+        viewport: state.viewport,
+      ),
+    );
   }
 
   void updatePan(Offset point) {
@@ -244,7 +316,7 @@ class CanvasCubit extends Cubit<CanvasState> {
   void endPan() {
     if (_panAnchor == null) return;
     _panAnchor = null;
-    emit(state.copyWith(panning: false));
+    emit(_idle);
     _flushFrames();
   }
 
@@ -270,67 +342,11 @@ class CanvasCubit extends Cubit<CanvasState> {
   /// Dois dedos no trackpad: o conteúdo acompanha os dedos.
   void trackpadPan(Offset delta) => scroll(-delta);
 
-  // ---- ferramentas ---------------------------------------------------------
-
-  void selectTool(CanvasTool tool) {
-    if (tool == state.tool) return;
-    emit(
-      state.copyWith(
-        tool: tool,
-        // Alvo de remoção só faz sentido no cursor: com a ferramenta armada o
-        // clique é de criação.
-        hovered: tool == CanvasTool.cursor ? null : () => null,
-      ),
-    );
-  }
-
-  /// Escolher um componente arma a ferramenta de terminal: o próximo clique no
-  /// canvas é que decide onde ele nasce.
-  void pickComponent(String? name) {
-    emit(
-      state.copyWith(
-        tool: CanvasTool.terminal,
-        pendingComponent: () => name,
-        banner: () => 'Próximo terminal: ${name ?? 'shell'}',
-      ),
-    );
-    _bannerTimer?.cancel();
-    _bannerTimer = Timer(const Duration(seconds: 3), () {
-      if (!isClosed) emit(state.copyWith(banner: () => null));
-    });
-  }
-
-  /// Solta o nó da ferramenta armada. [start] e [end] são os pontos do gesto,
-  /// em pixels da janela; um clique sem arrastar cria no tamanho padrão.
-  Future<void> placeByGesture(Offset start, Offset end) async {
-    final tool = state.tool;
-    if (tool == CanvasTool.cursor) return;
-    final a = state.viewport.toDocument(start);
-    final b = state.viewport.toDocument(end);
-    final dragged = Rect.fromPoints(a, b);
-    final rect =
-        (dragged.width < dragThreshold || dragged.height < dragThreshold)
-        ? a & tool.defaultNodeSize
-        : dragged;
-    final frame = Rect.fromLTWH(
-      rect.left.roundToDouble(),
-      rect.top.roundToDouble(),
-      math.max(CanvasCard.minSize.width, rect.width.roundToDouble()),
-      math.max(CanvasCard.minSize.height, rect.height.roundToDouble()),
-    );
-    final component = state.pendingComponent;
-    // Igual ao Figma: colocou, volta pro cursor. O componente escolhido vale
-    // para um nó só — deixá-lo armado faria o clique seguinte criar um revisor
-    // sem você ter pedido.
-    emit(state.copyWith(tool: CanvasTool.cursor, pendingComponent: () => null));
-    await _fire(_placeNode(workbenchId, tool, frame, component: component));
-  }
-
   // ---- cards ---------------------------------------------------------------
 
   void _shiftCards(Offset shift) {
     emit(
-      state.copyWith(
+      _with(
         cards: [
           for (final card in state.cards)
             card.copyWith(frame: card.frame.shift(shift)),
@@ -342,12 +358,14 @@ class CanvasCubit extends Cubit<CanvasState> {
 
   void _setFrame(String id, Rect frame) {
     emit(
-      state.copyWith(
+      CanvasDraggingCard(
+        cardId: id,
         cards: [
           for (final card in state.cards)
             if (card.id == id) card.copyWith(frame: frame) else card,
         ],
-        moving: true,
+        links: state.links,
+        viewport: state.viewport,
       ),
     );
     _framesDirty = true;
@@ -418,6 +436,7 @@ class CanvasCubit extends Cubit<CanvasState> {
   /// arquivo a cada pixel. O documento cresce para o que ficou perto da borda.
   void endCardGesture() {
     _dragging = null;
+    if (state is CanvasDraggingCard) emit(_idle);
     _view(state.viewport.growForNodes(_frames));
     _flushFrames();
   }
@@ -432,26 +451,35 @@ class CanvasCubit extends Cubit<CanvasState> {
 
   // ---- ligações ------------------------------------------------------------
 
-  /// Realce da ligação sob o cursor. Só no cursor: com a ferramenta armada o
-  /// clique é de criação.
+  /// Realce da ligação sob o cursor. Quem chama só chama no cursor: com a
+  /// ferramenta armada o clique é de criação. Com a mão ocupada (pan, arrasto,
+  /// ligação nova), não há realce.
   void hoverAt(Offset point) {
-    if (state.tool != CanvasTool.cursor || state.panning) {
-      if (state.hovered != null) emit(state.copyWith(hovered: () => null));
-      return;
-    }
+    final current = state;
+    final hovered = current is CanvasLinkHovered ? current.link : null;
+    if (current is! CanvasIdle && current is! CanvasLinkHovered) return;
     final link = EdgeLayout.linkNear(
       screenPoint: point,
       links: state.links,
       frames: state.frames,
       viewport: state.viewport,
-      hovered: state.hovered,
+      hovered: hovered,
     );
-    if (link == state.hovered) return;
-    emit(state.copyWith(hovered: () => link));
+    if (link == hovered) return;
+    emit(
+      link == null
+          ? _idle
+          : CanvasLinkHovered(
+              link: link,
+              cards: state.cards,
+              links: state.links,
+              viewport: state.viewport,
+            ),
+    );
   }
 
   void clearHover() {
-    if (state.hovered != null) emit(state.copyWith(hovered: () => null));
+    if (state is CanvasLinkHovered) emit(_idle);
   }
 
   Future<void> cycleDirection(EdgeLink link) =>
@@ -465,20 +493,24 @@ class CanvasCubit extends Cubit<CanvasState> {
 
   /// Arrasto saindo do `+` de um nó: a ponta segue o mouse.
   void portDrag(String from, Offset point) => emit(
-    state.copyWith(
-      pending: () =>
-          PendingLink(from: from, to: state.viewport.toDocument(point)),
+    CanvasLinking(
+      pending: PendingLink(from: from, to: state.viewport.toDocument(point)),
+      cards: state.cards,
+      links: state.links,
+      viewport: state.viewport,
     ),
   );
 
   /// O gesto foi cancelado pelo sistema: a linha tracejada some.
-  void portCancel() => emit(state.copyWith(pending: () => null));
+  void portCancel() {
+    if (state is CanvasLinking) emit(_idle);
+  }
 
   /// Soltou: se caiu sobre um nó a que o de origem pode se ligar (a lista é do
   /// core, `linkable`), pede a ligação. Ligado, laço ou sem porta, quem recusa
   /// é o core.
   Future<void> portRelease(String from, Offset point) async {
-    emit(state.copyWith(pending: () => null));
+    if (state is CanvasLinking) emit(_idle);
     final doc = state.viewport.toDocument(point);
     final source = state.cards.where((c) => c.id == from).firstOrNull;
     final target = state.cards
@@ -509,10 +541,11 @@ class CanvasCubit extends Cubit<CanvasState> {
 
   @override
   Future<void> close() async {
-    _bannerTimer?.cancel();
+    _memory?.keepView(workbenchId, state.viewport);
     _settleTimer?.cancel();
     _windowTimer?.cancel();
     await _subscription?.cancel();
+    await _motion.close();
     return super.close();
   }
 }

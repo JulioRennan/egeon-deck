@@ -1,5 +1,6 @@
 import '../../../../core/domain/entities/organization.dart';
 import '../../../../core/domain/entities/workbench.dart';
+import '../../../../core/domain/entities/workbench_clock.dart';
 
 /// A cortina de "sem acesso à pasta" da bancada.
 class AccessLock {
@@ -13,7 +14,13 @@ class AccessLock {
 
 /// O que o core diz da casca agora: a bancada na tela e as duas cortinas.
 class ShellSnapshot {
-  const ShellSnapshot({this.bench, this.busy, this.lock});
+  const ShellSnapshot({
+    this.bench,
+    this.busy,
+    this.lock,
+    this.banner,
+    this.clock,
+  });
 
   final Workbench? bench;
 
@@ -21,8 +28,14 @@ class ShellSnapshot {
   final String? busy;
   final AccessLock? lock;
 
-  /// A bancada na tela é a da aba ativa. A cortina de acesso vem do core, com o
-  /// texto pronto; a de "um instante" ainda não.
+  /// A faixa laranja sobre o conteúdo; ausente, nenhuma.
+  final String? banner;
+
+  /// O cronômetro da bancada na tela; ausente até ela ter rodado.
+  final WorkbenchClock? clock;
+
+  /// A bancada na tela é a da aba ativa. As cortinas e a faixa vêm do core,
+  /// com o texto pronto.
   factory ShellSnapshot.fromOrganization(Organization org) {
     final b = org.activeBench;
     return ShellSnapshot(
@@ -34,7 +47,11 @@ class ShellSnapshot {
               path: b.path,
               color: b.color,
               view: b.view,
+              template: b.template,
             ),
+      busy: b?.busy,
+      banner: b?.banner,
+      clock: b?.clock,
       lock: b?.access == null ? null : AccessLock(text: b!.access!.message),
     );
   }

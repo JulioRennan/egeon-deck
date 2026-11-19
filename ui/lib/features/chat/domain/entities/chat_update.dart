@@ -14,10 +14,8 @@ sealed class BlockOp {
       mapList(map['list'], ChatParticipantInfo.fromMap),
     ),
     'queues' => QueuesOp(mapList(map['list'], ChatQueueInfo.fromMap)),
-    'permission' => PermissionOp(
-      map['request'] == null
-          ? null
-          : PermissionRequest.fromMap(map['request']! as Map<String, Object?>),
+    'permissions' => PermissionsOp(
+      mapList(map['list'], PermissionRequest.fromMap),
     ),
     'remove' => RemoveOp(map['id']! as String),
     'insert' => InsertOp(
@@ -46,11 +44,11 @@ class QueuesOp extends BlockOp {
   final List<ChatQueueInfo> list;
 }
 
-/// O pedido de permissão em aberto, ou `null` quando não há.
-class PermissionOp extends BlockOp {
-  const PermissionOp(this.request);
+/// Os pedidos de permissão em aberto, empilhados; vazia, a bandeja some.
+class PermissionsOp extends BlockOp {
+  const PermissionsOp(this.list);
 
-  final PermissionRequest? request;
+  final List<PermissionRequest> list;
 }
 
 /// Uma op que a UI não conhece; aplicá-la não muda nada.
@@ -121,7 +119,7 @@ List<ChatBlock> applyOps(List<ChatBlock> blocks, List<BlockOp> ops) {
       case UpdateOp(:final block):
         final at = out.indexWhere((b) => b.id == block.id);
         if (at >= 0) out[at] = block;
-      case UnknownOp() || ParticipantsOp() || QueuesOp() || PermissionOp():
+      case UnknownOp() || ParticipantsOp() || QueuesOp() || PermissionsOp():
         break;
     }
   }

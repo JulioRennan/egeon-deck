@@ -7,6 +7,7 @@ import '../../../../../theme/app_colors.dart';
 import '../../domain/entities/agent_status.dart';
 import 'context_indicator.dart';
 import 'effort_dial.dart';
+import '../../../../../commons/widgets/app_tooltip.dart';
 
 /// A faixa do cabeçalho do card de agente: modelo, esforço, ultracode, o
 /// contexto em uso e o botão de limpar a conversa. Rótulo em cima, controle
@@ -65,7 +66,18 @@ class AgentStrip extends StatelessWidget {
         ),
       // Só o catálogo sabe o tamanho da janela: sem ele o grupo nem aparece.
       if (status.context != null || status.offersModel)
-        _Group('contexto', ContextIndicator(reading: status.context)),
+        _Group(
+          'contexto',
+          AppTooltip(
+            message: switch (status.context) {
+              final reading? =>
+                '${reading.detail}. O CLI pode compactar a conversa antes de '
+                    'encher',
+              null => 'Sem resposta do modelo ainda nesta conversa',
+            },
+            child: ContextIndicator(reading: status.context),
+          ),
+        ),
       if (status.clearable) _ClearButton(onTap: onClear),
     ];
     return Row(
@@ -148,31 +160,36 @@ class _ModelPicker extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => HandCursor(
-    child: GestureDetector(
-      key: const ValueKey('model-picker'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _open(context),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            status.modelTitle,
-            style: TextStyle(
-              color: AppColors.white(0.82),
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              fontFamily: 'Menlo',
-              decoration: TextDecoration.none,
+  Widget build(BuildContext context) => AppTooltip(
+    message:
+        'Modelo em uso: ${status.modelTitle} — escolher outro reinicia o '
+        'terminal, a conversa continua',
+    child: HandCursor(
+      child: GestureDetector(
+        key: const ValueKey('model-picker'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _open(context),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              status.modelTitle,
+              style: TextStyle(
+                color: AppColors.white(0.82),
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                fontFamily: 'Menlo',
+                decoration: TextDecoration.none,
+              ),
             ),
-          ),
-          const SizedBox(width: 4),
-          ChevronGlyph(
-            ChevronDirection.down,
-            color: AppColors.white(0.5),
-            size: 10,
-          ),
-        ],
+            const SizedBox(width: 4),
+            ChevronGlyph(
+              ChevronDirection.down,
+              color: AppColors.white(0.5),
+              size: 10,
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -196,30 +213,38 @@ class _UltracodePill extends StatelessWidget {
         : state.on
         ? tint
         : AppColors.white(0.62);
-    return HandCursor(
-      enabled: state.available,
-      child: GestureDetector(
-        key: const ValueKey('ultracode'),
-        behavior: HitTestBehavior.opaque,
-        onTap: state.available ? onTap : null,
-        child: Container(
-          height: 14,
-          margin: const EdgeInsets.only(top: 11),
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            color: state.on && state.available
-                ? tint.withValues(alpha: 0.18)
-                : null,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            'ultracode',
-            style: TextStyle(
-              color: color,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.none,
+    return AppTooltip(
+      message: state.available
+          ? 'Ultracode ${state.on ? 'ligado' : 'desligado'} — workflow dinâmico '
+                'em toda tarefa, em qualquer esforço (precisa dos dynamic '
+                'workflows ligados no /config). Trocar reinicia o terminal; a '
+                'conversa continua'
+          : 'Este modelo não tem ultracode',
+      child: HandCursor(
+        enabled: state.available,
+        child: GestureDetector(
+          key: const ValueKey('ultracode'),
+          behavior: HitTestBehavior.opaque,
+          onTap: state.available ? onTap : null,
+          child: Container(
+            height: 14,
+            margin: const EdgeInsets.only(top: 11),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: state.on && state.available
+                  ? tint.withValues(alpha: 0.18)
+                  : null,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              'ultracode',
+              style: TextStyle(
+                color: color,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
+              ),
             ),
           ),
         ),
@@ -234,16 +259,21 @@ class _ClearButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => HandCursor(
-    child: GestureDetector(
-      key: const ValueKey('agent-clear'),
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 11),
-        child: CustomPaint(
-          size: const Size.square(14),
-          painter: _SparklePainter(AppColors.white(0.62)),
+  Widget build(BuildContext context) => AppTooltip(
+    message:
+        'Limpa a conversa deste agente com o comando de limpar do CLI. Pede '
+        'confirmação',
+    child: HandCursor(
+      child: GestureDetector(
+        key: const ValueKey('agent-clear'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 11),
+          child: CustomPaint(
+            size: const Size.square(14),
+            painter: _SparklePainter(AppColors.white(0.62)),
+          ),
         ),
       ),
     ),

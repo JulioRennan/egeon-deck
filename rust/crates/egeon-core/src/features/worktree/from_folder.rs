@@ -8,6 +8,7 @@
 //! BLOQUEANTE, como [`super::routes::worktree`]: o git leva de segundos a
 //! minutos, e o ator aplica o [`WorktreeEffect`] que sai daqui.
 
+use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
 
@@ -33,6 +34,14 @@ pub struct Source<'a> {
     pub project: Option<&'a str>,
 }
 
+/// A branch da bancada e, em multi-projeto, a de cada repositório que a troca
+/// (pelo nome do link).
+#[derive(Debug, Clone, Copy)]
+pub struct Branches<'a> {
+    pub branch: &'a str,
+    pub repos: &'a BTreeMap<String, String>,
+}
+
 fn failed(error: impl std::fmt::Display) -> (RouteReply, Vec<WorktreeEffect>) {
     (RouteReply::err(400, error.to_string()), Vec::new())
 }
@@ -41,11 +50,12 @@ pub fn from_folder(
     git: &Git,
     org: &OrgSnapshot,
     source: Source<'_>,
-    branch: &str,
+    branches: Branches<'_>,
     template: Option<&(String, WorkbenchTemplate)>,
     home: &str,
     make_link: &dyn Fn(&Path, &Path) -> io::Result<()>,
 ) -> (RouteReply, Vec<WorktreeEffect>) {
+    let Branches { branch, repos } = branches;
     let project = match source.project {
         Some(id) => match org
             .workspaces
@@ -66,15 +76,7 @@ pub fn from_folder(
         if members.is_empty() {
             return failed(format!("\"{}\" não junta pasta nenhuma", project.name));
         }
-        let opened = duplicate::open_multi(
-            git,
-            project,
-            &members,
-            branch,
-            &Default::default(),
-            home,
-            make_link,
-        );
+        let opened = duplicate::open_multi(git, project, &members, branch, repos, home, make_link);
         let mut effects = Vec::new();
         let mut name = String::new();
         if opened.any_opened {

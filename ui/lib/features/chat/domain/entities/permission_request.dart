@@ -35,6 +35,7 @@ class PermissionRequest {
     this.canAlwaysAllow = false,
     this.questions = const [],
     this.agent,
+    this.address,
   });
 
   final String id;
@@ -52,6 +53,9 @@ class PermissionRequest {
 
   /// Quem pediu (id do agente), se o core disser.
   final String? agent;
+
+  /// O endereço de quem pediu (`bancada/id`), como o `GET /permissions`.
+  final String? address;
 
   /// Pergunta, e não permissão de ferramenta.
   bool get isQuestion => questions.isNotEmpty;
@@ -74,5 +78,6 @@ class PermissionRequest {
             PermissionQuestion.fromMap(q! as Map<String, Object?>),
         ],
         agent: (map['agent'] ?? map['node']) as String?,
+        address: map['address'] as String?,
       );
 }

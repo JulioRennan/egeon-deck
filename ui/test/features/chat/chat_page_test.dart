@@ -8,6 +8,7 @@ import 'package:egeon_deck/features/chat/domain/entities/chat_thread.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_update.dart';
 import 'package:egeon_deck/features/chat/presentation/page/chat_page.dart';
 import 'package:egeon_deck/features/chat/presentation/widgets/chat_thread_view.dart';
+import 'package:egeon_deck/features/node/terminal/presentation/widgets/terminal_body.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:egeon_deck/theme/code_palette.dart';
@@ -17,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/chat_fixtures.dart';
 import '../../support/fake_chat_repository.dart';
+import '../../support/fake_terminal_repository.dart';
 import '../../support/hand_cursor.dart';
 import '../../support/inject_fakes.dart';
 import '../../support/overlay_host.dart';
@@ -38,7 +40,7 @@ Future<FakeChatRepository> mount(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final repository = FakeChatRepository();
-  injectFakes(chat: repository);
+  injectFakes(chat: repository, terminals: FakeTerminalRepository());
   await tester.pumpWidget(
     overlayHost(const ChatPage(workbenchId: 'b1'), size: size),
   );
@@ -52,12 +54,13 @@ Future<void> deliver(
   List<ChatBlock> blocks, {
   List<ChatParticipantInfo>? participants,
   PermissionRequest? permission,
+  List<PermissionRequest>? permissions,
 }) async {
   repository.reset(
     rev,
     blocks,
     participants: participants,
-    permission: permission,
+    permissions: permissions ?? [?permission],
   );
   await tester.pump();
   await tester.pump();
@@ -579,6 +582,63 @@ void main() {
       );
     });
 
+    testWidgets('a setinha aparece quando você sobe e leva de volta ao fim', (
+      tester,
+    ) async {
+      final repository = await mount(tester);
+      await deliver(tester, repository, 1, conversation(20));
+      await tester.pumpAndSettle();
+      final arrow = find.byKey(const ValueKey('chat-to-bottom'));
+      expect(arrow, findsNothing, reason: 'no fim não há para onde descer');
+
+      controllerOf(tester).jumpTo(600);
+      await tester.pump();
+      expect(arrow, findsOneWidget);
+      await tester.tap(arrow);
+      await tester.pumpAndSettle();
+      final position = controllerOf(tester).position;
+      expect(position.pixels, closeTo(position.maxScrollExtent, 1));
+      expect(arrow, findsNothing);
+    });
+
+    testWidgets(
+      'clicar na resposta leva ao prompt dela, mesmo longe, e o acende',
+      (tester) async {
+        final repository = await mount(tester);
+        await deliver(tester, repository, 1, conversation(20));
+        await tester.pumpAndSettle();
+        expect(find.text('pergunta 0'), findsNothing, reason: 'está longe');
+
+        await tester.tap(find.byKey(const ValueKey('h|u19')));
+        await tester.pump();
+        await tester.pumpAndSettle(const Duration(milliseconds: 100));
+        expect(find.text('pergunta 19'), findsOneWidget);
+
+        final vista = tester.state<ChatThreadViewState>(
+          find.byType(ChatThreadView),
+        );
+        vista.revealMessage('p|u0');
+        await tester.pump();
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(find.text('pergunta 0'), findsOneWidget);
+        Color? lit() {
+          final box = tester.widget<AnimatedContainer>(
+            find.ancestor(
+              of: find.text('pergunta 0'),
+              matching: find.byType(AnimatedContainer),
+            ),
+          );
+          return (box.decoration as BoxDecoration?)?.color;
+        }
+
+        expect(lit()?.a, greaterThan(0), reason: 'acesa um instante');
+        await tester.pumpAndSettle(const Duration(seconds: 1));
+        expect(lit()?.a, 0);
+      },
+    );
+
     testWidgets('chegar ao começo pede mais histórico', (tester) async {
       final repository = await mount(tester);
       await deliver(tester, repository, 1, conversation(20));
@@ -586,6 +646,38 @@ void main() {
       await tester.pump();
       expect(repository.more, greaterThan(0));
     });
+  });
+
+  testWidgets('o link da resposta abre pelo core', (tester) async {
+    final repository = await mount(tester);
+    await deliver(tester, repository, 1, [
+      prompt(0),
+      ChatBlock.fromMap({
+        'id': 'b|u0|0',
+        'messageKey': 'r|u0',
+        'kind': 'prose',
+        'first': true,
+        'last': true,
+        'depth': 0,
+        'from': front,
+        'blocks': [
+          {
+            'kind': 'paragraph',
+            'spans': [
+              {'kind': 'text', 'text': 'veja '},
+              {
+                'kind': 'link',
+                'label': 'a doc',
+                'url': 'https://example.com/docs',
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
+    await tester.tapOnText(find.textRange.ofSubstring('a doc'));
+    await tester.pump();
+    expect(repository.links, ['https://example.com/docs']);
   });
 
   group('composer', () {
@@ -691,6 +783,145 @@ void main() {
       ], reason: 'o terminal não entra no Tab');
     });
 
+    testWidgets(
+      'clicar num shell mostra o terminal no lugar da thread e o composer '
+      'manda para ele',
+      (tester) async {
+        final repository = await ready(
+          tester,
+          participants: const [frontInfo, liveShell],
+        );
+        expect(find.byType(TerminalBody), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('participant-sh1')));
+        await tester.pump();
+
+        expect(
+          tester.widget<TerminalBody>(find.byType(TerminalBody)).nodeId,
+          'deck.sh1',
+          reason: 'a tela é a que o core manda, a mesma do canvas',
+        );
+        expect(find.byType(ChatThreadView), findsNothing);
+        await tester.enterText(find.byType(EditableText).last, 'ls');
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('composer-send')));
+        await tester.pump();
+        expect(repository.sent.single.to, ['sh1']);
+
+        // Voltar a um agente devolve a thread.
+        await tester.tap(find.byKey(const ValueKey('participant-front')));
+        await tester.pump();
+        expect(find.byType(TerminalBody), findsNothing);
+        expect(find.byType(ChatThreadView), findsOneWidget);
+      },
+    );
+
+    testWidgets('shell que morre com o foco devolve a thread', (tester) async {
+      final repository = await ready(
+        tester,
+        participants: const [frontInfo, liveShell],
+      );
+      await tester.tap(find.byKey(const ValueKey('participant-sh1')));
+      await tester.pump();
+      expect(find.byType(TerminalBody), findsOneWidget);
+
+      await deliver(
+        tester,
+        repository,
+        2,
+        conversation(2),
+        participants: const [frontInfo, deadShell],
+      );
+      expect(find.byType(TerminalBody), findsNothing);
+      expect(find.byType(ChatThreadView), findsOneWidget);
+    });
+
+    testWidgets('morto não recebe: o destino cai no primeiro agente vivo', (
+      tester,
+    ) async {
+      final repository = await ready(
+        tester,
+        participants: const [deadFront, backInfo],
+      );
+      await tester.tap(find.byKey(const ValueKey('participant-front')));
+      await tester.pump();
+      await tester.enterText(find.byType(EditableText), 'oi');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('composer-send')));
+      await tester.pump();
+      expect(repository.sent.single.to, ['back']);
+    });
+
+    testWidgets(
+      'a linha embaixo do nome é a que o core manda; morto não se clica',
+      (tester) async {
+        final repository = await ready(
+          tester,
+          participants: const [
+            frontInfo,
+            ChatParticipantInfo(
+              id: 'back',
+              address: 'deck/back',
+              isAgent: true,
+              activity: 'failed',
+              status: 'falhou — problema de cobrança',
+              statusTone: StatusTone.red,
+            ),
+            ChatParticipantInfo(
+              id: 'sh1',
+              address: 'deck/sh1',
+              isAgent: false,
+              activity: 'dead',
+              status: 'terminal fechado',
+              screen: 'deck.sh1',
+            ),
+          ],
+        );
+        expect(find.text('falhou — problema de cobrança'), findsOneWidget);
+        expect(find.text('terminal fechado'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('participant-sh1')));
+        await tester.pump();
+        expect(find.byType(TerminalBody), findsNothing);
+        await tester.enterText(find.byType(EditableText), 'oi');
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('composer-send')));
+        await tester.pump();
+        expect(repository.sent.single.to, ['front']);
+      },
+    );
+
+    testWidgets('Tab pula o agente morto', (tester) async {
+      final repository = await ready(
+        tester,
+        participants: const [frontInfo, deadBack, thirdInfo],
+      );
+      await tester.tap(find.byType(EditableText));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.enterText(find.byType(EditableText), 'a');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('composer-send')));
+      await tester.pump();
+      expect(repository.sent.last.to, ['third']);
+    });
+
+    testWidgets(
+      'o teclado vai ao composer ao entrar e ao escolher um participante',
+      (tester) async {
+        await ready(tester, participants: const [frontInfo, backInfo]);
+        await tester.pump();
+        EditableText field() =>
+            tester.widget<EditableText>(find.byType(EditableText));
+        expect(field().focusNode.hasFocus, isTrue, reason: 'ao entrar');
+
+        field().focusNode.unfocus();
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('participant-back')));
+        await tester.pump();
+        expect(field().focusNode.hasFocus, isTrue, reason: 'ao escolher');
+      },
+    );
+
     testWidgets('digitar não remonta a thread', (tester) async {
       await ready(tester);
       final view = tester.state<ChatThreadViewState>(
@@ -719,18 +950,35 @@ void main() {
   group('menu de @menção e /slash', () {
     Future<FakeChatRepository> ready(WidgetTester tester) async {
       final repository = await mount(tester);
+      // Como o core manda (`chat/runtime.rs`): a menção já vem com `@` e o
+      // `kind` é `agent`; o /comando traz a origem no `kind`.
       repository.completer = (text, caret) {
+        if (text.startsWith('/')) {
+          return ChatCompletion(
+            items: [
+              for (var i = 0; i < 12; i++)
+                CompletionItem(
+                  label: 'cmd$i',
+                  insert: '/cmd$i ',
+                  kind: i == 0 ? 'builtin' : 'user',
+                  detail: 'comando $i',
+                ),
+            ],
+            start: 0,
+            end: caret,
+          );
+        }
         final at = text.lastIndexOf('@', caret);
         if (at < 0) return ChatCompletion.none(caret);
         return ChatCompletion(
           items: const [
             CompletionItem(
-              label: 'rev',
+              label: '@rev',
               insert: '@rev ',
-              kind: 'mention',
+              kind: 'agent',
               detail: 'revisor',
             ),
-            CompletionItem(label: 'back', insert: '@back ', kind: 'mention'),
+            CompletionItem(label: '@back', insert: '@back ', kind: 'agent'),
           ],
           start: at,
           end: caret,
@@ -778,6 +1026,40 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'a lista de / diz de quem é, mostra dez e acompanha a seleção',
+      (tester) async {
+        await ready(tester);
+        await type(tester, '/');
+        expect(
+          find.text(
+            'COMANDOS DE FRONT — Tab ou Enter completa · 12, role ou busque',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('★'), findsWidgets, reason: 'glifo da origem');
+        expect(find.text('cmd11'), findsNothing, reason: 'fora da janela');
+        for (var i = 0; i < 11; i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump();
+        }
+        expect(
+          find.text('cmd11'),
+          findsOneWidget,
+          reason: 'a escolhida aparece',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        expect(fieldText(tester), '/cmd11 ');
+      },
+    );
+
+    testWidgets('a menção tem título próprio', (tester) async {
+      await ready(tester);
+      await type(tester, 'pede ao @re');
+      expect(find.text('MENCIONAR — o nome entra no prompt'), findsOneWidget);
+    });
 
     testWidgets('sem gatilho o menu não aparece', (tester) async {
       await ready(tester);
@@ -955,13 +1237,55 @@ void main() {
       expect(find.text('Permitir'), findsOneWidget);
     });
 
+    testWidgets('dois agentes pedindo ao mesmo tempo: as duas bandejas', (
+      tester,
+    ) async {
+      final repository = await mount(tester, size: const Size(800, 700));
+      await deliver(
+        tester,
+        repository,
+        1,
+        conversation(1),
+        participants: const [frontInfo, backInfo],
+        permissions: const [
+          PermissionRequest(
+            id: 'p1',
+            tool: 'Bash',
+            summary: 'ls',
+            address: 'deck/front',
+          ),
+          PermissionRequest(
+            id: 'p2',
+            tool: 'Edit',
+            summary: 'a.rs',
+            address: 'deck/back',
+          ),
+        ],
+      );
+      expect(find.byKey(const ValueKey('permission-p1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('permission-p2')), findsOneWidget);
+      expect(
+        find.textContaining('back quer usar Edit', findRichText: true),
+        findsOneWidget,
+        reason: 'o nome vem do endereço',
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('permission-p2')),
+          matching: find.text('Permitir'),
+        ),
+      );
+      await tester.pump();
+      expect(repository.answers.single, {'request': 'p2', 'answer': 'allow'});
+    });
+
     testWidgets('a bandeja some quando o core diz que não há pedido', (
       tester,
     ) async {
       final repository = await mount(tester);
       await deliver(tester, repository, 1, conversation(1), permission: tool);
       repository.push(
-        ChatUpdate(workbench: 'b1', rev: 2, ops: [const PermissionOp(null)]),
+        ChatUpdate(workbench: 'b1', rev: 2, ops: [const PermissionsOp([])]),
       );
       await tester.pump();
       await tester.pump();
@@ -997,6 +1321,30 @@ void main() {
       ]);
     });
 
+    testWidgets('"Recusar" nega a pergunta: o agente segue sem a resposta', (
+      tester,
+    ) async {
+      final repository = await mount(tester);
+      await deliver(
+        tester,
+        repository,
+        1,
+        conversation(1),
+        permission: const PermissionRequest(
+          id: 'p7',
+          tool: 'AskUserQuestion',
+          questions: [
+            PermissionQuestion(question: 'Qual cor?', options: ['azul']),
+          ],
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('permission-refuse')));
+      await tester.pump();
+      expect(repository.answers, [
+        {'request': 'p7', 'answer': 'deny'},
+      ]);
+    });
+
     testWidgets(
       'várias perguntas juntam as escolhas e só enviam com "Responder"',
       (tester) async {
@@ -1022,6 +1370,11 @@ void main() {
             ],
           ),
         );
+        expect(
+          find.byKey(const ValueKey('permission-refuse')),
+          findsOneWidget,
+          reason: 'junto do "Responder"',
+        );
         await tester.tap(find.text('Responder'));
         await tester.pump();
         expect(repository.answers, isEmpty, reason: 'falta responder tudo');
@@ -1043,3 +1396,35 @@ void main() {
     );
   });
 }
+
+const liveShell = ChatParticipantInfo(
+  id: 'sh1',
+  address: 'deck/sh1',
+  isAgent: false,
+  activity: 'ready',
+  screen: 'deck.sh1',
+);
+const deadShell = ChatParticipantInfo(
+  id: 'sh1',
+  address: 'deck/sh1',
+  isAgent: false,
+  activity: 'dead',
+  screen: 'deck.sh1',
+);
+const deadFront = ChatParticipantInfo(
+  id: 'front',
+  address: 'deck/front',
+  isAgent: true,
+  activity: 'dead',
+);
+const deadBack = ChatParticipantInfo(
+  id: 'back',
+  address: 'deck/back',
+  isAgent: true,
+  activity: 'dead',
+);
+const thirdInfo = ChatParticipantInfo(
+  id: 'third',
+  address: 'deck/third',
+  isAgent: true,
+);

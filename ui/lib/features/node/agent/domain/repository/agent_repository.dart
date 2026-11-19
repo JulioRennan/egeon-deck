@@ -10,4 +10,8 @@ abstract interface class AgentRepository {
 
   /// Limpa a conversa deste agente. A confirmação é da tela.
   Future<void> clear(String nodeId);
+
+  /// A tentativa agendada depois de uma falha da API: [now] tenta já; falso
+  /// cancela (ADR-072).
+  Future<void> retry(String nodeId, {required bool now});
 }

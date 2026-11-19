@@ -1,20 +1,17 @@
 part of 'shell_cubit.dart';
 
-/// O que a casca guarda: o que o core mandou e se a barra está recolhida —
-/// esta só da UI, é passageira.
-final class ShellState {
-  const ShellState({
-    this.snapshot = const ShellSnapshot(),
-    this.collapsed = false,
-  });
+/// A casca: o que o core diz dela, com a barra lateral aberta ou recolhida
+/// ao trilho (⌘/) — esta só da UI, é passageira.
+sealed class ShellState {
+  const ShellState(this.snapshot);
 
   final ShellSnapshot snapshot;
+}
 
-  /// A barra lateral recolhida ao trilho (⌘/).
-  final bool collapsed;
+final class ShellExpanded extends ShellState {
+  const ShellExpanded([super.snapshot = const ShellSnapshot()]);
+}
 
-  ShellState copyWith({ShellSnapshot? snapshot, bool? collapsed}) => ShellState(
-    snapshot: snapshot ?? this.snapshot,
-    collapsed: collapsed ?? this.collapsed,
-  );
+final class ShellCollapsed extends ShellState {
+  const ShellCollapsed(super.snapshot);
 }

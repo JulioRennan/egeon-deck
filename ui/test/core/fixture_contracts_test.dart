@@ -88,7 +88,13 @@ void main() {
     final completion = chat.complete('1a2b3c4d', 'pede ao @re', 11);
     expect(await exchange('chat_complete'), command('chat_complete'));
     final read = await completion;
-    expect(read.items.single.insert, '@rev ');
+    final item = read.items.single;
+    expect(item.insert, '@rev ');
+    // A menção vem como o core manda: `@` no rótulo, `kind` agent — não é /.
+    expect(item.label, '@rev');
+    expect(item.kind, 'agent');
+    expect(item.isSlash, isFalse);
+    expect(item.detail, 'deck/rev');
     expect((read.start, read.end), (8, 11));
   });
 

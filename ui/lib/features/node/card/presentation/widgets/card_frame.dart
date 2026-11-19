@@ -1,12 +1,15 @@
-import 'package:flutter/gestures.dart' show kPrimaryButton;
+import 'package:flutter/gestures.dart' show kPrimaryButton, kSecondaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../../../theme/app_colors.dart';
 import '../../../../../theme/app_theme.dart';
+import '../../../../../commons/widgets/app_tooltip.dart';
 import '../../../../../commons/widgets/attention_ring.dart';
+import '../../../../../commons/widgets/context_menu.dart';
 import '../../../../../core/domain/entities/workbench_node.dart';
 import 'card_accent.dart';
+import 'subtitle_link.dart';
 
 /// A moldura de todo nó do canvas: cabeçalho (área de arrasto), corpo, alça de
 /// resize e, nos terminais, o `+` de onde sai a ligação.
@@ -18,6 +21,8 @@ class CardFrame extends StatefulWidget {
     required this.id,
     required this.kind,
     required this.title,
+    this.titleTooltip,
+    this.onOpenFolder,
     required this.subtitle,
     required this.height,
     required this.linkable,
@@ -37,12 +42,21 @@ class CardFrame extends StatefulWidget {
     this.accent,
     this.accessory,
     this.needsAttention = false,
+    this.onConfigure,
+    this.onWorktree,
+    this.focusColor,
     super.key,
   });
 
   final String id;
   final NodeKind kind;
   final String title;
+
+  /// A dica do título: o endereço e, no agente, o nome do CLI.
+  final String? titleTooltip;
+
+  /// O ⌘-clique no subtítulo abre a pasta; nulo onde o subtítulo não é pasta.
+  final VoidCallback? onOpenFolder;
   final String subtitle;
 
   /// Altura do card no documento: a porta fica no meio dela.
@@ -80,6 +94,18 @@ class CardFrame extends StatefulWidget {
   final ValueChanged<Offset> onResize;
   final VoidCallback onResizeEnd;
   final VoidCallback onClose;
+
+  /// A cor da bancada: a borda do card em que você está digitando a leva,
+  /// a mesma do brilho do canvas (ADR-086). Sem ela, o foco não muda a borda.
+  final Color? focusColor;
+
+  /// O lápis do cabeçalho: configurar este nó. Sem ele, o nó não se configura
+  /// por aqui (só terminal tem).
+  final VoidCallback? onConfigure;
+
+  /// "Nova worktree para este terminal…": só quem abre pasta (shell e
+  /// agente). Botão no cabeçalho e item do botão direito.
+  final VoidCallback? onWorktree;
   final ValueChanged<Offset> onPortDrag;
   final ValueChanged<Offset> onPortRelease;
   final VoidCallback onPortCancel;
@@ -98,6 +124,9 @@ class CardFrame extends StatefulWidget {
 class _CardFrameState extends State<CardFrame> {
   var _dragging = false;
 
+  /// O foco do teclado está em algo dentro do card (o terminal, um campo).
+  var _focused = false;
+
   /// Onde o cabeçalho acaba: a linha do nome mais a faixa, quando há.
   double get _headerExtent =>
       CardFrame.headerHeight +
@@ -107,59 +136,88 @@ class _CardFrameState extends State<CardFrame> {
   Widget build(BuildContext context) {
     final accent = widget.accent ?? CardAccent.of(widget.kind);
     final alert = widget.needsAttention;
-    return AttentionRing(
-      tone: alert ? AttentionTone.asking : null,
-      radius: CardFrame.radius,
-      lineWidth: 3,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1C),
-          borderRadius: BorderRadius.circular(CardFrame.radius),
-          // Alerta ganha da cor do tipo: apagada por baixo do giro, cheia o traço
-          // laranja sumia sobre ela.
-          border: Border.all(
-            color: alert
-                ? AppColors.attention.withValues(alpha: 0.35)
-                : accent.withValues(alpha: 0.55),
-            width: alert ? 2 : 1,
+    final focus = _focused ? widget.focusColor : null;
+    // Alerta ganha de foco: quem espera você é mais urgente do que onde você
+    // está.
+    final (borderColor, borderWidth) = alert
+        // Apagada por baixo do giro: cheia, o traço laranja sumia sobre ela.
+        ? (AppColors.attention.withValues(alpha: 0.35), 2.0)
+        : focus != null
+        ? (focus.withValues(alpha: 0.95), 2.0)
+        : (accent.withValues(alpha: 0.55), 1.0);
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      includeSemantics: false,
+      onFocusChange: (inside) => setState(() => _focused = inside),
+      child: AttentionRing(
+        tone: alert ? AttentionTone.asking : null,
+        radius: CardFrame.radius,
+        lineWidth: 3,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1C),
+            borderRadius: BorderRadius.circular(CardFrame.radius),
+            // Alerta ganha da cor do tipo: apagada por baixo do giro, cheia o traço
+            // laranja sumia sobre ela.
+            border: Border.all(color: borderColor, width: borderWidth),
           ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(CardFrame.radius - 1),
-          child: Stack(
-            children: [
-              Positioned.fill(top: _headerExtent, child: widget.child),
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                height: _headerExtent,
-                child: _header(accent),
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                width: CardFrame.gripSize,
-                height: CardFrame.gripSize,
-                child: _grip(),
-              ),
-              if (widget.linkable)
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(CardFrame.radius - 1),
+            child: Stack(
+              children: [
+                Positioned.fill(top: _headerExtent, child: widget.child),
                 Positioned(
-                  right: 1,
-                  top: widget.height / 2 - CardFrame.portSize / 2,
-                  width: CardFrame.portSize,
-                  height: CardFrame.portSize,
-                  child: _Port(
-                    key: ValueKey('port-${widget.id}'),
-                    onDrag: widget.onPortDrag,
-                    onRelease: widget.onPortRelease,
-                    onCancel: widget.onPortCancel,
-                  ),
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: _headerExtent,
+                  child: _header(accent),
                 ),
-            ],
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  width: CardFrame.gripSize,
+                  height: CardFrame.gripSize,
+                  child: _grip(),
+                ),
+                if (widget.linkable)
+                  Positioned(
+                    right: 1,
+                    top: widget.height / 2 - CardFrame.portSize / 2,
+                    width: CardFrame.portSize,
+                    height: CardFrame.portSize,
+                    child: _Port(
+                      key: ValueKey('port-${widget.id}'),
+                      onDrag: widget.onPortDrag,
+                      onRelease: widget.onPortRelease,
+                      onCancel: widget.onPortCancel,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  /// O botão direito no cabeçalho, e só nele: o corpo é do terminal e da
+  /// página, cada um com o menu dele.
+  void _headerMenu(Offset position) {
+    final configure = widget.onConfigure;
+    final worktree = widget.onWorktree;
+    if (configure == null && worktree == null) return;
+    showContextMenu(
+      context,
+      position: position,
+      entries: [
+        if (configure != null) MenuEntry('Configurar ${widget.id}…', configure),
+        if (worktree != null)
+          MenuEntry('Nova worktree para este terminal…', worktree),
+        const MenuEntry.separator(),
+        MenuEntry('Remover ${widget.id}…', widget.onClose),
+      ],
     );
   }
 
@@ -178,6 +236,10 @@ class _CardFrameState extends State<CardFrame> {
           child: Listener(
             behavior: HitTestBehavior.opaque,
             onPointerDown: (e) {
+              if (e.buttons == kSecondaryButton) {
+                _headerMenu(e.position);
+                return;
+              }
               if (e.buttons != kPrimaryButton ||
                   HardwareKeyboard.instance.isAltPressed) {
                 return;
@@ -223,8 +285,30 @@ class _CardFrameState extends State<CardFrame> {
           height: CardFrame.headerHeight,
           child: Row(
             children: [
-              Expanded(child: IgnorePointer(child: _titles(accent))),
-              _CloseButton(onTap: widget.onClose),
+              Expanded(child: _titles(accent)),
+              // Estava só no menu do botão direito, e menu de contexto é onde
+              // funcionalidade vai morrer: quem não sabe que existe não clica
+              // com o direito para descobrir.
+              if (widget.onWorktree != null)
+                _HeaderButton(
+                  key: const ValueKey('card-worktree'),
+                  tooltip: 'Nova worktree para este terminal…',
+                  painter: (lit) => _BranchPainter(lit),
+                  onTap: widget.onWorktree!,
+                ),
+              if (widget.onConfigure != null)
+                _HeaderButton(
+                  key: const ValueKey('card-configure'),
+                  tooltip: 'Configurar este nó',
+                  painter: (lit) => _PencilPainter(lit),
+                  onTap: widget.onConfigure!,
+                ),
+              _HeaderButton(
+                key: const ValueKey('card-close'),
+                tooltip: 'Remover nó',
+                painter: (lit) => _CrossPainter(lit),
+                onTap: widget.onClose,
+              ),
             ],
           ),
         ),
@@ -250,16 +334,20 @@ class _CardFrameState extends State<CardFrame> {
       Row(
         children: [
           Flexible(
-            child: Text(
-              widget.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTheme.textStyle.copyWith(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                // O título do maestro é dourado sempre: o estado já tem cor na
-                // linha ao lado, e o dourado é o que o acha na tela.
-                color: widget.maestro ? accent : widget.titleColor ?? accent,
+            child: _passive(
+              widget.titleTooltip,
+              Text(
+                widget.title,
+                key: const ValueKey('card-title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.textStyle.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  // O título do maestro é dourado sempre: o estado já tem cor
+                  // na linha ao lado, e o dourado é o que o acha na tela.
+                  color: widget.maestro ? accent : widget.titleColor ?? accent,
+                ),
               ),
             ),
           ),
@@ -270,18 +358,20 @@ class _CardFrameState extends State<CardFrame> {
         ],
       ),
       const SizedBox(height: 3),
-      Text(
-        widget.subtitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppTheme.textStyle.copyWith(
-          fontSize: 10,
-          fontFamily: AppTheme.terminalFontFamily,
-          color: AppColors.white(0.58),
-        ),
-      ),
+      SubtitleLink(text: widget.subtitle, onOpen: widget.onOpenFolder),
     ],
   );
+
+  /// Texto do cabeçalho: não pega gesto (o arrasto do card passa por ele), mas
+  /// mostra a dica se houver.
+  Widget _passive(String? tooltip, Widget text) => switch (tooltip) {
+    final message? when message.isNotEmpty => AppTooltip(
+      message: message,
+      passThrough: true,
+      child: IgnorePointer(child: text),
+    ),
+    _ => IgnorePointer(child: text),
+  };
 
   void _endDrag() {
     if (!_dragging) return;
@@ -322,38 +412,110 @@ class _GripPainter extends CustomPainter {
   bool shouldRepaint(_GripPainter old) => false;
 }
 
-class _CloseButton extends StatefulWidget {
-  const _CloseButton({required this.onTap});
+/// Um botão do cabeçalho: o lápis e o X.
+class _HeaderButton extends StatefulWidget {
+  const _HeaderButton({
+    required this.painter,
+    required this.onTap,
+    required this.tooltip,
+    super.key,
+  });
 
+  final CustomPainter Function(bool lit) painter;
+  final String tooltip;
   final VoidCallback onTap;
 
   @override
-  State<_CloseButton> createState() => _CloseButtonState();
+  State<_HeaderButton> createState() => _HeaderButtonState();
 }
 
-class _CloseButtonState extends State<_CloseButton> {
+class _HeaderButtonState extends State<_HeaderButton> {
   var _hovering = false;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    onEnter: (_) => setState(() => _hovering = true),
-    onExit: (_) => setState(() => _hovering = false),
-    child: GestureDetector(
-      key: const ValueKey('card-close'),
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.onTap,
-      child: Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          color: _hovering ? AppColors.white(0.10) : null,
-          borderRadius: BorderRadius.circular(6),
+  Widget build(BuildContext context) => AppTooltip(
+    message: widget.tooltip,
+    child: MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: _hovering ? AppColors.white(0.10) : null,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: CustomPaint(painter: widget.painter(_hovering)),
         ),
-        child: CustomPaint(painter: _CrossPainter(_hovering)),
       ),
     ),
   );
+}
+
+/// Lápis, e não os controles deslizantes: o botão edita o nó, e ninguém lê
+/// controles deslizantes como "editar".
+class _PencilPainter extends CustomPainter {
+  _PencilPainter(this.lit);
+
+  final bool lit;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.white(lit ? 0.9 : 0.6)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    final c = size.center(Offset.zero);
+    final tip = c + const Offset(-5, 5);
+    final top = c + const Offset(4, -4);
+    canvas
+      ..drawLine(tip, top, paint)
+      ..drawLine(top, top + const Offset(1.5, 1.5), paint)
+      ..drawLine(tip, tip + const Offset(3, 0), paint);
+  }
+
+  @override
+  bool shouldRepaint(_PencilPainter old) => old.lit != lit;
+}
+
+/// O galho de branch (o `arrow.triangle.branch` do Swift): um tronco e um
+/// ramo que sai dele.
+class _BranchPainter extends CustomPainter {
+  _BranchPainter(this.lit);
+
+  final bool lit;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.white(lit ? 0.9 : 0.6)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final c = size.center(Offset.zero);
+    final base = c + const Offset(-3, 6);
+    final top = c + const Offset(-3, -6);
+    final tip = c + const Offset(4, -4);
+    canvas
+      ..drawLine(base, top, paint)
+      ..drawPath(
+        Path()
+          ..moveTo(base.dx, c.dy + 2)
+          ..quadraticBezierTo(tip.dx, c.dy + 2, tip.dx, tip.dy),
+        paint,
+      )
+      ..drawCircle(tip, 1.6, paint)
+      ..drawCircle(top, 1.6, paint);
+  }
+
+  @override
+  bool shouldRepaint(_BranchPainter old) => old.lit != lit;
 }
 
 class _CrossPainter extends CustomPainter {

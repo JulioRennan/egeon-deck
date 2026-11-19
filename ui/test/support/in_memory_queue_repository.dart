@@ -273,6 +273,12 @@ class InMemoryQueueRepository implements QueueRepository {
     return id;
   }
 
+  final openedImages = <(String, String)>[];
+
+  @override
+  Future<void> openImage(String nodeId, String id, String image) async =>
+      openedImages.add((id, image));
+
   @override
   Future<void> detach(String nodeId, String id, String image) async {
     final item = _item(id);

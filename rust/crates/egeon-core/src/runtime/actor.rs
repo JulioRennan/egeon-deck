@@ -7,14 +7,18 @@
 
 mod access;
 mod app_commands;
+mod bench_forms;
+mod bench_removal;
 mod chat_commands;
 mod chat_queue;
 mod dispatch_commands;
 mod exists;
 mod launch;
+mod menu_commands;
 mod node_clean;
 mod node_commands;
 mod node_detail;
+mod node_form;
 mod notices;
 
 pub use node_detail::{WEB_PROFILES, load_web_profiles};
@@ -27,6 +31,7 @@ mod trace_commands;
 mod trust_commands;
 mod ui_requests;
 mod update_commands;
+mod worktree_copy;
 
 /// Onde a resposta de uma rota HTTP vai: quem bloqueia a leva para fora do
 /// ator e responde depois.
@@ -555,6 +560,7 @@ impl Actor {
             | CommandKind::QueueClearDone(_)
             | CommandKind::QueueAttach(_)
             | CommandKind::QueueDetach(_)) => self.queue_command(re, kind),
+            CommandKind::QueueOpenImage(open) => self.queue_open_image(re, &open),
             CommandKind::UiReply(answer) => self.ui_reply(re, answer),
             CommandKind::ChatNewQueue(c) => self.chat_new_queue(client, re, c),
             CommandKind::AccessOpenSettings(r) => self.access_open_settings(re, &r),
@@ -597,13 +603,22 @@ impl Actor {
             kind @ (CommandKind::CreateWorkbench(_)
             | CommandKind::RemoveWorkbench(_)
             | CommandKind::PlanRemoveWorkbench(_)
+            | CommandKind::RemovalLosses(_)
             | CommandKind::ClearWorkbench(_)
+            | CommandKind::ResetClock(_)
             | CommandKind::Worktree(_)
             | CommandKind::CreateNode(_)
             | CommandKind::RemoveNode(_)
             | CommandKind::SetNode(_)
+            | CommandKind::NodeForm(_)
+            | CommandKind::NodeFormScreen(_)
+            | CommandKind::NodeFolder(_)
+            | CommandKind::ApplyNode(_)
+            | CommandKind::Components
             | CommandKind::Link(_)
             | CommandKind::NodeClear(_)
+            | CommandKind::Retry(_)
+            | CommandKind::OpenNodeFolder(_)
             | CommandKind::CreateWorkspace(_)
             | CommandKind::RemoveWorkspace(_)
             | CommandKind::SaveWorkspace(_)
@@ -613,7 +628,8 @@ impl Actor {
             | CommandKind::MultiProject(_)
             | CommandKind::Templates
             | CommandKind::WorktreeInfo(_)
-            | CommandKind::WorktreePlan(_)) => match self.node_command(client, re, kind) {
+            | CommandKind::WorktreePlan(_)
+            | CommandKind::SaveTemplate(_)) => match self.node_command(client, re, kind) {
                 Some(reply) => reply,
                 None => return,
             },
@@ -644,6 +660,8 @@ impl Actor {
             | CommandKind::UpdateAnswer(_)
             | CommandKind::UpdateAuto(_)
             | CommandKind::ReaperEnabled(_)) => self.app_command(re, kind),
+            CommandKind::CopyTargets => self.copy_targets(re),
+            CommandKind::OpenUrl(open) => self.open_url(re, open),
             other => self.org_command(re, other),
         };
         self.send_reply(client, &reply);

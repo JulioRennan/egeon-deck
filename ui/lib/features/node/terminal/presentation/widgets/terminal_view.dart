@@ -371,7 +371,10 @@ class _TerminalViewState extends State<TerminalView> {
                 onPointerCancel: _onPointerUp,
                 onPointerSignal: _onSignal,
                 onPointerPanZoomUpdate: (e) {
-                  if (e.scale == 1 && widget.onPointer != null) {
+                  // Com ⌘ o gesto é zoom do canvas, não rolagem da tela.
+                  if (e.scale == 1 &&
+                      widget.onPointer != null &&
+                      !HardwareKeyboard.instance.isMetaPressed) {
                     _wheel(e.panDelta.dy, e);
                   }
                 },

@@ -12,6 +12,7 @@ import '../../features/update/di/update_injection.dart';
 import '../../features/usage/di/usage_injection.dart';
 import '../../features/workbench/di/workbench_injection.dart';
 import '../../features/workspace/di/workspace_injection.dart';
+import '../adapters/clipboard_writer.dart';
 import '../adapters/egeon_app_launcher.dart';
 import '../adapters/egeon_paths.dart';
 import '../adapters/egeon_socket_client.dart';
@@ -51,6 +52,7 @@ void registerInfrastructure(Map<String, String> environment) {
     () => SocketCoreRepository(launcher: inject(), client: inject()),
   );
   Injector.factory<PathPicker>(SystemPathPicker.new);
+  Injector.factory<ClipboardWriter>(SystemClipboard.new);
 
   registerHomeRepositories();
   registerTabsRepositories();

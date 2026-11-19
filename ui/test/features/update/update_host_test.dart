@@ -54,8 +54,12 @@ void main() {
                   builder: (context) {
                     cubit = context.read<UpdateCubit>();
                     return BlocBuilder<UpdateCubit, UpdateState>(
-                      builder: (context, state) =>
-                          Text('menu: ${state.app.update.menu}'),
+                      builder: (context, state) => Text(
+                        'menu: ${switch (state) {
+                          UpdateWaiting() => '',
+                          UpdateShown(:final app) => app.update.menu,
+                        }}',
+                      ),
                     );
                   },
                 ),

@@ -131,6 +131,23 @@ impl Actor {
             rules_for(node, bench.rules.as_deref()).as_deref(),
             &hook_file,
         );
+        // Como o Swift ao criar o terminal (`main.swift`, `conversationStarted`):
+        // a linha acima já leva a conversa, e da próxima subida em diante ela é
+        // retomada (`--resume … || --session-id …`). Sem a marca, reabrir o app
+        // mandava `--session-id` de novo e o CLI recusava ("already in use").
+        if node.conversation_id.is_some() && !node.has_started_conversation() {
+            if let Some(stored) = self
+                .org
+                .state
+                .workbenches
+                .iter_mut()
+                .find(|w| w.id == bench.id)
+                .and_then(|w| w.nodes.iter_mut().find(|n| n.id == node.id))
+            {
+                stored.conversation_started = Some(true);
+            }
+            self.persist();
+        }
         let ctx = ChildContext {
             base: self.base_environment(),
             address: &address,
@@ -165,9 +182,8 @@ impl Actor {
             role,
         };
         // Claude herda a confiança do repositório antes de subir (ADR-071,
-        // TerminalNode.swift:310); a pasta da config vem do ambiente final do
-        // filho. Antes do corte só se grava dentro da pasta de dados
-        // (decisão 36), a mesma regra do `install.rs`.
+        // TerminalNode.swift:310), no `.claude.json` da config real do nó; a
+        // pasta da config vem do ambiente final do filho.
         match profile.filter(applies_to) {
             Some(profile) => {
                 let config_dir = profile.config_env.as_ref().and_then(|name| {
@@ -177,11 +193,8 @@ impl Actor {
                         .find(|(k, _)| k == name)
                         .map(|(_, v)| v.clone())
                 });
-                let own = deck
-                    .starts_with("egeon-next")
-                    .then(|| paths.home().to_path_buf());
                 let cwd = launch.cwd.clone();
-                self.seed_trust_then(cwd, config_dir, own, move |actor| {
+                self.seed_trust_then(cwd, config_dir, move |actor| {
                     actor.launch(launch);
                 });
             }

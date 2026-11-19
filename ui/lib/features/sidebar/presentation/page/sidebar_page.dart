@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/sidebar_cubit.dart';
 import '../widgets/bench_actions.dart';
 import '../widgets/group_actions.dart';
+import '../widgets/sidebar_segments.dart';
 import '../widgets/sidebar_drop.dart';
 import '../widgets/sidebar_panel.dart';
 
@@ -23,7 +24,10 @@ class SidebarPage extends StatelessWidget {
         final cubit = context.read<SidebarCubit>();
         return SidebarPanel(
           tree: state.tree,
-          tab: state.tab,
+          tab: switch (state) {
+            SidebarAll() => SidebarTab.all,
+            SidebarActive() => SidebarTab.active,
+          },
           onTab: cubit.showTab,
           compact: compact,
           commands: commands,

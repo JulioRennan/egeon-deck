@@ -25,6 +25,7 @@ struct Harness {
     notifier: Arc<FakeNotifier>,
     procs: Arc<FakeProcs>,
     local: Arc<FakeLocal>,
+    opener: Arc<FakeOpener>,
     stop: Option<oneshot::Sender<()>>,
     task: tokio::task::JoinHandle<Result<(), RuntimeError>>,
     _home: TempHome,
@@ -133,6 +134,7 @@ impl Harness {
         let notifier = Arc::new(FakeNotifier::default());
         let pty = Arc::new(FakePty::default());
         let procs = Arc::new(FakeProcs::sharing(pty.journal.clone()));
+        let opener = Arc::new(FakeOpener::default());
         let drivers = Drivers {
             pty: pty.clone(),
             screens: Arc::new(FakeScreens),
@@ -141,7 +143,7 @@ impl Harness {
             notifier: notifier.clone(),
             apps: Arc::new(FakeApps),
             installer: Arc::new(FakeApps),
-            opener: Arc::new(FakeOpener::default()),
+            opener: opener.clone(),
             cloner: Arc::new(FakeCloner),
             links: Arc::new(FakeLinks),
             is_executable: fake_executable,
@@ -160,6 +162,7 @@ impl Harness {
             notifier,
             procs,
             local,
+            opener,
             stop: Some(stop),
             task,
             _home: home,
@@ -1307,11 +1310,11 @@ async fn o_chat_lista_as_filas_da_bancada_no_reset() {
 }
 
 /// A herança de confiança do Claude (ADR-071) corre antes de o terminal subir e
-/// só grava num `.claude.json` de dentro da pasta de dados enquanto o app é o
-/// novo (decisão 36): a worktree com a origem aceita herda no config de dentro
-/// e o de fora, que seria o `~/.claude*` do usuário, fica como estava.
+/// grava no `.claude.json` da config de cada nó, dentro ou fora da pasta de
+/// dados, como o Swift (a decisão 36 vale só para as skills). A config "de
+/// fora" aqui é uma pasta temporária, nunca a do usuário.
 #[tokio::test]
-async fn heranca_de_confianca_grava_so_dentro_da_pasta_de_dados() {
+async fn heranca_de_confianca_grava_na_config_de_cada_no() {
     use crate::features::agent::claude::trust_seeder::real;
     let project = TempHome::new();
     let repo = project.0.join("app");
@@ -1387,10 +1390,11 @@ async fn heranca_de_confianca_grava_so_dentro_da_pasta_de_dados() {
         true,
         "dentro da pasta de dados: herdou"
     );
-    assert!(
-        read(&outside)["projects"].get(&key).is_none(),
-        "fora dela: não toca"
-    );
+    eventually(|| {
+        let (outside, key) = (outside.clone(), key.clone());
+        async move { read(&outside)["projects"][&key]["hasTrustDialogAccepted"] == true }
+    })
+    .await;
     h.stop().await.unwrap();
 }
 
@@ -3147,10 +3151,13 @@ async fn formulario_de_worktree_le_o_resumo_e_o_veredito_sem_criar_nada() {
         .await;
     let info = ui.reply(1).await;
     assert_eq!(info["suggested_branch"], "main-2");
-    assert_eq!(
-        info["nodes"],
-        json!([{"node": "sh", "state": "follows_workbench"}])
-    );
+    let nodes = info["nodes"].as_array().unwrap();
+    assert_eq!(nodes.len(), 1, "{info}");
+    assert_eq!(nodes[0]["node"], "sh");
+    assert_eq!(nodes[0]["state"], "follows_workbench");
+    assert_eq!(nodes[0]["repo"], "repo");
+    assert_eq!(nodes[0]["inside"], true);
+    assert_eq!(nodes[0]["exists"], true);
     assert!(
         info["summary"]
             .as_str()
@@ -3627,5 +3634,441 @@ async fn no_novo_sem_frame_usa_a_janela_da_ui() {
     .await;
     assert_eq!(saved[0]["nodes"][0]["w"], 1320.0);
     assert_eq!(saved[0]["nodes"][0]["h"], 920.0);
+    h.stop().await.unwrap();
+}
+
+// ── O formulário de terminal (org, `node_form.rs`) ─────────────────────────
+
+/// Abrir de terminal novo: agente com o Claude Code, as pastas da bancada, os
+/// componentes salvos e a tela do CLI já montada.
+#[tokio::test]
+async fn formulario_de_terminal_novo_abre_com_o_claude_e_as_pastas() {
+    let dir = TempHome::new();
+    std::fs::create_dir_all(dir.0.join("api/.git")).unwrap();
+    let mut files = two_benches(&dir.0);
+    files.push((
+        "components.json",
+        json!({"Revisor": {"name": "Revisor", "kind": "agent", "agent": "claude",
+                            "prompt": "revisa"}})
+        .to_string(),
+    ));
+    let h = Harness::start_with_files(&files).await;
+    let mut ui = h.ui().await;
+
+    ui.send(json!({"id": 1, "cmd": "node_form", "workbench": "1a2b3c4d"}))
+        .await;
+    let form = ui.reply(1).await;
+    assert_eq!(form["template"]["kind"], "agent");
+    assert_eq!(form["template"]["agent"], "claude");
+    assert_eq!(form["cli"], "claude");
+    assert!(
+        form["clis"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["key"] == "claude")
+    );
+    assert_eq!(form["folders"][0], json!({"value": "", "shown": "root"}));
+    assert_eq!(form["folders"][1], json!({"value": "api", "shown": "api"}));
+    assert_eq!(form["components"][0]["name"], "Revisor");
+    assert_eq!(form["components"][0]["subtitle"], "Claude Code");
+    assert_eq!(form["screen"]["models"][0]["label"], "padrão do CLI");
+    assert_eq!(form["screen"]["config_env"], "CLAUDE_CONFIG_DIR");
+
+    // Do nó: o que ele tem, com o nome dele.
+    ui.send(json!({"id": 2, "cmd": "node_form", "workbench": "1a2b3c4d", "node": "claude"}))
+        .await;
+    assert_eq!(ui.reply(2).await["template"]["name"], "claude");
+    ui.send(json!({"id": 3, "cmd": "node_form", "workbench": "1a2b3c4d", "node": "nada"}))
+        .await;
+    assert_eq!(ui.reply(3).await["error"], "nó desconhecido 'nada'");
+
+    ui.send(json!({"id": 4, "cmd": "components"})).await;
+    assert_eq!(ui.reply(4).await["components"][0]["name"], "Revisor");
+    h.stop().await.unwrap();
+}
+
+/// Trocar de CLI guarda o que estava na tela no CLI que saiu (ADR-057), e o
+/// + da pasta grava relativo dentro da bancada.
+#[tokio::test]
+async fn trocar_de_cli_guarda_a_tela_e_a_pasta_grava_relativa() {
+    let dir = TempHome::new();
+    let h = Harness::start_with_files(&two_benches(&dir.0)).await;
+    let mut ui = h.ui().await;
+
+    ui.send(
+        json!({"id": 1, "cmd": "node_form_screen", "workbench": "1a2b3c4d",
+        "template": {"name": "rev", "kind": "agent", "agent": "claude"},
+        "shown": {"cli": "claude", "model": "opus", "prompt": "revisa"},
+        "cli": "codex"}),
+    )
+    .await;
+    let screen = ui.reply(1).await;
+    assert_eq!(screen["template"]["byAgent"]["claude"]["model"], "opus");
+    assert_eq!(screen["template"]["prompt"], "revisa");
+    assert_eq!(screen["fields"]["prompt"], "revisa");
+    assert!(
+        screen["fields"].get("model").is_none(),
+        "opus não é do Codex"
+    );
+
+    let inside = dir.0.join("api").to_string_lossy().into_owned();
+    ui.send(json!({"id": 2, "cmd": "node_folder", "workbench": "1a2b3c4d", "path": inside}))
+        .await;
+    assert_eq!(
+        ui.reply(2).await,
+        json!({"re": 2, "ok": true, "cwd": "api", "shown": "api"})
+    );
+    let root = dir.0.to_string_lossy().into_owned();
+    ui.send(json!({"id": 3, "cmd": "node_folder", "workbench": "1a2b3c4d", "path": root}))
+        .await;
+    assert_eq!(ui.reply(3).await["shown"], "root");
+    h.stop().await.unwrap();
+}
+
+/// Criar pelo formulário: o id vem do nome, salvar como componente grava o
+/// `components.json`; aplicar renomeia e mantém o lugar.
+#[tokio::test]
+async fn criar_e_aplicar_pelo_formulario() {
+    let dir = TempHome::new();
+    let h = Harness::start_with_files(&two_benches(&dir.0)).await;
+    let mut ui = h.ui().await;
+
+    ui.send(
+        json!({"id": 1, "cmd": "create_node", "workbench": "1a2b3c4d", "type": "agent",
+        "frame": {"x": 10.0, "y": 20.0, "w": 600.0, "h": 400.0},
+        "form": {
+            "template": {"name": "", "kind": "agent", "agent": "claude"},
+            "fields": {"name": "Revisor Rust", "kind": "agent", "agent": "claude",
+                       "cwd": "", "maestro": false},
+            "shown": {"cli": "claude", "model": "opus", "prompt": "revisa o core"},
+            "save_component": true}}),
+    )
+    .await;
+    assert_eq!(ui.reply(1).await["node"], "revisor-rust");
+    let saved = saved_eventually(&h, |v| {
+        v[0]["nodes"].as_array().is_some_and(|n| n.len() == 3)
+    })
+    .await;
+    let node = &saved[0]["nodes"][2];
+    assert_eq!(node["model"], "opus");
+    assert_eq!(node["prompt"], "revisa o core");
+    assert_eq!(node["x"], 10.0);
+    let components = std::fs::read_to_string(h._home.0.join("data/components.json")).unwrap();
+    assert!(components.contains("Revisor Rust"), "{components}");
+
+    ui.send(
+        json!({"id": 2, "cmd": "apply_node", "workbench": "1a2b3c4d", "node": "revisor-rust",
+        "form": {
+            "template": {"name": "Revisor Rust", "kind": "agent", "agent": "claude",
+                         "prompt": "revisa o core", "byAgent": {"claude": {"model": "opus"}}},
+            "fields": {"name": "Critico", "kind": "agent", "agent": "claude", "cwd": ""},
+            "shown": {"cli": "claude", "model": "opus", "prompt": "revisa o core"}}}),
+    )
+    .await;
+    assert_eq!(ui.reply(2).await["node"], "critico");
+    let saved = saved_eventually(&h, |v| v[0]["nodes"][2]["id"] == "critico").await;
+    assert_eq!(saved[0]["nodes"][2]["x"], 10.0, "no mesmo lugar do canvas");
+    assert_eq!(saved[0]["nodes"][2]["model"], "opus");
+
+    ui.send(
+        json!({"id": 3, "cmd": "apply_node", "workbench": "1a2b3c4d", "node": "nada",
+        "form": {"template": {"name": "x", "kind": "shell"},
+                 "fields": {"name": "x", "kind": "shell"}}}),
+    )
+    .await;
+    assert_eq!(ui.reply(3).await["error"], "nó desconhecido 'nada'");
+    h.stop().await.unwrap();
+}
+
+#[path = "tests_bench.rs"]
+mod bench;
+
+/// Fechar uma roda de três nós ou mais avisa na faixa da bancada (o mesmo
+/// aviso do `/edge`, a faixa do `WorkbenchShell`); o par conversando, não
+/// (ADR-012, ADR-077).
+#[tokio::test]
+async fn fechar_ciclo_de_tres_avisa_na_faixa_da_bancada() {
+    let dir = TempHome::new();
+    let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": dir.0.to_string_lossy(),
+        "nodes": [{"type": "agent", "id": "a", "agent": "claude"},
+                  {"type": "agent", "id": "b", "agent": "claude"},
+                  {"type": "agent", "id": "c", "agent": "claude"}]}]);
+    let h = Harness::start_with_files(&[("workbenches.json", benches.to_string())]).await;
+    let mut ui = h.ui().await;
+    ui.send(json!({"id": 1, "cmd": "subscribe", "topic": "workspaces"}))
+        .await;
+    assert_eq!(ui.reply(1).await["ok"], true);
+    let link = |id: u64, from: &str, to: &str| json!({"id": id, "cmd": "link", "workbench": "1a2b3c4d", "from": from, "to": to});
+
+    // O par nos dois sentidos não é aviso.
+    ui.send(json!({"id": 2, "cmd": "link", "workbench": "1a2b3c4d", "from": "a", "to": "b", "both": true}))
+        .await;
+    assert_eq!(ui.reply(2).await["ok"], true);
+    ui.send(link(3, "b", "c")).await;
+    let after_pair = ui.reply(3).await;
+    assert_eq!(after_pair["ok"], true);
+    ui.send(link(4, "c", "a")).await;
+    let tree = ui
+        .until(|v| v["topic"] == "workspaces" && bench(v, "1a2b3c4d")["banner"].is_string())
+        .await;
+    let text = bench(&tree, "1a2b3c4d")["banner"].as_str().unwrap();
+    assert!(text.starts_with("Ciclo: "), "{text}");
+    assert!(text.contains(" → "), "{text}");
+    h.stop().await.unwrap();
+}
+
+/// A dica do título do card: o endereço e, no agente, o nome do CLI pelo
+/// perfil (`TerminalNode.swift`).
+#[tokio::test]
+async fn o_no_traz_endereco_e_o_nome_do_cli() {
+    let dir = TempHome::new();
+    let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": dir.0.to_string_lossy(),
+        "nodes": [{"type": "agent", "id": "a", "agent": "codex"},
+                  {"type": "agent", "id": "x", "agent": "inexistente"},
+                  {"type": "shell", "id": "sh"}]}]);
+    let h = Harness::start_with_files(&[("workbenches.json", benches.to_string())]).await;
+    let mut ui = h.ui().await;
+    ui.send(json!({"id": 1, "cmd": "subscribe", "topic": "workbench/1a2b3c4d/nodes"}))
+        .await;
+    let state = ui
+        .until(|v| v["topic"] == "workbench/1a2b3c4d/nodes" && v["nodes"].is_array())
+        .await;
+    let nodes = state["nodes"].as_array().unwrap();
+    assert_eq!(nodes[0]["address"], "deck/a");
+    assert_eq!(nodes[0]["cli_name"], "Codex CLI");
+    assert!(nodes[1].get("cli_name").is_none(), "perfil desconhecido");
+    assert_eq!(nodes[2]["address"], "deck/sh");
+    assert!(nodes[2].get("cli_name").is_none(), "shell não tem CLI");
+    h.stop().await.unwrap();
+}
+
+/// "Zerar cronômetro" do relógio da bancada (`ClockChip.swift`): o tempo volta
+/// a zero e a árvore nova sai a quem assina.
+#[tokio::test]
+async fn zerar_o_cronometro_volta_o_tempo_a_zero() {
+    let dir = TempHome::new();
+    let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": dir.0.to_string_lossy(),
+                          "nodes": []}]);
+    let clock = json!({"running": 754.0, "waiting": 120.0, "failed": 0.0});
+    let h = Harness::start_with_files(&[
+        ("workbenches.json", benches.to_string()),
+        ("workbenches/1a2b3c4d/clock.json", clock.to_string()),
+    ])
+    .await;
+    let mut ui = h.ui().await;
+    ui.send(json!({"id": 1, "cmd": "subscribe", "topic": "workspaces"}))
+        .await;
+    let tree = ui.until(|v| v["topic"] == "workspaces").await;
+    assert_eq!(bench(&tree, "1a2b3c4d")["clock"]["running"], 754, "{tree}");
+
+    // O estado novo sai antes da resposta: espera-se por ele direto.
+    ui.send(json!({"id": 2, "cmd": "reset_clock", "workbench": "1a2b3c4d"}))
+        .await;
+    ui.until(|v| {
+        v["topic"] == "workspaces"
+            && bench(v, "1a2b3c4d")["clock"]["running"]
+                .as_u64()
+                .unwrap_or(0)
+                == 0
+    })
+    .await;
+
+    ui.send(json!({"id": 3, "cmd": "reset_clock", "workbench": "ffffffff"}))
+        .await;
+    assert!(ui.reply(3).await["error"].is_string());
+    h.stop().await.unwrap();
+}
+
+/// O `retry` do `/ui` é a rota `/retry` (ADR-072): sem tentativa agendada no
+/// nó, a mesma recusa dela.
+#[tokio::test]
+async fn retry_pelo_socket_responde_como_a_rota() {
+    let dir = TempHome::new();
+    let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": dir.0.to_string_lossy(),
+        "nodes": [{"type": "agent", "id": "a", "agent": "claude"}]}]);
+    let h = Harness::start_with_files(&[("workbenches.json", benches.to_string())]).await;
+    let mut ui = h.ui().await;
+    ui.send(json!({"id": 1, "cmd": "retry", "workbench": "1a2b3c4d", "node": "a", "now": true}))
+        .await;
+    assert_eq!(
+        ui.reply(1).await["error"],
+        "nenhuma tentativa agendada em 'deck/a'"
+    );
+    ui.send(json!({"id": 2, "cmd": "retry", "workbench": "ffffffff", "node": "a", "now": false}))
+        .await;
+    assert_eq!(
+        ui.reply(2).await["error"],
+        "bancada desconhecida 'ffffffff'"
+    );
+    h.stop().await.unwrap();
+}
+
+/// O ⌘-clique no subtítulo do card abre a pasta do terminal no Finder, pelo
+/// opener do driver (`NodeView.swift`); web não tem pasta.
+#[tokio::test]
+async fn abrir_a_pasta_do_no_vai_ao_opener() {
+    let dir = TempHome::new();
+    let sub = dir.0.join("api");
+    std::fs::create_dir_all(&sub).unwrap();
+    let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": dir.0.to_string_lossy(),
+        "nodes": [{"type": "shell", "id": "sh", "cwd": "api"},
+                  {"type": "web", "id": "w", "url": "https://docs.rs"}]}]);
+    let h = Harness::start_with_files(&[("workbenches.json", benches.to_string())]).await;
+    let mut ui = h.ui().await;
+    ui.send(json!({"id": 1, "cmd": "open_node_folder", "workbench": "1a2b3c4d", "node": "sh"}))
+        .await;
+    assert_eq!(ui.reply(1).await["ok"], true);
+    let opened = h.opener.opened.lock().unwrap().clone();
+    assert_eq!(
+        opened,
+        vec![crate::ports::opener::OpenTarget::File(sub.clone())]
+    );
+    ui.send(json!({"id": 2, "cmd": "open_node_folder", "workbench": "1a2b3c4d", "node": "w"}))
+        .await;
+    assert_eq!(ui.reply(2).await["error"], "'w' não abre numa pasta");
+    h.stop().await.unwrap();
+}
+
+/// A worktree de um terminal só (`NodeWorktreePlanner` do Swift): o formulário
+/// lê o repositório da pasta do nó, e criar reaponta só aquele nó.
+#[tokio::test]
+async fn worktree_de_um_no_le_o_repo_dele_e_reaponta_so_ele() {
+    let dir = TempHome::new();
+    let repo = repo_with_env(&dir);
+    let bench_dir = std::fs::canonicalize(&dir.0).unwrap().join("bancada");
+    std::fs::create_dir_all(&bench_dir).unwrap();
+    let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": bench_dir.to_string_lossy(),
+        "nodes": [{"type": "shell", "id": "back", "cwd": repo.to_string_lossy()},
+                  {"type": "shell", "id": "sh"},
+                  {"type": "web", "id": "w", "url": "https://docs.rs"}]}]);
+    let h = Harness::start_with_files(&[("workbenches.json", benches.to_string())]).await;
+    let mut ui = h.ui().await;
+
+    ui.send(json!({"id": 1, "cmd": "worktree_info", "workbench": "1a2b3c4d", "node": "back"}))
+        .await;
+    let info = ui.reply(1).await;
+    assert_eq!(info["suggested_branch"], "main-2", "{info}");
+    assert_eq!(info["repo"], "repo");
+
+    ui.send(
+        json!({"id": 2, "cmd": "worktree_plan", "workbench": "1a2b3c4d", "node": "back",
+                   "branch": "nova"}),
+    )
+    .await;
+    let plan = ui.reply(2).await;
+    assert_eq!(plan["verdict"], "create");
+    assert!(
+        plan["folder"]
+            .as_str()
+            .unwrap()
+            .ends_with("worktrees/repo/nova"),
+        "{plan}"
+    );
+
+    ui.send(json!({"id": 3, "cmd": "worktree_info", "workbench": "1a2b3c4d", "node": "w"}))
+        .await;
+    assert_eq!(ui.reply(3).await["error"], "'w' não abre numa pasta");
+    ui.send(json!({"id": 5, "cmd": "worktree_info", "workbench": "1a2b3c4d", "node": "zz"}))
+        .await;
+    assert_eq!(ui.reply(5).await["error"], "nó desconhecido 'zz'");
+
+    ui.send(
+        json!({"id": 4, "cmd": "worktree", "workbench": "1a2b3c4d", "node": "back",
+                   "branch": "fix/api"}),
+    )
+    .await;
+    let done = ui.reply(4).await;
+    assert_eq!(done["ok"], true, "{done}");
+    assert_eq!(done["node"], "back");
+    let saved = saved_eventually(&h, |v| {
+        v[0]["nodes"][0]["cwd"]
+            .as_str()
+            .is_some_and(|cwd| cwd.ends_with("worktrees/repo/fix-api"))
+    })
+    .await;
+    assert_eq!(saved.as_array().unwrap().len(), 1, "nenhuma bancada nova");
+    assert!(saved[0]["nodes"][1].get("cwd").is_none(), "o outro nó fica");
+    h.stop().await.unwrap();
+}
+
+/// "Configurar novo terminal…" sem desenho (`spawnRect` do Swift): a tela diz
+/// o que está à vista, e o nó nasce a 40 do canto, descendo em diagonal se o
+/// lugar está ocupado.
+#[tokio::test]
+async fn no_sem_frame_nasce_no_primeiro_lugar_livre_do_que_esta_a_vista() {
+    let dir = TempHome::new();
+    let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": dir.0.to_string_lossy(),
+        "nodes": [{"type": "shell", "id": "a",
+                   "x": 140.0, "y": 140.0, "w": 720.0, "h": 460.0}]}]);
+    let h = Harness::start_with_files(&[("workbenches.json", benches.to_string())]).await;
+    let mut ui = h.ui().await;
+    ui.send(json!({"id": 1, "cmd": "subscribe", "topic": "workbench/1a2b3c4d/nodes"}))
+        .await;
+    assert_eq!(ui.reply(1).await["ok"], true);
+    ui.send(
+        json!({"id": 2, "cmd": "create_node", "workbench": "1a2b3c4d", "type": "shell",
+                   "visible": {"x": 100.0, "y": 100.0, "w": 1200.0, "h": 800.0}}),
+    )
+    .await;
+    let state = ui
+        .until(|v| {
+            v["topic"] == "workbench/1a2b3c4d/nodes"
+                && v["nodes"].as_array().is_some_and(|n| n.len() == 2)
+        })
+        .await;
+    assert_eq!(
+        state["nodes"][1]["frame"],
+        json!({"x": 172.0, "y": 172.0, "w": 720.0, "h": 460.0}),
+        "{state}"
+    );
+    h.stop().await.unwrap();
+}
+
+/// Subir o agente marca a conversa como começada e grava (`main.swift`,
+/// `conversationStarted`): a próxima subida retoma com `--resume`, em vez de
+/// mandar `--session-id` de novo — que o CLI recusa com "already in use".
+#[tokio::test]
+async fn subir_o_agente_marca_a_conversa_e_a_proxima_subida_retoma() {
+    let dir = TempHome::new();
+    let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": dir.0.to_string_lossy(),
+        "nodes": [{"type": "agent", "id": "claude", "agent": "claude",
+                   "conversationId": "11111111-2222-3333-4444-555555555555"}]}]);
+    let command = |h: &Harness| h.pty.child(0).2.args.join(" ");
+
+    let h = Harness::start_with_files(&[("workbenches.json", benches.to_string())]).await;
+    let mut ui = h.ui().await;
+    ui.send(json!({"id": 1, "cmd": "open_workbench", "workbench": "1a2b3c4d"}))
+        .await;
+    assert_eq!(ui.reply(1).await["ok"], true);
+    let pty = h.pty.clone();
+    eventually(|| {
+        let pty = pty.clone();
+        async move { pty.spawned.lock().unwrap().len() == 1 }
+    })
+    .await;
+    let first = command(&h);
+    assert!(first.contains("--session-id"), "{first}");
+    assert!(!first.contains("--resume"), "{first}");
+    let saved = saved_eventually(&h, |v| v[0]["nodes"][0]["conversationStarted"] == true).await;
+    h.stop().await.unwrap();
+
+    let h = Harness::start_with_files(&[("workbenches.json", saved.to_string())]).await;
+    let mut ui = h.ui().await;
+    ui.send(json!({"id": 1, "cmd": "open_workbench", "workbench": "1a2b3c4d"}))
+        .await;
+    assert_eq!(ui.reply(1).await["ok"], true);
+    let pty = h.pty.clone();
+    eventually(|| {
+        let pty = pty.clone();
+        async move { pty.spawned.lock().unwrap().len() == 1 }
+    })
+    .await;
+    let second = command(&h);
+    assert!(
+        second.contains("'--resume' '11111111-2222-3333-4444-555555555555'")
+            && second.contains(" || "),
+        "{second}"
+    );
     h.stop().await.unwrap();
 }

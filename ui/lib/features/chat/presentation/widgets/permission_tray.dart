@@ -142,8 +142,16 @@ class _PermissionTrayState extends State<PermissionTray> {
     ),
   ];
 
+  /// Recusa a pergunta: o agente segue sem a resposta. Vai junto do
+  /// "Responder" ou, sem ele, ao fim das opções da última pergunta.
+  Widget get _refuse => _Button(
+    'Recusar',
+    key: const ValueKey('permission-refuse'),
+    onTap: () => widget.onAnswer(_ask.id, 'deny'),
+  );
+
   List<Widget> _questions() => [
-    for (final q in _ask.questions) ...[
+    for (final (index, q) in _ask.questions.indexed) ...[
       Text(
         '${q.header == null ? '' : '${q.header} · '}${q.question}',
         style: TextStyle(
@@ -163,6 +171,7 @@ class _PermissionTrayState extends State<PermissionTray> {
               on: (_picked[q.question] ?? const []).contains(option),
               onTap: () => _toggle(q, option),
             ),
+          if (!_ask.collects && index == _ask.questions.length - 1) _refuse,
         ],
       ),
       const SizedBox(height: 8),
@@ -170,15 +179,23 @@ class _PermissionTrayState extends State<PermissionTray> {
     if (_ask.collects)
       Align(
         alignment: Alignment.centerRight,
-        child: _Button(
-          'Responder',
-          enabled: _complete,
-          color: AppColors.done,
-          onTap: () => widget.onAnswerAll(_ask.id, {
-            for (final e in _picked.entries) e.key: [...e.value],
-          }),
+        child: Wrap(
+          spacing: 8,
+          children: [
+            _Button(
+              'Responder',
+              enabled: _complete,
+              color: AppColors.done,
+              onTap: () => widget.onAnswerAll(_ask.id, {
+                for (final e in _picked.entries) e.key: [...e.value],
+              }),
+            ),
+            _refuse,
+          ],
         ),
-      ),
+      )
+    else if (_ask.questions.isEmpty)
+      _refuse,
   ];
 }
 
@@ -186,6 +203,7 @@ class _Button extends StatelessWidget {
   const _Button(
     this.label, {
     required this.onTap,
+    super.key,
     this.color,
     this.on = false,
     this.enabled = true,

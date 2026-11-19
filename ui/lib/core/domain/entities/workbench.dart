@@ -9,6 +9,7 @@ class Workbench {
     required this.path,
     this.color,
     this.view = ViewMode.canvas,
+    this.template,
   });
 
   final String id;
@@ -20,4 +21,7 @@ class Workbench {
   /// Nome da cor (`blue`, `sand`…); quem a resolve é o tema.
   final String? color;
   final ViewMode view;
+
+  /// O template de bancada de que ela nasceu; ausente, nenhum.
+  final String? template;
 }

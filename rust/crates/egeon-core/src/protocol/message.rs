@@ -16,20 +16,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use super::ProtocolError;
-use super::app::{AppEffect, AppState, ReaperEnabled, UpdateAnswer, UpdateAuto};
+use super::app::{AppEffect, AppState, OpenUrl, ReaperEnabled, UpdateAnswer, UpdateAuto};
 use super::chat::{ChatComplete, ChatNewQueue, ChatRef, ChatSend, ChatStep, PermissionAnswer};
 use super::node::{
     ClipboardReply, Drop, EffortMove, LinkHover, NodeDetail, NodeEffect, NodeTarget, PointerAt,
     ProcessesKill, ProcessesReap, QueueAdd, QueueAttach, QueueDetach, QueueItemRef, QueueItemText,
-    QueueMove, QueueSend, QueueSet, ScreenRef, ScrollTo, UiFocus, UiReply, UsageState, WebNavigate,
-    WebNavigated, WebSetProfile,
+    QueueMove, QueueSend, QueueSet, RetryNode, ScreenRef, ScrollTo, UiFocus, UiReply, UsageState,
+    WebNavigate, WebNavigated, WebSetProfile,
 };
 use super::org::{
-    AddProject, CreateNode, CreateProject, CreateWorkbench, CreateWorkspace, Link, Move, MoveNode,
-    MoveTab, MultiName, MultiProject, NodeRef, NodesState, RemoveProject, RemoveWorkbench,
-    RemoveWorkspace, SaveWorkspace, SetEdge, SetNode, SetProject, SetWorkbench, SetWorkbenchRules,
-    SetWorkspace, Unlink, WorkbenchRef, WorkspaceRef, WorkspacesState, Worktree,
-    WorktreePlanRequest,
+    AddProject, ApplyNode, CreateNode, CreateProject, CreateWorkbench, CreateWorkspace, Link, Move,
+    MoveNode, MoveTab, MultiName, MultiProject, NodeFolder, NodeForm, NodeFormScreen, NodeRef,
+    NodesState, RemoveProject, RemoveWorkbench, RemoveWorkspace, SaveTemplate, SaveWorkspace,
+    SetEdge, SetNode, SetProject, SetWorkbench, SetWorkbenchRules, SetWorkspace, Unlink,
+    WorkbenchRef, WorkspaceRef, WorkspacesState, Worktree, WorktreePlanRequest, WorktreeSource,
 };
 use super::screen::{Effect, Frame, KeyPress, Size};
 
@@ -180,10 +180,14 @@ pub enum CommandKind {
     MultiName(MultiName),
     /// Os templates de bancada: `{templates:[TemplateView]}`.
     Templates,
-    /// O formulário de worktree: `WorktreeInfo`.
-    WorktreeInfo(WorkbenchRef),
+    /// O formulário de worktree: `WorktreeInfo`. Sem `workbench`, parte de
+    /// `path` ou `project`.
+    WorktreeInfo(WorktreeSource),
     /// O veredito do nome da branch, sem criar: `WorktreePlan`.
     WorktreePlan(WorktreePlanRequest),
+    /// Salva o canvas como template de bancada: `{template}`, ou
+    /// `TemplatePlan` com `dry_run`.
+    SaveTemplate(SaveTemplate),
     /// "Abrir Ajustes" da cortina: o painel de privacidade do sistema.
     AccessOpenSettings(WorkbenchRef),
     /// "Pedir de novo": zera a recusa e confere; responde
@@ -194,11 +198,27 @@ pub enum CommandKind {
     SetWorkbenchRules(SetWorkbenchRules),
     /// O que a remoção vai levar, para o diálogo: `{live, worktrees}`.
     PlanRemoveWorkbench(WorkbenchRef),
+    /// O texto da 2ª confirmação, com a caixa de apagar marcada: `{losses}`.
+    /// A bancada fica com a cortina "Conferindo o que se perde…" enquanto isso.
+    RemovalLosses(WorkbenchRef),
     RemoveWorkbench(RemoveWorkbench),
     ClearWorkbench(WorkbenchRef),
+    /// "Zerar cronômetro" do relógio da bancada: o tempo volta a zero e o
+    /// estado novo sai no tópico `workspaces`.
+    ResetClock(WorkbenchRef),
     Worktree(Worktree),
     CreateNode(CreateNode),
     SetNode(SetNode),
+    /// Abre o formulário de terminal: `NodeFormView`.
+    NodeForm(NodeForm),
+    /// A tela do formulário para um CLI: `NodeScreenView`.
+    NodeFormScreen(Box<NodeFormScreen>),
+    /// O + da pasta do formulário: `{cwd, shown}`.
+    NodeFolder(NodeFolder),
+    /// Aplica o formulário a um nó: `{node}` com o id final.
+    ApplyNode(Box<ApplyNode>),
+    /// Os componentes salvos: `{components:[ComponentView]}`.
+    Components,
     MoveNode(MoveNode),
     RemoveNode(NodeRef),
     Link(Link),
@@ -222,6 +242,12 @@ pub enum CommandKind {
     EffortSettle(NodeTarget),
     /// O `/node/clear` do Swift: conversa nova no agente.
     NodeClear(NodeTarget),
+    /// "Tentar agora" / "Cancelar tentativa": `{ok}`, ou erro sem tentativa
+    /// agendada nesse nó.
+    Retry(RetryNode),
+    /// O ⌘-clique no subtítulo do card: a pasta em que o terminal abriu, no
+    /// Finder. Só shell e agente têm pasta.
+    OpenNodeFolder(NodeTarget),
     QueueAdd(QueueAdd),
     QueueUpdate(QueueItemText),
     QueueRemove(QueueItemRef),
@@ -234,6 +260,9 @@ pub enum CommandKind {
     QueueClearDone(NodeTarget),
     QueueAttach(QueueAttach),
     QueueDetach(QueueDetach),
+    /// Abre o print da tarefa no app do sistema; o mesmo endereço do
+    /// `queue_detach`.
+    QueueOpenImage(QueueDetach),
     WebNavigate(WebNavigate),
     WebNavigated(WebNavigated),
     WebSetProfile(WebSetProfile),
@@ -259,6 +288,11 @@ pub enum CommandKind {
     UpdateAnswer(UpdateAnswer),
     UpdateAuto(UpdateAuto),
     ReaperEnabled(ReaperEnabled),
+    /// "Copiar alvos de dispatch" (⇧⌘T): `{text}`, um endereço por linha,
+    /// para a UI pôr na área de transferência.
+    CopyTargets,
+    /// O link da resposta do chat, no navegador do sistema.
+    OpenUrl(OpenUrl),
 }
 
 impl CommandKind {

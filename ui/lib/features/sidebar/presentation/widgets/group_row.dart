@@ -89,7 +89,10 @@ class _SidebarGroupRowState extends State<SidebarGroupRow> {
     actions.onToggleProject(widget.owner!.id, _pr!.id);
   }
 
-  void _create(GroupActions actions) => actions.onCreateBenchFromWorktree(_pr!);
+  /// Projeto vazio: o clique abre o menu de criar; multi-projeto só nasce em
+  /// worktree, e vai direto.
+  void _create(GroupActions actions) =>
+      _pr!.isMulti ? actions.onCreateBenchFromWorktree(_pr!) : _addMenu();
 
   void _menu(Offset position) {
     final a = widget.actions;

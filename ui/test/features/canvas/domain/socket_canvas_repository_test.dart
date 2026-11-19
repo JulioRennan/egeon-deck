@@ -71,6 +71,16 @@ void main() {
       expect(claude.subtitle, '~/Documents/agro/deck');
       expect(claude.screen, '1a2b3c4d.claude');
       expect(claude.maestro, isTrue);
+      expect(
+        claude.titleTooltip,
+        'deck/claude · Claude Code',
+        reason: 'a dica do título: endereço e o CLI do agente',
+      );
+      expect(
+        snapshot.cards[1].titleTooltip,
+        'deck/sh',
+        reason: 'shell: só o endereço',
+      );
       expect(claude.frame, const Rect.fromLTWH(120, 80.5, 640, 420));
 
       final web = snapshot.cards[2];
@@ -269,6 +279,10 @@ void main() {
     test('remover o nó', () async {
       final sent = await sentAfter(() => repository.removeNode(wb, 'sh'));
       expect(sent, withoutId(commands['remove_node']!));
+      expect(
+        await sentAfter(() => repository.openFolder(wb, 'claude')),
+        withoutId(commands['open_node_folder']!),
+      );
     });
   });
 }

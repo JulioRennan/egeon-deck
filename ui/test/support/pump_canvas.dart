@@ -1,3 +1,4 @@
+import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_probe.dart';
 import 'package:egeon_deck/features/canvas/domain/repository/canvas_repository.dart';
 import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_commands.dart';
@@ -22,6 +23,12 @@ Future<void> pumpCanvas(
   CanvasCommands? commands,
   double sidebarInset = 0,
   Future<Uint8List?> Function(String cardId)? nativeCapture,
+  ValueChanged<Rect>? onConfigureTerminal,
+  ValueChanged<Rect>? onConfigureTerminalAt,
+  ValueChanged<CanvasCard>? onRequestConfigure,
+  void Function(CanvasCard card, {required bool now})? onRetry,
+  ValueChanged<CanvasCard>? onOpenFolder,
+  ValueChanged<CanvasCard>? onRequestWorktree,
 }) async {
   tester.view
     ..physicalSize = const Size(1200, 800)
@@ -38,12 +45,18 @@ Future<void> pumpCanvas(
       ),
       home: CanvasPage(
         workbenchId: 'bancada',
-        componentNames: componentNames,
+        componentNames: () async => componentNames,
         onEditLimit: onEditLimit,
         probes: probes,
         commands: commands,
         sidebarInset: sidebarInset,
         nativeCapture: nativeCapture,
+        onConfigureTerminal: onConfigureTerminal,
+        onConfigureTerminalAt: onConfigureTerminalAt,
+        onRequestConfigure: onRequestConfigure,
+        onRetry: onRetry,
+        onOpenFolder: onOpenFolder,
+        onRequestWorktree: onRequestWorktree,
         bodyBuilder: (context, card) => ColoredBox(
           key: ValueKey('body-${card.id}'),
           color: const Color(0xFF101010),

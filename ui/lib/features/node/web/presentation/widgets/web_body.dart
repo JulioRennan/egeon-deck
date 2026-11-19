@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../../commons/widgets/app_tooltip.dart';
 import '../../../../../commons/widgets/context_menu.dart';
 import '../../../../../commons/widgets/glyphs.dart';
 import '../../../../../commons/widgets/hand_cursor.dart';
@@ -45,11 +46,10 @@ class _WebView extends StatelessWidget {
         final controller = cubit.controller;
         final (node, page, address) = switch (state) {
           WebWaiting() => (null, null, ''),
-          WebShown(:final node, :final page, :final address) => (
-            node,
-            page,
-            address,
-          ),
+          // Antes de a página dizer onde está, a barra mostra o que o core
+          // guardou; depois, a página.
+          WebOpening(:final node) => (node, null, node.url),
+          WebShown(:final node, :final page) => (node, page, page.url),
         };
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -186,6 +186,13 @@ class _ProfilePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final node = this.node;
     if (node == null) return const SizedBox.shrink();
+    return AppTooltip(
+      message: 'Perfil de navegação (cookies e bancada isolados)',
+      child: _picker(context, node),
+    );
+  }
+
+  Widget _picker(BuildContext context, WebNode node) {
     return HandCursor(
       child: GestureDetector(
         key: const ValueKey('web-profile'),

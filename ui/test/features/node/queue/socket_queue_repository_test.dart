@@ -41,6 +41,7 @@ void main() {
     expect(queue.asking, isTrue);
     expect(queue.subtitle, '1 pendente');
     expect(queue.imageExtensions, contains('png'));
+    expect(queue.imagesDir, endsWith('/queues/fila/images'));
     expect(queue.items.map((i) => i.id), ['a1b2c3', 'd4e5f6']);
 
     final sent = queue.items[0];
@@ -133,6 +134,12 @@ void main() {
         () => repository.detach('fila', 'a1b2c3', 'img-9f8e7d6c.png'),
       ),
       withoutId(commands['queue_detach']!),
+    );
+    expect(
+      await harness.sent(
+        () => repository.openImage('fila', 'a1b2c3', 'img-9f8e7d6c.png'),
+      ),
+      withoutId(commands['queue_open_image']!),
     );
   });
 

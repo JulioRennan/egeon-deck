@@ -88,25 +88,26 @@ impl DispatchState {
         })
     }
 
-    /// O pedido de permissão em aberto da bancada para a bandeja do chat —
-    /// o primeiro, no formato do `GET /permissions`.
-    pub(super) fn permission(&self, bench: &WorkbenchConfig, now: SystemTime) -> Option<Value> {
-        let ask = self
-            .coordination
+    /// Os pedidos de permissão em aberto da bancada para a bandeja do chat —
+    /// todos, empilhados como no Swift, no formato do `GET /permissions`.
+    pub(super) fn permissions(&self, bench: &WorkbenchConfig, now: SystemTime) -> Vec<Value> {
+        self.coordination
             .desk
             .pending_at(&bench.name, now)
             .into_iter()
-            .next()?;
-        let questions: Vec<Value> = ask
-            .questions()
-            .into_iter()
-            .map(|q| json!({"question": q.question, "options": q.options, "multiSelect": q.multi_select}))
-            .collect();
-        Some(json!({
-            "id": ask.id, "address": ask.address, "tool": ask.tool,
-            "summary": ask.summary, "detail": ask.detail.clone().unwrap_or_default(),
-            "always": ask.can_always_allow(), "questions": questions,
-        }))
+            .map(|ask| {
+                let questions: Vec<Value> = ask
+                    .questions()
+                    .into_iter()
+                    .map(|q| json!({"question": q.question, "options": q.options, "multiSelect": q.multi_select}))
+                    .collect();
+                json!({
+                    "id": ask.id, "address": ask.address, "tool": ask.tool,
+                    "summary": ask.summary, "detail": ask.detail.clone().unwrap_or_default(),
+                    "always": ask.can_always_allow(), "questions": questions,
+                })
+            })
+            .collect()
     }
 }
 
@@ -819,6 +820,34 @@ impl Actor {
         }
     }
 
+    /// O comando `retry` do `/ui`: a mesma rota `/retry`, para o card dizer
+    /// "tentar agora" ou "cancelar tentativa" sem HTTP.
+    pub(super) fn retry_node(&mut self, address: &str, now_flag: bool) -> Result<(), String> {
+        let mut query = HashMap::from([("target".to_owned(), address.to_owned())]);
+        if now_flag {
+            query.insert("now".to_owned(), "1".to_owned());
+        }
+        let request = RouteRequest {
+            method: "POST".to_owned(),
+            target: "/retry".to_owned(),
+            path: "/retry".to_owned(),
+            query,
+            body: Vec::new(),
+            origin: None,
+        };
+        let now = SystemTime::now();
+        let (reply, out) = self.with_coordination(|c, w| dispatch::retry(c, &request, now, w));
+        self.dispatch_apply(out);
+        if reply.status == 200 {
+            Ok(())
+        } else {
+            Err(reply.json["error"]
+                .as_str()
+                .unwrap_or("tentativa recusada")
+                .to_owned())
+        }
+    }
+
     /// `GET /peek?target=<bancada/id>[&lines=n]` — `ControlSocket.swift:744`:
     /// o que o terminal realmente exibe. De dentro de um terminal, só de
     /// vizinho; o id de terminal (`t1`, `1a2b3c4d.b`) vale como reserva para
@@ -1327,21 +1356,31 @@ mod tests {
         let source = rig.actor.dispatch.source(&workbench, "a").unwrap();
         assert_eq!(source.path, std::path::PathBuf::from("/tmp/t.jsonl"));
 
-        assert!(rig.actor.dispatch.permission(&workbench, now).is_none());
-        rig.actor
-            .dispatch
-            .coordination
-            .desk
-            .open_ask(
-                "deck/b",
-                &serde_json::json!({"tool_name": "Bash", "tool_input": {"command": "ls"}}),
-                now,
-            )
-            .unwrap();
-        let tray = rig.actor.dispatch.permission(&workbench, now).unwrap();
+        assert!(rig.actor.dispatch.permissions(&workbench, now).is_empty());
+        for (address, command) in [("deck/b", "ls"), ("deck/a", "pwd")] {
+            rig.actor
+                .dispatch
+                .coordination
+                .desk
+                .open_ask(
+                    address,
+                    &serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}}),
+                    now,
+                )
+                .unwrap();
+        }
+        // Dois agentes pedindo ao mesmo tempo: os dois vão à bandeja.
+        let tray = rig.actor.dispatch.permissions(&workbench, now);
+        let shown: Vec<_> = tray
+            .iter()
+            .map(|t| (t["address"].clone(), t["summary"].clone()))
+            .collect();
         assert_eq!(
-            (tray["address"].clone(), tray["summary"].clone()),
-            (serde_json::json!("deck/b"), serde_json::json!("ls"))
+            shown,
+            [
+                (serde_json::json!("deck/b"), serde_json::json!("ls")),
+                (serde_json::json!("deck/a"), serde_json::json!("pwd")),
+            ]
         );
     }
 

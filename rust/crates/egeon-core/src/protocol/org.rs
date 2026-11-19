@@ -115,6 +115,14 @@ pub struct WorkbenchView {
     /// Ausente, dá para ler.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access: Option<AccessLock>,
+    /// A cortina "um instante" (`BusyOverlay`): o passo demorado em curso —
+    /// limpar ou remover. Ausente, nada em curso.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub busy: Option<String>,
+    /// A faixa laranja do shell (`showBanner`): hoje, a cópia do que o git não
+    /// versiona numa worktree nova.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub banner: Option<String>,
 }
 
 /// Por que a bancada está travada: a pasta protegida do macOS, quando é uma
@@ -223,8 +231,15 @@ pub struct NodeView {
     pub id: NodeId,
     #[serde(rename = "type")]
     pub kind: NodeKind,
+    /// `bancada/nó`: o endereço de dispatch, que a dica do título mostra.
+    #[serde(default)]
+    pub address: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// O nome do CLI do agente (`displayName` do perfil), para a dica do
+    /// título. Ausente em shell, web, fila e em agente sem perfil conhecido.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
     /// Onde o processo abre, já resolvido e com `~`: o subtítulo do card.
@@ -560,13 +575,37 @@ pub struct Worktree {
     /// worktree por repositório.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectId>,
+    /// Com `workbench`: leva só este terminal para a worktree (o
+    /// `NodeWorktreePlanner` do Swift). O nó é reapontado, não clonado.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<NodeId>,
     pub branch: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub nodes: BTreeMap<NodeId, String>,
+    /// Multi-projeto: a branch de cada repositório, pelo nome do link, quando
+    /// difere da da bancada (o "POR REPOSITÓRIO" do `MultiWorktreeForm`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub repos: BTreeMap<String, String>,
     #[serde(default)]
     pub destination: WorktreeDestination,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
+}
+
+/// De onde o formulário de worktree parte: a bancada que se duplica, ou, sem
+/// bancada de origem, a pasta escolhida ou o projeto da barra lateral.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct WorktreeSource {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbench: Option<WorkbenchId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<ProjectId>,
+    /// Com `workbench`: o formulário de um terminal só, sobre o repositório
+    /// da pasta em que ele abre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<NodeId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -585,6 +624,20 @@ pub struct WorktreeInfo {
     pub summary: String,
     pub suggested_branch: String,
     pub nodes: Vec<WorktreeNode>,
+    /// O nome do repositório, para o título "Worktree de <repo>".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub repo: String,
+    /// Presente quando a origem é um multi-projeto: o formulário é o de uma
+    /// branch por repositório, e os outros campos vêm vazios.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multi: Option<MultiWorktreeInfo>,
+}
+
+/// O `MultiWorktreeForm`: o nome do multi-projeto e um link por repositório.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MultiWorktreeInfo {
+    pub project: String,
+    pub repos: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -593,6 +646,19 @@ pub struct WorktreeNode {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
     pub state: WorktreeNodeState,
+    /// O nome do repositório em que o terminal abre; ausente, não é git.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    /// Onde o terminal abre hoje, com `~`: a linha mostra, e é a informação
+    /// que faltava quando as pastas embaralharam (`NodeWorktreeRow`).
+    #[serde(default)]
+    pub path: String,
+    /// A pasta existe; fora do git e ausente, a linha avisa em laranja.
+    #[serde(default = "yes")]
+    pub exists: bool,
+    /// A pasta está dentro da da bancada: na mesma branch, vai junto com ela.
+    #[serde(default)]
+    pub inside: bool,
 }
 
 /// O terminal ganha worktree própria, vai junto com a da bancada, ou não
@@ -626,8 +692,32 @@ pub enum BranchVerdict {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorktreePlanRequest {
-    pub workbench: WorkbenchId,
+    #[serde(flatten)]
+    pub source: WorktreeSource,
     pub branch: String,
+}
+
+/// Salva o canvas da bancada como template de bancada. Sem `name`, regrava o
+/// template de que ela nasceu ("Atualizar o template de origem"). Com
+/// `dry_run`, nada é gravado e a resposta é um [`TemplatePlan`]; sem, `{template}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SaveTemplate {
+    pub workbench: WorkbenchId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+/// O que salvar o template vai gravar, para o diálogo: a linha de resumo, o
+/// número de nós (zero é "Canvas vazio"), o nome resolvido e se já existe.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplatePlan {
+    pub summary: String,
+    pub nodes: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    pub exists: bool,
 }
 
 /// Um template de bancada (`templates.json`), para o formulário de bancada
@@ -649,6 +739,11 @@ pub struct CreateNode {
     pub kind: NodeKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame: Option<Rect>,
+    /// Sem `frame`: a área do canvas à vista, no espaço do canvas. O nó nasce
+    /// no primeiro lugar livre perto do canto dela (`spawnRect` do Swift);
+    /// sem as duas, na coluna do layout padrão.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<Rect>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub component: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -659,6 +754,220 @@ pub struct CreateNode {
     pub cmd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// O formulário de terminal confirmado: o componente em edição, os campos
+    /// de cima e o que estava na tela do CLI. Ganha de `component`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form: Option<Box<NodeFormSubmit>>,
+}
+
+// ---- O formulário de terminal (`NodeTemplateDialog`) ----
+
+/// Um componente no fio: o formato do `components.json` (ADR-057).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplateDraft {
+    pub name: String,
+    pub kind: NodeKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maestro: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rules: Option<String>,
+    #[serde(default, rename = "byAgent", skip_serializing_if = "Option::is_none")]
+    pub by_agent: Option<BTreeMap<String, CliOverrides>>,
+    /// O comando do shell. O de agente é do CLI, em `byAgent`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cmd: Option<String>,
+}
+
+/// O que um CLI muda no componente.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CliOverrides {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cmd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rules: Option<String>,
+}
+
+/// O que estava na tela para um CLI: o core guarda no componente com a regra
+/// do ADR-057.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShownFields {
+    pub cli: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rules: Option<String>,
+}
+
+/// Os campos de cima do formulário. `cwd` vazio é a raiz da bancada.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FormFields {
+    pub name: String,
+    pub kind: NodeKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    #[serde(default)]
+    pub cwd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cmd: Option<String>,
+    #[serde(default)]
+    pub maestro: bool,
+}
+
+/// O formulário confirmado, para `create_node` e `apply_node`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeFormSubmit {
+    pub template: TemplateDraft,
+    pub fields: FormFields,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<ShownFields>,
+    /// "Salvar como componente reutilizável".
+    #[serde(default)]
+    pub save_component: bool,
+}
+
+/// Abre o formulário: sem `node`, de terminal novo; com, do nó existente.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeForm {
+    pub workbench: WorkbenchId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<NodeId>,
+}
+
+/// O que a tela mostra para `cli`, depois de guardar o que estava nela
+/// (`shown`). `config` é a escolhida agora no + do campo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeFormScreen {
+    pub workbench: WorkbenchId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<NodeId>,
+    pub template: TemplateDraft,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<ShownFields>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<String>,
+}
+
+/// O + da pasta: o caminho escolhido, como o nó o grava.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeFolder {
+    pub workbench: WorkbenchId,
+    pub path: String,
+}
+
+/// Aplica o formulário a um nó existente: renomeia, e reinicia quando o
+/// processo muda. Responde `{node}` com o id final.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApplyNode {
+    pub workbench: WorkbenchId,
+    pub node: NodeId,
+    pub form: NodeFormSubmit,
+}
+
+/// Um CLI dos radios do formulário.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CliChoice {
+    pub key: String,
+    pub name: String,
+}
+
+/// Uma opção da lista de pasta: o valor gravado e o texto (`root` é a raiz).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderOption {
+    pub value: String,
+    pub shown: String,
+}
+
+/// Um componente salvo, para o menu do Terminal e a aba "Começar de outro".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComponentView {
+    pub name: String,
+    pub kind: NodeKind,
+    pub subtitle: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    /// O componente inteiro, para "Começar de outro" preencher o formulário.
+    pub template: TemplateDraft,
+}
+
+/// Um item do popup de modelo. Sem `id`, o padrão do CLI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelOption {
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+}
+
+/// Um item do popup de configuração. Sem `value`, o padrão do CLI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigOption {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+}
+
+/// Os valores na tela para o CLI escolhido. Nulo é o padrão do CLI.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScreenFields {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rules: Option<String>,
+}
+
+/// Resposta de `node_form_screen`: o componente com o que estava na tela já
+/// guardado, e o que a tela mostra para o CLI. Campo que o CLI não tem vem
+/// sem lista: `models` vazio é sem modelo, `config_env` ausente é sem
+/// configuração.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeScreenView {
+    pub template: TemplateDraft,
+    pub fields: ScreenFields,
+    pub models: Vec<ModelOption>,
+    pub efforts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_env: Option<String>,
+    pub config_items: Vec<ConfigOption>,
+}
+
+/// Resposta de `node_form`: o formulário aberto, com a tela do CLI escolhido.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeFormView {
+    pub template: TemplateDraft,
+    /// O CLI marcado ao abrir; ausente quando não há perfil nenhum.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli: Option<String>,
+    pub clis: Vec<CliChoice>,
+    pub folders: Vec<FolderOption>,
+    pub components: Vec<ComponentView>,
+    pub screen: NodeScreenView,
 }
 
 /// Os campos do formulário do nó. Ausente não mexe; `null` volta ao padrão

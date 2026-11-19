@@ -70,9 +70,10 @@ class _EgeonDeckAppState extends State<EgeonDeckApp> {
       value: widget.connection,
       child: WidgetsApp(
         title: widget.title,
+        debugShowCheckedModeBanner: false,
         color: AppColors.background,
         textStyle: AppTheme.textStyle,
-        builder: (context, _) => const HomePage(),
+        builder: (context, _) => HomePage(title: widget.title),
       ),
     );
   }

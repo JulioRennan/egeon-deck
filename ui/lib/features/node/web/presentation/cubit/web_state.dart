@@ -1,6 +1,6 @@
 part of 'web_cubit.dart';
 
-/// O nó web: esperando o core dizer qual página e perfil, ou com eles.
+/// O nó web, fase por fase.
 sealed class WebState {
   const WebState();
 }
@@ -10,18 +10,22 @@ final class WebWaiting extends WebState {
   const WebWaiting();
 }
 
-/// O que o core guardou do nó e, depois que a página nativa abre, onde ela
-/// está.
-final class WebShown extends WebState {
-  const WebShown({required this.node, this.page});
+/// O core mandou o nó: a URL que ele guardou e o perfil.
+sealed class WebWithNode extends WebState {
+  const WebWithNode(this.node);
 
   final WebNode node;
-  final WebPageState? page;
+}
 
-  /// O que a barra de endereço mostra: a página onde ela está agora, senão o
-  /// que o core guardou.
-  String get address => page?.url ?? node.url;
+/// A página nativa ainda não disse onde está: a barra mostra o que o core
+/// guardou.
+final class WebOpening extends WebWithNode {
+  const WebOpening(super.node);
+}
 
-  WebShown copyWith({WebNode? node, WebPageState? page}) =>
-      WebShown(node: node ?? this.node, page: page ?? this.page);
+/// A página nativa disse onde está e se carrega; a barra mostra a página.
+final class WebShown extends WebWithNode {
+  const WebShown(super.node, this.page);
+
+  final WebPageState page;
 }

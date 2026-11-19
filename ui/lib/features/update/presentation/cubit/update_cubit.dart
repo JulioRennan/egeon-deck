@@ -16,10 +16,8 @@ part 'update_state.dart';
 /// vez só, e o hospedeiro os desenha.
 class UpdateCubit extends Cubit<UpdateState> {
   UpdateCubit({required WatchApp watch, required this._answer})
-    : super(const UpdateState()) {
-    _stateSubscription = watch.state().listen(
-      (app) => emit(UpdateState(app: app)),
-    );
+    : super(const UpdateWaiting()) {
+    _stateSubscription = watch.state().listen((app) => emit(UpdateShown(app)));
     _effectSubscription = watch.effects().listen(_effects.add);
   }
 

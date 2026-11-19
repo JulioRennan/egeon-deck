@@ -80,6 +80,12 @@ impl NodeId {
         }
     }
 
+    /// O id do terminal de um nó, que a UI assina em `screen/<id>`: único entre
+    /// as bancadas. Nulo quando a junção não é um id válido (longo demais).
+    pub fn screen(workbench: &str, node: &str) -> Option<Self> {
+        Self::new(format!("{workbench}.{node}")).ok()
+    }
+
     /// `front end` → `front-end`, como `NodeTemplateStore.identifier`: o nome
     /// de um componente vira o id do nó.
     ///

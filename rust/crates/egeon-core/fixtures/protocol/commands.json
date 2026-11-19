@@ -20,6 +20,40 @@
     "path": "~/Documents/agro/nexus-backend",
     "workspace": "9f8e7d6c"
   },
+  "apply_node": {
+    "cmd": "apply_node",
+    "form": {
+      "fields": {
+        "agent": "claude",
+        "cwd": "api",
+        "kind": "agent",
+        "maestro": true,
+        "name": "revisor"
+      },
+      "save_component": true,
+      "shown": {
+        "cli": "claude",
+        "effort": "high",
+        "model": "claude-opus-5-5",
+        "prompt": "revisa o core"
+      },
+      "template": {
+        "agent": "claude",
+        "byAgent": {
+          "claude": {
+            "model": "claude-opus-5-5"
+          }
+        },
+        "cwd": "api",
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core"
+      }
+    },
+    "id": 155,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
   "chat_clear": {
     "cmd": "chat_clear",
     "id": 204,
@@ -86,10 +120,18 @@
     "id": 104,
     "workbench": "1a2b3c4d"
   },
+  "components": {
+    "cmd": "components",
+    "id": 156
+  },
   "copy": {
     "cmd": "copy",
     "id": 325,
     "node": "1a2b3c4d.claude"
+  },
+  "copy_targets": {
+    "cmd": "copy_targets",
+    "id": 166
   },
   "create_node": {
     "agent": "claude",
@@ -103,6 +145,86 @@
     },
     "id": 125,
     "type": "agent",
+    "workbench": "1a2b3c4d"
+  },
+  "create_node_form": {
+    "cmd": "create_node",
+    "form": {
+      "fields": {
+        "agent": "claude",
+        "cwd": "api",
+        "kind": "agent",
+        "maestro": true,
+        "name": "revisor"
+      },
+      "save_component": true,
+      "shown": {
+        "cli": "claude",
+        "effort": "high",
+        "model": "claude-opus-5-5",
+        "prompt": "revisa o core"
+      },
+      "template": {
+        "agent": "claude",
+        "byAgent": {
+          "claude": {
+            "model": "claude-opus-5-5"
+          }
+        },
+        "cwd": "api",
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core"
+      }
+    },
+    "frame": {
+      "h": 420.0,
+      "w": 640.0,
+      "x": 120.0,
+      "y": 80.5
+    },
+    "id": 154,
+    "type": "agent",
+    "workbench": "1a2b3c4d"
+  },
+  "create_node_form_visivel": {
+    "cmd": "create_node",
+    "form": {
+      "fields": {
+        "agent": "claude",
+        "cwd": "api",
+        "kind": "agent",
+        "maestro": true,
+        "name": "revisor"
+      },
+      "save_component": true,
+      "shown": {
+        "cli": "claude",
+        "effort": "high",
+        "model": "claude-opus-5-5",
+        "prompt": "revisa o core"
+      },
+      "template": {
+        "agent": "claude",
+        "byAgent": {
+          "claude": {
+            "model": "claude-opus-5-5"
+          }
+        },
+        "cwd": "api",
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core"
+      }
+    },
+    "id": 335,
+    "type": "agent",
+    "visible": {
+      "h": 420.0,
+      "w": 640.0,
+      "x": 120.0,
+      "y": 80.5
+    },
     "workbench": "1a2b3c4d"
   },
   "create_node_web": {
@@ -327,6 +449,59 @@
     "node": "claude",
     "workbench": "1a2b3c4d"
   },
+  "node_folder": {
+    "cmd": "node_folder",
+    "id": 153,
+    "path": "/Users/voce/deck/api",
+    "workbench": "1a2b3c4d"
+  },
+  "node_form": {
+    "cmd": "node_form",
+    "id": 150,
+    "workbench": "1a2b3c4d"
+  },
+  "node_form_do_no": {
+    "cmd": "node_form",
+    "id": 151,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "node_form_screen": {
+    "cli": "codex",
+    "cmd": "node_form_screen",
+    "config": "/Users/voce/.codex-x",
+    "id": 152,
+    "shown": {
+      "cli": "claude",
+      "effort": "high",
+      "model": "claude-opus-5-5",
+      "prompt": "revisa o core"
+    },
+    "template": {
+      "agent": "claude",
+      "byAgent": {
+        "claude": {
+          "model": "claude-opus-5-5"
+        }
+      },
+      "cwd": "api",
+      "kind": "agent",
+      "name": "revisor",
+      "prompt": "revisa o core"
+    },
+    "workbench": "1a2b3c4d"
+  },
+  "open_node_folder": {
+    "cmd": "open_node_folder",
+    "id": 331,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "open_url": {
+    "cmd": "open_url",
+    "id": 450,
+    "url": "https://example.com/docs"
+  },
   "open_workbench": {
     "cmd": "open_workbench",
     "id": 102,
@@ -476,6 +651,14 @@
     "to": 0,
     "workbench": "1a2b3c4d"
   },
+  "queue_open_image": {
+    "cmd": "queue_open_image",
+    "id": 350,
+    "image": "img-9f8e7d6c.png",
+    "item": "a1b2c3",
+    "node": "fila",
+    "workbench": "1a2b3c4d"
+  },
   "queue_remove": {
     "cmd": "queue_remove",
     "id": 307,
@@ -532,6 +715,11 @@
     "id": 404,
     "on": false
   },
+  "removal_losses": {
+    "cmd": "removal_losses",
+    "id": 167,
+    "workbench": "1a2b3c4d"
+  },
   "remove_node": {
     "cmd": "remove_node",
     "id": 129,
@@ -556,12 +744,44 @@
     "id": 112,
     "workspace": "9f8e7d6c"
   },
+  "reset_clock": {
+    "cmd": "reset_clock",
+    "id": 160,
+    "workbench": "1a2b3c4d"
+  },
   "resize": {
     "cmd": "resize",
     "cols": 120,
     "id": 11,
     "node": "t1",
     "rows": 40
+  },
+  "retry": {
+    "cmd": "retry",
+    "id": 330,
+    "node": "claude",
+    "now": true,
+    "workbench": "1a2b3c4d"
+  },
+  "save_template": {
+    "cmd": "save_template",
+    "dry_run": false,
+    "id": 164,
+    "name": "dupla",
+    "workbench": "1a2b3c4d"
+  },
+  "save_template_dry_run": {
+    "cmd": "save_template",
+    "dry_run": true,
+    "id": 163,
+    "name": "dupla",
+    "workbench": "1a2b3c4d"
+  },
+  "save_template_origem": {
+    "cmd": "save_template",
+    "dry_run": false,
+    "id": 165,
+    "workbench": "1a2b3c4d"
   },
   "save_workspace": {
     "cmd": "save_workspace",
@@ -829,10 +1049,54 @@
     "id": 140,
     "workbench": "1a2b3c4d"
   },
+  "worktree_info_de_pasta": {
+    "cmd": "worktree_info",
+    "id": 160,
+    "path": "~/Documents/agro/nexus-backend",
+    "project": "p1"
+  },
+  "worktree_info_no": {
+    "cmd": "worktree_info",
+    "id": 333,
+    "node": "back",
+    "workbench": "1a2b3c4d"
+  },
+  "worktree_multi": {
+    "branch": "feat/login",
+    "cmd": "worktree",
+    "destination": "new_workbench",
+    "id": 162,
+    "project": "m1",
+    "repos": {
+      "nexus-front": "fix/front"
+    },
+    "template": "dupla"
+  },
+  "worktree_no": {
+    "branch": "fix/api",
+    "cmd": "worktree",
+    "destination": "new_workbench",
+    "id": 332,
+    "node": "back",
+    "workbench": "1a2b3c4d"
+  },
   "worktree_plan": {
     "branch": "feature/PROJ-1234",
     "cmd": "worktree_plan",
     "id": 141,
+    "workbench": "1a2b3c4d"
+  },
+  "worktree_plan_de_pasta": {
+    "branch": "feature/PROJ-1234",
+    "cmd": "worktree_plan",
+    "id": 161,
+    "project": "p1"
+  },
+  "worktree_plan_no": {
+    "branch": "fix/api",
+    "cmd": "worktree_plan",
+    "id": 334,
+    "node": "back",
     "workbench": "1a2b3c4d"
   }
 }

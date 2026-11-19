@@ -154,6 +154,60 @@ void main() {
     expect(find.byKey(const ValueKey('queue-split')), findsNothing);
   });
 
+  testWidgets(
+    'abrir e fechar o painel guarda o texto do composer; o teclado vai à '
+    'fila e volta',
+    (tester) async {
+      await mount(tester);
+      EditableText field(Finder of) => tester.widget<EditableText>(
+        find.descendant(of: of, matching: find.byType(EditableText)),
+      );
+      final composer = find.byKey(const ValueKey('composer-field'));
+      await tester.enterText(
+        find.descendant(of: composer, matching: find.byType(EditableText)),
+        'meio escrito',
+      );
+
+      await tester.tap(find.byKey(const ValueKey('queue-fila1')));
+      await tester.pump();
+      await tester.pump();
+      expect(field(composer).controller.text, 'meio escrito');
+      expect(
+        field(find.byKey(const ValueKey('new-row'))).focusNode.hasFocus,
+        isTrue,
+        reason: 'abrir leva o teclado a "Nova tarefa"',
+      );
+
+      await tester.tap(find.byKey(const ValueKey('queue-fila1')));
+      await tester.pump();
+      expect(field(composer).controller.text, 'meio escrito');
+      expect(
+        field(composer).focusNode.hasFocus,
+        isTrue,
+        reason: 'fechar devolve o teclado ao composer',
+      );
+    },
+  );
+
+  testWidgets('o ✕ do painel também devolve o teclado ao composer', (
+    tester,
+  ) async {
+    await mount(tester);
+    await tester.tap(find.byKey(const ValueKey('queue-fila1')));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('queue-close')));
+    await tester.pump();
+    expect(find.byType(QueueBody), findsNothing);
+    final composer = tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(const ValueKey('composer-field')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(composer.focusNode.hasFocus, isTrue);
+  });
+
   testWidgets('a conversa fica ao lado do painel, com o composer à mão', (
     tester,
   ) async {

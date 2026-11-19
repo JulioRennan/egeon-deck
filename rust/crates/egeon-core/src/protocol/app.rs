@@ -109,3 +109,10 @@ pub struct UpdateAuto {
 pub struct ReaperEnabled {
     pub on: bool,
 }
+
+/// Abre um link no navegador do sistema, como o `NSWorkspace.open` do Swift
+/// no clique do link da resposta do chat. Recusa se o sistema não abrir.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenUrl {
+    pub url: String,
+}

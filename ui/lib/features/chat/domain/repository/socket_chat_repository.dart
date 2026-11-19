@@ -1,8 +1,12 @@
+import '../../../../commons/utils/wire.dart';
 import '../../../../core/adapters/egeon_socket_client.dart';
 import '../entities/chat_block.dart';
 import '../entities/chat_completion.dart';
+import '../entities/chat_participant.dart';
+import '../entities/chat_queue.dart';
 import '../entities/chat_thread.dart';
 import '../entities/chat_update.dart';
+import '../entities/permission_request.dart';
 import 'chat_repository.dart';
 import '../errors/chat_error.dart';
 
@@ -26,15 +30,18 @@ class SocketChatRepository implements ChatRepository {
   Stream<ChatUpdate> watch(String workbenchId) =>
       _client.subscribe('chat/$workbenchId').map(ChatUpdate.fromMap);
 
+  /// A thread inteira: linhas, coluna, filas e bandeja. Sem as três últimas,
+  /// a recuperação de um `rev` perdido esvaziaria a coluna e travaria o envio
+  /// até o próximo evento.
   @override
   Future<ChatThread> snapshot(String workbenchId) async {
     final reply = await _request('chat_snapshot', {'workbench': workbenchId});
     return ChatThread(
       rev: reply['rev']! as int,
-      blocks: [
-        for (final b in reply['blocks']! as List<Object?>)
-          ChatBlock.fromMap(b! as Map<String, Object?>),
-      ],
+      blocks: mapList(reply['blocks'], ChatBlock.fromMap),
+      participants: mapList(reply['participants'], ChatParticipantInfo.fromMap),
+      queues: mapList(reply['queues'], ChatQueueInfo.fromMap),
+      permissions: mapList(reply['permissions'], PermissionRequest.fromMap),
     );
   }
 
@@ -81,6 +88,9 @@ class SocketChatRepository implements ChatRepository {
   @override
   Future<void> clear(String workbenchId) =>
       _request('chat_clear', {'workbench': workbenchId});
+
+  @override
+  Future<void> openLink(String url) => _request('open_url', {'url': url});
 
   @override
   Future<void> answerPermission(

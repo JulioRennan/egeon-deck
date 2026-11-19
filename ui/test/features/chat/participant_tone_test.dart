@@ -32,7 +32,14 @@ void main() {
       final read = ChatParticipantInfo.fromMap(map);
       expect(read.tone, ActivityTone.parse(map['tone']));
       expect(read.needsAttention, map['needsAttention']);
+      // A tela do terminal vem pronta do core: `<bancada>.<nó>`.
+      expect(read.screen, map['screen']);
+      expect(read.screen, endsWith('.${read.id}'));
+      // A linha de estado vem pronta: a UI não monta texto a partir do nome.
+      expect(read.status, map['status']);
+      expect(read.statusTone, StatusTone.parse(map['statusTone']));
     }
+    expect(participants.any((m) => m['status'] == 'trabalhando…'), isTrue);
     expect(participants.any((m) => m['tone'] == 'green'), isTrue);
   });
 

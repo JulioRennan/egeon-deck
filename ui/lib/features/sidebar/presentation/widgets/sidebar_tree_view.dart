@@ -380,7 +380,7 @@ class _SidebarTreeViewState extends State<SidebarTreeView> {
     );
   }
 
-  Widget _bench(SidebarBench bench, {bool draggable = true}) => Padding(
+  Widget _bench(SidebarBench bench) => Padding(
     key: ValueKey('bench-${bench.id}'),
     padding: const EdgeInsets.only(bottom: 6),
     child: KeyedSubtree(
@@ -388,7 +388,7 @@ class _SidebarTreeViewState extends State<SidebarTreeView> {
       child: SidebarBenchRow(
         bench: bench,
         actions: widget.benches,
-        drag: draggable ? _hooks(DragBench(bench.id)) : null,
+        drag: _hooks(DragBench(bench.id)),
       ),
     ),
   );
@@ -415,8 +415,9 @@ class _SidebarTreeViewState extends State<SidebarTreeView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Órfã não se arrasta: não há projeto de origem para tirá-la.
-              for (final bench in orphans) _bench(bench, draggable: false),
+              // Órfã se arrasta como as outras: soltar num projeto é como ela
+              // ganha casa (`Sidebar.swift` liga o arrasto também nela).
+              for (final bench in orphans) _bench(bench),
             ],
           ),
         ),

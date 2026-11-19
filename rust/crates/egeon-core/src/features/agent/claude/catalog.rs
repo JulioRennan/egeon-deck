@@ -208,6 +208,12 @@ impl CatalogMemo {
         self.memo.as_ref().map(|c| &c.catalog)
     }
 
+    /// Os embutidos e as skills do binário — o que o `/` oferece além do disco
+    /// —, do último cache guardado. `None` enquanto não se leu.
+    pub fn commands(&self) -> Option<&CommandRegistry> {
+        self.memo.as_ref()?.commands.as_ref()
+    }
+
     /// Os preços do Claude Code instalado — a camada do meio da `PriceTable` —,
     /// do último cache guardado.
     pub fn installed_prices(&self) -> BTreeMap<String, ModelPrice> {

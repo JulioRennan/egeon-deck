@@ -56,7 +56,8 @@ pub enum OrgEffect {
     /// Abre a grade de cores na bancada ativa (`/workbench/color?show=1`).
     ShowPalette,
     /// O banner de ciclo de ligação.
-    Banner { text: String },
+    /// O aviso de uma linha que o canvas da bancada [workbench] mostra.
+    Banner { workbench: String, text: String },
     /// Projeto novo: entra no fim da lista do workspace (que abre, se estava
     /// recolhido).
     AddProject {
@@ -501,6 +502,7 @@ pub fn edge(state: &mut OrgState, req: &RouteRequest) -> (RouteReply, Vec<OrgEff
             vec![],
         );
     };
+    let workbench = bench.id.clone();
     let (json, outcome) = edges::apply(
         bench,
         req.param("from").unwrap_or(""),
@@ -509,7 +511,7 @@ pub fn edge(state: &mut OrgState, req: &RouteRequest) -> (RouteReply, Vec<OrgEff
     );
     let mut effects: Vec<OrgEffect> = outcome.notes.into_iter().map(log).collect();
     if let Some(text) = outcome.banner {
-        effects.push(OrgEffect::Banner { text });
+        effects.push(OrgEffect::Banner { workbench, text });
     }
     if outcome.changed {
         effects.push(OrgEffect::PersistWorkbenches);

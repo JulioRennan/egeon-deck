@@ -36,7 +36,8 @@ case "$FLAVOR" in
 esac
 
 if [ "${SKIP_BUILD:-}" != "1" ]; then
-  fvm flutter build macos "--$CONFIG"
+  # shellcheck disable=SC2086 # DART_DEFINES pode trazer vários --dart-define.
+  fvm flutter build macos "--$CONFIG" ${DART_DEFINES:-}
 fi
 
 SRC="build/macos/Build/Products/$PRODUCTS/EgeonDeck Next.app"

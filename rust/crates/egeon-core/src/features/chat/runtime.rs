@@ -104,8 +104,8 @@ pub trait ChatHost {
     fn activity(&self, address: &str) -> Option<Activity>;
     fn source(&self, workbench: &str, node: &str) -> Option<Source>;
     fn identity(&self, workbench: &str, node: &str) -> Identity;
-    /// O pedido de permissão em aberto da bancada, para a bandeja.
-    fn permission(&self, workbench: &str) -> Option<Value>;
+    /// Os pedidos de permissão em aberto da bancada, para a bandeja.
+    fn permissions(&self, workbench: &str) -> Vec<Value>;
     fn slash(&self, workbench: &str, node: &str) -> Option<SlashInputs>;
     /// A tabela de preços em vigor.
     fn prices(&self) -> PriceTable;
@@ -597,9 +597,10 @@ impl ChatRuntime {
             .collect();
         for bench in &benches {
             self.routes.register(&bench.id, &bench.name, &bench.mode);
-            let participants = ChatParticipant::from_nodes(&bench.nodes, &bench.name, |address| {
-                host.activity(address)
-            });
+            let participants =
+                ChatParticipant::from_nodes(&bench.nodes, &bench.id, &bench.name, |address| {
+                    host.activity(address)
+                });
             let before = self.routes.participants(&bench.id).to_vec();
             if before != participants {
                 self.dirty.insert(bench.id.clone());
@@ -607,7 +608,7 @@ impl ChatRuntime {
             let effects = self.routes.set_participants(&bench.id, participants);
             let permission = self
                 .routes
-                .set_permission(&bench.id, host.permission(&bench.id));
+                .set_permissions(&bench.id, host.permissions(&bench.id));
             let queues: Vec<QueueInfo> =
                 host.queues(&bench.id).iter().map(QueueInfo::from).collect();
             let queues = self.routes.set_queues(&bench.id, queues);

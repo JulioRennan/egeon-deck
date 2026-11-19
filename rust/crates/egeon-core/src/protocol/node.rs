@@ -209,6 +209,15 @@ pub enum NodeEffect {
 
 // ---- Comandos ----
 
+/// "Tentar agora" (`now`) ou "Cancelar tentativa" no estado de tentativa
+/// agendada do card: o mesmo do `POST /retry?target=&now=1` (ADR-072).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryNode {
+    pub workbench: WorkbenchId,
+    pub node: NodeId,
+    pub now: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeTarget {
     pub workbench: WorkbenchId,

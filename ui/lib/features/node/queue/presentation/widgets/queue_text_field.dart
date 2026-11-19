@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../../../../commons/widgets/pasted_image.dart';
 import '../../../../../theme/app_colors.dart';
 
 /// Campo de texto corrido da fila: várias linhas, Enter confirma e ⇧Enter
-/// quebra a linha, Esc sai. Não é o `TextField` do Material — o app não o usa.
+/// quebra a linha, Esc sai, e ⌘V com imagem na área de transferência vira print
+/// (sem imagem, cola o texto). Não é o `TextField` do Material — o app não o usa.
 class QueueTextField extends StatefulWidget {
   const QueueTextField({
     required this.text,
@@ -16,6 +20,7 @@ class QueueTextField extends StatefulWidget {
     this.autofocus = false,
     this.fontSize = 13,
     this.focusNode,
+    this.onPasteImage,
     super.key,
   });
 
@@ -31,6 +36,10 @@ class QueueTextField extends StatefulWidget {
   final VoidCallback? onSubmit;
   final VoidCallback? onEscape;
 
+  /// ⌘V com arquivo ou imagem na área de transferência. Devolve se aproveitou
+  /// alguma imagem; quando não, o ⌘V cola o texto como sempre.
+  final bool Function(PastedClipboard pasted)? onPasteImage;
+
   @override
   State<QueueTextField> createState() => _QueueTextFieldState();
 }
@@ -39,6 +48,7 @@ class _QueueTextFieldState extends State<QueueTextField> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.text,
   );
+  final _editable = GlobalKey<EditableTextState>();
   FocusNode? _ownFocus;
   FocusNode get _focus => widget.focusNode ?? (_ownFocus ??= FocusNode());
 
@@ -68,6 +78,13 @@ class _QueueTextFieldState extends State<QueueTextField> {
           ? KeyEventResult.ignored
           : KeyEventResult.handled;
     }
+    if (event.logicalKey == LogicalKeyboardKey.keyV &&
+        HardwareKeyboard.instance.isMetaPressed &&
+        widget.onPasteImage != null &&
+        !widget.readOnly) {
+      unawaited(_paste());
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
       widget.onEscape?.call();
       return widget.onEscape == null
@@ -75,6 +92,15 @@ class _QueueTextFieldState extends State<QueueTextField> {
           : KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  /// A área de transferência só se lê assíncrona: o ⌘V é tomado na hora e, sem
+  /// imagem que sirva, devolvido ao campo como colar texto.
+  Future<void> _paste() async {
+    final pasted = await readPastedImage();
+    if (!mounted) return;
+    if (pasted != null && (widget.onPasteImage?.call(pasted) ?? false)) return;
+    _editable.currentState?.pasteText(SelectionChangedCause.keyboard);
   }
 
   @override
@@ -107,6 +133,7 @@ class _QueueTextFieldState extends State<QueueTextField> {
           MouseRegion(
             cursor: SystemMouseCursors.text,
             child: EditableText(
+              key: _editable,
               controller: _controller,
               focusNode: _focus,
               autofocus: widget.autofocus,

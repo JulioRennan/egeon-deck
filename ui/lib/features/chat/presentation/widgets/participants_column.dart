@@ -131,12 +131,21 @@ class _Row extends StatelessWidget {
     final color = participant.isAgent
         ? ChatPalette.of(who)
         : AppColors.white(0.6);
+    final status = participant.status;
+    final statusColor = switch (participant.statusTone) {
+      StatusTone.orange => AppColors.attention,
+      StatusTone.red => ActivityColors.red,
+      StatusTone.agent => color.withValues(alpha: 0.85),
+      null => AppColors.white(0.45),
+    };
+    // Terminal fechado fica na coluna, mas não recebe: sem mão e sem clique.
+    final dead = participant.isDead;
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: dead ? MouseCursor.defer : SystemMouseCursors.click,
       child: GestureDetector(
         key: ValueKey('participant-${participant.id}'),
         behavior: HitTestBehavior.opaque,
-        onTap: () => onTap(participant.id),
+        onTap: dead ? null : () => onTap(participant.id),
         child: Container(
           height: 40,
           margin: const EdgeInsets.only(bottom: 3),
@@ -175,14 +184,15 @@ class _Row extends StatelessWidget {
                         decoration: TextDecoration.none,
                       ),
                     ),
-                    if (participant.role != null)
+                    if (status.isNotEmpty)
                       Text(
-                        participant.role!,
+                        status,
+                        key: ValueKey('participant-status-${participant.id}'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: AppColors.white(0.45),
+                          color: statusColor,
                           decoration: TextDecoration.none,
                         ),
                       ),

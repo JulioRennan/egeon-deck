@@ -10,22 +10,20 @@ use super::service;
 use crate::commons::ids::{BranchName, NodeId};
 use crate::features::path_text;
 use crate::features::workbench::model::WorkbenchConfig;
+use crate::features::workspace::model::ProjectConfig;
+use crate::features::workspace::multi::link_names;
 use crate::protocol::org::{
-    BranchVerdict, WorktreeInfo, WorktreeNode, WorktreeNodeState, WorktreePlan,
+    BranchVerdict, MultiWorktreeInfo, WorktreeInfo, WorktreeNode, WorktreeNodeState, WorktreePlan,
 };
 
-/// O repositório da bancada: o checkout principal, mesmo que ela já esteja numa
+/// O repositório da pasta: o checkout principal, mesmo que ela já esteja numa
 /// worktree — partir de uma worktree ligada aninharia uma dentro da outra.
-fn repository(
-    git: &Git,
-    origin: &WorkbenchConfig,
-    home: &str,
-) -> Result<(String, Status, String), String> {
-    let path = origin.url_path(home);
-    let not_a_repo = || format!("{} não é repositório git", origin.path);
-    let status = service::status(git, &path).map_err(|_| not_a_repo())?;
-    let root = service::main_repo(git, &path).unwrap_or_else(|| status.repo_root.clone());
-    Ok((root, status, path))
+/// `shown` é a pasta como o usuário a escreveu, para o erro.
+fn repository(git: &Git, path: &str, shown: &str) -> Result<(String, Status), String> {
+    let not_a_repo = || format!("{shown} não é repositório git");
+    let status = service::status(git, path).map_err(|_| not_a_repo())?;
+    let root = service::main_repo(git, path).unwrap_or_else(|| status.repo_root.clone());
+    Ok((root, status))
 }
 
 /// O que vai junto, em linhas. De onde a worktree sai e o que acontece com as
@@ -58,7 +56,8 @@ pub fn info(
     home: &str,
     copy_script: &str,
 ) -> Result<WorktreeInfo, String> {
-    let (root, status, path) = repository(git, origin, home)?;
+    let path = origin.url_path(home);
+    let (root, status) = repository(git, &path, &origin.path)?;
     let suggested = service::available_branch(git, &status.branch, &root);
     let nodes = node::inspect(git, origin, &path, &suggested, home)
         .into_iter()
@@ -77,6 +76,10 @@ pub fn info(
                 branch: plan.enabled.then(|| plan.branch.clone()),
                 node: NodeId::new(plan.node_id.as_str()).ok()?,
                 state,
+                repo: plan.repo_root.as_ref().map(|_| plan.repo_name()),
+                path: path_text::abbreviate_tilde(&plan.current_path, home),
+                exists: std::path::Path::new(&plan.current_path).exists(),
+                inside: plan.inside_workbench,
             })
         })
         .collect();
@@ -84,6 +87,52 @@ pub fn info(
         summary: summary(&status, copy_script),
         suggested_branch: suggested,
         nodes,
+        repo: path_text::last_component(&root),
+        multi: None,
+    })
+}
+
+/// `worktree_info` sem bancada de origem (`createWorkbenchFromWorktree`): o
+/// repositório da pasta, sem terminais — a bancada nasce vazia ou de template.
+pub fn info_at(
+    git: &Git,
+    folder: &str,
+    shown: &str,
+    copy_script: &str,
+) -> Result<WorktreeInfo, String> {
+    let (root, status) = repository(git, folder, shown)?;
+    Ok(WorktreeInfo {
+        summary: summary(&status, copy_script),
+        suggested_branch: service::available_branch(git, &status.branch, &root),
+        nodes: Vec::new(),
+        repo: path_text::last_component(&root),
+        multi: None,
+    })
+}
+
+/// `worktree_info` de multi-projeto: o `MultiWorktreeForm` só precisa do nome
+/// e de um campo por repositório, com o nome do link. Sem git: a branch da
+/// bancada nasce vazia, como no Swift.
+pub fn multi_info(
+    project: &ProjectConfig,
+    members: &[&ProjectConfig],
+    home: &str,
+) -> Result<WorktreeInfo, String> {
+    if members.is_empty() {
+        return Err(format!("\"{}\" não junta pasta nenhuma", project.name));
+    }
+    Ok(WorktreeInfo {
+        summary: String::new(),
+        suggested_branch: String::new(),
+        nodes: Vec::new(),
+        repo: String::new(),
+        multi: Some(MultiWorktreeInfo {
+            project: project.name.clone(),
+            repos: link_names(members, home)
+                .into_iter()
+                .map(|link| link.name)
+                .collect(),
+        }),
     })
 }
 
@@ -95,7 +144,18 @@ pub fn plan(
     branch: &str,
     home: &str,
 ) -> Result<WorktreePlan, String> {
-    let (root, status, _) = repository(git, origin, home)?;
+    plan_at(git, &origin.url_path(home), &origin.path, branch, home)
+}
+
+/// `worktree_plan` de uma pasta, com ou sem bancada de origem.
+pub fn plan_at(
+    git: &Git,
+    folder: &str,
+    shown: &str,
+    branch: &str,
+    home: &str,
+) -> Result<WorktreePlan, String> {
+    let (root, status) = repository(git, folder, shown)?;
     let plan = service::index(git, &root).plan(branch);
     let folder = match &plan {
         BranchPlan::AlreadyCheckedOut(path) => path.clone(),

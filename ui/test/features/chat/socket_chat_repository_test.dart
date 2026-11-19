@@ -85,15 +85,16 @@ void main() {
     expect(first.first.activity, 'working');
     expect(first.first.address, 'deck/front');
     expect(first.first.isAgent, isTrue);
-    final permissions = [
-      for (final op in updates.expand((u) => u.ops).whereType<PermissionOp>())
-        op.request,
+    final trays = [
+      for (final op in updates.expand((u) => u.ops).whereType<PermissionsOp>())
+        op.list,
     ];
-    final ask = permissions.firstWhere((r) => r != null)!;
-    expect(ask.id, 'p1');
-    expect(ask.tool, 'Bash');
-    expect(ask.detail, 'rm -rf x');
-    expect(permissions.last, isNull);
+    final stacked = trays.firstWhere((l) => l.isNotEmpty);
+    expect(stacked.map((r) => r.id), ['p1', 'p2'], reason: 'empilhados');
+    expect(stacked.first.tool, 'Bash');
+    expect(stacked.first.detail, 'rm -rf x');
+    expect(stacked.last.isQuestion, isTrue);
+    expect(trays.last, isEmpty);
     expect(
       updates.expand((u) => u.ops).whereType<QueuesOp>(),
       isNotEmpty,
@@ -112,7 +113,7 @@ void main() {
     expect(thread.rev, greaterThan(0));
     expect(thread.blocks, isEmpty);
     expect(thread.participants.map((p) => p.id), ['front', 'back']);
-    expect(thread.permission, isNull);
+    expect(thread.permissions, isEmpty);
   });
 
   test('evento a evento, a thread guarda a barra e o pedido', () {
@@ -124,7 +125,7 @@ void main() {
     final seen = <String?>[];
     for (final e in events['events']! as List<Object?>) {
       thread = thread.apply(ChatUpdate.fromMap(e! as Map<String, Object?>));
-      seen.add(thread.permission?.id);
+      seen.add(thread.permissions.firstOrNull?.id);
     }
     expect(seen.where((id) => id != null), isNotEmpty);
     expect(seen.first, isNull);
@@ -190,6 +191,10 @@ void main() {
   test('mais histórico, arquivar e instantâneo, como na fixture', () async {
     expect(await answered(repository.loadMore(wb)), fixture('chat_more'));
     expect(await answered(repository.clear(wb)), fixture('chat_clear'));
+    expect(
+      await answered(repository.openLink('https://example.com/docs')),
+      fixture('open_url'),
+    );
 
     final future = repository.snapshot(wb);
     await pump();
@@ -199,10 +204,32 @@ void main() {
       ...replies['chat_snapshot']!,
       're': sent['id'],
       'blocks': [prompt(2).raw],
+      // O core manda também a coluna, as filas e a bandeja
+      // (`ChatView::snapshot`); a recuperação não pode perdê-las.
+      'participants': [
+        {
+          'id': 'sh1',
+          'address': 'deck/sh1',
+          'isAgent': false,
+          'role': 'zsh',
+          'activity': 'ready',
+          'needsAttention': false,
+          'screen': 'w1.sh1',
+        },
+      ],
+      'queues': [
+        {'id': 'fila1', 'summary': '2 pendentes', 'asking': false},
+      ],
+      'permissions': [
+        {'id': 'p1', 'tool': 'Bash', 'detail': 'rm -rf x'},
+      ],
     });
     final thread = await future;
     expect(thread.rev, 42);
     expect(thread.blocks.single.id, 'p|u2');
+    expect(thread.participants.single.screen, 'w1.sh1');
+    expect(thread.queues.single.id, 'fila1');
+    expect(thread.permissions.single.id, 'p1');
   });
 
   test(

@@ -2,8 +2,10 @@ import '../../../../core/adapters/organization_feed.dart';
 import '../../../../core/domain/entities/organization.dart';
 import '../entities/bench_template.dart';
 import '../entities/removal_plan.dart';
+import '../entities/template_plan.dart';
 import '../entities/worktree_info.dart';
 import '../entities/worktree_plan.dart';
+import '../entities/worktree_source.dart';
 import 'workbench_repository.dart';
 import '../../../../core/adapters/egeon_socket_client.dart';
 import '../errors/workbench_error.dart';
@@ -46,6 +48,10 @@ class SocketWorkbenchRepository implements WorkbenchRepository {
       _command('clear_workbench', {'workbench': id});
 
   @override
+  Future<void> resetClock(String id) =>
+      _command('reset_clock', {'workbench': id});
+
+  @override
   Future<String> rules(String id) async => _bench(id).rules ?? '';
 
   /// Texto vazio (ou só espaços) apaga as regras: o core quer `null`.
@@ -59,6 +65,15 @@ class SocketWorkbenchRepository implements WorkbenchRepository {
   Future<RemovalPlan> planRemoval(String id) async => RemovalPlan.fromMap(
     await _command('plan_remove_workbench', {'workbench': id}),
   );
+
+  @override
+  Future<List<String>> removalLosses(String id) async {
+    final reply = await _command('removal_losses', {'workbench': id});
+    return [
+      for (final line in reply['losses'] as List<Object?>? ?? const [])
+        line! as String,
+    ];
+  }
 
   @override
   Future<void> remove(String id, {bool deleteWorktrees = false}) => _command(
@@ -92,28 +107,52 @@ class SocketWorkbenchRepository implements WorkbenchRepository {
   }
 
   @override
-  Future<WorktreeInfo> worktreeInfo(String id) async =>
-      WorktreeInfo.fromMap(await _command('worktree_info', {'workbench': id}));
+  Future<WorktreeInfo> worktreeInfo(WorktreeSource source) async =>
+      WorktreeInfo.fromMap(await _command('worktree_info', source.toMap()));
 
   @override
-  Future<WorktreePlan> worktreePlan(String id, String branch) async =>
-      WorktreePlan.fromMap(
-        await _command('worktree_plan', {'workbench': id, 'branch': branch}),
-      );
+  Future<WorktreePlan> worktreePlan(
+    WorktreeSource source,
+    String branch,
+  ) async => WorktreePlan.fromMap(
+    await _command('worktree_plan', {...source.toMap(), 'branch': branch}),
+  );
 
   @override
-  Future<String> createWorktree(
-    String id,
+  Future<WorktreeCreated> createWorktree(
+    WorktreeSource source,
     String branch, {
-    required WorktreeDestination destination,
+    WorktreeDestination destination = WorktreeDestination.newWorkbench,
     Map<String, String> nodes = const {},
-  }) async {
-    final reply = await _command('worktree', {
-      'workbench': id,
+    Map<String, String> repos = const {},
+    String? template,
+  }) async => WorktreeCreated.fromMap(
+    await _command('worktree', {
+      ...source.toMap(),
       'branch': branch,
       'destination': destination.wire,
       if (nodes.isNotEmpty) 'nodes': nodes,
+      if (repos.isNotEmpty) 'repos': repos,
+      'template': ?template,
+    }),
+  );
+
+  @override
+  Future<TemplatePlan> planTemplate(String id, {String? name}) async =>
+      TemplatePlan.fromMap(
+        await _command('save_template', {
+          'workbench': id,
+          'name': ?name,
+          'dry_run': true,
+        }),
+      );
+
+  @override
+  Future<String> saveTemplate(String id, {String? name}) async {
+    final reply = await _command('save_template', {
+      'workbench': id,
+      'name': ?name,
     });
-    return reply['workbench']! as String;
+    return reply['template']! as String;
   }
 }

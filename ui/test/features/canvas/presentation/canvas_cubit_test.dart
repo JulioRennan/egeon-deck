@@ -3,9 +3,13 @@ import 'dart:ui';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_tool.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_viewport.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/edge_link.dart';
+import 'package:egeon_deck/features/canvas/domain/usecase/place_node.dart';
+import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_cubit.dart';
+import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_tool_cubit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/canvas_cubit_for.dart';
+import '../../../support/in_memory_canvas_repository.dart';
 import '../../../support/pump.dart';
 
 void main() {
@@ -36,8 +40,9 @@ void main() {
       cubit.state.viewport.origin.dx,
       closeTo(before.dx + 50 / cubit.state.viewport.zoom, 0.001),
     );
+    expect(cubit.state, isA<CanvasPanning>());
     cubit.endPan();
-    expect(cubit.state.panning, isFalse);
+    expect(cubit.state, isA<CanvasIdle>());
     await cubit.close();
   });
 
@@ -119,20 +124,22 @@ void main() {
     'clique com a ferramenta cria no tamanho padrão e volta ao cursor',
     () async {
       final (:cubit, :repository) = await canvasCubitFor();
+      final tools = toolCubitFor(repository);
       cubit.resetZoom();
-      cubit.selectTool(CanvasTool.queue);
+      tools.selectTool(CanvasTool.queue);
 
-      await cubit.placeByGesture(
+      await tools.placeByGesture(
         const Offset(200, 200),
         const Offset(203, 205),
+        cubit.state.viewport,
       );
       await pump();
 
-      expect(cubit.state.tool, CanvasTool.cursor);
+      expect(tools.state, isA<CanvasPointer>());
       final placed = cubit.state.cards.last;
       expect(placed.frame.size, CanvasTool.queue.defaultNodeSize);
       expect(placed.kind.name, 'queue');
-      expect(repository, isNotNull);
+      await tools.close();
       await cubit.close();
     },
   );
@@ -140,43 +147,118 @@ void main() {
   test(
     'arrasto com a ferramenta desenha o retângulo, com piso no mínimo',
     () async {
-      final (:cubit, repository: _) = await canvasCubitFor();
+      final (:cubit, :repository) = await canvasCubitFor();
+      final tools = toolCubitFor(repository);
       cubit.resetZoom();
-      cubit.selectTool(CanvasTool.terminal);
-      await cubit.placeByGesture(
+      tools.selectTool(CanvasTool.queue);
+      await tools.placeByGesture(
         const Offset(200, 200),
         const Offset(300, 260),
+        cubit.state.viewport,
       );
       await pump();
       final placed = cubit.state.cards.last;
       expect(placed.frame.width, 280);
       expect(placed.frame.height, 180);
 
-      cubit.selectTool(CanvasTool.web);
-      await cubit.placeByGesture(
+      tools.selectTool(CanvasTool.web);
+      await tools.placeByGesture(
         const Offset(100, 100),
         const Offset(900, 600),
+        cubit.state.viewport,
       );
       await pump();
       expect(
         cubit.state.cards.last.frame.width,
         closeTo(800 / cubit.state.viewport.zoom, 1),
       );
+      await tools.close();
+      await cubit.close();
+    },
+  );
+
+  test(
+    'terminal sem componente não nasce: pede o formulário com o retângulo',
+    () async {
+      final (:cubit, :repository) = await canvasCubitFor();
+      final tools = toolCubitFor(repository);
+      final before = cubit.state.cards.length;
+      final asked = <Rect>[];
+      final subscription = tools.configureTerminal.listen(asked.add);
+      cubit.resetZoom();
+      tools.selectTool(CanvasTool.terminal);
+      await tools.placeByGesture(
+        const Offset(200, 200),
+        const Offset(300, 260),
+        cubit.state.viewport,
+      );
+      await pump();
+      expect(asked, hasLength(1));
+      expect(asked.single.width, 280, reason: 'o piso do mínimo vale aqui');
+      expect(cubit.state.cards, hasLength(before), reason: 'nada criado');
+      expect(tools.state, isA<CanvasPointer>());
+      await subscription.cancel();
+      await tools.close();
       await cubit.close();
     },
   );
 
   test('escolher componente arma o terminal e avisa', () async {
-    final (:cubit, repository: _) = await canvasCubitFor();
-    cubit.pickComponent('revisor');
-    expect(cubit.state.tool, CanvasTool.terminal);
-    expect(cubit.state.pendingComponent, 'revisor');
-    expect(cubit.state.banner, 'Próximo terminal: revisor');
+    final (:cubit, :repository) = await canvasCubitFor();
+    final tools = toolCubitFor(repository);
+    tools.pickComponent('revisor');
+    expect(tools.tool, CanvasTool.terminal);
+    expect(
+      tools.state,
+      isA<CanvasAnnouncing>().having(
+        (s) => s.component,
+        'component',
+        'revisor',
+      ),
+    );
 
-    await cubit.placeByGesture(const Offset(100, 100), const Offset(100, 100));
+    await tools.placeByGesture(
+      const Offset(100, 100),
+      const Offset(100, 100),
+      cubit.state.viewport,
+    );
     await pump();
-    expect(cubit.state.pendingComponent, isNull, reason: 'vale para um nó só');
+    expect(tools.state, isA<CanvasPointer>(), reason: 'vale para um nó só');
     expect(cubit.state.cards.last.title, 'revisor');
+    await tools.close();
+    await cubit.close();
+  });
+
+  test('o aviso do componente some e ele continua armado', () async {
+    final tools = CanvasToolCubit(
+      workbenchId: 'bancada',
+      placeNode: PlaceNode(InMemoryCanvasRepository()),
+      bannerTime: const Duration(milliseconds: 20),
+    );
+    tools.pickComponent(null);
+    expect(tools.state, isA<CanvasAnnouncing>());
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(
+      tools.state,
+      isA<CanvasComponentArmed>().having((s) => s.component, 'shell', null),
+    );
+    tools.selectTool(CanvasTool.cursor);
+    expect(tools.state, isA<CanvasPointer>());
+    await tools.close();
+  });
+
+  test('a vista que se mexe avisa o movimento e depois assenta', () async {
+    final (:cubit, repository: _) = await canvasCubitFor();
+    final motion = <bool>[];
+    final subscription = cubit.motion.listen(motion.add);
+    cubit.stepZoom(1);
+    await pump();
+    expect(motion, [true]);
+    await Future<void>.delayed(
+      CanvasCubit.settleDelay + const Duration(milliseconds: 50),
+    );
+    expect(motion, [true, false]);
+    await subscription.cancel();
     await cubit.close();
   });
 
@@ -187,11 +269,11 @@ void main() {
       final view = cubit.state.viewport;
 
       cubit.portDrag('a', view.toScreen(const Offset(1000, 300)));
-      expect(cubit.state.pending, isNotNull);
+      expect(cubit.state, isA<CanvasLinking>());
       await cubit.portRelease('a', view.toScreen(const Offset(1000, 300)));
       await pump();
 
-      expect(cubit.state.pending, isNull);
+      expect(cubit.state, isA<CanvasIdle>());
       expect(cubit.state.links, hasLength(1));
       expect(cubit.state.links.single.aToB, isTrue);
       expect(cubit.state.links.single.bToA, isTrue);
@@ -235,29 +317,45 @@ void main() {
       // O meio da linha entre a porta direita de a e a esquerda de b.
       final onLine = view.toScreen(const Offset(860, 330));
       cubit.hoverAt(onLine);
-      expect(cubit.state.hovered, isNotNull);
+      expect(cubit.state, isA<CanvasLinkHovered>());
 
       // Subindo para os controles, fora da distância da linha, continua no ar.
       cubit.hoverAt(onLine + const Offset(0, -40));
-      expect(cubit.state.hovered, isNotNull);
+      expect(cubit.state, isA<CanvasLinkHovered>());
 
       cubit.hoverAt(onLine + const Offset(0, -300));
-      expect(cubit.state.hovered, isNull);
+      expect(cubit.state, isA<CanvasIdle>());
       await cubit.close();
     });
 
-    test('com ferramenta armada não há realce', () async {
+    test(
+      'o realce continua durante o zoom: movimento é outro assunto',
+      () async {
+        final (:cubit, repository: _) = await canvasCubitFor(
+          links: const [EdgeLink(a: 'a', b: 'b')],
+        );
+        cubit.resetZoom();
+        cubit.hoverAt(cubit.state.viewport.toScreen(const Offset(860, 330)));
+        expect(cubit.state, isA<CanvasLinkHovered>());
+        cubit.stepZoom(1);
+        expect(cubit.state, isA<CanvasLinkHovered>());
+        await cubit.close();
+      },
+    );
+
+    test('com a mão ocupada não há realce; sair tira o realce', () async {
       final (:cubit, repository: _) = await canvasCubitFor(
         links: const [EdgeLink(a: 'a', b: 'b')],
       );
       cubit.resetZoom();
       final onLine = cubit.state.viewport.toScreen(const Offset(860, 330));
       cubit.hoverAt(onLine);
-      expect(cubit.state.hovered, isNotNull);
-      cubit.selectTool(CanvasTool.web);
-      expect(cubit.state.hovered, isNull);
+      expect(cubit.state, isA<CanvasLinkHovered>());
+      cubit.clearHover();
+      expect(cubit.state, isA<CanvasIdle>());
+      cubit.beginPan(onLine);
       cubit.hoverAt(onLine);
-      expect(cubit.state.hovered, isNull);
+      expect(cubit.state, isA<CanvasPanning>());
       await cubit.close();
     });
 

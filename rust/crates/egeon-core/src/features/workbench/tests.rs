@@ -166,6 +166,23 @@ fn origem_da_url_do_template() {
     assert_eq!(base_url("http://a b/c"), "http://a b/c");
 }
 
+#[test]
+fn resumo_do_template_conta_por_tipo_e_cita_a_pasta() {
+    let ws = workbench(
+        r#"{"name":"deck","path":"~/deck","nodes":[
+            {"type":"agent","id":"a"},{"type":"agent","id":"b"},
+            {"type":"shell","id":"c"},{"type":"queue","id":"f"}]}"#,
+    );
+    assert_eq!(
+        template_summary(&ws),
+        "2 agentes, 1 terminal — com posição, tamanho, pasta de cada nó e ~/deck como pasta inicial."
+    );
+    let web = workbench(
+        r#"{"name":"w","path":"/tmp","nodes":[{"type":"web","id":"w1"},{"type":"web","id":"w2"}]}"#,
+    );
+    assert!(template_summary(&web).starts_with("2 webs — "));
+}
+
 // ── WorkbenchIDTests ───────────────────────────────────────────────────────
 
 #[test]

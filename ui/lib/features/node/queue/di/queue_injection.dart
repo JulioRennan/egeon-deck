@@ -5,6 +5,7 @@ import '../domain/usecase/edit_queue.dart';
 import '../domain/usecase/watch_queue.dart';
 import '../domain/usecase/watch_queue_effects.dart';
 import '../presentation/cubit/queue_cubit.dart';
+import '../presentation/cubit/queue_notice_cubit.dart';
 
 /// Cada comando da fila leva a bancada: um repositório por bancada.
 void registerQueueRepositories() {
@@ -31,5 +32,9 @@ void registerQueueDomain() {
       edit: inject(node.workbenchId),
       effects: inject(node.workbenchId),
     ),
+  );
+  // O aviso segue a fila do mesmo nó: o stream é dela.
+  Injector.factoryParam<QueueNoticeCubit, QueueNoticeSource>(
+    QueueNoticeCubit.new,
   );
 }

@@ -46,7 +46,7 @@ class ShellScreenControl implements ScreenControl {
     } else {
       shell.setCollapsed(collapsed);
     }
-    return shell.state.collapsed;
+    return shell.collapsed;
   }
 
   @override

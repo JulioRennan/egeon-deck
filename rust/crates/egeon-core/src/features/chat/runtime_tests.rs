@@ -67,8 +67,8 @@ impl ChatHost for Fake {
         Identity::default()
     }
 
-    fn permission(&self, _workbench: &str) -> Option<Value> {
-        None
+    fn permissions(&self, _workbench: &str) -> Vec<Value> {
+        Vec::new()
     }
 
     fn queues(&self, _workbench: &str) -> Vec<ChatQueue> {
@@ -139,7 +139,7 @@ fn assinar_bancada_desconhecida_e_none_e_a_conhecida_recebe_o_reset() {
     assert_eq!(value["ops"][0]["op"], "reset");
     assert_eq!(value["ops"][1]["op"], "participants");
     assert_eq!(value["ops"][2]["op"], "queues");
-    assert_eq!(value["ops"][3]["op"], "permission");
+    assert_eq!(value["ops"][3]["op"], "permissions");
     assert!(lines[0].1.ends_with('\n'), "NDJSON");
     // E uma leitura do histórico para trazer o que está em disco.
     assert!(matches!(out.jobs.as_slice(), [(_, ChatJob::Refresh(_))]));

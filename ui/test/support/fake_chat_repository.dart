@@ -34,7 +34,7 @@ class FakeChatRepository implements ChatRepository {
     List<ChatBlock> blocks, {
     List<ChatParticipantInfo>? participants,
     List<ChatQueueInfo>? queues,
-    PermissionRequest? permission,
+    List<PermissionRequest> permissions = const [],
   }) => push(
     ChatUpdate(
       workbench: 'b1',
@@ -43,7 +43,7 @@ class FakeChatRepository implements ChatRepository {
         ResetOp(blocks),
         if (participants != null) ParticipantsOp(participants),
         if (queues != null) QueuesOp(queues),
-        PermissionOp(permission),
+        PermissionsOp(permissions),
       ],
     ),
   );
@@ -138,6 +138,11 @@ class FakeChatRepository implements ChatRepository {
 
   @override
   Future<void> clear(String workbenchId) async => clears++;
+
+  final links = <String>[];
+
+  @override
+  Future<void> openLink(String url) async => links.add(url);
 
   @override
   Future<void> send(

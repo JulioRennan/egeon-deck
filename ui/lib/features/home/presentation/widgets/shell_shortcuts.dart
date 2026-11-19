@@ -12,6 +12,11 @@ class ShellShortcutActions {
     required this.previousTab,
     required this.closeTab,
     required this.pickTab,
+    this.copyTargets,
+    this.showProcesses,
+    this.zoomIn,
+    this.zoomOut,
+    this.resetZoom,
   });
 
   final VoidCallback toggleSidebar;
@@ -22,6 +27,17 @@ class ShellShortcutActions {
 
   /// ⌘1…⌘9: a aba de número n (a primeira é 1).
   final ValueChanged<int> pickTab;
+
+  /// ⇧⌘T: copia os alvos de dispatch.
+  final VoidCallback? copyTargets;
+
+  /// ⌥⌘P: a janela Processos.
+  final VoidCallback? showProcesses;
+
+  /// ⌘= ⌘- ⌘0: o zoom do canvas (sem canvas na tela, nada).
+  final VoidCallback? zoomIn;
+  final VoidCallback? zoomOut;
+  final VoidCallback? resetZoom;
 }
 
 /// Os atalhos do app que valem em qualquer lugar da janela, com o terminal
@@ -31,6 +47,8 @@ class ShellShortcutActions {
 /// - ⌘/ recolhe a barra · ⌥⌘1 canvas · ⌥⌘2 chat
 /// - ⌘→ ⌘] aba da direita · ⌘← ⌘[ aba da esquerda · ⌘W fecha a aba
 /// - ⌘1…⌘9 vai à aba de número n
+/// - ⇧⌘T copia os alvos de dispatch · ⌥⌘P abre Processos
+/// - ⌘= aproxima · ⌘- afasta · ⌘0 volta a 100%
 class ShellShortcuts extends StatelessWidget {
   const ShellShortcuts({required this.actions, required this.child, super.key});
 
@@ -95,6 +113,17 @@ class ShellShortcuts extends StatelessWidget {
           actions.closeTab,
       for (var n = 1; n <= 9; n++)
         SingleActivator(_digits[n - 1], meta: true): () => actions.pickTab(n),
+      // ⇧⌘T e não ⌘T: no Swift o ⌘T arma a ferramenta de terminal.
+      const SingleActivator(LogicalKeyboardKey.keyT, meta: true, shift: true):
+          ?actions.copyTargets,
+      const SingleActivator(LogicalKeyboardKey.keyP, meta: true, alt: true):
+          ?actions.showProcesses,
+      const SingleActivator(LogicalKeyboardKey.equal, meta: true):
+          ?actions.zoomIn,
+      const SingleActivator(LogicalKeyboardKey.minus, meta: true):
+          ?actions.zoomOut,
+      const SingleActivator(LogicalKeyboardKey.digit0, meta: true):
+          ?actions.resetZoom,
     },
     child: child,
   );

@@ -12,27 +12,17 @@ impl Actor {
     /// começar, então a gravação tem de vir antes. Se o job morrer, `then`
     /// roda assim mesmo: um terminal que pergunta de novo é melhor que um que
     /// não sobe.
-    ///
-    /// `own_home` restringe a gravação à pasta de dados (decisão 36); ver
-    /// [`trust_seeder::prepare_for_launch`].
     pub(super) fn seed_trust_then(
         &self,
         cwd: PathBuf,
         config_dir: Option<String>,
-        own_home: Option<PathBuf>,
         then: impl FnOnce(&mut Actor) + Send + 'static,
     ) {
         let inbox = self.inbox.clone();
         let user_home = PathBuf::from(&self.org.home);
         tokio::spawn(async move {
             let seeded = tokio::task::spawn_blocking(move || {
-                trust_seeder::prepare_for_launch(
-                    &cwd,
-                    config_dir.as_deref(),
-                    &user_home,
-                    own_home.as_deref(),
-                    &GitCli,
-                )
+                trust_seeder::prepare_for_launch(&cwd, config_dir.as_deref(), &user_home, &GitCli)
             })
             .await;
             if seeded.is_err() {

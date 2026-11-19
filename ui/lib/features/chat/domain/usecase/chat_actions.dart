@@ -41,6 +41,8 @@ class ChatActions {
 
   Future<void> clear(String workbenchId) => _repository.clear(workbenchId);
 
+  Future<void> openLink(String url) => _repository.openLink(url);
+
   Future<String> newQueue(String workbenchId, {String? agent}) =>
       _repository.newQueue(workbenchId, agent: agent);
 

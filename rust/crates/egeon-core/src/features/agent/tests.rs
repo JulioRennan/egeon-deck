@@ -1726,9 +1726,10 @@ fn fontes_com_git_de_verdade() {
 }
 
 /// O caminho do lançamento: worktree ligada com a origem aceita herda no
-/// `.claude.json` do config do nó; fora da pasta de dados do app, não grava.
+/// `.claude.json` da config do nó, esteja ela onde estiver — como o Swift; a
+/// decisão 36 vale só para as skills.
 #[test]
-fn lancamento_herda_so_para_dentro_da_pasta_de_dados() {
+fn lancamento_herda_no_config_do_no_mesmo_fora_da_pasta_de_dados() {
     let base = fresh_dir("launch-");
     let repo = base.path().join("app");
     fs::create_dir_all(&repo).expect("pasta");
@@ -1765,57 +1766,87 @@ fn lancamento_herda_so_para_dentro_da_pasta_de_dados() {
     let target = trust_seeder::real(&wt);
     let accepted = root_with(json!({origin.clone(): {"hasTrustDialogAccepted": true}})).to_string();
 
-    let own = base.path().join("data");
-    let inside = own.join("claude-config");
-    fs::create_dir_all(&inside).expect("pasta");
-    write(&inside.join(".claude.json"), &accepted);
-    let outside = base.path().join("fora");
-    fs::create_dir_all(&outside).expect("pasta");
-    write(&outside.join(".claude.json"), &accepted);
+    // A config "real" do nó, fora de qualquer pasta de dados — numa pasta
+    // temporária, nunca a do usuário.
+    let config = base.path().join("claude-personal");
+    fs::create_dir_all(&config).expect("pasta");
+    write(&config.join(".claude.json"), &accepted);
     let read = |dir: &Path| -> Value {
         serde_json::from_str(&fs::read_to_string(dir.join(".claude.json")).expect("lê"))
             .expect("json")
     };
-    let launch = |config: &Path, restrict: bool| {
+    let launch = |cwd: &Path, config: Option<&str>| {
+        trust_seeder::prepare_for_launch(cwd, config, base.path(), &trust_seeder::GitCli)
+    };
+
+    assert!(launch(&wt, config.to_str()), "herda na config do nó");
+    assert_eq!(
+        read(&config)["projects"][&target]["hasTrustDialogAccepted"],
+        true
+    );
+    assert_eq!(
+        read(&config)["projects"][&origin]["hasTrustDialogAccepted"],
+        true,
+        "o resto do arquivo fica"
+    );
+    assert!(!launch(&wt, config.to_str()), "já herdou");
+    // O checkout principal não herda de ninguém, mas fica aceito de vez: a
+    // confiança ele já tinha; ganha os dois avisos dos imports.
+    assert!(launch(&repo, config.to_str()));
+    assert_eq!(
+        read(&config)["projects"][&origin]["hasClaudeMdExternalIncludesApproved"],
+        true
+    );
+    assert!(!launch(&repo, config.to_str()), "já aceito");
+    // Sem CLAUDE_CONFIG_DIR o alvo é o `~/.claude.json` da home dada (aqui,
+    // temporária); sem arquivo, não cria um.
+    assert!(!launch(&wt, None));
+    assert!(!base.path().join(".claude.json").exists());
+    write(&base.path().join(".claude.json"), &accepted);
+    assert!(launch(&wt, None), "a config padrão também herda");
+    assert_eq!(
+        read(base.path())["projects"][&target]["hasTrustDialogAccepted"],
+        true
+    );
+}
+
+/// Além do Swift (decisão do Julio): a pasta do nó fica sempre aceita, mesmo
+/// sem origem de onde herdar — entrada nova com o `blankProject`, a confiança e
+/// os dois avisos dos imports, e o resto do arquivo intacto.
+#[test]
+fn lancamento_aceita_a_pasta_sem_origem_nenhuma() {
+    let base = fresh_dir("accept-");
+    let folder = base.path().join("solta");
+    fs::create_dir_all(&folder).expect("pasta");
+    let config = base.path().join("cfg");
+    fs::create_dir_all(&config).expect("pasta");
+    write(
+        &config.join(".claude.json"),
+        &json!({"numStartups": 3, "projects": {}}).to_string(),
+    );
+    let launch = || {
         trust_seeder::prepare_for_launch(
-            &wt,
+            &folder,
             config.to_str(),
             base.path(),
-            restrict.then_some(own.as_path()),
             &trust_seeder::GitCli,
         )
     };
-
-    assert!(!launch(&outside, true), "fora da pasta de dados: pula");
-    assert!(read(&outside)["projects"].get(&target).is_none());
-    assert!(launch(&inside, true), "dentro: herda");
+    assert!(launch(), "sem origem, aceita assim mesmo");
+    let read: Value =
+        serde_json::from_str(&fs::read_to_string(config.join(".claude.json")).expect("lê"))
+            .expect("json");
+    let entry = &read["projects"][&trust_seeder::real(&folder)];
+    assert_eq!(entry["hasTrustDialogAccepted"], true);
+    assert_eq!(entry["hasClaudeMdExternalIncludesApproved"], true);
+    assert_eq!(entry["hasClaudeMdExternalIncludesWarningShown"], true);
     assert_eq!(
-        read(&inside)["projects"][&target]["hasTrustDialogAccepted"],
-        true
+        entry["allowedTools"],
+        json!([]),
+        "entrada nova do blankProject"
     );
-    assert!(!launch(&inside, true), "já herdou");
-    assert!(launch(&outside, false), "sem restrição, como o Swift");
-    assert_eq!(
-        read(&outside)["projects"][&target]["hasTrustDialogAccepted"],
-        true
-    );
-    // O checkout principal não herda de ninguém.
-    assert!(!trust_seeder::prepare_for_launch(
-        &repo,
-        inside.to_str(),
-        base.path(),
-        None,
-        &trust_seeder::GitCli
-    ));
-    // Sem CLAUDE_CONFIG_DIR o alvo é o `~/.claude.json`: fora da pasta de dados.
-    assert!(!trust_seeder::prepare_for_launch(
-        &wt,
-        None,
-        base.path(),
-        Some(own.as_path()),
-        &trust_seeder::GitCli
-    ));
-    assert!(!base.path().join(".claude.json").exists());
+    assert_eq!(read["numStartups"], 3, "o resto do arquivo fica");
+    assert!(!launch(), "já aceita");
 }
 
 #[test]

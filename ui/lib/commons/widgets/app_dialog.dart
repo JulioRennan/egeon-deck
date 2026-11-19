@@ -36,7 +36,10 @@ Future<T?> showAppDialog<T>(
   return completer.future;
 }
 
-class _DialogLayer extends StatelessWidget {
+/// Com escopo de foco próprio: o `autofocus` só pega num escopo sem foco, e
+/// sem ele a janela aberta por cima de um terminal (ou do painel de
+/// Processos) deixava o Esc e as teclas irem para quem estava atrás.
+class _DialogLayer extends StatefulWidget {
   const _DialogLayer({
     required this.width,
     required this.onCancel,
@@ -48,32 +51,73 @@ class _DialogLayer extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => CallbackShortcuts(
-    bindings: {const SingleActivator(LogicalKeyboardKey.escape): onCancel},
-    child: Focus(
-      autofocus: true,
-      child: Stack(
-        children: [
-          // Listener, e não GestureDetector: o fundo não é um botão e não leva
-          // a mão do ponteiro.
-          Positioned.fill(
-            child: Listener(
-              behavior: HitTestBehavior.opaque,
-              onPointerDown: (_) => onCancel(),
-              child: ColoredBox(color: AppColors.black(0.5)),
-            ),
-          ),
-          Center(
-            child: SizedBox(
-              width: width,
-              child: GlassPanel(child: child),
-            ),
-          ),
-        ],
-      ),
-    ),
+  State<_DialogLayer> createState() => _DialogLayerState();
+}
+
+class _DialogLayerState extends State<_DialogLayer> {
+  final _scope = FocusScopeNode(debugLabel: 'janela');
+
+  @override
+  void initState() {
+    super.initState();
+    // Depois do quadro: o campo com `autofocus` lá dentro já pegou o foco do
+    // escopo, e então nada a fazer.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_scope.hasFocus) _scope.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scope.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FocusScope(
+    node: _scope,
+    // Como o `runModal` do Swift: com a janela aberta, o ⌘ que ninguém dentro
+    // dela atendeu (o campo de texto atende o dele antes) para aqui, e não
+    // sobe ao menu para trocar de aba ou fechar a de baixo.
+    onKeyEvent: (_, event) =>
+        HardwareKeyboard.instance.isMetaPressed &&
+            event.logicalKey != LogicalKeyboardKey.metaLeft &&
+            event.logicalKey != LogicalKeyboardKey.metaRight
+        ? KeyEventResult.handled
+        : KeyEventResult.ignored,
+    child: _layer(widget.width, widget.onCancel, widget.child),
   );
 }
+
+Widget _layer(
+  double width,
+  VoidCallback onCancel,
+  Widget child,
+) => CallbackShortcuts(
+  bindings: {const SingleActivator(LogicalKeyboardKey.escape): onCancel},
+  child: Focus(
+    autofocus: true,
+    child: Stack(
+      children: [
+        // Listener, e não GestureDetector: o fundo não é um botão e não leva
+        // a mão do ponteiro.
+        Positioned.fill(
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) => onCancel(),
+            child: ColoredBox(color: AppColors.black(0.5)),
+          ),
+        ),
+        Center(
+          child: SizedBox(
+            width: width,
+            child: GlassPanel(child: child),
+          ),
+        ),
+      ],
+    ),
+  ),
+);
 
 /// O miolo comum: título, texto de apoio, o conteúdo e a fileira de botões.
 class DialogBody extends StatelessWidget {

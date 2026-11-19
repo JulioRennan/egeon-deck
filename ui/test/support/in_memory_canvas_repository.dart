@@ -181,6 +181,13 @@ class InMemoryCanvasRepository implements CanvasRepository {
     _publish();
   }
 
+  /// As pastas que o ⌘-clique no subtítulo pediu para abrir.
+  final openedFolders = <String>[];
+
+  @override
+  Future<void> openFolder(String workbenchId, String nodeId) async =>
+      openedFolders.add(nodeId);
+
   @override
   Future<void> removeNode(String workbenchId, String nodeId) async {
     _cards.removeWhere((card) => card.id == nodeId);

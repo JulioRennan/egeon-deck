@@ -14,6 +14,7 @@ import 'package:egeon_deck/features/canvas/domain/usecase/save_frames.dart';
 import 'package:egeon_deck/features/canvas/domain/usecase/set_ui_focus.dart';
 import 'package:egeon_deck/features/canvas/domain/usecase/watch_canvas.dart';
 import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_cubit.dart';
+import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_tool_cubit.dart';
 
 import 'pump.dart';
 
@@ -47,7 +48,6 @@ canvasCubitFor({
     workbenchId: 'bancada',
     watch: WatchCanvas(repository),
     saveFrames: SaveFrames(repository),
-    placeNode: PlaceNode(repository),
     links: EditLinks(repository),
     removeNode: RemoveNode(repository),
     setFocus: SetUiFocus(repository),
@@ -56,3 +56,7 @@ canvasCubitFor({
   cubit.resize(size);
   return (cubit: cubit, repository: repository);
 }
+
+/// A ferramenta do canvas da mesma bancada, criando no mesmo repositório.
+CanvasToolCubit toolCubitFor(InMemoryCanvasRepository repository) =>
+    CanvasToolCubit(workbenchId: 'bancada', placeNode: PlaceNode(repository));

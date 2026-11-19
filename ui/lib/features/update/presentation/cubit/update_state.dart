@@ -1,9 +1,17 @@
 part of 'update_cubit.dart';
 
-/// O que o menu do app mostra: o tópico `app` como o core o manda. Antes da
-/// primeira entrega, os padrões dele.
-final class UpdateState {
-  const UpdateState({this.app = const AppSnapshot()});
+/// O menu do app: esperando o tópico `app`, ou com o que o core mandou.
+sealed class UpdateState {
+  const UpdateState();
+}
+
+/// Antes da primeira entrega: o menu com os padrões dele.
+final class UpdateWaiting extends UpdateState {
+  const UpdateWaiting();
+}
+
+final class UpdateShown extends UpdateState {
+  const UpdateShown(this.app);
 
   final AppSnapshot app;
 }

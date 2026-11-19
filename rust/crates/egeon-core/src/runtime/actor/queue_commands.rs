@@ -33,11 +33,12 @@ use crate::features::queue::routes::{self, QueueDirectory, QueueEffect, TaskQueu
 use crate::features::queue::service::{Linked, QueueController, QueueHost, TICK_EVERY};
 use crate::features::queue::store::{IMAGE_EXTENSIONS, QueueStore, is_image_file};
 use crate::features::workbench::model::WorkbenchConfig;
+use crate::ports::opener::OpenTarget;
 use crate::protocol::handler::RouteRequest;
 use crate::protocol::message::{CommandKind, Event, EventBody, Reply, Topic};
 use crate::protocol::node::{
-    NodeDetail, NodeEffect, QueueDetail, QueueItemView, QueueMessage as MessageView, QueueStatus,
-    QueueTarget,
+    NodeDetail, NodeEffect, QueueDetach, QueueDetail, QueueItemView, QueueMessage as MessageView,
+    QueueStatus, QueueTarget,
 };
 use crate::protocol::org::NodeKind as WireKind;
 use crate::protocol::routes::FeatureRoute;
@@ -524,6 +525,40 @@ impl Actor {
         }
     }
 
+    /// O clique na miniatura: o print abre no app do sistema (o
+    /// `NSWorkspace.open` do Swift). Só o que é da tarefa abre: a UI não
+    /// escolhe arquivo solto pelo socket.
+    pub(super) fn queue_open_image(&mut self, re: u64, open: &QueueDetach) -> Reply {
+        self.queue_sync();
+        let path = with_queue(
+            &self.org.state.workbenches,
+            &mut self.queue.queues,
+            &mut self.dispatch.coordination.dispatcher,
+            &open.workbench,
+            &open.node,
+            |queue, _| {
+                let item = queue.queue().items.iter().find(|i| i.id == open.item)?;
+                item.images
+                    .contains(&open.image)
+                    .then(|| queue.store().url_of(&open.image))
+            },
+        );
+        let Some(found) = path else {
+            return Reply::err(
+                re,
+                format!("fila desconhecida '{}/{}'", open.workbench, open.node),
+            );
+        };
+        let Some(path) = found else {
+            return Reply::err(re, "o print não é desta tarefa");
+        };
+        if self.drivers.opener.open(&OpenTarget::File(path)) {
+            Reply::ok(re)
+        } else {
+            Reply::err(re, "o sistema não abriu o print")
+        }
+    }
+
     /// O estado de um nó de fila, para a assinatura do tópico do nó. `None`
     /// quando o nó não é uma fila.
     pub(super) fn queue_node_event(
@@ -892,6 +927,7 @@ mod tests {
     use base64::Engine;
 
     use crate::commons::ids::{NodeId, WorkbenchId};
+    use crate::ports::opener::OpenTarget;
     use crate::protocol::message::{CommandKind, Reply, Topic};
     use crate::protocol::node::*;
 
@@ -1542,6 +1578,52 @@ mod tests {
         assert_eq!(
             drain(&mut client),
             [json!({"re": 1, "ok": false, "error": "o nó 'dev' não tem estado por dentro"})]
+        );
+    }
+
+    /// O clique na miniatura abre o print da tarefa; o que não é dela não
+    /// abre, nem por nome inventado.
+    #[test]
+    fn open_image_abre_so_o_print_da_tarefa() {
+        let mut f = fila();
+        let a = f.add("olha o header");
+        let pasted = base64::engine::general_purpose::STANDARD.encode([9, 9, 9]);
+        let reply = f.run(CommandKind::QueueAttach(QueueAttach {
+            workbench: f.wb.clone(),
+            node: f.node.clone(),
+            item: Some(a.clone()),
+            open: None,
+            path: None,
+            png: Some(pasted),
+        }));
+        assert_eq!(reply["ok"], true);
+        let image = f.detail().items[0].images[0].clone();
+        let open = |f: &mut Fila, image: &str| {
+            let reply = f.rig.actor.queue_open_image(
+                7,
+                &QueueDetach {
+                    workbench: f.wb.clone(),
+                    node: f.node.clone(),
+                    item: a.clone(),
+                    image: image.into(),
+                },
+            );
+            serde_json::to_value(reply).unwrap()
+        };
+        assert_eq!(open(&mut f, &image)["ok"], true);
+        assert_eq!(
+            open(&mut f, "../../segredo.png")["error"],
+            "o print não é desta tarefa"
+        );
+        let folder = f
+            .rig
+            .data
+            .join("workbenches")
+            .join(f.wb.as_str())
+            .join("queues/fila");
+        assert_eq!(
+            *f.rig.opener.opened.lock().unwrap(),
+            [OpenTarget::File(folder.join(&image))]
         );
     }
 }

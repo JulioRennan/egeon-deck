@@ -56,6 +56,7 @@ fn agent(id: &str, activity: Activity) -> ChatParticipant {
         is_agent: true,
         role: None,
         activity,
+        screen: Some(format!("w1.{id}")),
     }
 }
 
@@ -775,6 +776,7 @@ fn thread_intercala_por_tempo() {
         is_agent: false,
         role: None,
         activity: Activity::Ready,
+        screen: None,
     };
     // Shell não tem transcript: mesmo que a fechadura devolva algo, fica fora.
     let thread = build(&[front.clone(), back.clone(), shell], |p| {
@@ -1055,7 +1057,7 @@ fn participantes_vem_dos_nos_agentes_e_shells() {
     .iter()
     .map(|j| serde_json::from_str(j).expect("nó"))
     .collect();
-    let participants = ChatParticipant::from_nodes(&nodes, "deck", |address| {
+    let participants = ChatParticipant::from_nodes(&nodes, "w1", "deck", |address| {
         (address == "deck/revisor").then_some(Activity::Working)
     });
     assert_eq!(
@@ -1066,6 +1068,9 @@ fn participantes_vem_dos_nos_agentes_e_shells() {
         ["revisor", "zsh"]
     );
     assert_eq!(participants[0].address, "deck/revisor");
+    // A tela é pelo id da bancada, como a do nó no canvas.
+    assert_eq!(participants[0].screen.as_deref(), Some("w1.revisor"));
+    assert_eq!(participants[1].screen.as_deref(), Some("w1.zsh"));
     // Só a primeira linha do papel: a lista não é lugar de prompt inteiro.
     assert_eq!(participants[0].role.as_deref(), Some("revise"));
     assert_eq!(participants[0].activity, Activity::Working);
@@ -1096,6 +1101,7 @@ fn participante_leva_o_tom_e_a_atencao_do_estado() {
             is_agent: true,
             role: None,
             activity: activity.clone(),
+            screen: None,
         };
         let info = p.info();
         assert_eq!(info.tone.as_deref(), tone, "{activity:?}");
@@ -1104,6 +1110,55 @@ fn participante_leva_o_tom_e_a_atencao_do_estado() {
         assert_eq!(json.get("tone").is_some(), tone.is_some());
         assert_eq!(json["needsAttention"], attention);
     }
+}
+
+/// A linha embaixo do nome sai pronta do core, como o `roleText` do Swift: o
+/// estado quando diz algo, o papel quando está parado.
+#[test]
+fn participante_leva_a_linha_de_estado_pronta() {
+    use std::time::UNIX_EPOCH;
+    let casos = [
+        (Activity::Dead, "terminal fechado", None),
+        (Activity::Working, "trabalhando…", Some("agent")),
+        (Activity::Starting, "preparando…", None),
+        (Activity::Asking, "precisa de você", Some("orange")),
+        (Activity::Background, "em segundo plano", None),
+        (Activity::Awaiting(vec![]), "aguardando vizinho", None),
+        (
+            Activity::Awaiting(vec!["back".into(), "rev".into()]),
+            "aguardando back, rev",
+            None,
+        ),
+        (
+            Activity::Retrying {
+                attempt: 2,
+                at: UNIX_EPOCH,
+            },
+            "tentando de novo (2/3)",
+            None,
+        ),
+        (
+            Activity::Failed("problema de cobrança".into()),
+            "falhou — problema de cobrança",
+            Some("red"),
+        ),
+        (Activity::Waiting, "revisor", None),
+        (Activity::Ready, "revisor", None),
+    ];
+    for (activity, status, tone) in casos {
+        let info = ChatParticipant {
+            role: Some("revisor".into()),
+            ..agent("a", activity.clone())
+        }
+        .info();
+        assert_eq!(info.status, status, "{activity:?}");
+        assert_eq!(info.status_tone.as_deref(), tone, "{activity:?}");
+        let json = serde_json::to_value(&info).expect("json");
+        assert_eq!(json["status"], status);
+        assert_eq!(json.get("statusTone").is_some(), tone.is_some());
+    }
+    // Parado e sem papel: linha vazia, e a UI não a desenha.
+    assert_eq!(agent("a", Activity::Waiting).info().status, "");
 }
 
 // ===========================================================================
@@ -2516,11 +2571,14 @@ fn fixtures_do_contrato_do_dart() {
         .set_queues(vec![(&working).into(), (&asking).into()])
         .expect("duas filas");
     let tray = envelope
-        .set_permission(Some(
+        .set_permissions(vec![
             json!({"id": "p1", "tool": "Bash", "detail": "rm -rf x"}),
-        ))
+            json!({"id": "p2", "tool": "AskUserQuestion", "questions": [
+                {"question": "Qual cor?", "options": ["azul", "verde"], "multiSelect": false},
+            ]}),
+        ])
         .expect("bandeja");
-    let closed = envelope.set_permission(None).expect("bandeja fechada");
+    let closed = envelope.set_permissions(vec![]).expect("bandeja fechada");
     let events = json!({"topic": "chat/w1", "events": [bar, queue_one, queue_two, tray, closed], "subscribe": envelope.reset_update()});
 
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/chat");
@@ -2570,7 +2628,8 @@ fn o_topico_e_por_bancada_e_a_barra_e_a_bandeja_tem_ops_proprios() {
     assert_eq!(
         value["ops"][0]["list"][0],
         json!({"id": "front", "address": "deck/front", "isAgent": true, "role": null, "activity": "working",
-               "needsAttention": false})
+               "needsAttention": false, "screen": "w1.front", "status": "trabalhando…",
+               "statusTone": "agent"})
     );
     assert_eq!(value["ops"][0]["list"][1]["tone"], "green");
     assert!(view.set_participants(list).is_none(), "igual: nada vai");
@@ -2581,18 +2640,29 @@ fn o_topico_e_por_bancada_e_a_barra_e_a_bandeja_tem_ops_proprios() {
     assert_eq!(view.set_participants(busy).expect("estado mudou").rev, 2);
 
     let ask = json!({"id": "p1", "tool": "Bash", "detail": "rm -rf x"});
-    let update = view.set_permission(Some(ask.clone())).expect("pedido novo");
+    let update = view
+        .set_permissions(vec![ask.clone()])
+        .expect("pedido novo");
     assert_eq!(
         serde_json::to_value(&update.ops).expect("json"),
-        json!([{"op": "permission", "request": ask}])
+        json!([{"op": "permissions", "list": [ask]}])
     );
-    assert!(view.set_permission(Some(ask)).is_none());
-    let closed = view.set_permission(None).expect("fechou");
+    assert!(view.set_permissions(vec![ask.clone()]).is_none());
+    // Outro agente pede junto: os dois ficam na bandeja, em ordem.
+    let other = json!({"id": "p2", "tool": "Edit", "detail": "a.rs"});
+    let both = view
+        .set_permissions(vec![ask.clone(), other.clone()])
+        .expect("dois");
+    assert_eq!(
+        serde_json::to_value(&both.ops).expect("json"),
+        json!([{"op": "permissions", "list": [ask, other]}])
+    );
+    let closed = view.set_permissions(vec![]).expect("fechou");
     assert_eq!(
         serde_json::to_value(&closed.ops).expect("json"),
-        json!([{"op": "permission", "request": null}])
+        json!([{"op": "permissions", "list": []}])
     );
-    assert_eq!(closed.rev, 4);
+    assert_eq!(closed.rev, 5);
 }
 
 /// Na assinatura (e em `rev` perdido) chega tudo: blocos, barra e bandeja.
@@ -2602,7 +2672,7 @@ fn a_assinatura_leva_blocos_barra_e_bandeja() {
     let mut view = ChatView::new("w1");
     rebuild(&mut view, &participants, &[step_record()]);
     view.set_participants(infos(&participants));
-    view.set_permission(Some(json!({"id": "p1"})));
+    view.set_permissions(vec![json!({"id": "p1"})]);
     let reset = view.reset_update();
     assert_eq!(reset.topic, "chat/w1");
     assert_eq!(reset.rev, view.rev());
@@ -2613,14 +2683,14 @@ fn a_assinatura_leva_blocos_barra_e_bandeja() {
             BlockOp::Reset { .. } => "reset",
             BlockOp::Participants { .. } => "participants",
             BlockOp::Queues { .. } => "queues",
-            BlockOp::Permission { .. } => "permission",
+            BlockOp::Permissions { .. } => "permissions",
             _ => "outro",
         })
         .collect();
-    assert_eq!(kinds, ["reset", "participants", "queues", "permission"]);
+    assert_eq!(kinds, ["reset", "participants", "queues", "permissions"]);
     let snapshot = view.snapshot();
     assert_eq!(snapshot["participants"][0]["id"], "a");
-    assert_eq!(snapshot["permission"], json!({"id": "p1"}));
+    assert_eq!(snapshot["permissions"], json!([{"id": "p1"}]));
     let back: super::view::ChatUpdate =
         serde_json::from_str(&serde_json::to_string(&reset).expect("json")).expect("volta");
     assert_eq!(back, reset);
@@ -2705,11 +2775,11 @@ fn comandos_do_canal_chegam_aos_handlers() {
     // permission_answer vai para o dispatch; a bandeja do chat só espelha o pedido.
     let ask = json!({"id": "p1"});
     assert!(matches!(
-        routes.set_permission("w1", Some(ask)).as_slice(),
+        routes.set_permissions("w1", vec![ask]).as_slice(),
         [ChatEffect::Ui(_)]
     ));
     assert!(matches!(
-        routes.set_permission("w1", None).as_slice(),
+        routes.set_permissions("w1", vec![]).as_slice(),
         [ChatEffect::Ui(_)]
     ));
 }

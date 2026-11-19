@@ -33,6 +33,9 @@ abstract interface class ChatRepository {
   /// Arquiva a conversa (não é o limpar dos agentes).
   Future<void> clear(String workbenchId);
 
+  /// Abre o link da resposta no navegador do sistema; quem abre é o core.
+  Future<void> openLink(String url);
+
   /// Responde ao pedido de permissão: [answer] é `allow`, `always` ou `deny`;
   /// [choice] a opção escolhida de uma pergunta; [answers] as escolhas de
   /// várias perguntas (`{pergunta: [opções]}`).

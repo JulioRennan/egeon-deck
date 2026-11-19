@@ -34,6 +34,98 @@ fn rect() -> Rect {
     }
 }
 
+fn draft() -> TemplateDraft {
+    TemplateDraft {
+        name: "revisor".into(),
+        kind: NodeKind::Agent,
+        agent: Some("claude".into()),
+        maestro: None,
+        cwd: Some("api".into()),
+        prompt: Some("revisa o core".into()),
+        rules: None,
+        by_agent: Some(BTreeMap::from([(
+            "claude".to_owned(),
+            CliOverrides {
+                model: Some("claude-opus-5-5".into()),
+                ..CliOverrides::default()
+            },
+        )])),
+        cmd: None,
+    }
+}
+
+fn shown() -> ShownFields {
+    ShownFields {
+        cli: "claude".into(),
+        model: Some("claude-opus-5-5".into()),
+        effort: Some("high".into()),
+        config: None,
+        prompt: Some("revisa o core".into()),
+        rules: None,
+    }
+}
+
+fn submit() -> NodeFormSubmit {
+    NodeFormSubmit {
+        template: draft(),
+        fields: FormFields {
+            name: "revisor".into(),
+            kind: NodeKind::Agent,
+            agent: Some("claude".into()),
+            cwd: "api".into(),
+            cmd: None,
+            maestro: true,
+        },
+        shown: Some(shown()),
+        save_component: true,
+    }
+}
+
+fn screen_view() -> NodeScreenView {
+    NodeScreenView {
+        template: draft(),
+        fields: ScreenFields {
+            model: Some("claude-opus-5-5".into()),
+            effort: Some("high".into()),
+            config: None,
+            prompt: Some("revisa o core".into()),
+            rules: None,
+        },
+        models: vec![
+            ModelOption {
+                label: "padrão do CLI".into(),
+                id: None,
+            },
+            ModelOption {
+                label: "Opus 5.5".into(),
+                id: Some("claude-opus-5-5".into()),
+            },
+        ],
+        efforts: vec!["low".into(), "medium".into(), "high".into()],
+        config_env: Some("CLAUDE_CONFIG_DIR".into()),
+        config_items: vec![
+            ConfigOption {
+                title: "~/.claude".into(),
+                value: None,
+            },
+            ConfigOption {
+                title: "~/.claude-agro".into(),
+                value: Some("/Users/voce/.claude-agro".into()),
+            },
+        ],
+    }
+}
+
+fn component_view() -> ComponentView {
+    ComponentView {
+        name: "revisor".into(),
+        kind: NodeKind::Agent,
+        subtitle: "Claude Code".into(),
+        prompt: Some("revisa o core".into()),
+        template: draft(),
+    }
+}
+
 pub fn commands() -> Vec<(&'static str, Command)> {
     let c = |id, kind| Command { id, kind };
     let here = || WorkbenchRef { workbench: wb() };
@@ -339,9 +431,17 @@ pub fn commands() -> Vec<(&'static str, Command)> {
             ),
         ),
         (
+            "removal_losses",
+            c(
+                167,
+                CommandKind::RemovalLosses(WorkbenchRef { workbench: wb() }),
+            ),
+        ),
+        (
             "clear_workbench",
             c(123, CommandKind::ClearWorkbench(here())),
         ),
+        ("reset_clock", c(160, CommandKind::ResetClock(here()))),
         (
             "worktree",
             c(
@@ -350,11 +450,13 @@ pub fn commands() -> Vec<(&'static str, Command)> {
                     workbench: Some(wb()),
                     path: None,
                     project: None,
+                    node: None,
                     branch: "feature/PROJ-1234".into(),
                     nodes: BTreeMap::from([
                         (node("back"), "fix/api".into()),
                         (node("sub"), String::new()),
                     ]),
+                    repos: BTreeMap::new(),
                     destination: WorktreeDestination::MoveCurrent,
                     template: None,
                 }),
@@ -368,10 +470,71 @@ pub fn commands() -> Vec<(&'static str, Command)> {
                     workbench: None,
                     path: Some("~/Documents/agro/nexus-backend".into()),
                     project: Some(pj("p1")),
+                    node: None,
                     branch: "feature/PROJ-1234".into(),
                     nodes: BTreeMap::new(),
+                    repos: BTreeMap::new(),
                     destination: WorktreeDestination::NewWorkbench,
                     template: Some("dupla".into()),
+                }),
+            ),
+        ),
+        (
+            "worktree_multi",
+            c(
+                162,
+                CommandKind::Worktree(Worktree {
+                    workbench: None,
+                    path: None,
+                    project: Some(pj("m1")),
+                    node: None,
+                    branch: "feat/login".into(),
+                    nodes: BTreeMap::new(),
+                    repos: BTreeMap::from([("nexus-front".to_owned(), "fix/front".to_owned())]),
+                    destination: WorktreeDestination::NewWorkbench,
+                    template: Some("dupla".into()),
+                }),
+            ),
+        ),
+        (
+            "worktree_no",
+            c(
+                332,
+                CommandKind::Worktree(Worktree {
+                    workbench: Some(wb()),
+                    path: None,
+                    project: None,
+                    node: Some(node("back")),
+                    branch: "fix/api".into(),
+                    nodes: BTreeMap::new(),
+                    repos: BTreeMap::new(),
+                    destination: WorktreeDestination::NewWorkbench,
+                    template: None,
+                }),
+            ),
+        ),
+        (
+            "worktree_info_no",
+            c(
+                333,
+                CommandKind::WorktreeInfo(WorktreeSource {
+                    workbench: Some(wb()),
+                    node: Some(node("back")),
+                    ..WorktreeSource::default()
+                }),
+            ),
+        ),
+        (
+            "worktree_plan_no",
+            c(
+                334,
+                CommandKind::WorktreePlan(WorktreePlanRequest {
+                    source: WorktreeSource {
+                        workbench: Some(wb()),
+                        node: Some(node("back")),
+                        ..WorktreeSource::default()
+                    },
+                    branch: "fix/api".into(),
                 }),
             ),
         ),
@@ -380,7 +543,10 @@ pub fn commands() -> Vec<(&'static str, Command)> {
             "worktree_info",
             c(
                 140,
-                CommandKind::WorktreeInfo(WorkbenchRef { workbench: wb() }),
+                CommandKind::WorktreeInfo(WorktreeSource {
+                    workbench: Some(wb()),
+                    ..WorktreeSource::default()
+                }),
             ),
         ),
         (
@@ -388,8 +554,69 @@ pub fn commands() -> Vec<(&'static str, Command)> {
             c(
                 141,
                 CommandKind::WorktreePlan(WorktreePlanRequest {
-                    workbench: wb(),
+                    source: WorktreeSource {
+                        workbench: Some(wb()),
+                        ..WorktreeSource::default()
+                    },
                     branch: "feature/PROJ-1234".into(),
+                }),
+            ),
+        ),
+        (
+            "worktree_info_de_pasta",
+            c(
+                160,
+                CommandKind::WorktreeInfo(WorktreeSource {
+                    path: Some("~/Documents/agro/nexus-backend".into()),
+                    project: Some(pj("p1")),
+                    ..WorktreeSource::default()
+                }),
+            ),
+        ),
+        (
+            "worktree_plan_de_pasta",
+            c(
+                161,
+                CommandKind::WorktreePlan(WorktreePlanRequest {
+                    source: WorktreeSource {
+                        project: Some(pj("p1")),
+                        ..WorktreeSource::default()
+                    },
+                    branch: "feature/PROJ-1234".into(),
+                }),
+            ),
+        ),
+        (
+            "save_template_dry_run",
+            c(
+                163,
+                CommandKind::SaveTemplate(SaveTemplate {
+                    workbench: wb(),
+                    name: Some("dupla".into()),
+                    dry_run: true,
+                }),
+            ),
+        ),
+        (
+            "save_template",
+            c(
+                164,
+                CommandKind::SaveTemplate(SaveTemplate {
+                    workbench: wb(),
+                    name: Some("dupla".into()),
+                    dry_run: false,
+                }),
+            ),
+        ),
+        ("copy_targets", c(166, CommandKind::CopyTargets)),
+        (
+            "save_template_origem",
+            c(
+                165,
+                CommandKind::SaveTemplate(SaveTemplate {
+                    workbench: wb(),
+                    name: None,
+                    dry_run: false,
                 }),
             ),
         ),
@@ -401,11 +628,13 @@ pub fn commands() -> Vec<(&'static str, Command)> {
                     workbench: wb(),
                     kind: NodeKind::Agent,
                     frame: Some(rect()),
+                    visible: None,
                     component: Some("revisor".into()),
                     agent: Some("claude".into()),
                     cwd: None,
                     cmd: None,
                     url: None,
+                    form: None,
                 }),
             ),
         ),
@@ -417,11 +646,13 @@ pub fn commands() -> Vec<(&'static str, Command)> {
                     workbench: wb(),
                     kind: NodeKind::Web,
                     frame: Some(rect()),
+                    visible: None,
                     component: None,
                     agent: None,
                     cwd: None,
                     cmd: None,
                     url: Some("https://docs.rs".into()),
+                    form: None,
                 }),
             ),
         ),
@@ -528,6 +759,98 @@ pub fn commands() -> Vec<(&'static str, Command)> {
                 }),
             ),
         ),
+        (
+            "node_form",
+            c(
+                150,
+                CommandKind::NodeForm(NodeForm {
+                    workbench: wb(),
+                    node: None,
+                }),
+            ),
+        ),
+        (
+            "node_form_do_no",
+            c(
+                151,
+                CommandKind::NodeForm(NodeForm {
+                    workbench: wb(),
+                    node: Some(node("claude")),
+                }),
+            ),
+        ),
+        (
+            "node_form_screen",
+            c(
+                152,
+                CommandKind::NodeFormScreen(Box::new(NodeFormScreen {
+                    workbench: wb(),
+                    node: None,
+                    template: draft(),
+                    shown: Some(shown()),
+                    cli: Some("codex".into()),
+                    config: Some("/Users/voce/.codex-x".into()),
+                })),
+            ),
+        ),
+        (
+            "node_folder",
+            c(
+                153,
+                CommandKind::NodeFolder(NodeFolder {
+                    workbench: wb(),
+                    path: "/Users/voce/deck/api".into(),
+                }),
+            ),
+        ),
+        (
+            "create_node_form",
+            c(
+                154,
+                CommandKind::CreateNode(CreateNode {
+                    workbench: wb(),
+                    kind: NodeKind::Agent,
+                    frame: Some(rect()),
+                    visible: None,
+                    component: None,
+                    agent: None,
+                    cwd: None,
+                    cmd: None,
+                    url: None,
+                    form: Some(Box::new(submit())),
+                }),
+            ),
+        ),
+        (
+            "create_node_form_visivel",
+            c(
+                335,
+                CommandKind::CreateNode(CreateNode {
+                    workbench: wb(),
+                    kind: NodeKind::Agent,
+                    frame: None,
+                    visible: Some(rect()),
+                    component: None,
+                    agent: None,
+                    cwd: None,
+                    cmd: None,
+                    url: None,
+                    form: Some(Box::new(submit())),
+                }),
+            ),
+        ),
+        (
+            "apply_node",
+            c(
+                155,
+                CommandKind::ApplyNode(Box::new(ApplyNode {
+                    workbench: wb(),
+                    node: node("claude"),
+                    form: submit(),
+                })),
+            ),
+        ),
+        ("components", c(156, CommandKind::Components)),
     ]
 }
 
@@ -674,7 +997,34 @@ pub fn replies() -> Vec<(&'static str, Reply)> {
         ("no_criado", Reply::with(125, &json!({"node": "revisor"}))),
         (
             "plan_remove_workbench",
-            Reply::with(135, &json!({"live": true, "worktrees": 2})),
+            Reply::with(
+                135,
+                &json!({"live": true, "worktrees": [
+                    {"path": "/Users/eu/Documents/worktrees/nexus-backend/feat-login",
+                     "repo": "nexus-backend", "branch": "feat/login", "owners": ["bancada"],
+                     "used_by": null},
+                    {"path": "/Users/eu/Documents/worktrees/nexus-front/fix-front",
+                     "repo": "nexus-front", "branch": "fix/front", "owners": ["front"],
+                     "used_by": "front-fix"}
+                ]}),
+            ),
+        ),
+        (
+            "removal_losses",
+            Reply::with(
+                167,
+                &json!({"losses": ["nexus-backend · feat/login",
+                                   "1 arquivo(s) com mudanças não commitadas:", "   M src/main.rs",
+                                   "", "nexus-api · feat/login",
+                                   "1 arquivo(s) novo(s), nunca commitados."]}),
+            ),
+        ),
+        (
+            "erro_remover_bancada",
+            Reply::err(
+                122,
+                "Já apagadas: /Users/eu/Documents/worktrees/nexus-api/x.\n\nNão consegui apagar:\n/Users/eu/Documents/worktrees/nexus-backend/x: permissão negada",
+            ),
         ),
         (
             "multi_name",
@@ -684,7 +1034,9 @@ pub fn replies() -> Vec<(&'static str, Reply)> {
             "chat_complete",
             Reply::with(
                 209,
-                &json!({"items": [{"label": "rev", "insert": "@rev ", "detail": "revisor", "kind": "mention"}],
+                // Como o core responde de verdade (`chat/runtime.rs`): a menção
+                // vem com o `@` no rótulo, o endereço no detalhe e `kind` agent.
+                &json!({"items": [{"label": "@rev", "insert": "@rev ", "detail": "deck/rev", "kind": "agent"}],
                         "range": [8, 11]}),
             ),
         ),
@@ -734,20 +1086,70 @@ pub fn replies() -> Vec<(&'static str, Reply)> {
                             node: node("back"),
                             branch: Some("fix/api".into()),
                             state: WorktreeNodeState::OwnWorktree,
+                            repo: Some("nexus-api".into()),
+                            path: "~/Documents/agro/nexus-api".into(),
+                            exists: true,
+                            inside: false,
                         },
                         WorktreeNode {
                             node: node("claude"),
                             branch: None,
                             state: WorktreeNodeState::FollowsWorkbench,
+                            repo: Some("nexus-backend".into()),
+                            path: "~/Documents/agro/nexus-backend".into(),
+                            exists: true,
+                            inside: true,
                         },
                         WorktreeNode {
                             node: node("docs"),
                             branch: None,
                             state: WorktreeNodeState::NoRepo,
+                            repo: None,
+                            path: "~/Documents/notas".into(),
+                            exists: false,
+                            inside: false,
                         },
                     ],
+                    repo: "nexus-backend".into(),
+                    multi: None,
                 },
             ),
+        ),
+        (
+            "worktree_info_multi",
+            Reply::with(
+                160,
+                &WorktreeInfo {
+                    summary: String::new(),
+                    suggested_branch: String::new(),
+                    nodes: vec![],
+                    repo: String::new(),
+                    multi: Some(MultiWorktreeInfo {
+                        project: "Nexus".into(),
+                        repos: vec!["nexus-backend".into(), "nexus-front".into()],
+                    }),
+                },
+            ),
+        ),
+        (
+            "template_plan",
+            Reply::with(
+                163,
+                &TemplatePlan {
+                    summary: "2 agentes, 1 terminal — com posição, tamanho, pasta de cada nó e ~/Documents/agro como pasta inicial.".into(),
+                    nodes: 3,
+                    template: Some("dupla".into()),
+                    exists: true,
+                },
+            ),
+        ),
+        (
+            "alvos_copiados",
+            Reply::with(166, &json!({"text": "deck/claude\ndeck/sh"})),
+        ),
+        (
+            "template_salvo",
+            Reply::with(164, &json!({"template": "dupla"})),
         ),
         (
             "worktree_plan",
@@ -780,6 +1182,48 @@ pub fn replies() -> Vec<(&'static str, Reply)> {
             "erro_bancada",
             Reply::err(103, "bancada desconhecida '1a2b3c4d'"),
         ),
+        (
+            "node_form",
+            Reply::with(
+                150,
+                &NodeFormView {
+                    template: draft(),
+                    cli: Some("claude".into()),
+                    clis: vec![
+                        CliChoice {
+                            key: "claude".into(),
+                            name: "Claude Code".into(),
+                        },
+                        CliChoice {
+                            key: "codex".into(),
+                            name: "Codex".into(),
+                        },
+                    ],
+                    folders: vec![
+                        FolderOption {
+                            value: String::new(),
+                            shown: "root".into(),
+                        },
+                        FolderOption {
+                            value: "api".into(),
+                            shown: "api".into(),
+                        },
+                    ],
+                    components: vec![component_view()],
+                    screen: screen_view(),
+                },
+            ),
+        ),
+        ("node_form_screen", Reply::with(152, &screen_view())),
+        (
+            "node_folder",
+            Reply::with(153, &json!({"cwd": "api", "shown": "api"})),
+        ),
+        ("no_aplicado", Reply::with(155, &json!({"node": "revisor"}))),
+        (
+            "components",
+            Reply::with(156, &json!({"components": [component_view()]})),
+        ),
     ]
 }
 
@@ -802,11 +1246,18 @@ fn bench(id: &str, name: &str, tab_order: Option<u32>, tab_active: bool) -> Work
         agents: 2,
         clock: None,
         access: None,
+        busy: None,
+        banner: None,
     }
 }
 
 pub fn events() -> Vec<(&'static str, Event)> {
     let orphan = WorkbenchView {
+        busy: Some("Removendo a bancada…".into()),
+        banner: Some(
+            "Copiando o que o git não versiona em nexus-backend (.env, node_modules, build…)"
+                .into(),
+        ),
         project: None,
         color: None,
         view: ViewMode::Chat,
@@ -835,7 +1286,9 @@ pub fn events() -> Vec<(&'static str, Event)> {
     let shell = NodeView {
         id: node("sh"),
         kind: NodeKind::Shell,
+        address: "deck/sh".into(),
         agent: None,
+        cli_name: None,
         cwd: Some("../nexus-backend".into()),
         dir: "~/Documents/agro/deck".into(),
         cmd: None,
@@ -868,7 +1321,9 @@ pub fn events() -> Vec<(&'static str, Event)> {
     let agent = NodeView {
         id: node("claude"),
         kind: NodeKind::Agent,
+        address: "deck/claude".into(),
         agent: Some("claude".into()),
+        cli_name: Some("Claude Code".into()),
         cwd: None,
         model: Some("opus".into()),
         effort: Some("high".into()),
@@ -898,6 +1353,7 @@ pub fn events() -> Vec<(&'static str, Event)> {
     let web = NodeView {
         id: node("docs"),
         kind: NodeKind::Web,
+        address: "deck/docs".into(),
         url: Some("https://docs.rs".into()),
         cwd: None,
         screen: None,

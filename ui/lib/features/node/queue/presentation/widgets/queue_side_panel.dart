@@ -86,6 +86,7 @@ class _QueueSidePanelState extends State<QueueSidePanel> {
                   workbenchId: widget.workbenchId,
                   nodeId: widget.queueNodeId,
                   onClose: widget.onClose,
+                  focusNewTask: true,
                 ),
               ),
             ),

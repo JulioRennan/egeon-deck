@@ -66,6 +66,21 @@ pub fn commands() -> Vec<(&'static str, Command)> {
         ),
         ("node_clear", c(304, CommandKind::NodeClear(at("claude")))),
         (
+            "open_node_folder",
+            c(331, CommandKind::OpenNodeFolder(at("claude"))),
+        ),
+        (
+            "retry",
+            c(
+                330,
+                CommandKind::Retry(RetryNode {
+                    workbench: wb(),
+                    node: node("claude"),
+                    now: true,
+                }),
+            ),
+        ),
+        (
             "queue_add",
             c(
                 305,
@@ -199,6 +214,18 @@ pub fn commands() -> Vec<(&'static str, Command)> {
             c(
                 316,
                 CommandKind::QueueDetach(QueueDetach {
+                    workbench: wb(),
+                    node: node("fila"),
+                    item: "a1b2c3".into(),
+                    image: "img-9f8e7d6c.png".into(),
+                }),
+            ),
+        ),
+        (
+            "queue_open_image",
+            c(
+                350,
+                CommandKind::QueueOpenImage(QueueDetach {
                     workbench: wb(),
                     node: node("fila"),
                     item: "a1b2c3".into(),

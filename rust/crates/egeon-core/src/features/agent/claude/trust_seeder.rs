@@ -112,61 +112,58 @@ pub fn git_children(folder: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// O que roda antes de o Claude subir (ADR-071): a pasta do nó herda a confiança
-/// do repositório de onde saiu, e o CLI não pergunta de novo.
-///
-/// `own_home` é a pasta de dados do app enquanto o app novo ainda não tomou o
-/// lugar do estável (decisão 36): só se grava num `.claude.json` de dentro
-/// dela. Fora disso — inclusive o `~/.claude.json` do usuário — pula, com uma
-/// nota. `None` = sem restrição, como o Swift. Devolve `true` quando gravou.
+/// O que roda antes de o Claude subir (ADR-071, `ClaudeTrustSeeder.prepare`):
+/// a pasta do nó herda a confiança do repositório de onde saiu e, além do
+/// Swift (decisão do Julio), fica aceita de qualquer jeito — o CLI nunca
+/// pergunta. Grava no `.claude.json` da config real do nó; a decisão 36 vale
+/// só para as skills (`install.rs`). Devolve `true` quando gravou.
 pub fn prepare_for_launch(
     cwd: &Path,
     config_dir: Option<&str>,
     user_home: &Path,
-    own_home: Option<&Path>,
     git: &dyn Worktrees,
 ) -> bool {
-    let Some((target, origins)) = sources(cwd, git) else {
+    // O checkout principal não herda de ninguém: a chave é a raiz dele.
+    let (target, origins) = sources(cwd, git).unwrap_or_else(|| {
+        let top = git.top_level(Path::new(&real(cwd)));
+        (real(top.as_deref().unwrap_or(cwd)), Vec::new())
+    });
+    let file = config_file(config_dir, user_home);
+    let Some(root) = read_json(&file) else {
         return false;
     };
-    if origins.is_empty() {
-        return false;
+    let inherited = trust::inheriting(&root, &target, &origins);
+    let base = inherited.as_ref().unwrap_or(&root);
+    match (trust::accepting(base, &target), inherited.is_some()) {
+        (Some(accepted), _) => write_json(
+            &file,
+            &accepted,
+            &format!("confiança[claude]: {target} aceita em {}", file.display()),
+        ),
+        (None, true) => write_json(&file, base, &inherited_line(&target, &origins, &file)),
+        (None, false) => false,
     }
-    let file = config_file(config_dir, user_home);
-    if let Some(own) = own_home
-        && !inside(&file, own)
-    {
-        crate::log!(
-            "confiança[claude]: {} fica fora da pasta de dados do app; pulei (decisão 36)",
-            file.display()
-        );
-        return false;
-    }
-    prepare(&target, &origins, &file)
 }
 
-/// `path` está dentro de `home`, com os links resolvidos. Caminho que ainda não
-/// existe resolve o maior ancestral que existe (`/tmp` é `/private/tmp` no
-/// macOS) e mantém o resto.
-fn inside(path: &Path, home: &Path) -> bool {
-    resolved(path).starts_with(resolved(home))
+fn read_json(file: &Path) -> Option<Value> {
+    serde_json::from_slice::<Value>(&fs::read(file).ok()?).ok()
 }
 
-fn resolved(path: &Path) -> PathBuf {
-    let mut rest = Vec::new();
-    let mut current = path;
-    loop {
-        if let Ok(real) = fs::canonicalize(current) {
-            return rest.iter().rev().fold(real, |acc, part| acc.join(part));
-        }
-        match (current.parent(), current.file_name()) {
-            (Some(parent), Some(name)) => {
-                rest.push(name.to_owned());
-                current = parent;
-            }
-            _ => return path.to_owned(),
-        }
-    }
+fn inherited_line(target: &str, origins: &[String], file: &Path) -> String {
+    let names: Vec<String> = origins
+        .iter()
+        .map(|o| {
+            Path::new(o)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+        .collect();
+    format!(
+        "confiança[claude]: {target} herdou de {} em {}",
+        names.join(", "),
+        file.display()
+    )
 }
 
 /// Grava a herança. Devolve `true` quando o arquivo mudou.
@@ -174,16 +171,18 @@ pub fn prepare(target: &str, origins: &[String], file: &Path) -> bool {
     if origins.is_empty() {
         return false;
     }
-    let Ok(bytes) = fs::read(file) else {
-        return false;
-    };
-    let Ok(root) = serde_json::from_slice::<Value>(&bytes) else {
+    let Some(root) = read_json(file) else {
         return false;
     };
     let Some(updated) = trust::inheriting(&root, target, origins) else {
         return false;
     };
-    let Ok(text) = serde_json::to_string_pretty(&updated) else {
+    write_json(file, &updated, &inherited_line(target, origins, file))
+}
+
+/// Troca o arquivo de uma vez, como o próprio CLI faz, e loga [line].
+fn write_json(file: &Path, updated: &Value, line: &str) -> bool {
+    let Ok(text) = serde_json::to_string_pretty(updated) else {
         return false;
     };
     let tmp = file.with_extension("json.tmp");
@@ -198,20 +197,7 @@ pub fn prepare(target: &str, origins: &[String], file: &Path) -> bool {
         .and_then(|()| fs::rename(&tmp, file));
     match written {
         Ok(()) => {
-            let names: Vec<String> = origins
-                .iter()
-                .map(|o| {
-                    Path::new(o)
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_default()
-                })
-                .collect();
-            crate::log!(
-                "confiança[claude]: {target} herdou de {} em {}",
-                names.join(", "),
-                file.display()
-            );
+            crate::log!("{line}");
             true
         }
         Err(error) => {

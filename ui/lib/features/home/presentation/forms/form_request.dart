@@ -92,3 +92,13 @@ class RecolorBench extends BenchRequest {
 
   final String? current;
 }
+
+/// "Salvar este canvas como um template novo".
+class SaveAsTemplate extends BenchRequest {
+  const SaveAsTemplate(super.benchId, super.benchName);
+}
+
+/// "Atualizar o template de origem com este canvas".
+class UpdateOriginTemplate extends BenchRequest {
+  const UpdateOriginTemplate(super.benchId, super.benchName);
+}

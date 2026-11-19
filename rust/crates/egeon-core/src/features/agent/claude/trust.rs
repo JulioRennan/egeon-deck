@@ -93,3 +93,38 @@ pub fn inheriting(root: &Value, target: &str, origins: &[String]) -> Option<Valu
         .insert("projects".to_owned(), Value::Object(all));
     Some(updated)
 }
+
+/// O `.claude.json` com `target` aceito: a confiança e os dois avisos dos
+/// imports externos do CLAUDE.md, cada um só se nem a pasta nem um pai já o tem.
+/// `None` quando não há o que mudar.
+///
+/// Vai além do Swift, por decisão do Julio: o checkout principal nunca aceito
+/// (ou qualquer pasta sem origem) também deixa de perguntar.
+pub fn accepting(root: &Value, target: &str) -> Option<Value> {
+    let projects = root
+        .get("projects")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let mut entry = projects.get(target).cloned().unwrap_or_else(blank_project);
+    let mut changed = false;
+    for key in std::iter::once(TRUST).chain(INCLUDES) {
+        if granted(key, &projects, target) {
+            continue;
+        }
+        if let Some(object) = entry.as_object_mut() {
+            object.insert(key.to_owned(), Value::Bool(true));
+            changed = true;
+        }
+    }
+    if !changed {
+        return None;
+    }
+    let mut updated = root.clone();
+    let mut all = projects;
+    all.insert(target.to_owned(), entry);
+    updated
+        .as_object_mut()?
+        .insert("projects".to_owned(), Value::Object(all));
+    Some(updated)
+}

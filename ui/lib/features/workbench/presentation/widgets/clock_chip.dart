@@ -5,12 +5,13 @@ import '../../../../core/domain/entities/workbench_clock.dart';
 import '../../../../theme/app_colors.dart';
 import 'clock_text.dart';
 
-/// A pastilha do cronômetro da bancada. Clicar abre o menu de zerar.
+/// A pastilha do cronômetro da bancada. Clicar abre o menu de zerar; sem
+/// [onReset], só mostra.
 class ClockChip extends StatefulWidget {
-  const ClockChip({required this.clock, required this.onReset, super.key});
+  const ClockChip({required this.clock, this.onReset, super.key});
 
   final WorkbenchClock clock;
-  final VoidCallback onReset;
+  final VoidCallback? onReset;
 
   @override
   State<ClockChip> createState() => _ClockChipState();
@@ -19,15 +20,21 @@ class ClockChip extends StatefulWidget {
 class _ClockChipState extends State<ClockChip> {
   bool _hovering = false;
 
-  void _menu(TapUpDetails details) => showContextMenu(
-    context,
-    position: details.globalPosition,
-    entries: [MenuEntry('Zerar cronômetro', widget.onReset)],
-  );
+  void _menu(TapUpDetails details) {
+    final reset = widget.onReset;
+    if (reset == null) return;
+    showContextMenu(
+      context,
+      position: details.globalPosition,
+      entries: [MenuEntry('Zerar cronômetro', reset)],
+    );
+  }
 
   @override
   Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
+    cursor: widget.onReset == null
+        ? MouseCursor.defer
+        : SystemMouseCursors.click,
     onEnter: (_) => setState(() => _hovering = true),
     onExit: (_) => setState(() => _hovering = false),
     child: GestureDetector(

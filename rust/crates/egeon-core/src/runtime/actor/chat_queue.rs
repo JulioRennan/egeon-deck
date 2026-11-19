@@ -33,11 +33,13 @@ impl Actor {
             workbench: c.workbench.clone(),
             kind: NodeKind::Queue,
             frame: None,
+            visible: None,
             component: None,
             agent: None,
             cwd: None,
             cmd: None,
             url: None,
+            form: None,
         });
         let Some(created) = self.node_command(client, re, create) else {
             return Reply::err(re, "a fila não foi criada");

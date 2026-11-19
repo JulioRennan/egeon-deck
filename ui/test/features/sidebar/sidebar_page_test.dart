@@ -1,3 +1,4 @@
+import 'package:egeon_deck/features/usage/domain/entities/usage_view.dart';
 import 'package:egeon_deck/commons/widgets/count_seal.dart';
 import 'package:egeon_deck/core/adapters/injector.dart';
 import 'package:egeon_deck/core/domain/entities/activity_summary.dart';
@@ -15,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_sidebar_repository.dart';
 import '../../support/hand_cursor.dart';
+import '../../support/fake_usage_repository.dart';
 import '../../support/inject_fakes.dart';
 import '../../support/overlay_host.dart';
 import '../../support/sidebar_fixtures.dart';
@@ -48,8 +50,9 @@ Future<void> mount(
   Calls calls, {
   SidebarTree? tree,
   bool compact = false,
+  FakeUsageRepository? usage,
 }) async {
-  injectFakes(sidebar: repository);
+  injectFakes(sidebar: repository, usage: usage);
   await tester.pumpWidget(
     overlayHost(
       BlocProvider(
@@ -149,7 +152,31 @@ void main() {
     await tester.tap(find.text('vazio'));
     await tester.pump();
     expect(repository.toggledProjects, isEmpty);
+    // Projeto comum: o menu de criar, como o + dele (multi iria direto).
+    expect(find.text('Nova bancada…'), findsOneWidget);
+    await tester.tap(find.text('Nova bancada em worktree…'));
+    await tester.pump();
     expect(calls.log, ['worktree-em:p2']);
+  });
+
+  testWidgets('o custo da bancada vai na ponta da linha; sem consumo, nada', (
+    tester,
+  ) async {
+    final usage = FakeUsageRepository(
+      const UsageView(pill: UsagePillView(text: 'US\$ 0,00', empty: true)),
+    );
+    await mount(tester, repository, calls, usage: usage);
+    expect(usage.watched, isNotEmpty, reason: 'cada linha assina a sua');
+    expect(find.text('US\$ 0,00'), findsNothing);
+
+    usage.push(
+      const UsageView(
+        pill: UsagePillView(text: 'US\$ 1,23', tooltip: 'Consumo da bancada'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('US\$ 1,23'), findsWidgets);
   });
 
   testWidgets('menu da bancada tem as sete ações do legado', (tester) async {
@@ -361,6 +388,19 @@ void main() {
       expect(repository.moves, ['bench:deck@p1/1']);
       expect(repository.selected, isEmpty, reason: 'arrastar não é clicar');
       expect(find.byKey(const ValueKey('drop-guide')), findsNothing);
+    });
+
+    testWidgets('a órfã se arrasta para um projeto e ganha casa', (
+      tester,
+    ) async {
+      await mount(tester, repository, calls);
+      final nexus = tester.getRect(find.text('nexus'));
+      final gesture = await grab(tester, 'solta');
+      await gesture.moveTo(Offset(nexus.center.dx, nexus.bottom + 14));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+      expect(repository.moves.single, startsWith('bench:solta@p1/'));
     });
 
     testWidgets('a guia só aparece onde o core diz que cai', (tester) async {

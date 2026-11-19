@@ -11,9 +11,8 @@ part 'usage_state.dart';
 /// cancela no `close()`. O core manda a pastilha e o painel prontos.
 class UsageCubit extends Cubit<UsageState> {
   UsageCubit({required this.workbenchId, required WatchUsage watch})
-    : super(const UsageState()) {
-    _subscription = watch(workbenchId)
-        .listen((view) => emit(UsageState(view: view)));
+    : super(const UsageWaiting()) {
+    _subscription = watch(workbenchId).listen((view) => emit(UsageShown(view)));
   }
 
   final String workbenchId;
