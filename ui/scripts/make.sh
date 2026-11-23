@@ -66,7 +66,7 @@ pb "Set :CFBundleVersion $BUILD"
 
 # O dev precisa ser reconhecível de relance no Dock, senão você fala com o app
 # errado. O ícone vem do do Swift; o .icns sobrepõe o do catálogo de assets.
-ICON_SRC="$UI_DIR/../legado/app/Resources/icon-dev.png"
+ICON_SRC="$UI_DIR/../design/brand/logo/app-icon-dev.png"
 if [ "$FLAVOR" = "dev" ] && [ -f "$ICON_SRC" ]; then
   WORK=$(mktemp -d)
   SET="$WORK/AppIcon.iconset"
