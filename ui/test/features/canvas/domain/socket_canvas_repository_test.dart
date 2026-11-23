@@ -60,6 +60,30 @@ void main() {
     return first;
   }
 
+  group('o subtítulo do card da fila', () {
+    test('a fila mostra o resumo que o core manda, e não a pasta', () {
+      final queue = CanvasCard.fromNode({
+        'id': 'fila',
+        'type': 'queue',
+        'dir': '~/Documents/agro/deck',
+        'subtitle': '2 pendentes',
+      });
+      expect(queue.subtitle, '2 pendentes');
+      final shell = CanvasCard.fromNode({
+        'id': 'sh',
+        'type': 'shell',
+        'dir': '~/Documents/agro/deck',
+        'subtitle': 'ignorado',
+      });
+      expect(shell.subtitle, '~/Documents/agro/deck');
+      expect(
+        CanvasCard.fromNode({'id': 'f2', 'type': 'queue'}).subtitle,
+        isEmpty,
+        reason: 'sem o campo (core antigo), fica vazio',
+      );
+    });
+  });
+
   group('o estado da bancada (workbench/<id>/nodes)', () {
     test('os nós chegam com tipo, frame, tela e subtítulo', () async {
       final snapshot = await firstSnapshot();
@@ -192,7 +216,7 @@ void main() {
       final sent = await sentAfter(
         () => repository.placeNode(
           wb,
-          CanvasTool.terminal,
+          CanvasTool.shell,
           const Rect.fromLTWH(0, 0, 720, 460),
           component: 'revisor',
         ),

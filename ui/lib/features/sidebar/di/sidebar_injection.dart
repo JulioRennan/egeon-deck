@@ -1,6 +1,7 @@
 import '../../../core/adapters/injector.dart';
 import '../domain/repository/sidebar_repository.dart';
 import '../domain/repository/socket_sidebar_repository.dart';
+import '../domain/usecase/copy_project_path.dart';
 import '../domain/usecase/move_item.dart';
 import '../domain/usecase/plan_move.dart';
 import '../domain/usecase/select_bench.dart';
@@ -20,6 +21,7 @@ void registerSidebarDomain() {
   Injector.factory(() => SetProjectStored(inject()));
   Injector.factory(() => MoveItem(inject()));
   Injector.factory(() => PlanMove(inject()));
+  Injector.factory(() => CopyProjectPath(inject()));
   Injector.factory(
     () => SidebarCubit(
       watch: inject(),

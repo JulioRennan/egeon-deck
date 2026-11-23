@@ -44,7 +44,7 @@ void main() {
         origin: const Offset(10, 20),
         size: const Size(1200, 800),
         window: window,
-        headerHeight: 46,
+        headerHeight: (_) => 46,
       );
       expect(geometry['workbench'], 'bancada');
       expect(geometry['mode'], 'canvas');
@@ -84,7 +84,7 @@ void main() {
         origin: Offset.zero,
         size: const Size(1200, 800),
         window: window,
-        headerHeight: 46,
+        headerHeight: (_) => 46,
       );
       expect(geometry['magnification'], 0.5);
       final a = (geometry['nodes']! as List).first as Map<String, Object?>;
@@ -109,7 +109,7 @@ void main() {
         origin: Offset.zero,
         size: const Size(1200, 800),
         window: const WindowFrame(x: 0, y: 0, screenHeight: 800),
-        headerHeight: 46,
+        headerHeight: (_) => 46,
       );
       final n = (geometry['nodes']! as List).single as Map<String, Object?>;
       expect((n['grabPoint']! as Map)['x'], 5);
@@ -145,7 +145,7 @@ void main() {
       origin: Offset.zero,
       size: const Size(1200, 800),
       window: window,
-      headerHeight: 46,
+      headerHeight: (_) => 46,
     );
     final kinds = [
       for (final n in (geometry['nodes']! as List).cast<Map<String, Object?>>())
@@ -166,7 +166,7 @@ void main() {
       origin: Offset.zero,
       size: const Size(1200, 800),
       window: window,
-      headerHeight: 46,
+      headerHeight: (_) => 46,
       mode: mode,
     );
     expect(of('canvas')['mode'], 'canvas');

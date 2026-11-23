@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../../core/adapters/png_file.dart';
+import '../../../../core/domain/entities/workbench_node.dart';
 import '../../../node/card/presentation/widgets/card_frame.dart';
 import '../../domain/entities/canvas_probe.dart';
 import '../cubit/canvas_cubit.dart';
@@ -45,7 +46,7 @@ class SurfaceProbe implements CanvasProbe {
       origin: box == null ? Offset.zero : box.localToGlobal(Offset.zero),
       size: box?.size ?? current.viewport.size,
       window: window,
-      headerHeight: CardFrame.headerHeight,
+      headerHeight: CardFrame.headerHeightOf,
       mode: mode,
     );
   }
@@ -60,7 +61,10 @@ class SurfaceProbe implements CanvasProbe {
       final ratio = pixelRatio();
       var image = await boundary.toImage(pixelRatio: ratio);
       final native = await nativeCapture?.call(cardId);
-      if (native != null) image = await _withNative(image, native, boundary);
+      if (native != null) {
+        final kind = state().cards.firstWhere((c) => c.id == cardId).kind;
+        image = await _withNative(image, native, kind);
+      }
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       if (bytes == null) return 'erro: não consegui gerar a imagem';
       await writePng(file, bytes.buffer.asUint8List());
@@ -74,7 +78,7 @@ class SurfaceProbe implements CanvasProbe {
   Future<ui.Image> _withNative(
     ui.Image card,
     Uint8List png,
-    RenderRepaintBoundary boundary,
+    NodeKind kind,
   ) async {
     final codec = await ui.instantiateImageCodec(png);
     final page = (await codec.getNextFrame()).image;
@@ -85,9 +89,9 @@ class SurfaceProbe implements CanvasProbe {
     // O corpo começa abaixo do cabeçalho (e da faixa, quando há): o que sobra.
     final body = Rect.fromLTWH(
       1 * ratio,
-      CardFrame.headerHeight * ratio,
+      CardFrame.headerHeightOf(kind) * ratio,
       card.width - 2 * ratio,
-      card.height - (CardFrame.headerHeight + 1) * ratio,
+      card.height - (CardFrame.headerHeightOf(kind) + 1) * ratio,
     );
     canvas.drawImageRect(
       page,

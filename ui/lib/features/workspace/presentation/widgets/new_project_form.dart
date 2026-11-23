@@ -1,9 +1,10 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/app_dialog.dart';
-import '../../../../commons/widgets/app_text_field.dart';
+import '../../../../commons/widgets/form_dialog.dart';
+import '../../../../commons/widgets/form_kit.dart';
 import '../../../../core/adapters/path_picker.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
 
 /// O que o formulário de projeto novo devolve.
 class NewProjectInput {
@@ -29,7 +30,7 @@ Future<NewProjectInput?> showNewProjectForm(
   String name = '',
   bool git = true,
   String? problem,
-}) => showAppDialog<NewProjectInput>(
+}) => showFormDialog<NewProjectInput>(
   context,
   width: 380,
   builder: (_, close) => _Body(
@@ -95,15 +96,15 @@ class _BodyState extends State<_Body> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _name,
-    builder: (context, _) => DialogBody(
+    builder: (context, _) => FormDialogBody(
       title: 'Novo projeto em "${widget.workspaceName}"',
       message:
           widget.problem ??
           'Cria a pasta e a põe no workspace. Pasta que já existe com esse '
               'nome é só adicionada.',
       actions: [
-        DialogButton('Cancelar', onTap: widget.close),
-        DialogButton(
+        FormDialogButton('Cancelar', onTap: widget.close),
+        FormDialogButton(
           'Criar',
           primary: true,
           enabled: _name.text.trim().isNotEmpty,
@@ -114,7 +115,7 @@ class _BodyState extends State<_Body> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppTextField(
+          FormTextField(
             controller: _name,
             placeholder: 'nome da pasta',
             autofocus: true,
@@ -125,9 +126,8 @@ class _BodyState extends State<_Body> {
             children: [
               Text(
                 'em',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.white(0.55),
+                style: EgeonType.caption.copyWith(
+                  color: context.eg.textSecondary,
                   decoration: TextDecoration.none,
                 ),
               ),
@@ -138,63 +138,22 @@ class _BodyState extends State<_Body> {
                   key: const ValueKey('new-project-parent'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Menlo',
-                    fontSize: 11,
-                    color: Color(0xFFFFFFFF),
+                  style: EgeonType.monoMeta.copyWith(
+                    color: context.eg.textPrimary,
                     decoration: TextDecoration.none,
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              DialogButton('Escolher…', small: true, onTap: _choose),
+              FormDialogButton('Escolher…', small: true, onTap: _choose),
             ],
           ),
           const SizedBox(height: 10),
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _git = !_git),
-              child: Row(
-                children: [
-                  Container(
-                    key: const ValueKey('git-box'),
-                    width: 14,
-                    height: 14,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _git ? AppColors.accent : null,
-                      borderRadius: BorderRadius.circular(3),
-                      border: Border.all(
-                        color: _git ? AppColors.accent : AppColors.white(0.4),
-                      ),
-                    ),
-                    child: _git
-                        ? const Text(
-                            '✓',
-                            style: TextStyle(
-                              fontSize: 10,
-                              height: 1,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFFFFFFFF),
-                              decoration: TextDecoration.none,
-                            ),
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Iniciar repositório git',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.white(0.85),
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          FormCheckbox(
+            key: const ValueKey('git-box'),
+            label: 'Iniciar repositório git',
+            on: _git,
+            onChanged: (v) => setState(() => _git = v),
           ),
         ],
       ),

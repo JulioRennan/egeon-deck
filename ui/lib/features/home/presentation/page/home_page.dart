@@ -4,12 +4,13 @@ import '../../../../core/domain/entities/workbench.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../theme/app_colors.dart';
+import '../../../../theme/egeon_colors.dart';
 import '../cubit/shell_cubit.dart';
 import '../widgets/root_layout.dart';
 import '../widgets/home_content.dart';
 import '../widgets/workbench_canvas.dart';
 import '../../../chat/presentation/page/chat_page.dart';
+import '../../../node/agent/presentation/widgets/agent_traits.dart';
 import 'home_shell_page.dart';
 
 class HomePage extends StatelessWidget {
@@ -23,13 +24,17 @@ class HomePage extends StatelessWidget {
     // Sem bancada na tela, o vazio com o aviso de conexão; com ela, o canvas
     // ou o chat.
     return ColoredBox(
-      color: AppColors.background,
+      color: context.eg.obsidian,
       child: HomeShellPage(
         title: title,
         canvas: (context, bench) =>
             bench == null ? const HomeContent() : _BenchCanvas(bench: bench),
-        chat: (context, bench) =>
-            ChatPage(workbenchId: bench.id, offerQueues: true),
+        chat: (context, bench) => ChatPage(
+          workbenchId: bench.id,
+          offerQueues: true,
+          traitsFor: (nodeId) =>
+              AgentTraits(workbenchId: bench.id, nodeId: nodeId),
+        ),
       ),
     );
   }
@@ -45,12 +50,8 @@ class _BenchCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final collapsed = context.select((ShellCubit shell) => shell.collapsed);
-    final clock = context.select(
-      (ShellCubit shell) => shell.state.snapshot.clock,
-    );
     return WorkbenchCanvas(
       bench: bench,
-      clock: clock,
       // A barra flutuante cobre a esquerda do canvas; enquadrar desconta, e
       // recolher a barra reenquadra.
       sidebarInset: RootLayout.floatingInset(

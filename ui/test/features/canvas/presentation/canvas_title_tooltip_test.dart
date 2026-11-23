@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:egeon_deck/commons/widgets/app_tooltip.dart';
+import 'package:egeon_deck/commons/widgets/eg/tooltip.dart';
 import 'package:egeon_deck/core/domain/entities/workbench_node.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
 import 'package:flutter/widgets.dart';
@@ -34,7 +34,7 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.moveTo(tester.getCenter(title()));
     await tester.pump();
-    await tester.pump(AppTooltip.delay);
+    await tester.pump(Tooltip.delay);
     expect(find.text('deck/dev · Claude Code'), findsOneWidget);
   });
 

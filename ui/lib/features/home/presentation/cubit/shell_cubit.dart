@@ -19,11 +19,8 @@ class ShellCubit extends Cubit<ShellState> {
     required this._setView,
     required this._access,
     required this._copyTargets,
-  }) : super(const ShellExpanded()) {
-    _subscription = watch().listen(
-      (snapshot) =>
-          emit(collapsed ? ShellCollapsed(snapshot) : ShellExpanded(snapshot)),
-    );
+  }) : super(const ShellCollapsed()) {
+    _subscription = watch().listen((snapshot) => emit(_withSnapshot(snapshot)));
   }
 
   final SetViewMode _setView;
@@ -31,14 +28,52 @@ class ShellCubit extends Cubit<ShellState> {
   final CopyDispatchTargets _copyTargets;
   StreamSubscription<ShellSnapshot>? _subscription;
 
-  /// A barra lateral está recolhida ao trilho.
+  /// A gaveta de bancadas está fechada.
   bool get collapsed => state is ShellCollapsed;
 
-  void toggleCollapsed() => setCollapsed(!collapsed);
+  /// O estado novo do core, com a gaveta como estava — salvo a aberta por
+  /// cima, que fecha quando outra bancada vai para a tela (escolheu uma).
+  ShellState _withSnapshot(ShellSnapshot snapshot) {
+    final switched =
+        snapshot.bench?.id != null &&
+        snapshot.bench?.id != state.snapshot.bench?.id;
+    return switch (state) {
+      ShellCollapsed() => ShellCollapsed(snapshot),
+      ShellExpanded() when switched => ShellCollapsed(snapshot),
+      ShellExpanded() => ShellExpanded(snapshot),
+      ShellPeeking() when switched => ShellCollapsed(snapshot),
+      ShellPeeking() => ShellPeeking(snapshot),
+    };
+  }
 
-  void setCollapsed(bool collapsed) => emit(
-    collapsed ? ShellCollapsed(state.snapshot) : ShellExpanded(state.snapshot),
-  );
+  /// ⌘/: abre a gaveta ou, com ela à vista, fecha. Aberta pelo mouse, o
+  /// clique a deixa aberta: quem passou o mouse e clicou quer ela ali.
+  void toggleCollapsed() {
+    if (state is ShellPeeking) {
+      emit(ShellExpanded(state.snapshot));
+    } else {
+      setCollapsed(!collapsed);
+    }
+  }
+
+  /// O mouse entrou no botão da gaveta: abre enquanto ele estiver por ali.
+  void peek() {
+    if (state is ShellCollapsed) emit(ShellPeeking(state.snapshot));
+  }
+
+  /// O mouse saiu: fecha só a que ele abriu.
+  void endPeek() {
+    if (state is ShellPeeking) emit(ShellCollapsed(state.snapshot));
+  }
+
+  void setCollapsed(bool collapsed) {
+    if (collapsed == this.collapsed) return;
+    if (collapsed) {
+      emit(ShellCollapsed(state.snapshot));
+    } else {
+      emit(ShellExpanded(state.snapshot));
+    }
+  }
 
   void setView(ViewMode mode) => _fire(_setView(mode));
 

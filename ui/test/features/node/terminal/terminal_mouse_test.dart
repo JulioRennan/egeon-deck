@@ -18,6 +18,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/eg_host.dart';
 import '../../../support/fake_terminal_repository.dart';
 
 /// Mouse, seleção, rolagem, cópia e efeitos (US-405, lado UI). A UI manda tudo
@@ -86,9 +87,9 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      Directionality(
-        textDirection: TextDirection.ltr,
-        child: BlocProvider.value(value: cubit, child: const TerminalPage()),
+      egHost(
+        BlocProvider.value(value: cubit, child: const TerminalPage()),
+        fill: true,
       ),
     );
     repository.push(frame());

@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/canvas_card.dart';
+import '../../domain/entities/canvas_component.dart';
 import '../../domain/entities/canvas_probe.dart';
 import '../../domain/entities/edge_link.dart';
 import '../../../../core/adapters/injector.dart';
@@ -25,7 +26,10 @@ class CanvasPage extends StatelessWidget {
     required this.bodyBuilder,
     this.accessoryBuilder,
     this.glow,
-    this.componentNames,
+    this.components,
+    this.benchName = '',
+    this.benchColor,
+    this.onPickColor,
     this.onConfigureTerminal,
     this.onConfigureTerminalAt,
     this.benchActions,
@@ -49,7 +53,12 @@ class CanvasPage extends StatelessWidget {
   final Color? glow;
 
   /// Os componentes salvos, pedidos quando o menu do Terminal abre.
-  final Future<List<String>> Function()? componentNames;
+  final Future<List<CanvasComponent>> Function()? components;
+
+  /// A cor da bancada (nome gravado) e quem a troca: o botão de cor da barra.
+  final String benchName;
+  final String? benchColor;
+  final ValueChanged<String>? onPickColor;
 
   /// "Configurar novo terminal…", com o que está à vista no canvas.
   final ValueChanged<Rect>? onConfigureTerminal;
@@ -108,7 +117,10 @@ class CanvasPage extends StatelessWidget {
         bodyBuilder: bodyBuilder,
         accessoryBuilder: accessoryBuilder,
         glow: glow,
-        componentNames: componentNames,
+        components: components,
+        benchName: benchName,
+        benchColor: benchColor,
+        onPickColor: onPickColor,
         onConfigureTerminal: onConfigureTerminal,
         onConfigureTerminalAt: onConfigureTerminalAt,
         benchActions: benchActions,

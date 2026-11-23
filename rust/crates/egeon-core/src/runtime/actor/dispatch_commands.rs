@@ -1316,6 +1316,98 @@ mod tests {
         assert_eq!(activity(&rig), Some(Activity::Ready));
     }
 
+    /// O resumo de atividade vai na árvore (`workspaces`), e o gancho de um
+    /// agente o muda sem nenhuma ação sobre a organização: o relógio republica
+    /// a árvore quando o resumo muda, e só então — nunca a cada tick.
+    #[tokio::test]
+    async fn a_arvore_e_republicada_quando_a_atividade_muda_e_so_entao() {
+        use crate::protocol::message::Topic;
+        let (mut rig, _) = deck();
+        let (line_tx, mut lines) = tokio::sync::mpsc::channel(32);
+        let (alive, _kept) = tokio::sync::oneshot::channel();
+        rig.actor.clients.insert(
+            1,
+            super::super::Client {
+                queue: line_tx,
+                _alive: alive,
+                topics: std::collections::HashSet::from([Topic::Workspaces]),
+                resync: std::collections::HashSet::new(),
+            },
+        );
+        let published = |lines: &mut tokio::sync::mpsc::Receiver<std::sync::Arc<[u8]>>| {
+            let mut trees = Vec::new();
+            while let Ok(line) = lines.try_recv() {
+                let value: serde_json::Value = serde_json::from_slice(&line).unwrap();
+                if value["topic"] == "workspaces" {
+                    trees.push(value);
+                }
+            }
+            trees
+        };
+
+        // A primeira conferência publica o que já está lá (nada foi publicado).
+        rig.actor.activity_tick();
+        assert_eq!(published(&mut lines).len(), 1);
+        // Sem mudança, o tick não publica.
+        rig.actor.activity_tick();
+        rig.actor.activity_tick();
+        assert!(published(&mut lines).is_empty());
+
+        // O gancho do agente muda o resumo; a árvore sai com ele.
+        hook(&mut rig, "deck/b", "event=prompt").await;
+        hook(&mut rig, "deck/b", "event=stop&last=[[ED:ok]]").await;
+        rig.actor.activity_tick();
+        let trees = published(&mut lines);
+        assert_eq!(trees.len(), 1, "{trees:?}");
+        let activity = &trees[0]["workbenches"][0]["activity"];
+        assert_eq!(activity["done"], 1, "{activity}");
+        rig.actor.activity_tick();
+        assert!(published(&mut lines).is_empty());
+    }
+
+    /// O retrato de quem acabou de assinar vai só para ele: não pode dar o
+    /// resumo novo como "já publicado", ou quem já assinava ficaria com a
+    /// árvore velha até a próxima mudança.
+    #[tokio::test]
+    async fn quem_assina_no_meio_nao_faz_o_relogio_pular_a_publicacao() {
+        use crate::protocol::message::Topic;
+        let (mut rig, _) = deck();
+        let client = |rig: &mut Rig, id, topics: &[Topic]| {
+            let (line_tx, lines) = tokio::sync::mpsc::channel(32);
+            let (alive, kept) = tokio::sync::oneshot::channel();
+            rig.actor.clients.insert(
+                id,
+                super::super::Client {
+                    queue: line_tx,
+                    _alive: alive,
+                    topics: topics.iter().cloned().collect(),
+                    resync: std::collections::HashSet::new(),
+                },
+            );
+            (lines, kept)
+        };
+        let (mut first, _first_alive) = client(&mut rig, 1, &[Topic::Workspaces]);
+        rig.actor.activity_tick();
+        while first.try_recv().is_ok() {}
+
+        // A atividade muda; antes do tick um segundo cliente assina.
+        hook(&mut rig, "deck/b", "event=prompt").await;
+        hook(&mut rig, "deck/b", "event=stop&last=[[ED:ok]]").await;
+        let (_second, _second_alive) = client(&mut rig, 2, &[]);
+        rig.actor.subscribe(2, 1, Topic::Workspaces);
+
+        rig.actor.activity_tick();
+        let mut got = Vec::new();
+        while let Ok(line) = first.try_recv() {
+            let value: serde_json::Value = serde_json::from_slice(&line).unwrap();
+            if value["topic"] == "workspaces" {
+                got.push(value);
+            }
+        }
+        assert_eq!(got.len(), 1, "o primeiro cliente ficou com a árvore velha");
+        assert_eq!(got[0]["workbenches"][0]["activity"]["done"], 1);
+    }
+
     /// O chat lê do dispatch a atividade, o transcript do turno e a bandeja; e
     /// o que você manda pelo chat entra sem guarda de cadeia.
     #[tokio::test]

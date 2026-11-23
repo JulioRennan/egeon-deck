@@ -2,8 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/glyphs.dart';
+import '../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../commons/widgets/eg/pressable.dart';
 import '../../../../commons/widgets/hand_cursor.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_tokens.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/chat_block.dart';
 import 'chat_block_view.dart';
 import 'chat_scroll.dart';
@@ -18,11 +22,19 @@ class ChatThreadView extends StatefulWidget {
     required this.blocks,
     required this.actions,
     required this.onTop,
+    this.bottomInset = 0,
+    this.mentions = const {},
     super.key,
   });
 
   final List<ChatBlock> blocks;
+
+  /// Os ids dos agentes da conversa, para pintar a menção no texto.
+  final Set<String> mentions;
   final ChatRowActions actions;
+
+  /// O espaço embaixo da última mensagem, para o composer flutuante não a cobrir.
+  final double bottomInset;
 
   /// O começo da lista foi alcançado: a janela de histórico pode crescer. Se
   /// o pedido falhar, a lista pode pedir de novo.
@@ -46,6 +58,8 @@ class ChatThreadViewState extends State<ChatThreadView> {
   /// estado da lista, para rolar não a remontar.
   final _away = ValueNotifier(false);
 
+  /// A mensagem sob o ponteiro: a hora e o custo aparecem só nela.
+
   /// A mensagem acesa depois de chegar nela por uma citação.
   final _flash = ValueNotifier<String?>(null);
   Timer? _flashTimer;
@@ -66,6 +80,9 @@ class ChatThreadViewState extends State<ChatThreadView> {
   void didUpdateWidget(ChatThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
     final changed = !identical(widget.blocks, oldWidget.blocks);
+    if (widget.bottomInset != oldWidget.bottomInset && scroll.isAtBottom) {
+      _settleAtBottom();
+    }
     if (widget.blocks.length != oldWidget.blocks.length) _loadingMore = false;
     if (changed && scroll.isAtBottom) {
       // No fim: a lista cresce e continua no fim.
@@ -248,6 +265,7 @@ class ChatThreadViewState extends State<ChatThreadView> {
   @override
   Widget build(BuildContext context) {
     _builds++;
+    if (widget.blocks.isEmpty) return const _EmptyThread();
     return Stack(
       children: [
         NotificationListener<ScrollStartNotification>(
@@ -258,7 +276,7 @@ class ChatThreadViewState extends State<ChatThreadView> {
           },
           child: ListView.builder(
             controller: scroll.controller,
-            padding: const EdgeInsets.only(top: 18),
+            padding: EdgeInsets.only(bottom: 24 + widget.bottomInset),
             itemCount: widget.blocks.length,
             findChildIndexCallback: (key) {
               final id = (key as ValueKey<String>).value;
@@ -267,7 +285,8 @@ class ChatThreadViewState extends State<ChatThreadView> {
             },
             itemBuilder: (context, index) {
               final block = widget.blocks[index];
-              return KeyedSubtree(
+              final day = dayStartingAt(widget.blocks, index);
+              final row = KeyedSubtree(
                 key: ValueKey(block.id),
                 // A linha toda leva à mensagem citada; sobre o texto, o I-beam
                 // de quem seleciona fica por cima da mão.
@@ -281,24 +300,36 @@ class ChatThreadViewState extends State<ChatThreadView> {
                         key: _key(block.id),
                         duration: const Duration(milliseconds: 200),
                         color: flash == block.messageKey
-                            ? const Color(0x2E0A84FF)
-                            : const Color(0x000A84FF),
+                            ? context.eg.accentSoft
+                            : EgeonColors.clear,
                         child: child,
                       ),
                       child: ChatBlockView(
                         block: block,
                         actions: widget.actions,
+                        mentions: widget.mentions,
+                        // O último passo de uma capa aberta fecha a caixa.
+                        groupTail: !_continuesGroup(widget.blocks, index),
                       ),
                     ),
                   ),
                 ),
+              );
+              if (day == null) return row;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DaySeparator(day: day),
+                  row,
+                ],
               );
             },
           ),
         ),
         Positioned(
           right: 18,
-          bottom: 12,
+          bottom: 12 + widget.bottomInset,
           child: ValueListenableBuilder<bool>(
             valueListenable: _away,
             builder: (context, away, _) => away
@@ -311,6 +342,119 @@ class ChatThreadViewState extends State<ChatThreadView> {
   }
 }
 
+/// O bloco seguinte ainda é passo da capa aberta (o recuo diz): a caixa cinza
+/// do grupo continua nele.
+bool _continuesGroup(List<ChatBlock> blocks, int index) {
+  if (index + 1 >= blocks.length) return false;
+  final next = blocks[index + 1];
+  return next is StepBlock && next.depth > 0;
+}
+
+/// O instante do bloco no relógio da máquina: o core manda UTC, e o dia que
+/// o usuário vê é o dele.
+DateTime? _stamp(ChatBlock b) => switch (b) {
+  PromptBlock(:final at) => at.toLocal(),
+  HeaderBlock(:final at) => at?.toLocal(),
+  _ => null,
+};
+
+/// O dia que abre aqui, se o bloco [index] é datado e o dia dele não é o do
+/// último bloco datado antes dele (ou não há nenhum): é onde o separador entra.
+
+DateTime? dayStartingAt(List<ChatBlock> blocks, int index) {
+  final at = _stamp(blocks[index]);
+  if (at == null) return null;
+  for (var i = index - 1; i >= 0; i--) {
+    final before = _stamp(blocks[i]);
+    if (before == null) continue;
+    final same =
+        before.year == at.year &&
+        before.month == at.month &&
+        before.day == at.day;
+    return same ? null : at;
+  }
+  return at;
+}
+
+/// "Hoje" (ou "Ontem", ou a data) centrado no topo da conversa, em `caption`
+/// muted, como na v3.
+class DaySeparator extends StatelessWidget {
+  const DaySeparator({required this.day, this.now, super.key});
+
+  final DateTime day;
+
+  /// O instante de referência; só o teste o passa.
+  final DateTime? now;
+
+  String get label {
+    final today = (now ?? DateTime.now()).toLocal();
+    final local = day.toLocal();
+    final days = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).difference(DateTime(local.year, local.month, local.day)).inDays;
+    if (days == 0) return 'Hoje';
+    if (days == 1) return 'Ontem';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(local.day)}/${two(local.month)}/${local.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 16, bottom: 12),
+    child: Center(
+      child: Text(
+        label,
+        key: const ValueKey('chat-day'),
+        style: EgeonType.caption.copyWith(
+          color: context.eg.textMuted,
+          decoration: TextDecoration.none,
+        ),
+      ),
+    ),
+  );
+}
+
+/// A conversa sem nenhuma mensagem: o convite em `display`, que o DS reserva
+/// aos estados vazios.
+class _EmptyThread extends StatelessWidget {
+  const _EmptyThread();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Peça algo ao time',
+              key: const ValueKey('chat-empty'),
+              textAlign: TextAlign.center,
+              style: EgeonType.display.copyWith(
+                color: c.textPrimary,
+                decoration: TextDecoration.none,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Escreva embaixo. Use / para comandos e @ para mencionar.',
+              textAlign: TextAlign.center,
+              style: EgeonType.body.copyWith(
+                color: c.textMuted,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// A setinha redonda do canto: leva ao fim, com movimento.
 class _ToBottom extends StatelessWidget {
   const _ToBottom({required this.onTap});
@@ -318,28 +462,27 @@ class _ToBottom extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => HandCursor(
-    child: GestureDetector(
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    return Pressable(
       key: const ValueKey('chat-to-bottom'),
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        alignment: Alignment.center,
+      onPressed: onTap,
+      semanticLabel: 'Ir ao fim da conversa',
+      builder: (context, s) => DecoratedBox(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: const Color(0xF5171C29),
-          border: Border.all(color: const Color(0x24FFFFFF)),
-          boxShadow: const [
-            BoxShadow(color: Color(0x80000000), blurRadius: 10),
-          ],
+          color: s.hovered ? c.steel : c.carbon,
+          border: Border.all(color: c.line),
+          boxShadow: EgeonShadow.float,
         ),
-        child: const ChevronGlyph(
-          ChevronDirection.down,
-          color: Color(0xFFE6E6E6),
-          size: 16,
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Center(
+            child: EgIcon(EgIcons.chevronDown, size: 16, color: c.textPrimary),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

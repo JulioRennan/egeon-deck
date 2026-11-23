@@ -2,7 +2,6 @@ import 'package:egeon_deck/features/update/domain/entities/app_effect.dart';
 import 'package:egeon_deck/features/update/domain/entities/app_snapshot.dart';
 import 'package:egeon_deck/features/update/presentation/cubit/update_cubit.dart';
 import 'package:egeon_deck/features/update/presentation/widgets/update_host.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/eg_host.dart';
 import '../../support/fake_app_repository.dart';
 import '../../support/inject_fakes.dart';
 
@@ -39,33 +39,23 @@ void main() {
     addTearDown(tester.view.reset);
     injectFakes(app: repo);
     await tester.pumpWidget(
-      // Um Overlay próprio, como o da casca: sem rota por baixo, o Esc do
-      // diálogo é do diálogo.
-      WidgetsApp(
-        color: const Color(0xFF000000),
-        textStyle: AppTheme.textStyle,
-        builder: (context, _) => Overlay(
-          initialEntries: [
-            OverlayEntry(
-              builder: (context) => UpdateHost(
-                onShowProcesses: () => processes++,
-                onTerminate: () => terminated++,
-                child: Builder(
-                  builder: (context) {
-                    cubit = context.read<UpdateCubit>();
-                    return BlocBuilder<UpdateCubit, UpdateState>(
-                      builder: (context, state) => Text(
-                        'menu: ${switch (state) {
-                          UpdateWaiting() => '',
-                          UpdateShown(:final app) => app.update.menu,
-                        }}',
-                      ),
-                    );
-                  },
+      egHost(
+        UpdateHost(
+          onShowProcesses: () => processes++,
+          onTerminate: () => terminated++,
+          child: Builder(
+            builder: (context) {
+              cubit = context.read<UpdateCubit>();
+              return BlocBuilder<UpdateCubit, UpdateState>(
+                builder: (context, state) => Text(
+                  'menu: ${switch (state) {
+                    UpdateWaiting() => '',
+                    UpdateShown(:final app) => app.update.menu,
+                  }}',
                 ),
-              ),
-            ),
-          ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -218,7 +208,9 @@ void main() {
     });
   });
 
-  testWidgets('a mensagem de uma linha abre e fecha no OK', (tester) async {
+  testWidgets('a mensagem de uma linha vira um aviso passageiro', (
+    tester,
+  ) async {
     await pumpHost(tester);
     repo.effect(
       const UpdateMessage(
@@ -230,9 +222,8 @@ void main() {
     await tester.pump();
     expect(find.text('Você está na última versão'), findsOneWidget);
     expect(find.text('Egeon Deck 1.6.0.'), findsOneWidget);
-    await tester.tap(find.text('OK'));
-    await tester.pump();
-    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 1));
     expect(find.text('Você está na última versão'), findsNothing);
   });
 

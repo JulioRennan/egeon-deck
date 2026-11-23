@@ -65,7 +65,7 @@ Map<String, Object?> canvasGeometry({
   required Offset origin,
   required Size size,
   required WindowFrame window,
-  required double headerHeight,
+  required double Function(NodeKind kind) headerHeight,
   String mode = 'canvas',
 }) {
   int round(double v) => v.round();
@@ -95,7 +95,7 @@ Map<String, Object?> canvasGeometry({
       frame.left,
       frame.top,
       frame.width,
-      headerHeight * viewport.zoom,
+      headerHeight(card.kind) * viewport.zoom,
     );
     nodes.add({
       'id': card.id,

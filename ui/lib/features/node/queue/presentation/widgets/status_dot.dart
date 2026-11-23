@@ -1,7 +1,8 @@
 import 'package:flutter/widgets.dart';
 
+import '../../../../../commons/widgets/eg/spinner.dart';
 import '../../../../../commons/widgets/hand_cursor.dart';
-import '../../../../../theme/app_colors.dart';
+import '../../../../../theme/egeon_colors.dart';
 import '../../domain/entities/queue_item.dart';
 
 /// A bolinha de estado da tarefa, que também é o checkbox: vazia é pendente,
@@ -24,14 +25,21 @@ class StatusDot extends StatelessWidget {
       child: SizedBox(
         width: size + 8,
         height: size + 8,
-        child: CustomPaint(painter: _DotPainter(item.status, item.awaiting)),
+        // Entregue ao agente = trabalhando: o spinner do DS no lugar do anel.
+        child: item.status == ItemStatus.sent && !item.awaiting
+            ? const Center(child: Spinner(size: 14))
+            : CustomPaint(
+                painter: _DotPainter(item.status, item.awaiting, context.eg),
+              ),
       ),
     ),
   );
 }
 
 class _DotPainter extends CustomPainter {
-  _DotPainter(this.status, this.awaiting);
+  _DotPainter(this.status, this.awaiting, this.colors);
+
+  final EgeonColors colors;
 
   final ItemStatus status;
   final bool awaiting;
@@ -41,11 +49,11 @@ class _DotPainter extends CustomPainter {
     final center = size.center(Offset.zero);
     const r = StatusDot.size / 2 - 1.5;
     final color = awaiting
-        ? AppColors.attention
+        ? colors.attention
         : switch (status) {
-            ItemStatus.pending => AppColors.white(0.4),
-            ItemStatus.sent => AppColors.accent,
-            ItemStatus.done => AppColors.done,
+            ItemStatus.pending => colors.textDisabled,
+            ItemStatus.sent => colors.running,
+            ItemStatus.done => colors.success,
           };
     final ring = Paint()
       ..color = color
@@ -63,7 +71,7 @@ class _DotPainter extends CustomPainter {
           ..lineTo(center.dx - 1, center.dy + 3)
           ..lineTo(center.dx + 4, center.dy - 3),
         Paint()
-          ..color = const Color(0xFF101010)
+          ..color = colors.obsidian
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.8
           ..strokeCap = StrokeCap.round
@@ -89,5 +97,5 @@ class _DotPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DotPainter old) =>
-      old.status != status || old.awaiting != awaiting;
+      old.status != status || old.awaiting != awaiting || old.colors != colors;
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/pick_list.dart';
+import '../../../../commons/widgets/form_kit.dart';
 import '../../domain/entities/bench_template.dart';
 
 /// "Começar vazia" e os templates de bancada, um só marcado. [chosen] nulo é

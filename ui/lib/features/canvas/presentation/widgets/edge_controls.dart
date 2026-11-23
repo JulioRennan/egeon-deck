@@ -1,9 +1,12 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/hand_cursor.dart';
-
-import '../../../../theme/app_colors.dart';
+import '../../../../commons/widgets/eg/edge_label.dart';
+import '../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../commons/widgets/eg/pressable.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/canvas_viewport.dart';
+import '../../domain/entities/edge_curve.dart';
 import '../../domain/entities/edge_layout.dart';
 import '../../domain/entities/edge_link.dart';
 
@@ -28,99 +31,120 @@ class EdgeControlsLayer extends StatelessWidget {
   final VoidCallback onLimit;
   final VoidCallback onRemove;
 
-  static const _fill = Color(0xFF242424);
-
   @override
   Widget build(BuildContext context) {
     final a = frames[link.a];
     final b = frames[link.b];
     if (a == null || b == null) return const SizedBox.shrink();
+    final c = context.eg;
     final laid = EdgeLayout.lay(link, a, b);
     final rects = EdgeLayout.controls(laid, viewport);
     return Stack(
       children: [
-        _place(
+        _round(
+          context,
           rects.direction,
           onCycle,
-          shape: BoxShape.circle,
-          child: Text(
+          Text(
             laid.directionGlyph,
-            style: const TextStyle(
-              color: AppColors.attention,
-              fontSize: 19,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.none,
-            ),
-          ),
-        ),
-        _place(
-          rects.pill,
-          onLimit,
-          shape: BoxShape.rectangle,
-          child: Text(
-            '↻ ${link.maxSends ?? '∞'}',
-            style: const TextStyle(
-              color: AppColors.attention,
+            style: EgeonType.label.copyWith(
+              color: c.accent,
               fontSize: 17,
               fontWeight: FontWeight.w600,
-              fontFeatures: [FontFeature.tabularFigures()],
               decoration: TextDecoration.none,
             ),
           ),
         ),
-        _place(
+        Positioned.fromRect(
+          rect: rects.pill,
+          child: Pressable(
+            onPressed: onLimit,
+            semanticLabel: 'Limite da ligação',
+            builder: (context, s) => Center(
+              child: EdgeLabel(
+                max: link.maxSends,
+                state: EdgeLabelState.selected,
+              ),
+            ),
+          ),
+        ),
+        _round(
+          context,
           rects.remove,
           onRemove,
-          shape: BoxShape.circle,
-          child: CustomPaint(
-            size: const Size.square(13),
-            painter: _CrossPainter(),
-          ),
+          EgIcon(EgIcons.x, size: 14, color: c.accent),
         ),
       ],
     );
   }
 
-  Widget _place(
+  /// Botão redondo de 32 sobre `carbon`, com o fio e o glifo em `accent`.
+  Widget _round(
+    BuildContext context,
     Rect rect,
-    VoidCallback onTap, {
-    required BoxShape shape,
-    required Widget child,
-  }) => Positioned.fromRect(
-    rect: rect,
-    child: HandCursor(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: DecoratedBox(
+    VoidCallback onTap,
+    Widget child,
+  ) {
+    final c = context.eg;
+    return Positioned.fromRect(
+      rect: rect,
+      child: Pressable(
+        onPressed: onTap,
+        builder: (context, s) => DecoratedBox(
           decoration: BoxDecoration(
-            color: _fill,
-            shape: shape,
-            borderRadius: shape == BoxShape.circle
-                ? null
-                : BorderRadius.circular(rect.height / 2),
-            border: Border.all(color: AppColors.attention),
+            color: s.hovered ? c.steelActive : c.carbon,
+            shape: BoxShape.circle,
+            border: Border.all(color: c.accent),
           ),
           child: Center(child: child),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-class _CrossPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.attention
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-    canvas
-      ..drawLine(Offset.zero, Offset(size.width, size.height), paint)
-      ..drawLine(Offset(size.width, 0), Offset(0, size.height), paint);
-  }
+/// Os rótulos de limite no meio de cada ligação (menos a que está sob o
+/// cursor, que mostra os controles). Só enfeite: o clique passa.
+class EdgeLabelsLayer extends StatelessWidget {
+  const EdgeLabelsLayer({
+    required this.links,
+    required this.frames,
+    required this.viewport,
+    this.hidden,
+    super.key,
+  });
+
+  final List<EdgeLink> links;
+  final Map<String, Rect> frames;
+  final CanvasViewport viewport;
+  final EdgeLink? hidden;
 
   @override
-  bool shouldRepaint(_CrossPainter old) => false;
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        for (final link in links)
+          if (link != hidden &&
+              frames[link.a] != null &&
+              frames[link.b] != null)
+            _label(link),
+      ],
+    ),
+  );
+
+  Widget _label(EdgeLink link) {
+    final laid = EdgeLayout.lay(link, frames[link.a]!, frames[link.b]!);
+    final (mid, _) = EdgeCurve.midpoint(laid.route);
+    final point = viewport.toScreen(mid);
+    // 22 de altura; o rótulo é uma peça de tela, não cresce com o zoom.
+    return Positioned(
+      left: point.dx,
+      top: point.dy,
+      child: FractionalTranslation(
+        translation: const Offset(-0.5, -0.5),
+        child: EdgeLabel(max: link.maxSends),
+      ),
+    );
+  }
 }

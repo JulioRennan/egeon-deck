@@ -11,12 +11,17 @@ import 'package:egeon_deck/features/chat/presentation/widgets/chat_thread_view.d
 import 'package:egeon_deck/features/node/terminal/presentation/widgets/terminal_body.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
-import 'package:egeon_deck/theme/code_palette.dart';
+import 'package:egeon_deck/commons/widgets/eg/diff_view.dart';
+import 'package:egeon_deck/commons/widgets/shell_layers.dart';
+import 'package:egeon_deck/features/chat/presentation/widgets/chat_composer.dart';
+import 'package:egeon_deck/commons/widgets/eg/status_dot.dart';
+import 'package:egeon_deck/theme/egeon_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/chat_fixtures.dart';
+import '../../support/fake_agent_repository.dart';
 import '../../support/fake_chat_repository.dart';
 import '../../support/fake_terminal_repository.dart';
 import '../../support/hand_cursor.dart';
@@ -40,7 +45,11 @@ Future<FakeChatRepository> mount(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final repository = FakeChatRepository();
-  injectFakes(chat: repository, terminals: FakeTerminalRepository());
+  injectFakes(
+    chat: repository,
+    terminals: FakeTerminalRepository(),
+    agent: (_) => FakeAgentRepository(),
+  );
   await tester.pumpWidget(
     overlayHost(const ChatPage(workbenchId: 'b1'), size: size),
   );
@@ -73,12 +82,41 @@ ScrollController controllerOf(WidgetTester tester) => tester
     .controller;
 
 void main() {
-  testWidgets('mostra a conversa: prompt, cabeçalho, prosa', (tester) async {
+  testWidgets('o composer flutua embaixo e a última mensagem fica acima dele', (
+    tester,
+  ) async {
     final repository = await mount(tester);
+    await deliver(tester, repository, 1, conversation(8));
+    await tester.pumpAndSettle();
+    final composer = tester.getRect(find.byType(ChatComposer));
+    expect(composer.bottom, 500 - ShellLayers.bottomMargin);
+    final last = tester.getRect(
+      find.textContaining('Resposta 7 com texto', findRichText: true),
+    );
+    expect(last.bottom, lessThanOrEqualTo(composer.top));
+    // A lista ocupa a altura toda por baixo do cartão de vidro.
+    expect(tester.getSize(find.byType(ChatThreadView)).height, 500);
+  });
+
+  testWidgets('sem mensagem nenhuma, o convite em display', (tester) async {
+    final repository = await mount(tester);
+    await deliver(tester, repository, 1, const []);
+    expect(find.byKey(const ValueKey('chat-empty')), findsOneWidget);
+    expect(find.text('Peça algo ao time'), findsOneWidget);
+    await deliver(tester, repository, 2, conversation(1));
+    expect(find.byKey(const ValueKey('chat-empty')), findsNothing);
+  });
+
+  testWidgets('mostra a conversa: prompt, cabeçalho, prosa', (tester) async {
+    final repository = await mount(tester, size: const Size(800, 640));
     await deliver(tester, repository, 1, conversation(2));
     expect(find.text('pergunta 0'), findsOneWidget);
-    expect(find.text('✦ front'), findsWidgets);
-    expect(find.text('deck/front'), findsWidgets);
+    expect(find.text('front'), findsWidgets);
+    expect(
+      find.text('deck/front'),
+      findsNothing,
+      reason: 'o cabeçalho não escreve o endereço',
+    );
     expect(
       find.textContaining('Resposta 1 com texto', findRichText: true),
       findsOneWidget,
@@ -115,8 +153,8 @@ void main() {
         return true;
       });
     }
-    expect(colors['let'], CodePalette.of('keyword'));
-    expect(colors['1'], CodePalette.of('number'));
+    expect(colors['let'], EgeonColors.dark.synKeyword);
+    expect(colors['1'], EgeonColors.dark.synNumber);
     expect(colors['let'], isNot(colors['1']));
   });
 
@@ -213,8 +251,9 @@ void main() {
       }),
     );
     await deliver(tester, repository, 1, [header(1), group]);
-    expect(find.text('3 passos · três'), findsOneWidget);
-    await tester.tap(find.text('3 passos · três'));
+    expect(find.text('3 passos'), findsOneWidget);
+    expect(find.text('· três'), findsOneWidget);
+    await tester.tap(find.text('3 passos'));
     await tester.pump();
     expect(repository.groups, ['g|u1|0']);
   });
@@ -232,20 +271,18 @@ void main() {
       }),
     );
     await deliver(tester, repository, 1, [header(1), diff]);
-    expect(find.text('± a.swift'), findsOneWidget);
-    final spans = <String, Color?>{};
-    for (final widget in tester.widgetList<RichText>(find.byType(RichText))) {
-      widget.text.visitChildren((span) {
-        if (span is TextSpan &&
-            (span.text ?? '').trim().startsWith(RegExp('[-+@]'))) {
-          spans[span.text!.trim()] = span.style?.color;
-        }
-        return true;
-      });
-    }
-    expect(spans['-a'], const Color(0xFFFF7B7B));
-    expect(spans['+b'], const Color(0xFF6CCB7A));
-    expect(spans['@@ -1 +1 @@'], const Color(0xFF6EA8FF));
+    expect(find.text('a.swift'), findsOneWidget);
+    final view = tester.widget<DiffView>(find.byType(DiffView));
+    expect(view.added, 1);
+    expect(view.removed, 1);
+    expect(view.filename, 'a.swift');
+    // Lado a lado: a remoção à esquerda, a adição à direita, na mesma linha.
+    final row = view.rows.firstWhere((r) => r.fold == null);
+    expect(row.left!.sign, DiffSign.removed);
+    expect(row.left!.text, 'a');
+    expect(row.right!.sign, DiffSign.added);
+    expect(row.right!.text, 'b');
+    expect(view.rows.first.fold, '@@ -1 +1 @@');
   });
 
   testWidgets(
@@ -263,7 +300,8 @@ void main() {
       await deliver(tester, repository, 1, [header(1), status('thinking')]);
       expect(find.textContaining('pensando…'), findsOneWidget);
       await deliver(tester, repository, 2, [header(1), status('asking')]);
-      expect(find.text('● precisa de você'), findsOneWidget);
+      expect(find.text('precisa de você'), findsOneWidget);
+      expect(find.byType(StatusDot), findsOneWidget, reason: 'o ponto pulsa');
     },
   );
 
@@ -281,7 +319,7 @@ void main() {
   testWidgets(
     'revisão perdida pede a thread de novo, não aplica o diff torto',
     (tester) async {
-      final repository = await mount(tester);
+      final repository = await mount(tester, size: const Size(800, 700));
       await deliver(tester, repository, 1, conversation(1));
       repository.thread = ChatThread(rev: 5, blocks: conversation(2));
       repository.push(
@@ -303,6 +341,18 @@ void main() {
       );
     },
   );
+
+  testWidgets('diff ilegível pede a thread inteira na hora', (tester) async {
+    final repository = await mount(tester, size: const Size(800, 700));
+    await deliver(tester, repository, 1, conversation(1));
+    repository.thread = ChatThread(rev: 2, blocks: conversation(2));
+    repository.push(const ChatUpdate.unreadable('b1'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(repository.snapshots, 1);
+    expect(find.text('pergunta 1'), findsOneWidget, reason: 'do instantâneo');
+  });
 
   testWidgets('evento velho é descartado; só o buraco pede o instantâneo', (
     tester,
@@ -877,7 +927,7 @@ void main() {
           ],
         );
         expect(find.text('falhou — problema de cobrança'), findsOneWidget);
-        expect(find.text('terminal fechado'), findsOneWidget);
+        expect(find.text('terminal fechado'), findsNothing);
         await tester.tap(find.byKey(const ValueKey('participant-sh1')));
         await tester.pump();
         expect(find.byType(TerminalBody), findsNothing);
@@ -948,8 +998,11 @@ void main() {
   });
 
   group('menu de @menção e /slash', () {
-    Future<FakeChatRepository> ready(WidgetTester tester) async {
-      final repository = await mount(tester);
+    Future<FakeChatRepository> ready(
+      WidgetTester tester, {
+      Size size = const Size(800, 500),
+    }) async {
+      final repository = await mount(tester, size: size);
       // Como o core manda (`chat/runtime.rs`): a menção já vem com `@` e o
       // `kind` é `agent`; o /comando traz a origem no `kind`.
       repository.completer = (text, caret) {
@@ -1030,7 +1083,7 @@ void main() {
     testWidgets(
       'a lista de / diz de quem é, mostra dez e acompanha a seleção',
       (tester) async {
-        await ready(tester);
+        await ready(tester, size: const Size(800, 760));
         await type(tester, '/');
         expect(
           find.text(
@@ -1135,16 +1188,19 @@ void main() {
         conversation(1),
         participants: const [frontInfo, backInfo, shellInfo],
       );
-      expect(find.text('AGENTES'), findsOneWidget);
-      expect(find.text('TERMINAIS'), findsOneWidget);
-      expect(find.text('revisor'), findsOneWidget, reason: 'o papel do agente');
+      expect(find.text('Participantes'), findsOneWidget);
+      expect(
+        find.text('revisor'),
+        findsNothing,
+        reason: 'sem a linha do papel',
+      );
       expect(find.byKey(const ValueKey('activity-working')), findsOneWidget);
     });
 
     testWidgets('sem participantes a coluna não aparece', (tester) async {
       final repository = await mount(tester);
       await deliver(tester, repository, 1, conversation(1));
-      expect(find.text('AGENTES'), findsNothing);
+      expect(find.text('Participantes'), findsNothing);
     });
 
     testWidgets('a lista de participantes muda com o evento do core', (
@@ -1207,10 +1263,15 @@ void main() {
         );
         expect(find.byKey(const ValueKey('permission-tray')), findsOneWidget);
         expect(
-          find.textContaining('quer usar Bash — apagar x', findRichText: true),
+          find.textContaining('quer rodar', findRichText: true),
           findsOneWidget,
         );
-        expect(find.text('rm -rf x'), findsOneWidget);
+        expect(
+          find.textContaining('rm -rf x', findRichText: true),
+          findsOneWidget,
+          reason: 'o comando fica na mesma linha, em mono',
+        );
+        expect(find.text('apagar x'), findsOneWidget, reason: 'a descrição');
 
         await tester.tap(find.text('Permitir'));
         await tester.tap(find.text('Sempre'));
@@ -1265,7 +1326,7 @@ void main() {
       expect(find.byKey(const ValueKey('permission-p1')), findsOneWidget);
       expect(find.byKey(const ValueKey('permission-p2')), findsOneWidget);
       expect(
-        find.textContaining('back quer usar Edit', findRichText: true),
+        find.textContaining('back quer editar', findRichText: true),
         findsOneWidget,
         reason: 'o nome vem do endereço',
       );

@@ -1,8 +1,11 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/glass_panel.dart';
-import '../../../../commons/widgets/spinner.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../commons/widgets/eg/banner.dart';
+import '../../../../commons/widgets/eg/button.dart';
+import '../../../../commons/widgets/eg/glass_surface.dart';
+import '../../../../commons/widgets/eg/spinner.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/shell_snapshot.dart';
 
 /// "Um instante": cobre o conteúdo enquanto o core faz algo demorado.
@@ -13,45 +16,30 @@ class BusyCurtain extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ColoredBox(
-    color: AppColors.black(0.55),
+    color: context.eg.scrim,
     child: Center(
-      child: GlassPanel(
-        radius: 12,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SpinnerBuilder(
-                builder: (_, glyph) => Text(
-                  glyph,
-                  style: const TextStyle(
-                    fontFamily: 'Menlo',
-                    fontSize: 14,
-                    color: Color(0xFFFFFFFF),
-                    decoration: TextDecoration.none,
-                  ),
-                ),
+      child: GlassSurface(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Spinner(size: 16),
+            const SizedBox(width: 12),
+            Text(
+              text,
+              style: EgeonType.label.copyWith(
+                color: context.eg.textPrimary,
+                decoration: TextDecoration.none,
               ),
-              const SizedBox(width: 12),
-              Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFFFFFFFF),
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     ),
   );
 }
 
-/// A faixa laranja do shell (`showBanner`): avisa sem travar nada. No canvas
+/// A faixa de aviso do shell (`showBanner`): avisa sem travar nada. No canvas
 /// desce para debaixo da barra de ações e da informativa (cronômetro e
 /// custo); no chat fica encostada no topo.
 class ShellBanner extends StatelessWidget {
@@ -71,28 +59,11 @@ class ShellBanner extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.only(top: top, left: 16, right: 16),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760, minHeight: 30),
-          child: DecoratedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: NoticeBanner(
             key: const ValueKey('shell-banner'),
-            decoration: BoxDecoration(
-              color: AppColors.attention,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              child: Text(
-                text,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF000000),
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ),
+            tone: BannerTone.attention,
+            child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         ),
       ),
@@ -114,52 +85,53 @@ class AccessCurtain extends StatelessWidget {
   final VoidCallback onAskAgain;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: AppColors.black(0.7),
-    child: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: GlassPanel(
-          child: Padding(
-            padding: const EdgeInsets.all(22),
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    return ColoredBox(
+      color: c.scrim,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: GlassSurface(
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Sem acesso à pasta',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFFFFFFF),
+                  style: EgeonType.heading.copyWith(
+                    color: c.textPrimary,
                     decoration: TextDecoration.none,
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Text(
                   lock.asking
                       ? 'O macOS está perguntando — responda o aviso dele.'
                       : lock.text,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.white(0.8),
+                  style: EgeonType.body.copyWith(
+                    color: c.textSecondary,
                     decoration: TextDecoration.none,
                   ),
                 ),
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                const SizedBox(height: 20),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    _Button(
-                      'Pedir de novo',
-                      enabled: !lock.asking,
-                      onTap: onAskAgain,
+                    Button(
+                      label: 'Pedir de novo',
+                      kind: ButtonKind.ghost,
+                      size: ButtonSize.lg,
+                      onPressed: lock.asking ? null : onAskAgain,
                     ),
-                    const SizedBox(width: 10),
-                    _Button(
-                      'Abrir Ajustes',
-                      enabled: true,
-                      onTap: onOpenSettings,
+                    Button(
+                      label: 'Abrir Ajustes',
+                      kind: ButtonKind.primary,
+                      size: ButtonSize.lg,
+                      onPressed: onOpenSettings,
                     ),
                   ],
                 ),
@@ -168,40 +140,6 @@ class AccessCurtain extends StatelessWidget {
           ),
         ),
       ),
-    ),
-  );
-}
-
-class _Button extends StatelessWidget {
-  const _Button(this.label, {required this.enabled, required this.onTap});
-
-  final String label;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 130,
-        height: 28,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.white(enabled ? 0.12 : 0.05),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.white(enabled ? 0.95 : 0.35),
-            decoration: TextDecoration.none,
-          ),
-        ),
-      ),
-    ),
-  );
+    );
+  }
 }

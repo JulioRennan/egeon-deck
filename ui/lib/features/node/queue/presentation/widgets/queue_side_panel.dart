@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../../theme/app_colors.dart';
+import '../../../../../theme/egeon_colors.dart';
 import '../../domain/entities/queue_panel.dart';
 import 'queue_body.dart';
 
@@ -79,7 +79,7 @@ class _QueueSidePanelState extends State<QueueSidePanel> {
               borderRadius: BorderRadius.circular(12),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.white(0.08)),
+                  border: Border.all(color: context.eg.lineSubtle),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: QueueBody(

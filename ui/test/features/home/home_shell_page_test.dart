@@ -1,5 +1,9 @@
-import 'package:egeon_deck/commons/widgets/app_text_field.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:egeon_deck/commons/widgets/form_kit.dart';
 
+import 'package:egeon_deck/commons/utils/bench_identity.dart';
+import 'package:egeon_deck/commons/widgets/eg/menu.dart';
+import 'package:egeon_deck/commons/widgets/eg/toast.dart';
 import 'package:egeon_deck/core/adapters/injector.dart';
 import 'package:egeon_deck/core/adapters/window_frame.dart';
 import 'package:egeon_deck/core/domain/entities/view_mode.dart';
@@ -9,24 +13,44 @@ import 'package:egeon_deck/features/canvas/domain/entities/canvas_probe.dart'
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_probe.dart'
     as canvas
     show WindowFrame;
+import 'package:egeon_deck/features/chat/presentation/page/chat_page.dart';
+import 'package:egeon_deck/features/chat/presentation/widgets/chat_composer.dart';
+import 'package:egeon_deck/features/chat/presentation/widgets/participants_column.dart';
+import 'package:egeon_deck/features/canvas/domain/entities/canvas_tool.dart';
+import 'package:egeon_deck/features/canvas/presentation/widgets/canvas_bench_actions.dart';
+import 'package:egeon_deck/features/canvas/presentation/widgets/canvas_toolbar.dart';
+import 'package:egeon_deck/features/usage/domain/usecase/watch_usage.dart';
+import 'package:egeon_deck/features/usage/presentation/cubit/usage_cubit.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:egeon_deck/features/home/domain/entities/shell_snapshot.dart';
 import 'package:egeon_deck/features/home/domain/entities/ui_request.dart';
 import 'package:egeon_deck/features/home/presentation/forms/form_request.dart';
 import 'package:egeon_deck/features/home/presentation/page/home_shell_page.dart';
+import 'package:egeon_deck/features/home/presentation/widgets/bench_drawer.dart';
+import 'package:egeon_deck/features/home/presentation/widgets/drawer_hover.dart';
+import 'package:egeon_deck/features/home/presentation/widgets/bench_rail.dart';
 import 'package:egeon_deck/features/home/presentation/widgets/root_layout.dart';
-import 'package:egeon_deck/features/home/presentation/widgets/view_toolbar.dart';
+import 'package:egeon_deck/features/home/presentation/widgets/workbench_shell.dart';
+import 'package:egeon_deck/theme/egeon_colors.dart';
+import 'package:egeon_deck/features/home/presentation/widgets/top_bar.dart';
+import 'package:egeon_deck/commons/widgets/shell_layers.dart';
+import 'package:egeon_deck/core/domain/entities/workbench_clock.dart';
 import 'package:egeon_deck/features/usage/domain/entities/usage_view.dart';
+import 'package:egeon_deck/features/usage/presentation/widgets/usage_chip.dart';
 import 'package:egeon_deck/features/update/domain/entities/app_snapshot.dart';
 import 'package:egeon_deck/features/sidebar/presentation/widgets/sidebar_panel.dart';
-import 'package:egeon_deck/features/sidebar/presentation/widgets/sidebar_segments.dart';
+import 'package:egeon_deck/features/sidebar/domain/entities/sidebar_tab.dart';
 import 'package:egeon_deck/features/tabs/domain/entities/workbench_tab.dart';
-import 'package:egeon_deck/features/tabs/presentation/widgets/workbench_tabs_bar.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/chat_fixtures.dart';
+import '../../support/fake_agent_repository.dart';
+import '../../support/fake_chat_repository.dart';
+import '../../support/fake_terminal_repository.dart';
 import '../../support/fake_shell_repository.dart';
 import '../../support/fake_sidebar_repository.dart';
 import '../../support/hand_cursor.dart';
@@ -37,7 +61,7 @@ import '../../support/fake_processes_repository.dart';
 import '../../support/fake_usage_repository.dart';
 import '../../support/fake_tabs_repository.dart';
 import '../../support/fake_ui_request_repository.dart';
-import '../../support/overlay_host.dart';
+import '../../support/eg_host.dart';
 import '../../support/sidebar_fixtures.dart';
 
 const bench = Workbench(
@@ -68,7 +92,7 @@ class _FakeActivator implements WindowActivator {
 }
 
 class Shell {
-  Shell({this.content}) {
+  Shell({this.content, this.chat}) {
     injectFakes(
       shell: shell,
       sidebar: sidebar,
@@ -79,14 +103,22 @@ class Shell {
       processes: FakeProcessesRepository(const []),
       menu: menu,
       clipboard: clipboard,
+      chat: chatRepository,
+      terminals: FakeTerminalRepository(),
+      agent: (_) => FakeAgentRepository(),
     );
   }
+
+  final chatRepository = FakeChatRepository();
 
   final menu = FakeMenuRepository('deck/claude\ndeck/sh');
   final clipboard = FakeClipboard();
 
   /// O que ocupa o lugar do canvas; sem isso, um texto.
   final Widget? content;
+
+  /// O que ocupa o lugar do chat; sem isso, um texto.
+  final Widget? chat;
 
   final shell = FakeShellRepository();
   final sidebar = FakeSidebarRepository();
@@ -99,7 +131,8 @@ class Shell {
   final pngs = <String, Uint8List>{};
   final forms = <FormRequest>[];
 
-  Widget build() => overlayHost(
+  Widget build() => egHost(
+    fill: true,
     HomeShellPage(
       canvas: (_, _) =>
           content ??
@@ -107,7 +140,7 @@ class Shell {
             autofocus: true,
             child: Text('CANVAS', key: ValueKey('canvas')),
           ),
-      chat: (_, _) => const Text('CHAT', key: ValueKey('chat')),
+      chat: (_, _) => chat ?? const Text('CHAT', key: ValueKey('chat')),
       onForm: (_, request) => forms.add(request),
       window: const _FixedWindow(),
       activator: activator,
@@ -123,7 +156,27 @@ class Shell {
   }
 }
 
-Future<Shell> mount(WidgetTester tester, [ShellSnapshot? state]) async {
+/// Deixa a gaveta terminar de abrir ou fechar: a animação de 200 ms só começa
+/// no primeiro quadro, e a troca do AnimatedSwitcher acaba num quadro a mais.
+Future<void> settleDrawer(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pump();
+}
+
+/// Abre a gaveta de bancadas pelo botão do trilho e espera os 200 ms.
+Future<void> openDrawer(WidgetTester tester) async {
+  await tester.tap(find.bySemanticsLabel('Todas as bancadas'));
+  await settleDrawer(tester);
+}
+
+/// Monta a casca. Com [drawer] (o padrão) a gaveta já está aberta, que é onde
+/// a barra lateral mora; sem ele, só o trilho.
+Future<Shell> mount(
+  WidgetTester tester, [
+  ShellSnapshot? state,
+  bool drawer = true,
+]) async {
   tester.view.physicalSize = const Size(1000, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -132,8 +185,11 @@ Future<Shell> mount(WidgetTester tester, [ShellSnapshot? state]) async {
   final s = Shell();
   await tester.pumpWidget(s.build());
   await s.show(tester, state ?? const ShellSnapshot(bench: bench));
+  if (drawer) await openDrawer(tester);
   return s;
 }
+
+Workbench _bench(String id) => Workbench(id: id, name: id, path: '~');
 
 /// A casca com três abas, a do meio na frente.
 Future<Shell> withTabs(WidgetTester tester) async {
@@ -214,16 +270,16 @@ void main() {
         ),
       );
       expect(
-        tester.getRect(find.byType(ViewToolbar)),
-        const Rect.fromLTWH(0, 0, 1000, ViewToolbar.height),
+        tester.getRect(find.byType(TopBar)),
+        const Rect.fromLTWH(0, 0, 1000, TopBar.height),
         reason: 'modo ${mode.wire}',
       );
-      expect(s.shell.watchers, 1);
+      expect(s.shell.watchers, 2);
       await tester.pumpWidget(const SizedBox());
     }
   });
 
-  testWidgets('só o conteúdo cede à barra lateral, e só no chat', (
+  testWidgets('a gaveta empurra o conteúdo no chat e cobre o canvas', (
     tester,
   ) async {
     await mount(
@@ -232,24 +288,33 @@ void main() {
         bench: Workbench(id: 'b', name: 'd', path: '~', view: ViewMode.chat),
       ),
     );
-    final cover =
-        RootLayout.margin + SidebarPanel.expandedWidth + RootLayout.gap;
+    // No chat a gaveta aberta fica ao lado: sobreposição é mensagem coberta.
     final chat = tester.getRect(find.byKey(const ValueKey('shell-content')));
-    expect(chat.left, cover);
-    expect(chat.width, 1000 - cover);
-    expect(chat.top, ViewToolbar.height);
+    expect(
+      chat.left,
+      WorkbenchShell.frameLeft + BenchDrawer.width + RootLayout.gap,
+    );
+    expect(chat.right, 1000 - WorkbenchShell.gapRight);
+    expect(chat.top, TopBar.height + WorkbenchShell.gapTop);
     expect(find.byKey(const ValueKey('chat')), findsOneWidget);
     expect(find.byKey(const ValueKey('canvas')), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await mount(tester);
     final canvas = tester.getRect(find.byKey(const ValueKey('shell-content')));
-    expect(canvas.left, 0, reason: 'o grid corre por baixo do vidro');
-    expect(canvas.width, 1000);
+    expect(
+      canvas.left,
+      WorkbenchShell.frameLeft,
+      reason: 'no canvas a gaveta aberta fica por cima do grid',
+    );
+    expect(
+      canvas.width,
+      1000 - WorkbenchShell.frameLeft - WorkbenchShell.gapRight,
+    );
     expect(find.byKey(const ValueKey('canvas')), findsOneWidget);
   });
 
-  testWidgets('recolher a barra devolve a largura ao chat', (tester) async {
+  testWidgets('fechar a gaveta devolve a largura ao chat', (tester) async {
     await mount(
       tester,
       const ShellSnapshot(
@@ -260,78 +325,249 @@ void main() {
         .getRect(find.byKey(const ValueKey('shell-content')))
         .left;
 
-    // O botão de recolher é a seta à esquerda do cabeçalho da barra.
-    final panel = tester.getRect(find.byType(SidebarPanel));
-    await tester.tapAt(Offset(panel.right - 20, panel.top + 24));
-    await tester.pump();
+    // Sem ✕ na gaveta: o botão do trilho a recolhe (e o Esc, sem fixar).
+    await tester.tap(find.bySemanticsLabel('Todas as bancadas'));
+    await settleDrawer(tester);
 
     final after = tester
         .getRect(find.byKey(const ValueKey('shell-content')))
         .left;
     expect(after, lessThan(before));
-    expect(after, RootLayout.margin + SidebarPanel.railWidth + RootLayout.gap);
-    expect(
-      tester.getRect(find.byType(SidebarPanel)).width,
-      SidebarPanel.railWidth,
-    );
+    expect(after, WorkbenchShell.frameLeft);
+    expect(find.byType(SidebarPanel), findsNothing);
   });
 
-  testWidgets('a pílula troca o modo e o título diz a bancada', (tester) async {
+  testWidgets('Canvas | Chat troca o modo e a trilha diz a bancada', (
+    tester,
+  ) async {
     final s = await mount(tester);
-    expect(find.text('deck'), findsWidgets);
-    expect(find.byKey(const ValueKey('bench-swatch')), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(TopBar), matching: find.text('deck')),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.text('Chat'));
+    await tester.tap(find.byKey(const ValueKey('view-chat')));
     await tester.pump();
     expect(s.shell.views, [ViewMode.chat]);
   });
 
-  testWidgets('clicar na bolinha da cor pede o seletor de cor', (tester) async {
-    final s = await mount(tester);
-    await tester.tap(find.byKey(const ValueKey('bench-swatch')));
-    await tester.pump();
-    expect(s.forms.single, isA<RecolorBench>());
-    expect((s.forms.single as RecolorBench).benchId, 'b1');
-  });
-
-  testWidgets('a faixa de abas aparece entre a barra e o conteúdo', (
+  testWidgets('a trilha mostra projeto / bancada, e a bancada na cor dela', (
     tester,
   ) async {
-    final s = await mount(tester);
-    expect(find.byType(WorkbenchTabsBar), findsNothing);
-
-    s.tabs.push([
-      WorkbenchTab(id: 'a', name: 'a', isActive: true),
-      const WorkbenchTab(id: 'b', name: 'b'),
-    ]);
-    await tester.pump();
-    await tester.pump();
-
-    final bar = tester.getRect(find.byType(WorkbenchTabsBar));
-    expect(bar.top, ViewToolbar.height);
-    final content = tester.getRect(find.byKey(const ValueKey('shell-content')));
-    expect(
-      content.top,
-      bar.bottom,
-      reason: 'o conteúdo desce a altura da faixa',
+    await mount(tester, const ShellSnapshot(bench: bench, projectName: 'loja'));
+    expect(find.text('loja'), findsWidgets);
+    final name = tester.widget<Text>(
+      find.descendant(of: find.byType(TopBar), matching: find.text('deck')),
     );
+    expect(name.style!.fontWeight, FontWeight.w600);
+    expect(name.style!.color, BenchIdentity.of('blue').color(EgeonColors.dark));
   });
 
-  testWidgets('a faixa nunca fica sob o vidro da barra lateral', (
+  group('a gaveta de bancadas', () {
+    testWidgets('começa fechada: só o trilho de bancadas', (tester) async {
+      await mount(tester, null, false);
+      expect(find.byType(SidebarPanel), findsNothing);
+      expect(find.byType(BenchRail), findsOneWidget);
+      final frame = tester.getRect(find.byKey(const ValueKey('shell-content')));
+      expect(frame.left, WorkbenchShell.frameLeft);
+    });
+
+    testWidgets('o botão do trilho abre e fecha', (tester) async {
+      await mount(tester, null, false);
+      await openDrawer(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
+      final drawer = tester.getRect(find.byType(BenchDrawer));
+      expect(drawer.left, WorkbenchShell.frameLeft);
+      expect(drawer.width, BenchDrawer.width);
+      await tester.tap(find.bySemanticsLabel('Todas as bancadas'));
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+    });
+
+    testWidgets('passar o mouse no botão abre; tirar fecha', (tester) async {
+      await mount(tester, null, false);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: const Offset(900, 700));
+      await mouse.moveTo(
+        tester.getCenter(find.bySemanticsLabel('Todas as bancadas')),
+      );
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
+      // Atravessa o vão até a gaveta: ela não pisca.
+      final drawer = tester.getRect(find.byType(BenchDrawer));
+      await mouse.moveTo(drawer.center);
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
+      await mouse.moveTo(const Offset(900, 700));
+      await tester.pump(DrawerHover.linger);
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+
+      // A faixa vazia do trilho, junto à borda da janela, também abre.
+      await mouse.moveTo(const Offset(8, 500));
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
+    });
+
+    testWidgets('abre e fecha em 200 ms', (tester) async {
+      await mount(tester, null, false);
+      await tester.tap(find.bySemanticsLabel('Todas as bancadas'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      var opacity = tester
+          .widgetList<Opacity>(
+            find.ancestor(
+              of: find.byType(SidebarPanel),
+              matching: find.byType(Opacity),
+            ),
+          )
+          .first
+          .opacity;
+      expect(opacity, inExclusiveRange(0, 1), reason: 'no meio da entrada');
+      await tester.pump(const Duration(milliseconds: 120));
+      opacity = tester
+          .widgetList<Opacity>(
+            find.ancestor(
+              of: find.byType(SidebarPanel),
+              matching: find.byType(Opacity),
+            ),
+          )
+          .first
+          .opacity;
+      expect(opacity, 1);
+    });
+
+    testWidgets('Esc fecha a gaveta aberta por cima', (tester) async {
+      await mount(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+    });
+
+    testWidgets('clicar fora fecha; clicar dentro não', (tester) async {
+      await mount(tester);
+      await tester.tapAt(
+        tester.getCenter(find.byType(SidebarPanel)).translate(0, 60),
+      );
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
+      // Fora: bem à direita, no conteúdo.
+      await tester.tapAt(const Offset(900, 500));
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+    });
+
+    testWidgets('escolher outra bancada fecha a gaveta aberta por cima', (
+      tester,
+    ) async {
+      final s = await mount(tester);
+      await s.show(
+        tester,
+        const ShellSnapshot(
+          bench: Workbench(id: 'b2', name: 'outra', path: '~'),
+        ),
+      );
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+    });
+
+    testWidgets('não há fixar: o canvas continua por baixo e Esc a fecha', (
+      tester,
+    ) async {
+      await mount(tester);
+      expect(find.bySemanticsLabel('Fixar a gaveta'), findsNothing);
+      expect(find.bySemanticsLabel('Soltar a gaveta'), findsNothing);
+      final frame = tester.getRect(find.byKey(const ValueKey('shell-content')));
+      expect(
+        frame.left,
+        WorkbenchShell.frameLeft,
+        reason: 'no canvas ela flutua, não empurra a moldura',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+    });
+
+    testWidgets('o último botão da linha do topo recolhe a gaveta', (
+      tester,
+    ) async {
+      await mount(tester);
+      await tester.tap(find.bySemanticsLabel('Recolher barra lateral'));
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+    });
+
+    testWidgets('o ⌘/ fecha a gaveta, e ela reabre', (tester) async {
+      await mount(tester);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.slash);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+      await tester.tap(find.bySemanticsLabel('Todas as bancadas'));
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
+    });
+
+    testWidgets('⌘K abre a gaveta', (tester) async {
+      await mount(tester, null, false);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
+    });
+  });
+
+  group('o trilho de bancadas na casca', () {
+    testWidgets('mostra as abas abertas e troca de bancada pelo clique', (
+      tester,
+    ) async {
+      final s = await withTabs(tester);
+      final rail = find.byType(BenchRail);
+      expect(
+        find.descendant(of: rail, matching: find.text('A')),
+        findsOneWidget,
+      );
+      await tester.tap(find.descendant(of: rail, matching: find.text('C')));
+      expect(s.tabs.picked, ['c']);
+    });
+
+    testWidgets('Nova bancada pede o formulário', (tester) async {
+      final s = await mount(tester, null, false);
+      await tester.tap(find.bySemanticsLabel('Nova bancada'));
+      expect(s.forms.single, isA<NewBench>());
+    });
+  });
+
+  testWidgets('H6b: os flutuantes da E1 abrem dentro da casca, sob o tema', (
     tester,
   ) async {
+    await mount(tester);
+    final context = tester.element(find.byType(TopBar));
+    showMenu(
+      context,
+      anchor: tester.getRect(find.byType(TopBar)),
+      items: [MenuItem('Trocar bancada', onSelected: () {})],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Trocar bancada'), findsOneWidget);
+    showToast(context, title: 'Pronto', tone: ToastTone.success);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Pronto'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('a casca não mostra mais a faixa de abas', (tester) async {
     final s = await mount(tester);
     s.tabs.push([
-      WorkbenchTab(id: 'a', name: 'a', isActive: true),
+      const WorkbenchTab(id: 'a', name: 'a', isActive: true),
       const WorkbenchTab(id: 'b', name: 'b'),
     ]);
     await tester.pump();
     await tester.pump();
-
-    final cover =
-        RootLayout.margin + SidebarPanel.expandedWidth + RootLayout.gap;
-    final first = tester.getTopLeft(find.byKey(const ValueKey('tab-a'))).dx;
-    expect(first, greaterThanOrEqualTo(cover));
+    expect(find.byKey(const ValueKey('tab-a')), findsNothing);
   });
 
   testWidgets('as cortinas cobrem o conteúdo, não a barra de cima', (
@@ -356,7 +592,7 @@ void main() {
     expect(s.shell.askedAgain, 1);
 
     // A barra de cima segue clicável por baixo das cortinas.
-    await tester.tap(find.text('Chat'));
+    await tester.tap(find.byKey(const ValueKey('view-chat')));
     expect(s.shell.views, [ViewMode.chat]);
   });
 
@@ -410,8 +646,9 @@ void main() {
     tester,
   ) async {
     final s = await mount(tester);
-    await tester.tap(find.text('+').first);
+    await tester.tap(find.bySemanticsLabel('Novo'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Novo workspace…'));
     await tester.pump();
     expect(s.forms.single, isA<NewWorkspace>());
@@ -451,13 +688,12 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('⌘→ e ⌘] vão à aba da direita; da última volta à primeira', (
+    testWidgets('⌘→ vai à aba da direita; da última volta à primeira', (
       tester,
     ) async {
       final s = await withTabs(tester);
       await keys(tester, LogicalKeyboardKey.arrowRight);
-      await keys(tester, LogicalKeyboardKey.bracketRight);
-      expect(s.tabs.picked, ['c', 'c']);
+      expect(s.tabs.picked, ['c']);
     });
 
     testWidgets('segurar ⌘→ repete a troca de aba', (tester) async {
@@ -472,11 +708,30 @@ void main() {
       expect(s.tabs.picked.length, 3);
     });
 
-    testWidgets('⌘← e ⌘[ vão à da esquerda', (tester) async {
+    testWidgets('⌘← vai à da esquerda', (tester) async {
       final s = await withTabs(tester);
       await keys(tester, LogicalKeyboardKey.arrowLeft);
+      expect(s.tabs.picked, ['a']);
+    });
+
+    testWidgets('⌘[ e ⌘] voltam e avançam entre as bancadas visitadas', (
+      tester,
+    ) async {
+      final s = await withTabs(tester);
+      ShellSnapshot on(String id) =>
+          ShellSnapshot(bench: _bench(id), openBenchIds: const {'a', 'b', 'c'});
+      // Sem visita anterior, nada.
       await keys(tester, LogicalKeyboardKey.bracketLeft);
-      expect(s.tabs.picked, ['a', 'a']);
+      await keys(tester, LogicalKeyboardKey.bracketRight);
+      expect(s.shell.activated, isEmpty);
+
+      await s.show(tester, on('b'));
+      await s.show(tester, on('c'));
+      await keys(tester, LogicalKeyboardKey.bracketLeft);
+      expect(s.shell.activated, ['b'], reason: 'voltou à bancada de antes');
+      await s.show(tester, on('b'));
+      await keys(tester, LogicalKeyboardKey.bracketRight);
+      expect(s.shell.activated, ['b', 'c']);
     });
 
     testWidgets('⌘1…⌘9 vão à aba pelo número; número sem aba não faz nada', (
@@ -516,13 +771,15 @@ void main() {
       expect(s.tabs.closed, ['b']);
     });
 
-    testWidgets('⌘/ recolhe a barra e ⌥⌘2 mostra o chat', (tester) async {
+    testWidgets('⌘/ abre e fecha a gaveta, ⌥⌘2 mostra o chat', (tester) async {
       final s = await mount(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
       await keys(tester, LogicalKeyboardKey.slash);
-      expect(
-        tester.getRect(find.byType(SidebarPanel)).width,
-        SidebarPanel.railWidth,
-      );
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsNothing);
+      await keys(tester, LogicalKeyboardKey.slash);
+      await settleDrawer(tester);
+      expect(find.byType(SidebarPanel), findsOneWidget);
       await keys(tester, LogicalKeyboardKey.digit2, alt: true);
       await keys(tester, LogicalKeyboardKey.digit1, alt: true);
       expect(s.shell.views, [ViewMode.chat, ViewMode.canvas]);
@@ -540,7 +797,7 @@ void main() {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final s = Shell(
-            content: AppTextField(
+            content: FormTextField(
               controller: controller,
               autofocus: true,
               maxLines: 1,
@@ -563,9 +820,9 @@ void main() {
           await keys(tester, LogicalKeyboardKey.arrowRight);
           expect(s.tabs.picked, isEmpty, reason: 'o texto fica com as setas');
 
-          // ⌘[ e ⌘] seguem valendo no campo.
+          // ⌘[ e ⌘] seguem valendo no campo: sem histórico, não fazem nada.
           await keys(tester, LogicalKeyboardKey.bracketRight);
-          expect(s.tabs.picked, ['c']);
+          expect(s.tabs.picked, isEmpty);
         } finally {
           debugDefaultTargetPlatformOverride = null;
         }
@@ -586,7 +843,7 @@ void main() {
     tester,
   ) async {
     final s = await mount(tester);
-    expect(s.shell.watchers, 1);
+    expect(s.shell.watchers, 2);
     await tester.pumpWidget(const SizedBox());
     expect(s.shell.watchers, 0);
   });
@@ -596,7 +853,7 @@ void main() {
   ) async {
     final s = await mount(tester);
     expect(s.sidebar.watchers, 1);
-    expect(s.shell.watchers, 1);
+    expect(s.shell.watchers, 2);
     await tester.pumpWidget(const SizedBox());
     expect(s.sidebar.watchers, 0);
     expect(s.shell.watchers, 0);
@@ -604,7 +861,7 @@ void main() {
   });
 
   group('uso e processos', () {
-    testWidgets('a pastilha de consumo da bancada fica no canto da barra', (
+    testWidgets('o chip de consumo da bancada fica no canto da moldura', (
       tester,
     ) async {
       final s = Shell();
@@ -613,25 +870,44 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(s.build());
-      await s.show(tester, const ShellSnapshot(bench: bench));
+      await s.show(
+        tester,
+        const ShellSnapshot(
+          bench: bench,
+          clock: WorkbenchClock(running: 75, waiting: 5),
+        ),
+      );
 
       expect(
         s.usage.watched,
         contains('b1'),
         reason: 'o canto assina a da tela; a barra lateral, a de cada linha',
       );
+      final chip = find.byType(UsageChip);
+      expect(chip, findsOneWidget);
       expect(
-        find.descendant(
-          of: find.byType(ViewToolbar),
-          matching: find.text('US\$ 12,34'),
-        ),
+        find.descendant(of: chip, matching: find.text('US\$ 12,34')),
         findsOneWidget,
       );
+      expect(
+        find.descendant(of: chip, matching: find.text('01:15')),
+        findsOneWidget,
+      );
+      // Na moldura, no canto de cima à direita, e não mais na barra de cima.
+      expect(
+        find.descendant(
+          of: find.byType(TopBar),
+          matching: find.byType(UsageChip),
+        ),
+        findsNothing,
+      );
+      final rect = tester.getRect(chip);
+      expect(rect.right, closeTo(1000 - 24 - ShellLayers.margin, 1));
     });
 
-    testWidgets('sem bancada não há pastilha', (tester) async {
+    testWidgets('sem bancada não há chip', (tester) async {
       await mount(tester, const ShellSnapshot());
-      expect(find.byKey(const ValueKey('usage-pill')), findsNothing);
+      expect(find.byType(UsageChip), findsNothing);
     });
 
     testWidgets('o menu oferece Processos…', (tester) async {
@@ -653,8 +929,8 @@ void main() {
         for (final (label, key, modifiers) in [
           ('Aba à direita', LogicalKeyboardKey.arrowRight, meta),
           ('Aba à esquerda', LogicalKeyboardKey.arrowLeft, meta),
-          ('Próxima bancada', LogicalKeyboardKey.bracketRight, meta),
-          ('Bancada anterior', LogicalKeyboardKey.bracketLeft, meta),
+          ('Avançar', LogicalKeyboardKey.bracketRight, meta),
+          ('Voltar', LogicalKeyboardKey.bracketLeft, meta),
           ('Fechar a aba', LogicalKeyboardKey.keyW, meta),
           ('Aba 1', LogicalKeyboardKey.digit1, meta),
           ('Aba 9', LogicalKeyboardKey.digit9, meta),
@@ -662,7 +938,12 @@ void main() {
           ('Processos…', LogicalKeyboardKey.keyP, meta | alt),
           ('Ver no canvas', LogicalKeyboardKey.digit1, meta | alt),
           ('Ver como chat', LogicalKeyboardKey.digit2, meta | alt),
-          ('Recolher a barra de bancadas', LogicalKeyboardKey.slash, meta),
+          (
+            'Abrir ou fechar a gaveta de bancadas',
+            LogicalKeyboardKey.slash,
+            meta,
+          ),
+          ('Buscar bancada…', LogicalKeyboardKey.keyK, meta),
           ('Aproximar', LogicalKeyboardKey.equal, meta),
           ('Afastar', LogicalKeyboardKey.minus, meta),
           ('Zoom 100%', LogicalKeyboardKey.digit0, meta),
@@ -830,6 +1111,11 @@ void main() {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 300)),
         );
+        // A região pode esperar o quadro seguinte: o teste o dá e espera de novo.
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 300)),
+        );
         await tester.pump();
         final reply = s.requests.replies.last.$2;
         expect(reply.value, file);
@@ -913,16 +1199,181 @@ void main() {
     });
   });
 
-  test(
-    'a barra flutuante cobre o canvas: aberta, recolhida e ao lado (chat)',
-    () {
-      final open = RootLayout.floatingInset(collapsed: false, beside: false);
-      final rail = RootLayout.floatingInset(collapsed: true, beside: false);
-      expect(open, greaterThan(rail));
-      expect(rail, greaterThan(0));
-      expect(RootLayout.floatingInset(collapsed: false, beside: true), 0);
-    },
-  );
+  test('a gaveta só cobre o canvas; no chat fica ao lado', () {
+    expect(
+      RootLayout.floatingInset(collapsed: false, beside: false),
+      BenchDrawer.width + RootLayout.gap,
+    );
+    expect(RootLayout.floatingInset(collapsed: true, beside: false), 0);
+    expect(
+      RootLayout.floatingInset(collapsed: false, beside: true),
+      0,
+      reason: 'no chat ela empurra a moldura em vez de cobri-la',
+    );
+  });
+
+  group('janela no tamanho mínimo', () {
+    testWidgets(
+      'chat com a gaveta aberta ao lado: nada estoura e a conversa tem largura',
+      (tester) async {
+        tester.view.physicalSize = RootLayout.minWindow;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await Injector.reset();
+        final s = Shell(chat: const ChatPage(workbenchId: 'b1'));
+        await tester.pumpWidget(s.build());
+        await s.show(
+          tester,
+          const ShellSnapshot(
+            bench: Workbench(
+              id: 'b1',
+              name: 'deck',
+              path: '~',
+              view: ViewMode.chat,
+            ),
+          ),
+        );
+        s.chatRepository.reset(
+          1,
+          conversation(4),
+          participants: const [frontInfo, backInfo],
+        );
+        await tester.pump();
+        await tester.pump();
+        await openDrawer(tester);
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(ParticipantsColumn), findsOneWidget);
+        expect(
+          tester.getSize(find.byType(ChatComposer)).width,
+          greaterThan(260),
+        );
+        final chip = tester.getRect(find.byType(UsageChip));
+        final column = tester.getRect(find.byType(ParticipantsColumn));
+        expect(chip.overlaps(column), isFalse);
+      },
+    );
+
+    Widget topStack(Widget bar, Widget? corner) => egHost(
+      fill: true,
+      Stack(
+        children: [
+          Positioned(
+            top: 16,
+            left: 0,
+            right: 0,
+            child: ToolbarSlot(child: bar),
+          ),
+          Positioned.fill(child: ShellLayers(corner: corner)),
+        ],
+      ),
+    );
+
+    testWidgets(
+      'a barra do canvas não passa por baixo do canto, na largura natural',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        for (final corner in [null, 120.0, 220.0]) {
+          for (final width in [892.0, 1000.0, 1400.0]) {
+            tester.view.physicalSize = Size(width, 300);
+            tester.view.devicePixelRatio = 1;
+            await tester.pumpWidget(
+              topStack(
+                SizedBox(
+                  key: const ValueKey('bar'),
+                  width: 515,
+                  height: CanvasToolbar.height,
+                ),
+                corner == null
+                    ? null
+                    : SizedBox(
+                        key: const ValueKey('corner'),
+                        width: corner,
+                        height: 46,
+                      ),
+              ),
+            );
+            await tester.pump();
+            await tester.pump();
+            final bar = tester.getRect(find.byKey(const ValueKey('bar')));
+            // O que o host dá de largura (ele limita a viewport).
+            final room = tester.getSize(find.byType(ToolbarSlot)).width;
+            reason(String what) =>
+                '$what (canto $corner, largura $width, sala $room, barra $bar)';
+            expect(bar.width, 515, reason: reason('sem encolher'));
+            expect(bar.left, greaterThanOrEqualTo(16));
+            if (corner == null) {
+              expect(
+                bar.center.dx,
+                closeTo(room / 2, 0.5),
+                reason: reason('sem peça no canto, no centro'),
+              );
+            } else {
+              final box = tester.getRect(find.byKey(const ValueKey('corner')));
+              expect(bar.overlaps(box), isFalse, reason: reason('sobrepôs'));
+              if (room - 515 >= 2 * 220 + 64) {
+                expect(
+                  bar.center.dx,
+                  closeTo(room / 2, 0.5),
+                  reason: reason('cabendo, no centro'),
+                );
+              }
+            }
+          }
+        }
+      },
+    );
+
+    testWidgets(
+      'a barra real e o chip real na janela mínima: sem encolher e sem sobrepor',
+      (tester) async {
+        // A moldura do canvas no tamanho mínimo, sem a gaveta empurrando: a
+        // janela menos o trilho (84) e a margem da direita (24).
+        final frame = RootLayout.minWindow.width - 84 - 24;
+        tester.view.physicalSize = Size(frame, 600);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          topStack(
+            CanvasToolbar(
+              tool: CanvasTool.cursor,
+              zoom: 1,
+              onSelect: (_) {},
+              onZoom: (_) {},
+              onResetZoom: () {},
+              onFitAll: () {},
+              onPickColor: (_) {},
+              benchName: 'deck',
+              benchActions: CanvasBenchActions(
+                onSaveTemplate: () {},
+                onNewWorktree: () {},
+                onUpdateTemplate: () {},
+              ),
+            ),
+            BlocProvider(
+              create: (_) => UsageCubit(
+                workbenchId: 'b1',
+                watch: WatchUsage(FakeUsageRepository()),
+              ),
+              child: const UsageChip(),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        final bar = tester.getRect(find.byType(CanvasToolbar));
+        final chip = tester.getRect(find.byType(UsageChip));
+        expect(bar.overlaps(chip), isFalse);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'a barra cabe sem estourar',
+        );
+        expect(bar.left, greaterThanOrEqualTo(16));
+      },
+    );
+  });
 }
 
 class _FakeProbe implements CanvasProbe {

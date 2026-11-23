@@ -6,15 +6,20 @@ import '../../../support/in_memory_web_repository.dart';
 import 'package:egeon_deck/core/adapters/injector.dart';
 import 'package:egeon_deck/features/node/web/presentation/cubit/web_capture_registry.dart';
 import 'package:egeon_deck/features/node/web/presentation/widgets/web_body.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/eg_host.dart';
 import '../../../support/fake_web_surface.dart';
 import '../../../support/inject_fakes.dart';
+
+Finder address() => find.descendant(
+  of: find.byKey(const ValueKey('address-field')),
+  matching: find.byType(EditableText),
+);
 
 void main() {
   late InMemoryWebRepository repository;
@@ -37,14 +42,10 @@ void main() {
       },
     );
     await tester.pumpWidget(
-      WidgetsApp(
-        color: const Color(0xFF000000),
-        textStyle: AppTheme.textStyle,
-        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-          settings: settings,
-          pageBuilder: (context, _, _) => builder(context),
-        ),
-        home: StatefulBuilder(
+      egHost(
+        fill: true,
+        size: const Size(900, 600),
+        StatefulBuilder(
           builder: (context, setState) => CardMotion(
             live: live,
             child: const WebBody(workbenchId: 'bancada', nodeId: 'web1'),
@@ -73,12 +74,9 @@ void main() {
     'digitar na barra manda o texto cru; o core normaliza e a página carrega',
     (tester) async {
       await pumpWeb(tester);
-      await tester.tap(find.byKey(const ValueKey('address-field')));
+      await tester.tap(address());
       await tester.pump();
-      await tester.enterText(
-        find.byKey(const ValueKey('address-field')),
-        'docs.rs',
-      );
+      await tester.enterText(address(), 'docs.rs');
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
       await tester.pump();
@@ -86,14 +84,30 @@ void main() {
     },
   );
 
+  testWidgets('a barra é o campo mono do DS e traz o perfil do nó', (
+    tester,
+  ) async {
+    await pumpWeb(tester);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('address-field')),
+        matching: find.byType(EditableText),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('web-back'))).height,
+      30,
+      reason: 'IconButton compacto',
+    );
+    expect(WebBody.barHeight, 44);
+  });
+
   testWidgets('texto que não parece endereço vira busca', (tester) async {
     await pumpWeb(tester);
-    await tester.tap(find.byKey(const ValueKey('address-field')));
+    await tester.tap(address());
     await tester.pump();
-    await tester.enterText(
-      find.byKey(const ValueKey('address-field')),
-      'flutter webview',
-    );
+    await tester.enterText(address(), 'flutter webview');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     await tester.pump();
@@ -109,9 +123,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    final field = tester.widget<EditableText>(
-      find.byKey(const ValueKey('address-field')),
-    );
+    final field = tester.widget<EditableText>(address());
     expect(field.controller.text, 'https://docs.rs/serde');
     expect(repository.reported, ['https://docs.rs/serde']);
     // E o eco do core não manda a página carregar de novo o que ela já mostra.
@@ -168,14 +180,10 @@ void main() {
 
     live = false;
     await tester.pumpWidget(
-      WidgetsApp(
-        color: const Color(0xFF000000),
-        textStyle: AppTheme.textStyle,
-        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-          settings: settings,
-          pageBuilder: (context, _, _) => builder(context),
-        ),
-        home: CardMotion(
+      egHost(
+        fill: true,
+        size: const Size(900, 600),
+        CardMotion(
           live: false,
           child: const WebBody(workbenchId: 'bancada', nodeId: 'web1'),
         ),

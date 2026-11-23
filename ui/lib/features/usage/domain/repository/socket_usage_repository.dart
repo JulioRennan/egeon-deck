@@ -1,3 +1,4 @@
+import '../../../../core/adapters/event_parsing.dart';
 import '../../../../core/adapters/egeon_socket_client.dart';
 import '../entities/usage_view.dart';
 import 'usage_repository.dart';
@@ -11,6 +12,11 @@ class SocketUsageRepository implements UsageRepository {
   final EgeonSocketClient _client;
 
   @override
-  Stream<UsageView> watch(String workbenchId) =>
-      _client.subscribe('workbench/$workbenchId/usage').map(UsageView.fromMap);
+  Stream<UsageView> watch(String workbenchId) => _client
+      .subscribe('workbench/$workbenchId/usage')
+      .parsed(
+        'workbench/$workbenchId/usage',
+        UsageView.fromMap,
+        fallback: (_) => const UsageView(),
+      );
 }

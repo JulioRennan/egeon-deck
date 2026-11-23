@@ -1,9 +1,10 @@
 import 'package:egeon_deck/core/domain/entities/workbench_node.dart';
+import 'package:egeon_deck/features/node/card/domain/entities/card_activity.dart';
 import 'package:egeon_deck/features/node/card/presentation/widgets/card_frame.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../../support/overlay_host.dart';
+import '../../../support/eg_host.dart';
 
 /// O card em que você está digitando leva a cor da bancada na borda (ADR-086);
 /// alerta ganha de foco.
@@ -14,7 +15,7 @@ void main() {
     final node = FocusNode();
     addTearDown(node.dispose);
     await tester.pumpWidget(
-      overlayHost(
+      egHost(
         SizedBox(
           width: 400,
           height: 300,
@@ -25,7 +26,9 @@ void main() {
             subtitle: '~',
             height: 300,
             linkable: false,
-            needsAttention: alert,
+            activity: alert
+                ? const CardActivity(needsAttention: true)
+                : CardActivity.none,
             focusColor: bench,
             onDragStart: (_) {},
             onDrag: (_) {},

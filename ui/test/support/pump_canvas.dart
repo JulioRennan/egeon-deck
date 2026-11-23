@@ -1,12 +1,14 @@
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
+import 'package:egeon_deck/features/canvas/domain/entities/canvas_component.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_probe.dart';
 import 'package:egeon_deck/features/canvas/domain/repository/canvas_repository.dart';
 import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_commands.dart';
 import 'package:egeon_deck/features/canvas/presentation/page/canvas_page.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
+import 'package:egeon_deck/features/canvas/presentation/widgets/canvas_bench_actions.dart';
 
 import 'dart:typed_data';
 
+import 'eg_host.dart';
 import 'inject_fakes.dart';
 
 import 'package:flutter/widgets.dart';
@@ -18,6 +20,11 @@ Future<void> pumpCanvas(
   WidgetTester tester,
   CanvasRepository repository, {
   List<String> componentNames = const [],
+  List<CanvasComponent>? components,
+  CanvasBenchActions? benchActions,
+  String benchName = 'bancada',
+  String? benchColor,
+  ValueChanged<String>? onPickColor,
   ValueChanged<dynamic>? onEditLimit,
   CanvasProbeRegistry? probes,
   CanvasCommands? commands,
@@ -36,16 +43,17 @@ Future<void> pumpCanvas(
   addTearDown(tester.view.reset);
   injectFakes(canvas: repository);
   await tester.pumpWidget(
-    WidgetsApp(
-      color: const Color(0xFF000000),
-      textStyle: AppTheme.textStyle,
-      pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-        settings: settings,
-        pageBuilder: (context, _, _) => builder(context),
-      ),
-      home: CanvasPage(
+    egHost(
+      fill: true,
+      size: const Size(1200, 800),
+      CanvasPage(
         workbenchId: 'bancada',
-        componentNames: () async => componentNames,
+        components: () async =>
+            components ?? [for (final n in componentNames) CanvasComponent(n)],
+        benchActions: benchActions,
+        benchName: benchName,
+        benchColor: benchColor,
+        onPickColor: onPickColor,
         onEditLimit: onEditLimit,
         probes: probes,
         commands: commands,

@@ -1,3 +1,4 @@
+import 'package:egeon_deck/commons/widgets/eg/status_dot.dart';
 import 'package:egeon_deck/core/domain/entities/workbench_node.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
 import 'package:egeon_deck/features/node/card/domain/entities/card_activity.dart';
@@ -7,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/in_memory_canvas_repository.dart';
 import '../../../support/pump_canvas.dart';
 
-/// Tentativa agendada depois de uma falha da API: o status do agente vira
+/// Tentativa agendada depois de uma falha da API: o ponto de estado do agente vira
 /// botão, com "Tentar agora" e "Cancelar tentativa" (ADR-072).
 void main() {
   CanvasCard agent(String state) => CanvasCard(
@@ -33,7 +34,7 @@ void main() {
     return asked;
   }
 
-  testWidgets('em tentativa, o status oferece tentar agora e cancelar', (
+  testWidgets('em tentativa, o ponto oferece tentar agora e cancelar', (
     tester,
   ) async {
     final asked = await mount(tester, 'retrying');
@@ -48,9 +49,9 @@ void main() {
     expect(asked, [true, false]);
   });
 
-  testWidgets('fora de tentativa o status só mostra', (tester) async {
+  testWidgets('fora de tentativa o ponto só mostra', (tester) async {
     await mount(tester, 'working');
     expect(find.byKey(const ValueKey('card-retry')), findsNothing);
-    expect(find.byKey(const ValueKey('card-status')), findsOneWidget);
+    expect(find.byType(StatusDot), findsWidgets);
   });
 }

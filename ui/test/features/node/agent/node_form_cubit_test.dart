@@ -159,4 +159,76 @@ void main() {
     );
     expect(await ListComponents(repository)(), ['revisor']);
   });
+
+  test(
+    'a linha do componente traz CLI, modelo e o esforço em português',
+    () async {
+      repository = FakeNodeFormRepository(
+        saved: const [
+          ComponentInfo(
+            name: 'revisor',
+            kind: NodeKind.agent,
+            subtitle: 'Claude Code',
+            template: NodeTemplate(
+              name: 'revisor',
+              kind: NodeKind.agent,
+              agent: 'claude',
+              byAgent: {'claude': CliOverrides(model: 'opus', effort: 'high')},
+            ),
+          ),
+        ],
+      );
+      final choices = await ListComponents(repository).choices('b1');
+      expect(
+        choices.single.meta,
+        'Claude Code · opus · alto',
+        reason: 'apelido que o catálogo não conhece fica como está',
+      );
+    },
+  );
+
+  test('o modelo da linha sai com o título do catálogo do CLI', () async {
+    repository = FakeNodeFormRepository(
+      saved: const [
+        ComponentInfo(
+          name: 'revisor',
+          kind: NodeKind.agent,
+          subtitle: 'Claude Code',
+          template: NodeTemplate(
+            name: 'revisor',
+            kind: NodeKind.agent,
+            agent: 'claude',
+            byAgent: {
+              'claude': CliOverrides(model: 'claude-opus-5-5', effort: 'high'),
+            },
+          ),
+        ),
+      ],
+    );
+    final choices = await ListComponents(repository).choices('b1');
+    expect(choices.single.meta, 'Claude Code · Opus 5.5 · alto');
+    expect(repository.screens.single.cli, 'claude');
+  });
+
+  test('sem o catálogo (o core recusa), a linha fica com o apelido', () async {
+    repository = FakeNodeFormRepository(
+      saved: const [
+        ComponentInfo(
+          name: 'revisor',
+          kind: NodeKind.agent,
+          subtitle: 'Claude Code',
+          template: NodeTemplate(
+            name: 'revisor',
+            kind: NodeKind.agent,
+            agent: 'claude',
+            byAgent: {
+              'claude': CliOverrides(model: 'claude-opus-5-5', effort: 'high'),
+            },
+          ),
+        ),
+      ],
+    )..refuseScreen = true;
+    final choices = await ListComponents(repository).choices('b1');
+    expect(choices.single.meta, 'Claude Code · claude-opus-5-5 · alto');
+  });
 }

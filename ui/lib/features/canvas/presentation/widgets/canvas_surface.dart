@@ -5,21 +5,21 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../theme/app_colors.dart';
 import '../../../../core/domain/entities/workbench_node.dart';
-import '../../../../theme/app_theme.dart';
-import '../../../node/card/presentation/widgets/card_accent.dart';
 import '../../../node/card/presentation/widgets/card_frame.dart';
-import '../../../node/card/presentation/widgets/card_status.dart';
 import '../../../node/card/presentation/widgets/card_motion.dart';
 import '../../domain/entities/canvas_card.dart';
+import '../../domain/entities/canvas_component.dart';
 import '../../domain/entities/canvas_probe.dart';
 import '../../domain/entities/edge_link.dart';
+import '../../../../commons/utils/agent_identity.dart';
+import '../../../../commons/widgets/eg/identity.dart';
+import '../../../../theme/egeon_colors.dart';
 import '../cubit/canvas_commands.dart';
 import '../cubit/canvas_cubit.dart';
 import '../cubit/canvas_motion_cubit.dart';
+import '../../domain/entities/canvas_tool.dart';
 import '../cubit/canvas_tool_cubit.dart';
-import 'canvas_glow.dart';
 import 'canvas_grid.dart';
 import 'canvas_bench_actions.dart';
 import 'canvas_toolbar.dart';
@@ -58,7 +58,10 @@ class CanvasSurface extends StatefulWidget {
     required this.bodyBuilder,
     this.accessoryBuilder,
     this.glow,
-    this.componentNames,
+    this.components,
+    this.benchName = '',
+    this.benchColor,
+    this.onPickColor,
     this.onConfigureTerminal,
     this.onConfigureTerminalAt,
     this.benchActions,
@@ -83,7 +86,12 @@ class CanvasSurface extends StatefulWidget {
   final Color? glow;
 
   /// Os componentes salvos, pedidos na hora em que o menu do Terminal abre.
-  final Future<List<String>> Function()? componentNames;
+  final Future<List<CanvasComponent>> Function()? components;
+
+  /// A cor da bancada (nome gravado) e quem a troca: o botão de cor da barra.
+  final String benchName;
+  final String? benchColor;
+  final ValueChanged<String>? onPickColor;
 
   /// "Configurar novo terminal…" do menu do Terminal.
   /// "Configurar novo terminal…": recebe o que está à vista, no espaço do
@@ -250,10 +258,20 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
       CanvasDraggingCard() ||
       CanvasLinking() => null,
     };
-    final banner = switch (tool) {
+    final hint = switch (tool) {
+      CanvasPointer() => null,
       CanvasAnnouncing(:final component) =>
         'Próximo terminal: ${component ?? 'shell'}',
-      CanvasPointer() || CanvasArmed() || CanvasComponentArmed() => null,
+      CanvasComponentArmed(:final component) =>
+        'Clique ou arraste no canvas para criar ${component ?? 'um shell'}',
+      CanvasArmed(:final tool) => switch (tool) {
+        CanvasTool.cursor => null,
+        CanvasTool.shell => 'Clique ou arraste no canvas para criar um shell',
+        CanvasTool.agent =>
+          'Clique ou arraste no canvas para criar um terminal de agente',
+        CanvasTool.web => 'Clique ou arraste no canvas para criar um navegador',
+        CanvasTool.queue => 'Clique no canvas para criar uma fila de prompts',
+      },
     };
     return MouseRegion(
       cursor: state is CanvasPanning
@@ -314,7 +332,14 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
               Positioned.fill(
                 child: _world(context, state, hovered, moving: moving),
               ),
-              Positioned.fill(child: CanvasGlow(color: widget.glow)),
+              Positioned.fill(
+                child: EdgeLabelsLayer(
+                  links: state.links,
+                  frames: frames,
+                  viewport: view,
+                  hidden: hovered,
+                ),
+              ),
               if (hovered != null && pointer)
                 Positioned.fill(
                   child: EdgeControlsLayer(
@@ -337,17 +362,21 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
                       end,
                       _cubit.state.viewport,
                     ),
+                    onCancel: () => _tools.selectTool(CanvasTool.cursor),
                   ),
                 ),
               Positioned(
-                top: 12,
+                top: 16,
                 left: 0,
                 right: 0,
-                child: Center(
+                child: ToolbarSlot(
                   child: CanvasToolbar(
                     tool: armed,
                     zoom: view.zoom,
-                    componentNames: widget.componentNames,
+                    components: widget.components,
+                    benchName: widget.benchName,
+                    benchColor: widget.benchColor,
+                    onPickColor: widget.onPickColor,
                     onSelect: _tools.selectTool,
                     onZoom: _cubit.stepZoom,
                     onResetZoom: _cubit.resetZoom,
@@ -363,19 +392,19 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
                   ),
                 ),
               ),
-              if (widget.infoBar case final info?)
+              if (hint != null || widget.infoBar != null)
                 Positioned(
-                  top: 12 + CanvasToolbar.height + 6,
+                  top: 16 + CanvasToolbar.height + 10,
                   left: 0,
                   right: 0,
-                  child: Center(child: info),
-                ),
-              if (banner != null)
-                Positioned(
-                  bottom: 24,
-                  left: 0,
-                  right: 0,
-                  child: Center(child: _Banner(banner)),
+                  child: Column(
+                    children: [
+                      if (hint != null) ToolHint(hint),
+                      if (hint != null && widget.infoBar != null)
+                        const SizedBox(height: 6),
+                      ?widget.infoBar,
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -447,6 +476,7 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
                       links: state.links,
                       frames: state.frames,
                       zoom: view.zoom,
+                      colors: context.eg,
                       hovered: hovered,
                       pending: switch (state) {
                         CanvasLinking(:final pending) => pending,
@@ -462,6 +492,9 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
               for (final card in state.cards)
                 _card(
                   card,
+                  identity: card.kind == NodeKind.agent
+                      ? agentIdentity(card.id)
+                      : null,
                   live:
                       !moving &&
                       (webLiveAtAnyZoom || (view.zoom - 1).abs() < 0.001),
@@ -473,7 +506,11 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
     );
   }
 
-  Widget _card(CanvasCard card, {required bool live}) => Positioned.fromRect(
+  Widget _card(
+    CanvasCard card, {
+    required bool live,
+    Identity? identity,
+  }) => Positioned.fromRect(
     key: ValueKey('card-${card.id}'),
     rect: card.frame,
     // O foco de teclado entrando no card (no terminal, no campo) ou o clique
@@ -491,7 +528,7 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
           child: CardFrame(
             id: card.id,
             kind: card.kind,
-            title: card.title,
+            title: card.kind == NodeKind.queue ? 'Fila de prompts' : card.title,
             titleTooltip: card.titleTooltip,
             onWorktree: switch (widget.onRequestWorktree) {
               final worktree?
@@ -510,19 +547,15 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
             subtitle: card.subtitle,
             height: card.frame.height,
             linkable: card.port,
-            needsAttention: card.activity.needsAttention,
             maestro: card.maestro,
-            accent: card.maestro ? CardAccent.maestro : null,
-            titleColor: ActivityColors.of(card.activity.tone),
-            status: CardStatus(
-              activity: card.activity,
-              onRetry: switch (widget.onRetry) {
-                final retry? when card.kind == NodeKind.agent => ({
-                  required now,
-                }) => retry(card, now: now),
-                _ => null,
-              },
-            ),
+            identity: identity,
+            activity: card.activity,
+            onRetry: switch (widget.onRetry) {
+              final retry? when card.kind == NodeKind.agent => ({
+                required now,
+              }) => retry(card, now: now),
+              _ => null,
+            },
             onDragStart: (p) => _cubit.beginCardDrag(card.id, _local(p)),
             onDrag: (p) => _cubit.dragCard(_local(p)),
             onDragEnd: _cubit.endCardGesture,
@@ -549,25 +582,6 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
           ),
         ),
       ),
-    ),
-  );
-}
-
-class _Banner extends StatelessWidget {
-  const _Banner(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: const Color(0xE61E1E20),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: AppColors.white(0.12)),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Text(text, style: AppTheme.textStyle.copyWith(fontSize: 12)),
     ),
   );
 }

@@ -3,8 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/cubits/connection_cubit.dart';
 import '../../../../core/domain/errors/core_error.dart';
-import '../../../../theme/app_colors.dart';
-import '../../../../theme/app_theme.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
 
 /// Sem bancada aberta, como no Swift: o canvas fica de fora e a barra lateral
 /// explica o +. Aqui só o aviso de conexão com o core Rust.
@@ -36,7 +36,10 @@ class HomeNotice extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Text(
           message,
-          style: AppTheme.textStyle.copyWith(color: AppColors.textMuted),
+          style: EgeonType.small.copyWith(
+            color: context.eg.textMuted,
+            decoration: TextDecoration.none,
+          ),
         ),
       ),
     );

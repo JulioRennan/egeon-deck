@@ -1,58 +1,85 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/glass_panel.dart';
-import '../../../sidebar/presentation/widgets/sidebar_panel.dart';
-import 'view_toolbar.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_tokens.dart';
+import 'bench_drawer.dart';
+import 'top_bar.dart';
+import 'workbench_shell.dart';
 
-/// A raiz: a bancada ocupa a janela inteira e a barra lateral flutua por cima
-/// dela — no canvas por cima do grid, e no chat ao LADO do conteúdo, porque ali
-/// sobreposição é mensagem coberta.
+/// A raiz: a faixa de cima, o trilho de bancadas à esquerda e a moldura com o
+/// conteúdo. A gaveta de bancadas abre do trilho: por cima da moldura no canvas
+/// e ao LADO do conteúdo no chat (ali sobreposição é mensagem coberta). Não há
+/// fixar: a gaveta só abre e fecha.
 class RootLayout extends StatelessWidget {
   const RootLayout({
     required this.shell,
-    required this.sidebar,
+    required this.rail,
+    required this.drawer,
     required this.collapsed,
     required this.beside,
     super.key,
   });
 
-  /// Monta a bancada, já sabendo quanto ceder à barra: `contentInset` (só no
-  /// chat) e `tabsInset` (sempre, a faixa nunca fica sob o vidro).
-  final Widget Function(double contentInset, double tabsInset) shell;
-  final Widget sidebar;
+  /// Monta a bancada, já sabendo onde a moldura começa.
+  final Widget Function(double frameLeft) shell;
+  final Widget rail;
+
+  /// A gaveta; cuida sozinha de aparecer ou não.
+  final Widget drawer;
+
+  /// A gaveta está fechada.
   final bool collapsed;
 
-  /// O conteúdo na tela fica ao lado da barra, e não por baixo dela.
+  /// O conteúdo na tela fica ao lado da gaveta, e não por baixo dela (o chat).
   final bool beside;
 
-  static const margin = 10.0;
-  static const gap = 8.0;
-  static const top = ViewToolbar.height + 8;
+  /// O vão entre a gaveta e a moldura que ela empurra.
+  static const gap = EgeonSpace.s3;
 
-  static double sidebarWidth({required bool collapsed}) =>
-      collapsed ? SidebarPanel.railWidth : SidebarPanel.expandedWidth;
+  /// O menor tamanho de janela que o app aceita (o `contentMinSize` do runner
+  /// macOS repete estes números): com a gaveta aberta ao lado no chat ainda cabem a coluna de
+  /// participantes e uma conversa legível. Mudou aqui, mude em
+  /// `macos/Runner/MainFlutterWindow.swift`.
+  static const minWindow = Size(1000, 600);
+  static const top = TopBar.height + WorkbenchShell.gapTop;
 
-  /// Quanto da borda esquerda a barra cobre agora. No canvas o enquadramento de
-  /// nós desconta isto — e é lido na hora, porque recolher muda o número.
+  /// Onde a moldura começa agora: depois do trilho, e da gaveta se ela empurra.
+  static double frameLeft({required bool collapsed, required bool beside}) {
+    final pushes = !collapsed && beside;
+    return WorkbenchShell.frameLeft + (pushes ? BenchDrawer.width + gap : 0);
+  }
+
+  /// Quanto da borda esquerda da moldura a gaveta cobre agora: só quando ela
+  /// abre por cima (no canvas). O enquadramento de nós desconta isto,
+  /// lido na hora porque abrir e fechar muda o número.
   static double floatingInset({
     required bool collapsed,
     required bool beside,
-  }) => beside ? 0 : margin + sidebarWidth(collapsed: collapsed) + gap;
+  }) => !collapsed && !beside ? BenchDrawer.width + gap : 0;
 
   @override
   Widget build(BuildContext context) {
-    final cover = margin + sidebarWidth(collapsed: collapsed) + gap;
     return ColoredBox(
-      color: const Color(0xFF171717),
+      color: context.eg.obsidian,
       child: Stack(
         children: [
-          Positioned.fill(child: shell(beside ? cover : 0, cover)),
+          Positioned.fill(
+            child: shell(frameLeft(collapsed: collapsed, beside: beside)),
+          ),
+          // O trilho recua sozinho: a faixa toda até a moldura é dele (hover).
           Positioned(
-            left: margin,
+            left: 0,
             top: top,
-            bottom: margin,
-            width: sidebarWidth(collapsed: collapsed),
-            child: GlassPanel(radius: 16, child: sidebar),
+            bottom: WorkbenchShell.gapBottom,
+            width: WorkbenchShell.frameLeft,
+            child: rail,
+          ),
+          Positioned(
+            left: WorkbenchShell.frameLeft,
+            top: top,
+            bottom: WorkbenchShell.gapBottom,
+            width: BenchDrawer.width,
+            child: drawer,
           ),
         ],
       ),

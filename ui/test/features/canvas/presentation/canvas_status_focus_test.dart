@@ -4,8 +4,13 @@ import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
 import '../../../support/in_memory_canvas_repository.dart';
 
 import 'package:egeon_deck/features/node/card/domain/entities/card_activity.dart';
-import 'package:egeon_deck/features/node/card/presentation/widgets/card_accent.dart';
-import 'package:egeon_deck/features/node/card/presentation/widgets/card_status.dart';
+import 'package:egeon_deck/commons/utils/agent_identity.dart';
+import 'package:egeon_deck/commons/widgets/eg/identity.dart';
+import 'package:egeon_deck/commons/widgets/eg/spinner.dart';
+import 'package:egeon_deck/commons/widgets/eg/status.dart';
+import 'package:egeon_deck/commons/widgets/eg/status_dot.dart';
+import 'package:egeon_deck/features/node/card/presentation/widgets/card_state.dart';
+import 'package:egeon_deck/theme/egeon_colors.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -71,9 +76,41 @@ void main() {
     });
   });
 
-  testWidgets(
-    'o card mostra glifo, rótulo e fila; o tom pinta o texto e o título',
-    (tester) async {
+  group('o ponto de estado do cabeçalho', () {
+    test('o core diz o glifo e o tom; a UI escolhe um dos cinco estados', () {
+      CardState of(CardActivity a) => CardState.of(a);
+      expect(of(CardActivity.none), CardState.idle);
+      expect(of(const CardActivity(needsAttention: true)), CardState.attention);
+      expect(
+        of(const CardActivity(glyph: ActivityGlyph.spinner)),
+        CardState.working,
+      );
+      expect(
+        of(const CardActivity(glyph: ActivityGlyph.hourglass)),
+        CardState.working,
+      );
+      expect(of(const CardActivity(tone: ActivityTone.green)), CardState.done);
+      expect(of(const CardActivity(tone: ActivityTone.red)), CardState.error);
+      expect(
+        of(const CardActivity(glyph: ActivityGlyph.cross)),
+        CardState.error,
+      );
+      // Pedir você ganha de qualquer outro tom.
+      expect(
+        of(
+          const CardActivity(
+            needsAttention: true,
+            tone: ActivityTone.red,
+            glyph: ActivityGlyph.spinner,
+          ),
+        ),
+        CardState.attention,
+      );
+    });
+
+    testWidgets('cada card mostra o estado dele; o nome leva a identidade', (
+      tester,
+    ) async {
       final repo = InMemoryCanvasRepository(
         cards: [
           agent(
@@ -102,89 +139,136 @@ void main() {
       );
       await pumpCanvas(tester, repo);
 
-      Text status(String id) => tester.widget<Text>(
-        find.descendant(
-          of: card(id),
-          matching: find.byKey(const ValueKey('card-status')),
-        ),
-      );
-      expect(status('a').data, '● precisa de você');
-      expect(status('a').style!.color, ActivityColors.of(ActivityTone.orange));
-      expect(status('b').data, contains('trabalhando  ·  2 na fila'));
+      Status statusOf(String id) => tester
+          .widget<StatusDot>(
+            find.descendant(of: card(id), matching: find.byType(StatusDot)),
+          )
+          .status;
+      expect(statusOf('a'), Status.attention);
+      expect(statusOf('b'), Status.running);
       expect(
-        status('b').data!.startsWith('●'),
-        isFalse,
-        reason: 'o glifo é o spinner',
+        find.descendant(of: card('b'), matching: find.byType(Spinner)),
+        findsOneWidget,
+        reason: 'trabalhando gira',
       );
 
-      // O título do que pede você leva a cor do tom; o outro, a do tipo.
+      // Cada agente, na ordem em que aparecem, leva uma cor de identidade.
       Color? titleColor(String id) => tester
           .widget<Text>(find.descendant(of: card(id), matching: find.text(id)))
           .style!
           .color;
-      expect(titleColor('a'), ActivityColors.of(ActivityTone.orange));
-      expect(titleColor('b'), CardAccent.agent);
+      final c = EgeonColors.dark;
+      expect(titleColor('a'), agentIdentity('a').color(c));
+      expect(titleColor('b'), agentIdentity('b').color(c));
+    });
+  });
+
+  testWidgets(
+    'o maestro leva a faixa, a etiqueta e o anel de 4 (sempre em sand, e não na cor do agente)',
+    (tester) async {
+      final repo = InMemoryCanvasRepository(
+        cards: [
+          agent(
+            'm',
+            200,
+            maestro: true,
+            activity: const CardActivity(glyph: ActivityGlyph.spinner),
+          ),
+          agent('n', 1100),
+        ],
+        links: const [],
+      );
+      await pumpCanvas(tester, repo);
+      final c = EgeonColors.dark;
+      expect(
+        tester
+            .widget<Text>(
+              find.descendant(of: card('m'), matching: find.text('m')),
+            )
+            .style!
+            .color,
+        Identity.sand.color(c),
+      );
+      expect(
+        find.descendant(of: card('m'), matching: find.text('maestro')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: card('n'), matching: find.text('maestro')),
+        findsNothing,
+      );
+      BoxDecoration frame(String id) =>
+          tester
+                  .widgetList<DecoratedBox>(
+                    find.descendant(
+                      of: card(id),
+                      matching: find.byType(DecoratedBox),
+                    ),
+                  )
+                  .first
+                  .decoration
+              as BoxDecoration;
+      expect(
+        (frame('m').border! as Border).top.color,
+        Identity.sand.color(c).withValues(alpha: 0.9),
+      );
+      expect(
+        frame('m').boxShadow!.any((s) => s.spreadRadius == 4),
+        isTrue,
+        reason: 'anel de 4px',
+      );
+      expect(
+        frame('n').boxShadow!.any((s) => s.spreadRadius == 3),
+        isTrue,
+        reason: 'anel de 3px',
+      );
     },
   );
 
-  testWidgets('o spinner gira com o relógio', (tester) async {
-    final repo = InMemoryCanvasRepository(
-      cards: [
-        agent(
-          'a',
-          200,
-          activity: const CardActivity(
-            label: 'trabalhando',
-            glyph: ActivityGlyph.spinner,
+  testWidgets(
+    'o maestro que precisa de você: a borda laranja vence a sand, a etiqueta fica',
+    (tester) async {
+      final repo = InMemoryCanvasRepository(
+        cards: [
+          agent(
+            'm',
+            200,
+            maestro: true,
+            activity: const CardActivity(needsAttention: true),
           ),
+        ],
+        links: const [],
+      );
+      await pumpCanvas(tester, repo);
+      final c = EgeonColors.dark;
+      final frame =
+          tester
+                  .widgetList<DecoratedBox>(
+                    find.descendant(
+                      of: card('m'),
+                      matching: find.byType(DecoratedBox),
+                    ),
+                  )
+                  .first
+                  .decoration
+              as BoxDecoration;
+      expect(
+        (frame.border! as Border).top.color,
+        c.attention.withValues(alpha: 0.7),
+      );
+      expect(
+        frame.boxShadow!.any(
+          (s) => s.color == c.attention.withValues(alpha: 0.14),
         ),
-      ],
-      links: const [],
-    );
-    await pumpCanvas(tester, repo);
-    String glyph() => tester
-        .widget<Text>(find.byKey(const ValueKey('card-status')))
-        .data!
-        .split(' ')
-        .first;
-    final first = glyph();
-    // O spinner lê o relógio de verdade, e não o falso do teste.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 200)),
-    );
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(glyph(), isNot(first));
-  });
-
-  testWidgets('o maestro leva o título dourado, mesmo com estado', (
-    tester,
-  ) async {
-    final repo = InMemoryCanvasRepository(
-      cards: [
-        agent(
-          'm',
-          200,
-          maestro: true,
-          activity: const CardActivity(
-            label: 'precisa de você',
-            tone: ActivityTone.orange,
-          ),
-        ),
-      ],
-      links: const [],
-    );
-    await pumpCanvas(tester, repo);
-    expect(
-      tester
-          .widget<Text>(
-            find.descendant(of: card('m'), matching: find.text('m')),
-          )
-          .style!
-          .color,
-      CardAccent.maestro,
-    );
-  });
+        isTrue,
+        reason: 'o anel é o do "precisa de você"',
+      );
+      expect(
+        find.descendant(of: card('m'), matching: find.text('maestro')),
+        findsOneWidget,
+      );
+    },
+  );
 
   group('foco da interface (ui_focus)', () {
     testWidgets(

@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../theme/app_colors.dart';
 import 'dragged_image.dart';
+import '../../theme/egeon_colors.dart';
 
 /// Recebe arquivos arrastados do Finder sobre [child]; entrega os caminhos e
 /// realça a borda enquanto o arquivo está por cima. É o único lugar que conhece
@@ -56,7 +56,7 @@ class _FileDropTargetState extends State<FileDropTarget> {
     child: DecoratedBox(
       position: DecorationPosition.foreground,
       decoration: BoxDecoration(
-        border: _over ? Border.all(color: AppColors.accent, width: 2) : null,
+        border: _over ? Border.all(color: context.eg.accent, width: 2) : null,
       ),
       child: widget.child,
     ),

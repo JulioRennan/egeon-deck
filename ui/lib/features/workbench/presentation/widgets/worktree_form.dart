@@ -1,11 +1,11 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../commons/widgets/app_dialog.dart';
-import '../../../../commons/widgets/app_text_field.dart';
-import '../../../../commons/widgets/form_label.dart';
+import '../../../../commons/widgets/form_dialog.dart';
+import '../../../../commons/widgets/form_kit.dart';
 import '../../../../core/adapters/injector.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/worktree_info.dart';
 import '../../domain/entities/bench_template.dart';
 import '../../domain/entities/worktree_plan.dart';
@@ -41,7 +41,7 @@ Future<WorktreeInput?> showWorktreeForm(
   required String title,
   WorktreeInfo? info,
   List<BenchTemplate> templates = const [],
-}) => showAppDialog<WorktreeInput>(
+}) => showFormDialog<WorktreeInput>(
   context,
   width: 460,
   builder: (_, close) => MultiBlocProvider(
@@ -169,12 +169,12 @@ class _BodyState extends State<_Body> {
       WorktreeFormReady(:final info) => info,
     };
     final templates = widget.templates;
-    return DialogBody(
+    return FormDialogBody(
       title: widget.title,
       message: info?.summary,
       actions: [
-        DialogButton('Cancelar', onTap: widget.close),
-        DialogButton(
+        FormDialogButton('Cancelar', onTap: widget.close),
+        FormDialogButton(
           'Abrir',
           primary: true,
           enabled: branch.isNotEmpty,
@@ -210,7 +210,7 @@ class _BodyState extends State<_Body> {
             const SizedBox(height: 10),
           ],
           const FormLabel('BRANCH DA BANCADA'),
-          AppTextField(
+          FormTextField(
             key: const ValueKey('worktree-branch'),
             controller: _branch,
             placeholder: 'nome da branch',
@@ -227,7 +227,7 @@ class _BodyState extends State<_Body> {
               'Todos vão. Na mesma branch da bancada, junto com ela; com '
               'outra branch, em worktree própria do repositório dele. Em '
               'branco, fica onde está.',
-              style: _hint,
+              style: _hint(context),
             ),
             const SizedBox(height: 6),
             ConstrainedBox(
@@ -281,16 +281,15 @@ class _BodyState extends State<_Body> {
                   node.node,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _mono,
+                  style: _mono(context),
                 ),
                 Text(
                   node.detail(choice),
                   key: ValueKey('node-${node.node}-detail'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _hint.copyWith(
-                    color: warns ? AppColors.attention : null,
-                  ),
+                  style: _hint(context)
+                      .copyWith(color: warns ? context.eg.attention : null),
                 ),
               ],
             ),
@@ -299,7 +298,7 @@ class _BodyState extends State<_Body> {
             const SizedBox(width: 10),
             SizedBox(
               width: 170,
-              child: AppTextField(
+              child: FormTextField(
                 key: ValueKey('node-${node.node}'),
                 controller: controller,
                 placeholder: 'não levar',
@@ -313,16 +312,13 @@ class _BodyState extends State<_Body> {
   }
 }
 
-TextStyle get _hint => TextStyle(
-  fontSize: 10,
-  color: AppColors.white(0.5),
+TextStyle _hint(BuildContext context) => EgeonType.caption.copyWith(
+  color: context.eg.textMuted,
   decoration: TextDecoration.none,
 );
 
-TextStyle get _mono => TextStyle(
-  fontFamily: 'Menlo',
-  fontSize: 11,
-  color: AppColors.white(0.7),
+TextStyle _mono(BuildContext context) => EgeonType.monoMeta.copyWith(
+  color: context.eg.textSecondary,
   decoration: TextDecoration.none,
 );
 
@@ -344,10 +340,8 @@ class _Verdict extends StatelessWidget {
         Text(
           plan.message ?? _summary(plan.verdict),
           key: const ValueKey('worktree-verdict'),
-          style: TextStyle(
-            fontSize: 10,
-            color: plan.isFresh ? AppColors.white(0.5) : AppColors.attention,
-            decoration: TextDecoration.none,
+          style: _hint(context).copyWith(
+            color: plan.isFresh ? context.eg.textMuted : context.eg.attention,
           ),
         ),
         const SizedBox(height: 3),
@@ -356,7 +350,7 @@ class _Verdict extends StatelessWidget {
           key: const ValueKey('worktree-folder'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: _mono,
+          style: _mono(context),
         ),
       ],
     );
@@ -386,57 +380,20 @@ class _Radio extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 14,
-              height: 14,
-              margin: const EdgeInsets.only(top: 1),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? AppColors.accent : AppColors.white(0.4),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: selected
-                  ? Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.accent,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.white(0.9),
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                  Text(hint, style: _hint),
-                ],
-              ),
-            ),
-          ],
-        ),
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FormRadio(label: title, selected: selected, onTap: onTap),
+          Padding(
+            padding: const EdgeInsets.only(left: 26, top: 2),
+            child: Text(hint, style: _hint(context)),
+          ),
+        ],
       ),
     ),
   );

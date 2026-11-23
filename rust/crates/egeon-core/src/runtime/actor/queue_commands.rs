@@ -50,6 +50,9 @@ type Key = (String, String);
 #[derive(Default)]
 pub(super) struct QueueState {
     queues: BTreeMap<Key, QueueController>,
+    /// O subtítulo de cada fila na última vez que os nós foram à tela: digitar
+    /// numa tarefa muda a fila a cada tecla, mas não o "N pendentes".
+    shown_subtitles: BTreeMap<Key, String>,
     /// A próxima batida de 1 s das filas.
     next_tick: Option<SystemTime>,
 }
@@ -64,6 +67,33 @@ impl QueueState {
             .filter(|((bench, _), _)| bench == bench_id)
             .map(|((_, node), controller)| ChatQueue::new(node.clone(), controller.queue()))
             .collect()
+    }
+}
+
+impl QueueState {
+    /// As bancadas em que algum subtítulo de fila mudou desde a última vez que
+    /// os nós foram publicados; guarda os de agora.
+    fn take_subtitle_changes(&mut self) -> BTreeSet<String> {
+        let now: BTreeMap<Key, String> = self
+            .queues
+            .iter()
+            .map(|(key, c)| (key.clone(), c.queue().pending_summary()))
+            .collect();
+        let changed = now
+            .iter()
+            .filter(|(key, text)| self.shown_subtitles.get(*key) != Some(*text))
+            .map(|((bench, _), _)| bench.clone())
+            .collect();
+        self.shown_subtitles = now;
+        changed
+    }
+
+    /// O subtítulo do card da fila ("nada pendente", "N pendentes"); `None`
+    /// se o ator ainda não criou essa fila.
+    pub(super) fn subtitle(&self, bench_id: &str, node: &str) -> Option<String> {
+        self.queues
+            .get(&(bench_id.to_owned(), node.to_owned()))
+            .map(|controller| controller.queue().pending_summary())
     }
 }
 
@@ -368,7 +398,7 @@ fn run_command(
 
 impl Actor {
     /// Põe e tira controladores para casar com os nós de fila das bancadas.
-    fn queue_sync(&mut self) {
+    pub(super) fn queue_sync(&mut self) {
         let wanted: BTreeSet<Key> = self
             .org
             .state
@@ -609,6 +639,38 @@ impl Actor {
                 self.publish(&event);
             }
         }
+        // O card da fila leva o resumo dela: só quando ele muda é que os nós da
+        // bancada vão de novo (editar o texto de uma tarefa não o muda).
+        let changed = self.queue.take_subtitle_changes();
+        self.queue_publish_nodes(&changed);
+    }
+
+    /// Quem assina os nós das bancadas em `benches` recebe o retrato de novo.
+    fn queue_publish_nodes(&mut self, benches: &BTreeSet<String>) {
+        let watched: HashSet<WorkbenchId> = self
+            .clients
+            .values()
+            .flat_map(|c| c.topics.iter())
+            .filter_map(|t| match t {
+                Topic::Nodes(workbench) if benches.contains(workbench.as_str()) => {
+                    Some(workbench.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        for workbench in watched {
+            let Some(state) = self
+                .org
+                .index_of(&workbench)
+                .and_then(|index| self.nodes_state(index))
+            else {
+                continue;
+            };
+            self.publish(&Event {
+                topic: Topic::Nodes(workbench),
+                body: EventBody::Nodes(state),
+            });
+        }
     }
 
     /// A batida de 1 s das filas: fecha o item cujo turno acabou e, no
@@ -683,6 +745,62 @@ mod tests {
             .call(FeatureRoute::Queue, request("GET", target, None))
             .await;
         (reply.status, reply.json)
+    }
+
+    /// O card da fila leva o resumo dela no subtítulo (`QueueNode.swift:143`):
+    /// "nada pendente" e depois "N pendentes", no retrato dos nós, e a bancada
+    /// que assina os nós recebe o retrato de novo quando a fila muda.
+    #[tokio::test]
+    async fn o_card_da_fila_leva_o_subtitulo_no_retrato_dos_nos() {
+        use crate::protocol::org::NodeKind as WireNode;
+        let (mut rig, id) = rig_with_deck();
+        let subtitle = |rig: &mut Rig| {
+            rig.actor.queue_sync();
+            let state = rig.actor.nodes_state(0).unwrap();
+            let fila = state
+                .nodes
+                .iter()
+                .find(|n| n.kind == WireNode::Queue)
+                .unwrap();
+            let agent = state.nodes.iter().find(|n| n.kind == WireNode::Agent);
+            assert!(agent.unwrap().subtitle.is_none(), "só a fila leva");
+            fila.subtitle.clone()
+        };
+        assert_eq!(subtitle(&mut rig).as_deref(), Some("nada pendente"));
+
+        let (line_tx, mut lines) = tokio::sync::mpsc::channel(8);
+        let (alive, _kept) = tokio::sync::oneshot::channel();
+        rig.actor.clients.insert(
+            1,
+            super::super::Client {
+                queue: line_tx,
+                _alive: alive,
+                topics: HashSet::from([Topic::Nodes(WorkbenchId::new(id).unwrap())]),
+                resync: HashSet::new(),
+            },
+        );
+        queue(&mut rig, "/queue?target=deck/fila&add=primeira").await;
+        queue(&mut rig, "/queue?target=deck/fila&add=segunda").await;
+        assert_eq!(subtitle(&mut rig).as_deref(), Some("2 pendentes"));
+
+        let mut last = None;
+        while let Ok(line) = lines.try_recv() {
+            let value: Value = serde_json::from_slice(&line).unwrap();
+            if value["topic"]
+                .as_str()
+                .is_some_and(|t| t.ends_with("/nodes"))
+            {
+                last = Some(value);
+            }
+        }
+        let nodes = last.expect("os nós foram republicados");
+        let fila = nodes["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["type"] == "queue")
+            .unwrap();
+        assert_eq!(fila["subtitle"], "2 pendentes");
     }
 
     fn pending(rig: &Rig) -> usize {
@@ -1013,6 +1131,48 @@ mod tests {
         assert_eq!(detail.targets.len(), 1);
         assert_eq!(detail.targets[0].label, "dev");
         assert_eq!(detail.blocker, None);
+    }
+
+    /// Digitar numa tarefa chega como `queue_update` a cada tecla: o texto não
+    /// muda o "N pendentes", então os nós da bancada não vão de novo. Criar uma
+    /// tarefa muda, e vão.
+    #[test]
+    fn editar_o_texto_nao_republica_os_nos_e_criar_uma_tarefa_sim() {
+        let mut f = fila();
+        let (line_tx, mut lines) = tokio::sync::mpsc::channel(64);
+        let (alive, _kept) = tokio::sync::oneshot::channel();
+        f.rig.actor.clients.insert(
+            1,
+            super::super::Client {
+                queue: line_tx,
+                _alive: alive,
+                topics: HashSet::from([Topic::Nodes(f.wb.clone())]),
+                resync: HashSet::new(),
+            },
+        );
+        let node_states = |lines: &mut tokio::sync::mpsc::Receiver<std::sync::Arc<[u8]>>| {
+            let mut count = 0;
+            while let Ok(line) = lines.try_recv() {
+                let value: Value = serde_json::from_slice(&line).unwrap();
+                if value["topic"]
+                    .as_str()
+                    .is_some_and(|t| t.ends_with("/nodes"))
+                {
+                    count += 1;
+                }
+            }
+            count
+        };
+        let a = f.add("a");
+        assert_eq!(node_states(&mut lines), 1, "criar uma tarefa muda o resumo");
+
+        for text in ["a2", "a23", "a234"] {
+            f.run(CommandKind::QueueUpdate(f.text(&a, text)));
+        }
+        assert_eq!(node_states(&mut lines), 0, "digitar não muda o resumo");
+
+        f.add("b");
+        assert_eq!(node_states(&mut lines), 1);
     }
 
     #[test]

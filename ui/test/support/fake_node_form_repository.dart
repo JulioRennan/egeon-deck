@@ -50,6 +50,9 @@ class FakeNodeFormRepository implements NodeFormRepository {
 
   /// O próximo pedido é recusado com esta mensagem.
   String? refuse;
+
+  /// Só o catálogo da tela é recusado (o resto responde).
+  bool refuseScreen = false;
   String createdId = 'revisor';
 
   static const clis = [
@@ -98,6 +101,7 @@ class FakeNodeFormRepository implements NodeFormRepository {
     String? config,
   }) async {
     screens.add((cli: cli, shown: shown, config: config));
+    if (refuseScreen) throw const AgentRefused('sem catálogo');
     await _gate();
     final fields = ScreenFields(
       prompt: shown?.prompt ?? template.prompt,

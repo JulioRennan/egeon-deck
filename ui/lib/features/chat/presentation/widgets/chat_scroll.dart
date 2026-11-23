@@ -45,11 +45,22 @@ class ChatScroll {
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOut,
           )
-          .whenComplete(() => scrollingToBottom = false);
+          .whenComplete(() {
+            scrollingToBottom = false;
+            _settle(3);
+          });
       return;
     }
     scrollingToBottom = false;
     controller.jumpTo(controller.position.maxScrollExtent);
+  }
+
+  /// Linhas que estavam longe só ganham altura ao entrar: depois da descida o
+  /// fim pode ter andado, e o salto repete até ele parar.
+  void _settle(int rounds) {
+    if (rounds == 0 || !controller.hasClients || isAtVeryBottom) return;
+    controller.jumpTo(controller.position.maxScrollExtent);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _settle(rounds - 1));
   }
 
   /// Pegar a thread na mão no meio da descida cancela a descida: quem parou

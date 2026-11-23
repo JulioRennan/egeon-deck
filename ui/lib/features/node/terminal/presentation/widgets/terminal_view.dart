@@ -4,7 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../../../theme/app_colors.dart';
+import '../../../../../theme/egeon_terminal_palette.dart';
 import '../../domain/entities/terminal_cursor.dart';
 import '../../domain/entities/terminal_effect.dart';
 import '../../domain/entities/terminal_frame.dart';
@@ -17,6 +17,7 @@ import 'terminal_key_mapper.dart';
 import 'terminal_line_painter.dart';
 import 'terminal_metrics.dart';
 import 'terminal_text_input.dart';
+import '../../../../../theme/egeon_colors.dart';
 
 /// Pinta a grade do terminal a partir de um stream de quadros, captura o
 /// teclado e informa colunas × linhas quando o espaço muda. Não sabe de
@@ -382,7 +383,7 @@ class _TerminalViewState extends State<TerminalView> {
                   behavior: HitTestBehavior.opaque,
                   onTap: _focus.requestFocus,
                   child: ColoredBox(
-                    color: AppColors.terminalBackground,
+                    color: EgeonTerminalPalette.background,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         _reportSize(constraints.biggest);
@@ -477,13 +478,13 @@ class _TerminalViewState extends State<TerminalView> {
       alignment: Alignment.centerLeft,
       maxWidth: double.infinity,
       child: ColoredBox(
-        color: AppColors.terminalForeground.withValues(alpha: 0.25),
+        color: EgeonTerminalPalette.foreground.withValues(alpha: 0.25),
         child: Text(
           text,
           style: TerminalMetrics.baseStyle.copyWith(
-            color: AppColors.terminalForeground,
+            color: EgeonTerminalPalette.foreground,
             decoration: TextDecoration.underline,
-            decorationColor: AppColors.terminalForeground,
+            decorationColor: EgeonTerminalPalette.foreground,
           ),
         ),
       ),
@@ -491,19 +492,19 @@ class _TerminalViewState extends State<TerminalView> {
   }
 
   Widget _cursorShape(TerminalCursorShape shape) {
-    const color = AppColors.terminalCursor;
+    final color = EgeonTerminalPalette.cursor;
     if (!_focus.hasFocus) {
       return DecoratedBox(
         decoration: BoxDecoration(border: Border.all(color: color)),
       );
     }
     return switch (shape) {
-      TerminalCursorShape.block => const ColoredBox(color: color),
-      TerminalCursorShape.bar => const Align(
+      TerminalCursorShape.block => ColoredBox(color: color),
+      TerminalCursorShape.bar => Align(
         alignment: Alignment.centerLeft,
         child: SizedBox(width: 2, child: ColoredBox(color: color)),
       ),
-      TerminalCursorShape.underline => const Align(
+      TerminalCursorShape.underline => Align(
         alignment: Alignment.bottomCenter,
         child: SizedBox(height: 2, child: ColoredBox(color: color)),
       ),
@@ -561,7 +562,9 @@ class _TerminalScrollbarState extends State<_TerminalScrollbar> {
               onPointerCancel: (_) => setState(() => _dragging = false),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: AppColors.white(_dragging ? 0.5 : 0.28),
+                  color: (_dragging
+                      ? context.eg.lineHover
+                      : context.eg.lineStrong),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),

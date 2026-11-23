@@ -1,8 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/app_dialog.dart';
-import '../../../../commons/widgets/app_text_field.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../commons/widgets/form_dialog.dart';
+import '../../../../commons/widgets/form_kit.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_tokens.dart';
 import '../../domain/entities/workspace_draft.dart';
 import '../../domain/errors/workspace_error.dart';
 
@@ -22,18 +23,18 @@ Future<MultiDraft?> showMultiProjectEditor(
       if (!folders.contains(f)) f,
   ];
   if (all.isEmpty) {
-    return showAppDialog<MultiDraft>(
+    return showFormDialog<MultiDraft>(
       context,
-      builder: (_, close) => DialogBody(
+      builder: (_, close) => FormDialogBody(
         title: 'Novo multi-projeto',
         message:
             'Adicione antes as pastas do workspace — o multi-projeto junta '
             'algumas delas.',
-        actions: [DialogButton('Entendi', primary: true, onTap: close)],
+        actions: [FormDialogButton('Entendi', primary: true, onTap: close)],
       ),
     );
   }
-  return showAppDialog<MultiDraft>(
+  return showFormDialog<MultiDraft>(
     context,
     builder: (_, close) => _EditorBody(
       draft: draft,
@@ -92,112 +93,52 @@ class _EditorBodyState extends State<_EditorBody> {
   }
 
   @override
-  Widget build(BuildContext context) => DialogBody(
+  Widget build(BuildContext context) => FormDialogBody(
     title: _isNew ? 'Novo multi-projeto' : 'Editar multi-projeto',
     message:
         'Marque as pastas que a bancada vai ver juntas, cada uma numa '
         'subpasta.',
     actions: [
-      DialogButton('Cancelar', onTap: widget.close),
-      DialogButton('OK', primary: true, onTap: _save),
+      FormDialogButton('Cancelar', onTap: widget.close),
+      FormDialogButton('OK', primary: true, onTap: _save),
     ],
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AppTextField(
+        FormTextField(
           controller: _name,
           placeholder: 'nome do multi-projeto',
           autofocus: true,
         ),
         const SizedBox(height: 10),
-        Container(
-          height: 180,
+        DecoratedBox(
           decoration: BoxDecoration(
-            color: AppColors.black(0.25),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppColors.white(0.14)),
+            color: context.eg.obsidian,
+            borderRadius: BorderRadius.circular(EgeonRadius.md),
+            border: Border.all(color: context.eg.line),
           ),
-          child: ListView(
-            children: [
-              for (final folder in widget.folders)
-                _Check(
-                  key: ValueKey('multi-$folder'),
-                  label: folder,
-                  on: _chosen.contains(folder),
-                  onTap: () => setState(() {
-                    if (!_chosen.add(folder)) _chosen.remove(folder);
-                  }),
-                ),
-            ],
+          child: SizedBox(
+            height: 180,
+            child: ListView(
+              padding: const EdgeInsets.all(8),
+              children: [
+                for (final folder in widget.folders)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: FormCheckbox(
+                      key: ValueKey('multi-$folder'),
+                      label: folder,
+                      on: _chosen.contains(folder),
+                      onChanged: (_) => setState(() {
+                        if (!_chosen.add(folder)) _chosen.remove(folder);
+                      }),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ],
-    ),
-  );
-}
-
-class _Check extends StatelessWidget {
-  const _Check({
-    required this.label,
-    required this.on,
-    required this.onTap,
-    super.key,
-  });
-
-  final String label;
-  final bool on;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        child: Row(
-          children: [
-            Container(
-              width: 14,
-              height: 14,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: on ? AppColors.accent : null,
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(
-                  color: on ? AppColors.accent : AppColors.white(0.4),
-                ),
-              ),
-              child: on
-                  ? const Text(
-                      '✓',
-                      style: TextStyle(
-                        fontSize: 10,
-                        height: 1,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFFFFFFF),
-                        decoration: TextDecoration.none,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFFFFFFFF),
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     ),
   );
 }

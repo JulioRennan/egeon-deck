@@ -8,11 +8,13 @@ import '../domain/repository/socket_ui_request_repository.dart';
 import '../domain/repository/ui_request_repository.dart';
 import '../domain/usecase/answer_ui_request.dart';
 import '../domain/usecase/copy_dispatch_targets.dart';
+import '../domain/usecase/go_to_bench.dart';
 import '../domain/usecase/reply_ui_request.dart';
 import '../domain/usecase/resolve_access_lock.dart';
 import '../domain/usecase/set_view_mode.dart';
 import '../domain/usecase/watch_shell.dart';
 import '../domain/usecase/watch_ui_requests.dart';
+import '../presentation/cubit/navigation_cubit.dart';
 import '../presentation/cubit/shell_cubit.dart';
 import '../presentation/cubit/ui_request_cubit.dart';
 
@@ -45,6 +47,9 @@ void registerHomeDomain() {
       copyTargets: inject(),
     ),
   );
+
+  Injector.factory(() => GoToBench(inject()));
+  Injector.factory(() => NavigationCubit(watch: inject(), goTo: inject()));
 
   Injector.factory(() => WatchUiRequests(inject()));
   Injector.factory(() => ReplyUiRequest(inject()));

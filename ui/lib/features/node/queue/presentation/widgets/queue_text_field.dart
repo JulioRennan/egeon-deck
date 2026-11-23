@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../../../commons/widgets/pasted_image.dart';
-import '../../../../../theme/app_colors.dart';
+import '../../../../../theme/egeon_colors.dart';
 
 /// Campo de texto corrido da fila: várias linhas, Enter confirma e ⇧Enter
 /// quebra a linha, Esc sai, e ⌘V com imagem na área de transferência vira print
@@ -106,7 +106,7 @@ class _QueueTextFieldState extends State<QueueTextField> {
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(
-      color: AppColors.white(0.9),
+      color: context.eg.textPrimary,
       fontSize: widget.fontSize,
       height: 1.3,
       decoration: TextDecoration.none,
@@ -124,7 +124,7 @@ class _QueueTextFieldState extends State<QueueTextField> {
                   builder: (context, _) => _controller.text.isEmpty
                       ? Text(
                           widget.hint,
-                          style: style.copyWith(color: AppColors.white(0.3)),
+                          style: style.copyWith(color: context.eg.textDisabled),
                         )
                       : const SizedBox.shrink(),
                 ),
@@ -139,9 +139,9 @@ class _QueueTextFieldState extends State<QueueTextField> {
               autofocus: widget.autofocus,
               readOnly: widget.readOnly,
               style: style,
-              cursorColor: AppColors.white(0.9),
-              backgroundCursorColor: AppColors.white(0.2),
-              selectionColor: AppColors.accent.withValues(alpha: 0.4),
+              cursorColor: context.eg.textPrimary,
+              backgroundCursorColor: context.eg.controlBorder,
+              selectionColor: context.eg.accent.withValues(alpha: 0.4),
               maxLines: null,
               keyboardType: TextInputType.multiline,
               onChanged: widget.onChanged,

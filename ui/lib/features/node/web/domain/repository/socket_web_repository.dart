@@ -1,3 +1,4 @@
+import '../../../../../core/adapters/event_parsing.dart';
 import '../../../../../core/adapters/egeon_socket_client.dart';
 import '../entities/web_node.dart';
 import 'web_repository.dart';
@@ -24,7 +25,10 @@ class SocketWebRepository implements WebRepository {
   Stream<WebNode> watch(String nodeId) => _client
       .subscribe('node/$workbenchId/$nodeId')
       .where((event) => event['kind'] == 'web')
-      .map((event) => WebNode.fromMap(event['web']! as Map<String, Object?>));
+      .parsed(
+        'node/$workbenchId/$nodeId',
+        (event) => WebNode.fromMap(event['web']! as Map<String, Object?>),
+      );
 
   @override
   Future<void> navigate(String nodeId, String typed) =>

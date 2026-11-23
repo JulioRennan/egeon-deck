@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/standard_dialogs.dart';
+import '../../../../commons/widgets/form_dialog.dart';
 import '../../../../core/adapters/injector.dart';
 import '../../../workbench/domain/entities/bench_template.dart';
 import '../../../workbench/domain/errors/workbench_error.dart';
@@ -236,7 +236,11 @@ Future<void> _multiWorktree(
 
 Future<void> _recolor(BuildContext context, RecolorBench request) async {
   final change = inject<ChangeBenchColor>();
-  final picked = await showColorPalette(context, current: request.current);
+  final picked = await showColorPalette(
+    context,
+    benchName: request.benchName,
+    current: request.current,
+  );
   if (picked == null || !context.mounted) return;
   await _guard(context, () => change(request.benchId, picked));
 }

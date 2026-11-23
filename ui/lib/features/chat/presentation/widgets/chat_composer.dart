@@ -1,11 +1,18 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/app_text_field.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../commons/widgets/eg/glass_surface.dart';
+import '../../../../commons/widgets/eg/icon_button.dart' as eg;
+import '../../../../commons/widgets/eg/menu.dart';
+import '../../../../commons/widgets/eg/pressable.dart';
+import '../../../../commons/widgets/eg/tooltip.dart';
+import '../../../../theme/egeon_tokens.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/chat_block.dart';
 import '../../domain/entities/chat_completion.dart';
 import '../../domain/entities/chat_participant.dart';
+import '../../../../theme/egeon_colors.dart';
 import 'chat_palette.dart';
 import 'completion_menu.dart';
 
@@ -21,8 +28,18 @@ class ChatComposer extends StatefulWidget {
     this.quote,
     this.onClearQuote,
     this.focusNode,
+    this.above = const [],
+    this.autofocus = true,
+    this.margin = const EdgeInsets.fromLTRB(20, 0, 20, 20),
+    this.participants = const [],
+    this.onPickTarget,
+    this.traits,
     super.key,
   });
+
+  /// "modelo · esforço" do destinatário, ao lado do enviar; vem de fora porque
+  /// o estado do agente é de outra feature.
+  final Widget? traits;
 
   /// Para quem vai a mensagem: o participante em foco. Sem ninguém, não manda.
   final ChatParticipantInfo? target;
@@ -41,6 +58,20 @@ class ChatComposer extends StatefulWidget {
   /// O teclado do campo: entrar no chat e escolher um participante o trazem
   /// para cá.
   final FocusNode? focusNode;
+
+  /// O teclado vai ao campo ao montar: no chat sim; no canvas não, para não
+  /// tirar o foco do terminal.
+  final bool autofocus;
+
+  /// O respiro em volta do cartão.
+  final EdgeInsets margin;
+
+  /// O que mora dentro do composer, acima do campo: os pedidos de permissão.
+  final List<Widget> above;
+
+  /// Quem pode receber, para o menu do destinatário; escolher um é focá-lo.
+  final List<ChatParticipantInfo> participants;
+  final ValueChanged<String>? onPickTarget;
 
   @override
   State<ChatComposer> createState() => _ChatComposerState();
@@ -143,58 +174,201 @@ class _ChatComposerState extends State<ChatComposer> {
     return KeyEventResult.handled;
   }
 
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
-    decoration: BoxDecoration(
-      color: const Color(0xFF161616),
-      border: Border(top: BorderSide(color: AppColors.white(0.09))),
-    ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_menuOpen)
-          CompletionMenu(
-            items: _completion.items,
-            selected: _picked,
-            targetName: widget.target?.id,
-            onPick: (item) => setState(() => _insert(item)),
+  final _recipientKey = GlobalKey();
+
+  /// Insere [char] onde está o cursor: o botão de "/" e de "@" só digitam, e o
+  /// core responde com as sugestões como em qualquer digitação.
+  void _type(String char) {
+    final value = _text.value;
+    final sel = value.selection;
+    final at = sel.isValid ? sel.start : value.text.length;
+    final end = sel.isValid ? sel.end : value.text.length;
+    _text.value = TextEditingValue(
+      text: value.text.replaceRange(at, end, char),
+      selection: TextSelection.collapsed(offset: at + char.length),
+    );
+    widget.focusNode?.requestFocus();
+  }
+
+  void _pickRecipient() {
+    final onPick = widget.onPickTarget;
+    if (onPick == null) return;
+    final box = _recipientKey.currentContext!.findRenderObject()! as RenderBox;
+    final alive = [
+      for (final p in widget.participants)
+        if (!p.isDead) p,
+    ];
+    showMenu(
+      context,
+      anchor: box.localToGlobal(Offset.zero) & box.size,
+      width: 240,
+      items: [
+        const MenuHeader('Mandar para'),
+        for (final p in alive)
+          MenuItem(
+            p.id,
+            checked: p.id == widget.target?.id,
+            onSelected: () => onPick(p.id),
+            leading: null,
+            desc: p.address,
           ),
-        if (widget.quote != null) _quote(widget.quote!),
-        if (widget.target != null) _recipient(widget.target!),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: AppTextField(
-                key: const ValueKey('composer-field'),
-                controller: _text,
-                focusNode: widget.focusNode,
-                autofocus: true,
-                placeholder: widget.target == null
-                    ? 'Ninguém na conversa ainda'
-                    : 'Mensagem',
-                maxLines: 8,
-                minLines: 1,
-                onKeyEvent: _onKey,
-              ),
-            ),
-            const SizedBox(width: 8),
-            ListenableBuilder(
-              listenable: _text,
-              builder: (context, _) => _SendButton(
-                enabled: _text.text.trim().isNotEmpty && widget.target != null,
-                onTap: _send,
-              ),
-            ),
-          ],
-        ),
       ],
-    ),
-  );
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    final target = widget.target;
+    final canSend = target != null;
+    final style = EgeonType.body.copyWith(
+      fontSize: 14,
+      height: 22 / 14,
+      color: c.textPrimary,
+      decoration: TextDecoration.none,
+    );
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720 + 40),
+        child: Padding(
+          padding: widget.margin,
+          child: GlassSurface(
+            radius: 16,
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final tray in widget.above)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: tray,
+                  ),
+                if (_menuOpen)
+                  CompletionMenu(
+                    items: _completion.items,
+                    selected: _picked,
+                    targetName: target?.id,
+                    onPick: (item) => setState(() => _insert(item)),
+                  ),
+                if (widget.quote != null) _quote(widget.quote!),
+                _field(style, canSend),
+                const SizedBox(height: 8),
+                LayoutBuilder(
+                  builder: (context, box) {
+                    final roomy = box.maxWidth >= 460;
+                    final wide = box.maxWidth >= 300;
+                    return Row(
+                      spacing: 4,
+                      children: [
+                        _SlashButton(onTap: canSend ? () => _type('/') : null),
+                        eg.IconButton(
+                          key: const ValueKey('composer-at'),
+                          icon: EgIcons.at,
+                          tooltip: 'Mencionar agente (@)',
+                          compact: true,
+                          onPressed: canSend ? () => _type('@') : null,
+                        ),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, room) => Row(
+                              children: [
+                                // O destinatário toma até 60% do vão; o resto é
+                                // do "modelo · esforço", colado à direita.
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: room.maxWidth * 0.6,
+                                  ),
+                                  child: target == null
+                                      ? const SizedBox.shrink()
+                                      : _recipient(c, target, label: wide),
+                                ),
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: widget.traits != null && roomy
+                                        ? widget.traits
+                                        : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        ListenableBuilder(
+                          listenable: _text,
+                          builder: (context, _) => _SendButton(
+                            enabled: _text.text.trim().isNotEmpty && canSend,
+                            onTap: _send,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// O campo, sem borda nem fundo: o vidro do composer é o fundo dele.
+  Widget _field(TextStyle style, bool canSend) {
+    final c = context.eg;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (_, event) => _onKey(event),
+      child: Stack(
+        children: [
+          ListenableBuilder(
+            listenable: _text,
+            builder: (context, _) => _text.text.isEmpty
+                ? IgnorePointer(
+                    child: Text(
+                      canSend
+                          ? 'Peça algo ao time… / para comandos, @ para '
+                                'mencionar'
+                          : 'Ninguém na conversa ainda',
+                      style: style.copyWith(color: c.textMuted),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          KeyedSubtree(
+            key: const ValueKey('composer-field'),
+            child: EditableText(
+              controller: _text,
+              focusNode: widget.focusNode ?? (_ownFocus ??= FocusNode()),
+              autofocus: widget.autofocus,
+              style: style,
+              cursorColor: c.accent,
+              backgroundCursorColor: c.steelActive,
+              selectionColor: c.accentSoft,
+              maxLines: 8,
+              minLines: 2,
+              keyboardType: TextInputType.multiline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  FocusNode? _ownFocus;
+
+  @override
+  void dispose() {
+    _ownFocus?.dispose();
+    _text.dispose();
+    super.dispose();
+  }
 
   Widget _quote(ChatBlock block) {
+    final c = context.eg;
     final text = switch (block) {
       PromptBlock(:final text) => text,
       _ => block.messageKey,
@@ -205,79 +379,145 @@ class _ChatComposerState extends State<ChatComposer> {
         children: [
           Expanded(
             child: Container(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
               decoration: BoxDecoration(
-                color: AppColors.black(0.2),
+                color: c.obsidian,
                 borderRadius: BorderRadius.circular(6),
-                border: const Border(
-                  left: BorderSide(color: Color(0xFF2F7FF6), width: 3),
-                ),
+                border: Border(left: BorderSide(color: c.accent, width: 2)),
               ),
               child: Text(
                 text,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: AppColors.white(0.7),
+                style: EgeonType.caption.copyWith(
+                  color: c.textSecondary,
                   decoration: TextDecoration.none,
                 ),
               ),
             ),
           ),
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: widget.onClearQuote,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Text(
-                  '✕',
-                  key: const ValueKey('quote-clear'),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: AppColors.white(0.5),
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ),
-            ),
+          eg.IconButton(
+            key: const ValueKey('quote-clear'),
+            icon: EgIcons.x,
+            tooltip: 'Tirar a citação',
+            compact: true,
+            onPressed: widget.onClearQuote,
           ),
         ],
       ),
     );
   }
 
-  Widget _recipient(ChatParticipantInfo target) {
-    final color = ChatPalette.of(
-      ChatWho(id: target.id, address: target.address, isAgent: target.isAgent),
-    );
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: 'para ',
-                style: TextStyle(color: AppColors.white(0.45)),
-              ),
-              TextSpan(
-                text: '${target.isAgent ? '✦' : '❯'} ${target.id}',
-                style: TextStyle(color: color, fontWeight: FontWeight.w700),
-              ),
-            ],
+  /// "Para agente ▾": quem recebe; Tab troca, o clique abre a lista.
+  Widget _recipient(
+    EgeonColors c,
+    ChatParticipantInfo target, {
+    bool label = true,
+  }) {
+    final color = target.isAgent
+        ? ChatPalette.of(
+            c,
+            ChatWho(id: target.id, address: target.address, isAgent: true),
+          )
+        : c.textPrimary;
+    return Pressable(
+      key: _recipientKey,
+      onPressed: widget.onPickTarget == null ? null : _pickRecipient,
+      semanticLabel: 'Destinatário: ${target.id}',
+      builder: (context, s) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: s.hovered ? c.steel : null,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: SizedBox(
+          height: 28,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (label) ...[
+                  Text(
+                    'Para',
+                    style: EgeonType.caption.copyWith(
+                      color: c.textSecondary,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Flexible(
+                  child: Text(
+                    target.id,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    key: const ValueKey('composer-target'),
+                    style: EgeonType.label.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                EgIcon(EgIcons.chevronDown, size: 12, color: c.textMuted),
+              ],
+            ),
           ),
-          key: const ValueKey('composer-target'),
-          style: const TextStyle(fontSize: 11, decoration: TextDecoration.none),
         ),
       ),
     );
   }
 }
 
+/// "/" num quadrado de linha: o botão de comandos (a v3 o distingue do "@").
+class _SlashButton extends StatelessWidget {
+  const _SlashButton({required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    return Tooltip(
+      message: 'Comandos (/)',
+      child: Pressable(
+        key: const ValueKey('composer-slash'),
+        onPressed: onTap,
+        semanticLabel: 'Comandos',
+        builder: (context, s) {
+          final color = onTap == null
+              ? c.textDisabled
+              : s.hovered
+              ? c.textPrimary
+              : c.textSecondary;
+          return SizedBox(
+            width: EgeonSize.controlSm,
+            height: EgeonSize.controlSm,
+            child: Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: color),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: Center(
+                    child: EgIcon(EgIcons.slash, size: 10, color: color),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Enviar (↵): `primary`, 32; sem texto fica a 40%.
 class _SendButton extends StatelessWidget {
   const _SendButton({required this.enabled, required this.onTap});
 
@@ -285,30 +525,32 @@ class _SendButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-    child: GestureDetector(
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    return Pressable(
       key: const ValueKey('composer-send'),
-      behavior: HitTestBehavior.opaque,
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 30,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: enabled ? AppColors.accent : AppColors.white(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Text(
-          '↑',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.white(enabled ? 1 : 0.35),
-            decoration: TextDecoration.none,
+      onPressed: enabled ? onTap : null,
+      semanticLabel: 'Enviar',
+      builder: (context, s) => Opacity(
+        opacity: enabled ? 1 : EgeonOpacity.disabled,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: s.pressed
+                ? c.primaryPressed
+                : s.hovered
+                ? c.primaryHover
+                : c.primary,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: Center(
+              child: EgIcon(EgIcons.send, size: 16, color: c.onPrimary),
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

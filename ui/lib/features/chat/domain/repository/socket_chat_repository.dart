@@ -1,3 +1,4 @@
+import '../../../../core/adapters/event_parsing.dart';
 import '../../../../commons/utils/wire.dart';
 import '../../../../core/adapters/egeon_socket_client.dart';
 import '../entities/chat_block.dart';
@@ -27,8 +28,14 @@ class SocketChatRepository implements ChatRepository {
           .failingAs(refused: ChatRefused.new, offline: ChatOffline.new);
 
   @override
-  Stream<ChatUpdate> watch(String workbenchId) =>
-      _client.subscribe('chat/$workbenchId').map(ChatUpdate.fromMap);
+  Stream<ChatUpdate> watch(String workbenchId) => _client
+      .subscribe('chat/$workbenchId')
+      .parsed(
+        'chat/$workbenchId',
+        ChatUpdate.fromMap,
+        fallback: (_) => ChatUpdate.unreadable(workbenchId),
+        fallbackAfterFirst: true,
+      );
 
   /// A thread inteira: linhas, coluna, filas e bandeja. Sem as três últimas,
   /// a recuperação de um `rev` perdido esvaziaria a coluna e travaria o envio

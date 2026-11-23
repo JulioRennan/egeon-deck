@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/chat_fixtures.dart';
+import '../../support/fake_agent_repository.dart';
 import '../../support/fake_chat_repository.dart';
 import '../../support/in_memory_queue_repository.dart';
 import '../../support/inject_fakes.dart';
@@ -36,7 +37,11 @@ Future<FakeChatRepository> mount(
   addTearDown(tester.view.reset);
   final repository = FakeChatRepository();
   final queues = InMemoryQueueRepository();
-  injectFakes(chat: repository, queue: (_) => queues);
+  injectFakes(
+    chat: repository,
+    queue: (_) => queues,
+    agent: (_) => FakeAgentRepository(),
+  );
   inject<QueuePanelWidth>().notifier.value = width;
   await tester.pumpWidget(
     overlayHost(
@@ -116,7 +121,7 @@ void main() {
     tester,
   ) async {
     await mount(tester);
-    expect(find.text('FILAS'), findsOneWidget);
+    expect(find.text('Participantes'), findsOneWidget);
     expect(find.text('2 pendentes · com front'), findsOneWidget);
     expect(find.text('? pergunta'), findsOneWidget);
     final asking = tester.widget<Text>(

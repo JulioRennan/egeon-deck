@@ -6,9 +6,10 @@ import '../../../support/in_memory_canvas_repository.dart';
 import 'package:egeon_deck/features/canvas/presentation/page/canvas_page.dart';
 import 'package:egeon_deck/features/node/terminal/presentation/widgets/terminal_body.dart';
 import 'package:egeon_deck/features/node/terminal/presentation/widgets/terminal_view.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../support/eg_host.dart';
 
 import '../../../support/fake_terminal_repository.dart';
 import '../../../support/inject_fakes.dart';
@@ -46,10 +47,10 @@ void main() {
     injectFakes(canvas: canvas, terminals: terminals);
 
     await tester.pumpWidget(
-      WidgetsApp(
-        color: const Color(0xFF000000),
-        textStyle: AppTheme.textStyle,
-        builder: (context, _) => CanvasPage(
+      egHost(
+        fill: true,
+        size: const Size(1200, 800),
+        CanvasPage(
           workbenchId: 'b',
           bodyBuilder: (context, card) => card.kind != NodeKind.web
               ? TerminalBody(nodeId: card.id)

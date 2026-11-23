@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 
-import '../../../../../commons/widgets/context_menu.dart';
+import '../../../../../commons/widgets/eg/menu.dart';
 import '../../../../../commons/widgets/hand_cursor.dart';
 import '../../../../../commons/widgets/pasted_image.dart';
-import '../../../../../theme/app_colors.dart';
+import '../../../../../theme/egeon_colors.dart';
 import '../../domain/entities/queue_item.dart';
 import 'queue_text_field.dart';
 import 'status_dot.dart';
@@ -72,6 +72,7 @@ class QueueRow extends StatefulWidget {
 class _QueueRowState extends State<QueueRow> {
   final _editorFocus = FocusNode(debugLabel: 'queue-editor');
   final _replyFocus = FocusNode(debugLabel: 'queue-reply');
+  var _hovered = false;
   var _reply = '';
   var _replyKey = 0;
 
@@ -99,24 +100,24 @@ class _QueueRowState extends State<QueueRow> {
 
   void _menu(Offset position) {
     final item = widget.item;
-    showContextMenu(
+    showMenu(
       context,
-      position: position,
+      anchor: position & const Size(1, 1),
       // Tarefa travada (já enviada) não volta nem vai de novo; e a que está
       // com o agente não se apaga por aqui.
-      entries: [
+      items: [
         if (!item.locked) ...[
           if (item.status == ItemStatus.pending)
-            MenuEntry('Enviar agora', widget.onSend)
+            MenuItem('Enviar agora', onSelected: widget.onSend)
           else
-            MenuEntry('Voltar para pendente', widget.onReopen),
-          const MenuEntry.separator(),
+            MenuItem('Voltar para pendente', onSelected: widget.onReopen),
+          const MenuSeparator(),
         ],
-        MenuEntry('Mover para cima', () => widget.onMove(-1)),
-        MenuEntry('Mover para baixo', () => widget.onMove(1)),
+        MenuItem('Mover para cima', onSelected: () => widget.onMove(-1)),
+        MenuItem('Mover para baixo', onSelected: () => widget.onMove(1)),
         if (item.status != ItemStatus.sent) ...[
-          const MenuEntry.separator(),
-          MenuEntry('Apagar', widget.onRemove),
+          const MenuSeparator(),
+          MenuItem('Apagar', onSelected: widget.onRemove, danger: true),
         ],
       ],
     );
@@ -125,9 +126,7 @@ class _QueueRowState extends State<QueueRow> {
   String get _meta {
     final item = widget.item;
     final parts = <String>[
-      if (item.status == ItemStatus.sent)
-        'enviada${item.sentTo == null ? '' : ' para ${widget.destinationLabel ?? item.sentTo}'}',
-      if (item.status == ItemStatus.done) 'feita',
+      // A v3 não escreve "enviada" nem "feita": o spinner e o risco já dizem.
       if (item.awaiting) 'o agente perguntou',
       if (item.images.isNotEmpty)
         '${item.images.length} print${item.images.length == 1 ? '' : 's'}',
@@ -144,30 +143,46 @@ class _QueueRowState extends State<QueueRow> {
       // No `mouseDown`, como o Swift; e sem mão, que ali o clique é escrever.
       // Ter o toque aqui é o que impede o vazio da lista de fechar a tarefa.
       onTapDown: widget.expanded ? (_) => _focusEditor() : null,
-      child: Container(
-        margin: EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: widget.expanded ? 6 : 0,
-        ),
-        padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
-        decoration: widget.expanded
-            ? BoxDecoration(
-                color: AppColors.white(0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.white(0.10)),
-              )
-            : null,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            StatusDot(item: item, onTap: widget.onToggleDone),
-            const SizedBox(width: 6),
-            Expanded(child: widget.expanded ? _open(item) : _closed(item)),
-          ],
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Container(
+          margin: EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: widget.expanded ? 6 : 0,
+          ),
+          padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
+          decoration: widget.expanded
+              ? BoxDecoration(
+                  color: context.eg.steel,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: context.eg.line),
+                )
+              : null,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // A bolinha é o checkbox e o spinner: só à vista quando trabalha,
+              // pergunta, está aberta ou o ponteiro está na linha — pendente e
+              // feita são só texto na v3.
+              if (_dotShown(item)) ...[
+                StatusDot(item: item, onTap: widget.onToggleDone),
+                const SizedBox(width: 6),
+              ] else
+                const SizedBox(width: 6),
+              Expanded(child: widget.expanded ? _open(item) : _closed(item)),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  bool _dotShown(QueueItem item) =>
+      widget.expanded ||
+      _hovered ||
+      item.awaiting ||
+      item.status == ItemStatus.sent;
 
   Widget _closed(QueueItem item) => HandCursor(
     child: GestureDetector(
@@ -184,13 +199,15 @@ class _QueueRowState extends State<QueueRow> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: AppColors.white(
-                  item.status == ItemStatus.done ? 0.4 : 0.88,
-                ),
+                color: item.status == ItemStatus.done
+                    ? context.eg.textMuted
+                    : item.status == ItemStatus.sent
+                    ? context.eg.textPrimary
+                    : context.eg.textSecondary,
                 decoration: item.status == ItemStatus.done
                     ? TextDecoration.lineThrough
                     : TextDecoration.none,
-                decorationColor: AppColors.white(0.4),
+                decorationColor: context.eg.textMuted,
                 fontSize: 13,
                 height: 1.3,
               ),
@@ -202,8 +219,8 @@ class _QueueRowState extends State<QueueRow> {
                   _meta,
                   style: TextStyle(
                     color: item.awaiting
-                        ? AppColors.attention
-                        : AppColors.white(0.4),
+                        ? context.eg.attention
+                        : context.eg.textMuted,
                     fontSize: 10,
                     decoration: TextDecoration.none,
                   ),
@@ -264,7 +281,7 @@ class _QueueRowState extends State<QueueRow> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: AppColors.white(0.06),
+            color: context.eg.steel,
             borderRadius: BorderRadius.circular(6),
           ),
           child: QueueTextField(
@@ -299,7 +316,7 @@ class _QueueRowState extends State<QueueRow> {
               Text(
                 _meta,
                 style: TextStyle(
-                  color: AppColors.white(0.4),
+                  color: context.eg.textMuted,
                   fontSize: 10,
                   decoration: TextDecoration.none,
                 ),
@@ -327,13 +344,13 @@ class _SendButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
         decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.2),
+          color: context.eg.accent.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(5),
         ),
         child: Text(
           'Enviar',
           style: TextStyle(
-            color: AppColors.accent,
+            color: context.eg.accent,
             fontSize: 11,
             fontWeight: FontWeight.w600,
             decoration: TextDecoration.none,
@@ -384,14 +401,14 @@ class _Thumb extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             foregroundDecoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppColors.white(0.14)),
+              border: Border.all(color: context.eg.line),
             ),
             decoration: BoxDecoration(borderRadius: BorderRadius.circular(6)),
             child: Image.file(
               File(path),
               height: height,
               fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => _name(),
+              errorBuilder: (_, _, _) => _name(context),
             ),
           ),
         ),
@@ -409,14 +426,14 @@ class _Thumb extends StatelessWidget {
                 width: 26,
                 height: 26,
                 alignment: Alignment.center,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xB3000000),
+                  color: context.eg.scrim,
                 ),
-                child: const Text(
+                child: Text(
                   '✕',
                   style: TextStyle(
-                    color: Color(0xFFFFFFFF),
+                    color: context.eg.textPrimary,
                     fontSize: 12,
                     decoration: TextDecoration.none,
                   ),
@@ -429,15 +446,15 @@ class _Thumb extends StatelessWidget {
   );
 
   // Alto o bastante para o X do canto caber dentro (e receber o clique).
-  Widget _name() => Container(
+  Widget _name(BuildContext context) => Container(
     height: 38,
     alignment: Alignment.centerLeft,
     padding: const EdgeInsets.fromLTRB(8, 0, 40, 0),
-    color: AppColors.white(0.08),
+    color: context.eg.lineSubtle,
     child: Text(
       name,
       style: TextStyle(
-        color: AppColors.white(0.7),
+        color: context.eg.textSecondary,
         fontSize: 10,
         decoration: TextDecoration.none,
       ),

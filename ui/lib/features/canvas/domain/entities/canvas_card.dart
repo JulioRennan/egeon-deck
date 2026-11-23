@@ -78,9 +78,12 @@ class CanvasCard {
       title: id,
       address: map['address'] as String? ?? '',
       cliName: map['cli_name'] as String?,
-      subtitle: kind == NodeKind.web
-          ? map['url'] as String? ?? ''
-          : map['dir'] as String? ?? '',
+      subtitle: switch (kind) {
+        NodeKind.web => map['url'] as String? ?? '',
+        // A fila diz quantas tarefas esperam, no lugar da pasta.
+        NodeKind.queue => map['subtitle'] as String? ?? '',
+        _ => map['dir'] as String? ?? '',
+      },
       screen: map['screen'] as String?,
       url: map['url'] as String?,
       alive: map['alive'] as bool? ?? true,

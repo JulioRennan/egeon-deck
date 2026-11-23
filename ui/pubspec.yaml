@@ -14,6 +14,7 @@ dependencies:
     sdk: flutter
   flutter_bloc: ^9.1.1
   get_it: ^9.3.0
+  material_ui: ^1.11.1
 
 dev_dependencies:
   flutter_test:
@@ -21,3 +22,18 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+
+# O app tem de abrir offline: as fontes do design system vão embutidas
+# (variáveis, normal e itálico; licença OFL em assets/fonts).
+flutter:
+  fonts:
+    - family: Noto Sans
+      fonts:
+        - asset: assets/fonts/NotoSans-Variable.ttf
+        - asset: assets/fonts/NotoSans-Italic-Variable.ttf
+          style: italic
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Variable.ttf
+        - asset: assets/fonts/JetBrainsMono-Italic-Variable.ttf
+          style: italic

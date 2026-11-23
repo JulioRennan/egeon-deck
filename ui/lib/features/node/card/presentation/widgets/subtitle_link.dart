@@ -2,14 +2,25 @@ import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../../../commons/widgets/app_tooltip.dart';
-import '../../../../../theme/app_colors.dart';
-import '../../../../../theme/app_theme.dart';
+import '../../../../../commons/widgets/eg/tooltip.dart';
+import '../../../../../theme/egeon_colors.dart';
+import '../../../../../theme/egeon_type.dart';
+
+/// O caminho curto do cabeçalho: `~/…/a/b` quando passa de três partes.
+/// Endereço (o nó web) e o que não é caminho ficam como estão.
+String shortPath(String path) {
+  if (!path.startsWith('~') && !path.startsWith('/')) return path;
+  final parts = path.split('/');
+  return parts.length > 3
+      ? '~/…/${parts.sublist(parts.length - 2).join('/')}'
+      : path;
+}
 
 /// O subtítulo do card (a pasta). Sem ⌘ é cabeçalho, por onde se arrasta o
 /// card; com ⌘ sobre ele vira link — sublinhado e mão — e o clique abre a pasta
 /// no Finder, como o caminho dentro do terminal (`NodeView.swift`). Sem
-/// [onOpen] (o web, cujo subtítulo é a página), só mostra.
+/// [onOpen] (o web, cujo subtítulo é a página), só mostra. A dica traz o
+/// caminho inteiro.
 class SubtitleLink extends StatefulWidget {
   const SubtitleLink({required this.text, this.onOpen, super.key});
 
@@ -52,28 +63,29 @@ class _SubtitleLinkState extends State<SubtitleLink> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.eg;
     final open = widget.onOpen;
     final linked = open != null && _command && _hovering;
+    final color = linked ? c.textPrimary : c.textDisabled;
     final text = IgnorePointer(
       child: Text(
-        widget.text,
+        shortPath(widget.text),
         key: const ValueKey('card-subtitle'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: AppTheme.textStyle.copyWith(
-          fontSize: 10,
-          fontFamily: AppTheme.terminalFontFamily,
-          color: AppColors.white(linked ? 0.85 : 0.58),
+        style: EgeonType.monoMeta.copyWith(
+          fontSize: 11,
+          height: 14 / 11,
+          color: color,
           decoration: linked ? TextDecoration.underline : TextDecoration.none,
-          decorationColor: AppColors.white(0.85),
+          decorationColor: color,
         ),
       ),
     );
-    return AppTooltip(
+    return Tooltip(
       message: open == null
           ? widget.text
           : '${widget.text}  —  ⌘-clique abre no Finder',
-      passThrough: true,
       child: MouseRegion(
         // Translúcida para saber do mouse sem ⌘; quem decide se o clique passa
         // é o Listener de dentro (`opaque: false` aqui deixaria passar sempre).

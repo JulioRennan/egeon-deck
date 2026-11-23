@@ -1,11 +1,19 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/spinner.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../commons/widgets/eg/diff_view.dart';
+import '../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../commons/widgets/eg/pressable.dart';
+import '../../../../commons/widgets/eg/spinner.dart';
+import '../../../../commons/widgets/eg/status.dart';
+import '../../../../commons/widgets/eg/status_dot.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_tokens.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/chat_block.dart';
-import 'chat_bubble.dart';
 import 'chat_palette.dart';
+import 'diff_rows.dart';
 import 'md_text.dart';
+import 'message_frame.dart';
 
 /// O que uma linha da thread pede à tela que a hospeda.
 class ChatRowActions {
@@ -24,142 +32,225 @@ class ChatRowActions {
   final ValueChanged<String>? onLink;
 }
 
-/// Uma linha da thread, pelo tipo.
+TextStyle _mono(EgeonColors c, {double size = 12, Color? color}) =>
+    EgeonType.monoMeta.copyWith(
+      fontSize: size,
+      height: size >= 13 ? 20 / 13 : 18 / 12,
+      color: color ?? c.textMuted,
+      decoration: TextDecoration.none,
+    );
+
+String _clock(DateTime at) {
+  final local = at.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(local.hour)}:${two(local.minute)}';
+}
+
+/// Uma linha da thread, pelo tipo: a mensagem do usuário numa bolha, a do
+/// agente corrida (nome, "hora · custo" e as peças: texto, passos, código,
+/// diff), a citação entre agentes numa linha.
 class ChatBlockView extends StatelessWidget {
-  const ChatBlockView({required this.block, required this.actions, super.key});
+  const ChatBlockView({
+    required this.block,
+    required this.actions,
+    this.mentions = const {},
+    this.groupTail = true,
+    super.key,
+  });
 
   final ChatBlock block;
   final ChatRowActions actions;
 
-  static const _time = TextStyle(
-    fontSize: 10.5,
-    color: Color(0xFF737373),
-    decoration: TextDecoration.none,
-  );
+  /// Os ids dos agentes da conversa: ficam na cor deles no texto.
+  final Set<String> mentions;
+
+  /// Passo de capa aberta: é o último, o que fecha a caixa cinza do grupo.
+  final bool groupTail;
 
   @override
-  Widget build(BuildContext context) => switch (block) {
-    PromptBlock() => _prompt(block as PromptBlock),
-    HeaderBlock() => _header(block as HeaderBlock),
-    ProseBlock(:final blocks, :final from) => _agent(
-      from,
-      Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: MdColumn(blocks: blocks, onLink: actions.onLink),
+  Widget build(BuildContext context) {
+    return switch (block) {
+      PromptBlock() => _prompt(context, block as PromptBlock),
+      HeaderBlock() => _header(context, block as HeaderBlock),
+      ProseBlock(:final blocks) => _piece(
+        MdColumn(blocks: blocks, onLink: actions.onLink, mentions: mentions),
       ),
-    ),
-    CodeBlock(:final code, :final from, :final lines) => _agent(
-      from,
-      Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: CodeBox(code: code, lines: lines),
+      CodeBlock(:final code, :final lines) => _piece(
+        CodeBox(code: code, lines: lines),
       ),
-    ),
-    StepBlock() => _agent(
-      (block as StepBlock).from,
-      _boxed(
+      StepBlock() => _inGroup(
         StepTile(block: block as StepBlock, onToggle: actions.onToggleStep),
       ),
-    ),
-    GroupBlock() => _agent(
-      (block as GroupBlock).from,
-      _boxed(
+      GroupBlock() => _piece(
         GroupCover(block: block as GroupBlock, onCycle: actions.onCycleGroup),
       ),
-    ),
-    DiffBlock() => _agent(
-      (block as DiffBlock).from,
-      _boxed(DiffBox(block: block as DiffBlock)),
-    ),
-    StatusBlock(:final from, :final live) => _agent(
-      from,
-      Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: StatusLine(live: live),
+      DiffBlock() => _piece(DiffBox(block: block as DiffBlock)),
+      StatusBlock(:final live) => _piece(StatusLine(live: live)),
+      TypingBlock(:final from) => _piece(
+        StatusLine(live: const LiveWorking(), name: from),
       ),
-    ),
-    TypingBlock(:final from) => _agent(
-      from,
-      Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: StatusLine(live: const LiveWorking(), name: from),
-      ),
-    ),
-  };
+    };
+  }
 
-  /// A caixa de um passo, de um diff ou de uma capa: recuada pela profundidade.
-  Widget _boxed(Widget child) => Padding(
-    padding: EdgeInsets.only(
-      top: block.depth > 0 ? 6 : 12,
-      left: block.depth * 18.0,
-    ),
-    child: child,
-  );
-
-  Widget _agent(ChatWho from, Widget child) => ChatBubble(
+  /// Uma peça da resposta, colada ao cabeçalho com 8 e às outras com 10; o
+  /// passo de uma capa entra um degrau.
+  Widget _piece(Widget child) => MessageFrame(
     first: block.first,
-    last: block.last,
-    accent: ChatPalette.of(from),
-    child: child,
+    top: _afterHeader ? 8 : null,
+    child: Padding(
+      padding: EdgeInsets.only(left: block.depth * 18.0),
+      child: child,
+    ),
   );
 
-  Widget _prompt(PromptBlock b) {
-    final you = b.fromText == null;
+  bool get _afterHeader => false;
+
+  /// Um passo da capa aberta: mora DENTRO da caixa cinza do grupo, colado ao
+  /// cabeçalho "3 passos · …" (22 por linha), recuado 34; o último fecha a
+  /// caixa com o raio de baixo.
+  Widget _inGroup(Widget child) => MessageFrame(
+    first: false,
+    top: 0,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: EgeonColors.overlay2,
+        borderRadius: groupTail
+            ? const BorderRadius.vertical(bottom: Radius.circular(10))
+            : null,
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(34, 0, 14, groupTail ? 10 : 0),
+        child: child,
+      ),
+    ),
+  );
+
+  Widget _prompt(BuildContext context, PromptBlock b) {
+    final c = context.eg;
+    if (b.fromText != null) return _relay(context, b);
     final mention = b.mention ? '@${b.to.id} ' : '';
-    return ChatBubble(
+    return MessageFrame(
       first: block.first,
-      last: block.last,
-      you: you,
-      maxWidth: ChatBubble.promptMaxWidth,
-      dimmed: b.pending,
-      accent: you ? null : ChatPalette.of(b.to),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (b.fromText != null)
-            Text(
-              '✦ ${b.fromText}',
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.white(0.55),
-                decoration: TextDecoration.none,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Opacity(
+            opacity: b.pending ? 0.6 : 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: c.carbon,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
+                  bottomRight: Radius.circular(4),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (b.quote != null)
+                      QuoteView(
+                        quote: b.quote!,
+                        onTap: () => actions.onQuote(b.quote!.targetKey),
+                      ),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          if (mention.isNotEmpty)
+                            TextSpan(
+                              text: mention,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          TextSpan(text: b.text),
+                        ],
+                      ),
+                      style: mdBase(c),
+                    ),
+                    if (block.last)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'você · ${_clock(b.at)}',
+                          textAlign: TextAlign.end,
+                          style: _mono(c),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          if (b.quote != null)
-            QuoteView(
-              quote: b.quote!,
-              onTap: () => actions.onQuote(b.quote!.targetKey),
-            ),
-          Text.rich(
-            TextSpan(
-              children: [
-                if (mention.isNotEmpty)
-                  TextSpan(
-                    text: mention,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                TextSpan(text: b.text),
-              ],
-            ),
-            style: const TextStyle(
-              fontSize: 13.5,
-              height: 1.35,
-              color: Color(0xFFFFFFFF),
-              decoration: TextDecoration.none,
-            ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _header(HeaderBlock b) {
-    final time = b.at == null ? 'agora' : _clock(b.at!);
-    final label = b.cost == null ? time : '${b.cost!.text} · $time';
-    return ChatBubble(
+  /// O prompt de um agente para outro: "maestro → revisor  texto  hora".
+  Widget _relay(BuildContext context, PromptBlock b) {
+    final c = context.eg;
+    return MessageFrame(
       first: block.first,
-      last: block.last,
-      accent: ChatPalette.of(b.from),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 2),
+        child: Row(
+          children: [
+            Text(
+              b.fromText!,
+              style: EgeonType.label.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: ChatPalette.ofId(c, b.fromText!),
+                decoration: TextDecoration.none,
+              ),
+            ),
+            const SizedBox(width: 10),
+            EgIcon(EgIcons.arrowRight, size: 14, color: c.textMuted),
+            const SizedBox(width: 10),
+            Text(
+              b.to.id,
+              style: EgeonType.label.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: ChatPalette.of(c, b.to),
+                decoration: TextDecoration.none,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                b.text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: EgeonType.small.copyWith(
+                  color: c.textSecondary,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(_clock(b.at), style: _mono(c)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header(BuildContext context, HeaderBlock b) {
+    final c = context.eg;
+    final time = b.at == null ? 'agora' : _clock(b.at!);
+    final meta = b.cost == null ? time : '$time · ${b.cost!.text}';
+    return MessageFrame(
+      first: block.first,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -168,26 +259,26 @@ class ChatBlockView extends StatelessWidget {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                '✦ ${b.from.id}',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: ChatPalette.of(b.from),
+                b.from.id,
+                style: EgeonType.label.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: ChatPalette.of(c, b.from),
                   decoration: TextDecoration.none,
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                b.from.address,
-                style: const TextStyle(
-                  fontFamily: 'Menlo',
-                  fontSize: 10.5,
-                  color: Color(0xFF737373),
-                  decoration: TextDecoration.none,
+              const SizedBox(width: 10),
+              // A v3 põe a hora e o custo colados ao nome, sempre à vista; o
+              // modelo da resposta entra aqui quando o bloco o trouxer.
+              Flexible(
+                child: Text(
+                  meta,
+                  key: const ValueKey('message-meta'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _mono(c),
                 ),
               ),
-              const Spacer(),
-              Text(label, style: _time),
             ],
           ),
           if (b.quote != null)
@@ -202,15 +293,11 @@ class ChatBlockView extends StatelessWidget {
       ),
     );
   }
-
-  static String _clock(DateTime at) {
-    final local = at.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(local.hour)}:${two(local.minute)}';
-  }
 }
 
-/// A mensagem que uma resposta cita; clicar leva até ela.
+/// A mensagem que uma resposta cita (`Quote` do DS): `steel` (hover
+/// `steelActive`), raio 8, 8 × 12, até 560; o autor em 12 e o texto em uma
+/// linha. Clicar leva até ela.
 class QuoteView extends StatelessWidget {
   const QuoteView({required this.quote, required this.onTap, super.key});
 
@@ -219,46 +306,57 @@ class QuoteView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.eg;
     final author = quote.authorId;
-    final color = author == null
-        ? const Color(0xFF2F7FF6)
-        : ChatPalette.of(ChatWho(id: author, address: author, isAgent: true));
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-          decoration: BoxDecoration(
-            color: AppColors.black(0.2),
-            borderRadius: BorderRadius.circular(6),
-            border: Border(left: BorderSide(color: color, width: 3)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                author == null ? 'você' : '✦ $author',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                  decoration: TextDecoration.none,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Pressable(
+            onPressed: onTap,
+            semanticLabel: 'Ir à mensagem citada',
+            builder: (context, s) => DecoratedBox(
+              decoration: BoxDecoration(
+                color: s.hovered || s.pressed ? c.steelActive : c.steel,
+                borderRadius: BorderRadius.circular(EgeonRadius.md),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: EgeonSpace.s3,
+                  vertical: EgeonSpace.s2,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      author ?? 'você',
+                      style: EgeonType.label.copyWith(
+                        fontSize: 12,
+                        height: 16 / 12,
+                        fontWeight: FontWeight.w600,
+                        color: author == null
+                            ? c.textSecondary
+                            : ChatPalette.ofId(c, author),
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                    Text(
+                      quote.text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: EgeonType.small.copyWith(
+                        height: 18 / 13,
+                        color: c.textSecondary,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Text(
-                quote.text,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: AppColors.white(0.7),
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -266,106 +364,90 @@ class QuoteView extends StatelessWidget {
   }
 }
 
-/// A caixa de um passo. Recolhido é só o título; aberto, o comando e a saída.
-/// Só a faixa do título responde ao clique — o resto é texto para ler e copiar.
-class StepTile extends StatefulWidget {
+/// O título de um passo como a v3 o escreve: o verbo em `accent` ("$",
+/// "criar nó", "aresta"), o resto no cinza da linha e a meta em `textMuted`
+/// depois de um "·". Glifo que não é o "$" não aparece: o tofu do `⇄` na fonte
+/// mono era o quadrado quebrado, e a v3 não tem ícone.
+List<InlineSpan> _stepSpans(EgeonColors c, ChatStep step, bool open) {
+  final accent = step.isError ? c.danger : c.accent;
+  final words = step.text.split(' ');
+  final shell = step.glyph == r'$';
+  final verb = shell ? r'$' : words.first;
+  final rest = shell ? step.text : words.skip(1).join(' ');
+  return [
+    TextSpan(
+      text: verb,
+      style: TextStyle(color: accent),
+    ),
+    if (rest.isNotEmpty) TextSpan(text: ' $rest'),
+    if (!open && step.detail != null)
+      TextSpan(
+        text: ' · ${step.detail}',
+        style: TextStyle(color: c.textMuted),
+      ),
+  ];
+}
+
+/// Um passo do agente (`Step` do DS): o glifo em `accent` e o texto em mono
+/// 12/18; aberto, o comando e a saída recuados 34. Só a linha do título
+/// responde ao clique — o resto é texto para ler e copiar.
+class StepTile extends StatelessWidget {
   const StepTile({required this.block, required this.onToggle, super.key});
 
   final StepBlock block;
   final ValueChanged<String> onToggle;
 
   @override
-  State<StepTile> createState() => _StepTileState();
-}
-
-class _StepTileState extends State<StepTile> {
-  bool _hovering = false;
-
-  @override
   Widget build(BuildContext context) {
-    final step = widget.block.step;
-    final open = widget.block.expanded && step.isExpandable;
-    final title = Text(
-      '${step.glyph} ${step.text}',
-      style: TextStyle(
-        fontFamily: 'Menlo',
-        fontSize: 12,
-        height: 1.3,
-        color: step.isError ? const Color(0xFFFF6B6B) : AppColors.white(0.85),
-        decoration: TextDecoration.none,
-      ),
-    );
-    final strip = Container(
+    final c = context.eg;
+    final step = block.step;
+    final open = block.expanded && step.isExpandable;
+    final title = Padding(
       key: const ValueKey('step-title'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      color: open || _hovering
-          ? (_hovering ? ChatPalette.titleHover : ChatPalette.titleFill)
-          : null,
-      child: title,
+      // 22 por linha: 18 de texto e 2 de respiro em cima e embaixo.
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Text.rich(
+        TextSpan(children: _stepSpans(c, step, open)),
+        style: _mono(c, color: step.isError ? c.danger : c.textSecondary),
+      ),
     );
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: ChatPalette.boxFill,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: ChatPalette.boxBorder),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            step.isExpandable
-                ? MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    onEnter: (_) => setState(() => _hovering = true),
-                    onExit: (_) => setState(() => _hovering = false),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => widget.onToggle(widget.block.id),
-                      child: strip,
-                    ),
-                  )
-                : strip,
-            if (open)
-              Container(
-                key: const ValueKey('step-body'),
-                color: ChatPalette.contentFill,
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (step.detail != null) _mono(step.detail!, 0.85),
-                    if (step.output != null)
-                      Padding(
-                        padding: EdgeInsets.only(
-                          top: step.detail != null ? 8 : 0,
-                        ),
-                        child: _mono(step.output!, 0.6),
-                      ),
-                  ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        step.isExpandable
+            ? MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onToggle(block.id),
+                  child: title,
                 ),
-              ),
-          ],
-        ),
-      ),
+              )
+            : title,
+        if (open)
+          Padding(
+            key: const ValueKey('step-body'),
+            padding: const EdgeInsets.only(left: 20, top: 4, bottom: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (step.detail != null)
+                  Text(step.detail!, style: _mono(c, color: c.textSecondary)),
+                if (step.output != null)
+                  Padding(
+                    padding: EdgeInsets.only(top: step.detail != null ? 8 : 0),
+                    child: Text(step.output!, style: _mono(c)),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
-
-  Widget _mono(String text, double alpha) => Text(
-    text,
-    style: TextStyle(
-      fontFamily: 'Menlo',
-      fontSize: 11.5,
-      height: 1.35,
-      color: AppColors.white(alpha),
-      decoration: TextDecoration.none,
-    ),
-  );
 }
 
-/// A capa de uma sequência de passos: "3 passos · echo três". Clicar avança o
-/// nível.
+/// A capa de uma sequência de passos (`StepGroup` do DS): "3 passos · o último".
+/// Clicar avança o nível.
 class GroupCover extends StatelessWidget {
   const GroupCover({required this.block, required this.onCycle, super.key});
 
@@ -373,137 +455,130 @@ class GroupCover extends StatelessWidget {
   final ValueChanged<String> onCycle;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onCycle(block.id),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: ChatPalette.boxFill,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: ChatPalette.boxBorder),
-        ),
-        child: Text(
-          '${block.count} ${block.count == 1 ? 'passo' : 'passos'} · '
-          '${block.lastStep}',
-          style: TextStyle(
-            fontFamily: 'Menlo',
-            fontSize: 12,
-            color: AppColors.white(0.7),
-            decoration: TextDecoration.none,
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    final open = block.level != GroupLevel.summary;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onCycle(block.id),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: EgeonColors.overlay2,
+            // Aberta, a caixa continua nos passos: só o topo é arredondado.
+            borderRadius: open
+                ? const BorderRadius.vertical(top: Radius.circular(10))
+                : BorderRadius.circular(10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                AnimatedRotation(
+                  turns: open ? 0.25 : 0,
+                  duration: const Duration(milliseconds: 140),
+                  child: EgIcon(
+                    EgIcons.chevronRight,
+                    size: 14,
+                    color: c.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${block.count} ${block.count == 1 ? 'passo' : 'passos'}',
+                  style: EgeonType.label.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: c.textSecondary,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '· ${block.lastStep}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EgeonType.small.copyWith(
+                      color: c.textMuted,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-/// Um diff: o arquivo em cima e as linhas coloridas — verde entra, vermelho
-/// sai, azul é a posição.
+/// Um diff (`DiffView` do DS): o arquivo com `+n −n`, lado a lado, com número
+/// de linha e o fundo `diff-*`.
 class DiffBox extends StatelessWidget {
   const DiffBox({required this.block, super.key});
 
   final DiffBlock block;
 
-  static Color colorOf(String line) {
-    if (line.startsWith('@@')) return const Color(0xFF6EA8FF);
-    if (line.startsWith('+')) return const Color(0xFF6CCB7A);
-    if (line.startsWith('-')) return const Color(0xFFFF7B7B);
-    return const Color(0xFFBFBFBF);
-  }
-
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: ChatPalette.boxFill,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: ChatPalette.boxBorder),
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: ChatPalette.titleFill,
-            child: Text(
-              '± ${block.file}',
-              style: TextStyle(
-                fontFamily: 'Menlo',
-                fontSize: 12,
-                color: AppColors.white(0.85),
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: ChatPalette.contentFill,
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  for (final (i, line) in block.lines.indexed)
-                    TextSpan(
-                      text: i == block.lines.length - 1 ? line : '$line\n',
-                      style: TextStyle(color: colorOf(line)),
-                    ),
-                ],
-              ),
-              style: const TextStyle(
-                fontFamily: 'Menlo',
-                fontSize: 11.5,
-                height: 1.35,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final parsed = diffRowsOf(block.lines);
+    return DiffView(
+      filename: block.file,
+      rows: parsed.rows,
+      added: parsed.added,
+      removed: parsed.removed,
+    );
+  }
 }
 
-/// A linha de status da bolha ao vivo: o spinner e o que o agente faz agora; em
-/// laranja e sem spinner quando é ele quem espera por você.
+/// A linha de status da resposta ao vivo: o spinner e o que o agente faz agora;
+/// o ponto laranja que pulsa, e sem spinner, quando é ele quem espera por você.
 class StatusLine extends StatelessWidget {
   const StatusLine({required this.live, this.name, super.key});
 
   final ChatLive live;
 
-  /// Na bolha de "digitando" o agente ainda não tem cabeçalho.
+  /// Na resposta de "digitando" o agente ainda não tem cabeçalho.
   final ChatWho? name;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.eg;
     final asking = live is LiveAsking;
-    Widget text(String glyph) => Text(
-      '${asking ? '●' : glyph} ${live.label}',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontFamily: 'Menlo',
-        fontSize: 11.5,
-        color: asking ? AppColors.attention : AppColors.white(0.5),
-        decoration: TextDecoration.none,
-      ),
+    final line = Row(
+      children: [
+        if (asking)
+          const StatusDot(Status.attention, animated: true)
+        else
+          const Spinner(size: 12),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            live.label,
+            key: const ValueKey('chat-status'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: EgeonType.small.copyWith(
+              color: asking ? c.attention : c.textSecondary,
+              decoration: TextDecoration.none,
+            ),
+          ),
+        ),
+      ],
     );
-    final line = asking
-        ? text('●')
-        : SpinnerBuilder(builder: (_, glyph) => text(glyph));
     if (name == null) return line;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '✦ ${name!.id}',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: ChatPalette.of(name!),
+          name!.id,
+          style: EgeonType.label.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: ChatPalette.of(c, name!),
             decoration: TextDecoration.none,
           ),
         ),

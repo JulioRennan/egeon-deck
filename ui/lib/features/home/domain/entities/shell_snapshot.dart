@@ -20,6 +20,8 @@ class ShellSnapshot {
     this.lock,
     this.banner,
     this.clock,
+    this.projectName,
+    this.openBenchIds = const {},
   });
 
   final Workbench? bench;
@@ -33,6 +35,13 @@ class ShellSnapshot {
 
   /// O cronômetro da bancada na tela; ausente até ela ter rodado.
   final WorkbenchClock? clock;
+
+  /// O projeto da bancada na tela, para a trilha `projeto / bancada`; ausente
+  /// quando ela é órfã.
+  final String? projectName;
+
+  /// As bancadas com aba aberta: para onde o voltar e o avançar ainda podem ir.
+  final Set<String> openBenchIds;
 
   /// A bancada na tela é a da aba ativa. As cortinas e a faixa vêm do core,
   /// com o texto pronto.
@@ -49,6 +58,8 @@ class ShellSnapshot {
               view: b.view,
               template: b.template,
             ),
+      projectName: b?.project == null ? null : org.project(b!.project!)?.name,
+      openBenchIds: {for (final t in org.openTabs) t.id},
       busy: b?.busy,
       banner: b?.banner,
       clock: b?.clock,

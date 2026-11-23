@@ -7,20 +7,19 @@ import '../cubit/agent_cubit.dart';
 import 'agent_strip.dart';
 
 /// A faixa de um card de agente, presa ao nó: um cubit por agente. Antes de o
-/// core mandar o primeiro estado, a faixa fica vazia.
+/// core mandar o primeiro estado, ela mostra o que se sabe (o CLI padrão, sem
+/// nível de esforço nem contexto): a faixa nunca fica vazia.
 class AgentAccessory extends StatelessWidget {
   const AgentAccessory({
     required this.workbenchId,
     required this.nodeId,
     this.onRequestClear,
-    this.tint = const Color(0xFFBF5AF2),
     super.key,
   });
 
   /// A bancada do nó: os comandos do agente vão por ela.
   final String workbenchId;
   final String nodeId;
-  final Color tint;
 
   /// Limpar apaga a conversa: quem compõe a tela confirma antes de chamar
   /// `confirm`. Sem ouvinte, limpa direto.
@@ -34,7 +33,7 @@ class AgentAccessory extends StatelessWidget {
           inject<AgentCubit>((workbenchId: workbenchId, nodeId: nodeId)),
       child: BlocBuilder<AgentCubit, AgentState>(
         builder: (context, state) => switch (state) {
-          AgentWaiting() => const SizedBox.shrink(),
+          AgentWaiting() => _strip(context.read<AgentCubit>(), _unknown),
           AgentShown(:final status) => _strip(
             context.read<AgentCubit>(),
             status,
@@ -44,9 +43,12 @@ class AgentAccessory extends StatelessWidget {
     );
   }
 
+  /// O que se sabe antes do primeiro estado: limpar espera o core dizer que dá.
+  static const _unknown = AgentStatus(clearable: false);
+
   Widget _strip(AgentCubit cubit, AgentStatus status) => AgentStrip(
     status: status,
-    tint: tint,
+    agentName: nodeId,
     onModel: cubit.chooseModel,
     onEffortMove: cubit.moveEffort,
     onEffortAuto: cubit.toggleEffortAuto,

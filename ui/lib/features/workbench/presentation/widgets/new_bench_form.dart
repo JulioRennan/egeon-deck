@@ -1,9 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/app_dialog.dart';
-import '../../../../commons/widgets/app_text_field.dart';
-import '../../../../commons/widgets/form_label.dart';
-import '../../../../commons/widgets/pick_list.dart';
+import '../../../../commons/widgets/form_dialog.dart';
+import '../../../../commons/widgets/form_kit.dart';
 import '../../domain/entities/bench_template.dart';
 
 /// O que o formulário de bancada nova devolve: o nome (vazio deixa o core
@@ -22,7 +20,7 @@ Future<NewBenchInput?> showNewBenchForm(
   required String suggested,
   required List<BenchTemplate> templates,
   String? problem,
-}) => showAppDialog<NewBenchInput>(
+}) => showFormDialog<NewBenchInput>(
   context,
   width: 340,
   builder: (_, close) => _Body(
@@ -75,19 +73,19 @@ class _BodyState extends State<_Body> {
   }
 
   @override
-  Widget build(BuildContext context) => DialogBody(
+  Widget build(BuildContext context) => FormDialogBody(
     title: 'Nova bancada',
     message:
         widget.problem ?? 'O nome é a primeira parte do endereço de dispatch.',
     actions: [
-      DialogButton('Cancelar', onTap: widget.close),
-      DialogButton('Criar', primary: true, onTap: _create),
+      FormDialogButton('Cancelar', onTap: widget.close),
+      FormDialogButton('Criar', primary: true, onTap: _create),
     ],
     child: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AppTextField(
+        FormTextField(
           controller: _name,
           placeholder: 'nome da bancada',
           autofocus: true,

@@ -6,7 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../../commons/widgets/file_drop_target.dart';
 import '../../../../../commons/widgets/pasted_image.dart';
 import '../../../../../core/adapters/injector.dart';
-import '../../../../../theme/app_colors.dart';
+import '../../../../../theme/egeon_colors.dart';
 import '../../domain/errors/queue_error.dart';
 import '../cubit/queue_cubit.dart';
 import '../cubit/queue_notice_cubit.dart';
@@ -55,11 +55,28 @@ class QueueBody extends StatelessWidget {
   }
 }
 
-class _QueueView extends StatelessWidget {
+class _QueueView extends StatefulWidget {
   const _QueueView({required this.focusNewTask, this.onClose});
 
   final VoidCallback? onClose;
   final bool focusNewTask;
+
+  @override
+  State<_QueueView> createState() => _QueueViewState();
+}
+
+class _QueueViewState extends State<_QueueView> {
+  /// A v3 não mostra a barra (destino, Automático, mandar, limpar) no card em
+  /// repouso: ela aparece com o ponteiro sobre ele. No painel ao lado da
+  /// conversa, que tem o ✕, fica sempre.
+  var _hover = false;
+
+  /// O teclado está na linha de baixo ("Nova tarefa"): ela não some com o
+  /// ponteiro no meio de uma anotação.
+  var _typing = false;
+
+  VoidCallback? get onClose => widget.onClose;
+  bool get focusNewTask => widget.focusNewTask;
 
   @override
   Widget build(BuildContext context) {
@@ -69,33 +86,48 @@ class _QueueView extends StatelessWidget {
     return FileDropTarget(
       onFiles: (paths) => unawaited(cubit.attachFiles(paths)),
       onImage: (png) => unawaited(cubit.attachPng(png)),
-      child: ColoredBox(
-        color: const Color(0xFF181818),
-        child: BlocBuilder<QueueCubit, QueueState>(
-          builder: (context, state) {
-            final queue = state.queue;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                QueueBar(
-                  queue: queue,
-                  onTarget: cubit.setTarget,
-                  onAuto: (on) => cubit.setAuto(on: on),
-                  onSendNext: () => cubit.send(),
-                  onClearDone: cubit.clearDone,
-                  onClose: onClose,
-                ),
-                const _Notice(),
-                Expanded(
-                  child: _List(
-                    state: state,
-                    cubit: cubit,
-                    focusNewTask: focusNewTask,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: ColoredBox(
+          color: context.eg.graphite,
+          child: BlocBuilder<QueueCubit, QueueState>(
+            builder: (context, state) {
+              final queue = state.queue;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 140),
+                    alignment: Alignment.topCenter,
+                    child: _hover || onClose != null
+                        ? QueueBar(
+                            queue: queue,
+                            onTarget: cubit.setTarget,
+                            onAuto: (on) => cubit.setAuto(on: on),
+                            onSendNext: () => cubit.send(),
+                            onClearDone: cubit.clearDone,
+                            onClose: onClose,
+                          )
+                        : const SizedBox(width: double.infinity),
                   ),
-                ),
-              ],
-            );
-          },
+                  const _Notice(),
+                  Expanded(
+                    child: _List(
+                      state: state,
+                      cubit: cubit,
+                      focusNewTask: focusNewTask,
+                      // A linha de anotar, como a barra, só vem com o ponteiro
+                      // no card (a v3 não a mostra); no painel do chat fica.
+                      showNewRow: _hover || onClose != null || _typing,
+                      onNewFocus: (focused) =>
+                          setState(() => _typing = focused),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -130,8 +162,8 @@ class _Notice extends StatelessWidget {
             child: Text(
               notice,
               key: const ValueKey('queue-notice'),
-              style: const TextStyle(
-                color: AppColors.attention,
+              style: TextStyle(
+                color: context.eg.attention,
                 fontSize: 13,
                 decoration: TextDecoration.none,
               ),
@@ -146,11 +178,15 @@ class _List extends StatelessWidget {
     required this.state,
     required this.cubit,
     required this.focusNewTask,
+    required this.showNewRow,
+    required this.onNewFocus,
   });
 
   final QueueState state;
   final QueueCubit cubit;
   final bool focusNewTask;
+  final bool showNewRow;
+  final ValueChanged<bool> onNewFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -173,12 +209,24 @@ class _List extends StatelessWidget {
             cubit.move(items[from].id, to: to.clamp(0, items.length - 1)),
         itemBuilder: (context, index) {
           if (index == items.length) {
-            return _NewRow(
-              key: const ValueKey('new-row'),
-              drafts: cubit.drafts,
-              onCreate: (text) => cubit.create(text: text),
-              onPaste: cubit.pasteNew,
-              autofocus: focusNewTask,
+            return Focus(
+              key: const ValueKey('new-row-slot'),
+              canRequestFocus: false,
+              skipTraversal: true,
+              onFocusChange: onNewFocus,
+              // Escondida, a linha continua montada: o rascunho e o foco não
+              // se perdem.
+              child: Visibility(
+                visible: showNewRow,
+                maintainState: true,
+                child: _NewRow(
+                  key: const ValueKey('new-row'),
+                  drafts: cubit.drafts,
+                  onCreate: (text) => cubit.create(text: text),
+                  onPaste: cubit.pasteNew,
+                  autofocus: focusNewTask,
+                ),
+              ),
             );
           }
           final item = items[index];
@@ -325,7 +373,7 @@ class _NewRowState extends State<_NewRow> {
           height: 14,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.white(0.2), width: 1.6),
+            border: Border.all(color: context.eg.controlBorder, width: 1.6),
           ),
         ),
         Expanded(

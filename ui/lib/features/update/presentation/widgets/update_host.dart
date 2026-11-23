@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../commons/widgets/app_dialog.dart';
-import '../../../../commons/widgets/standard_dialogs.dart';
+import '../../../../commons/widgets/eg/toast.dart';
+import '../../../../commons/widgets/form_dialog.dart';
 import '../../../../core/adapters/injector.dart';
 import '../../domain/entities/app_effect.dart';
 import '../cubit/update_cubit.dart';
@@ -14,7 +14,7 @@ import 'update_prompt_body.dart';
 
 /// Hospeda o cubit do app e desenha o que o core pede: o aviso de versão nova
 /// (uma folha por vez; enquanto está aberta, os terminais seguem desenhando),
-/// a mensagem de uma linha, o encerrar do app e a abertura de Processos.
+/// o aviso passageiro (Toast), o encerrar do app e a abertura de Processos.
 ///
 /// Fica abaixo de um `Overlay` — [dialogContext] devolve o contexto que o tem,
 /// quando o do próprio widget não serve.
@@ -81,7 +81,7 @@ class _UpdateEffectsState extends State<_UpdateEffects> {
       case UpdatePrompt():
         unawaited(_prompt(effect));
       case UpdateMessage(:final title, :final text):
-        unawaited(messageDialog(_dialogs, title: title, message: text));
+        showToast(_dialogs, title: title, description: text);
       case Terminate():
         (_host.onTerminate ?? _exit)();
       case ShowProcesses():
@@ -93,7 +93,7 @@ class _UpdateEffectsState extends State<_UpdateEffects> {
     // Uma folha por vez: um segundo aviso não empilha.
     if (_prompting || !mounted) return;
     _prompting = true;
-    final choice = await showAppDialog<UpdateChoice>(
+    final choice = await showFormDialog<UpdateChoice>(
       _dialogs,
       width: 500,
       builder: (_, close) => UpdatePromptBody(prompt: prompt, close: close),

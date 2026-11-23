@@ -22,7 +22,7 @@ void main() {
     List<ComponentInfo> saved = const [],
     NodeTemplate? node,
   }) async {
-    tester.view.physicalSize = const Size(1100, 1000);
+    tester.view.physicalSize = const Size(1100, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     repository = FakeNodeFormRepository(saved: saved, nodeTemplate: node);
@@ -108,6 +108,21 @@ void main() {
     expect(created.form.saveComponent, isTrue);
     expect(created.form.shown?.cli, 'claude');
     expect(result(), 'revisor');
+  });
+
+  testWidgets('o select de esforço lista os níveis em português', (
+    tester,
+  ) async {
+    await mount(tester);
+    open(tester, frame: const Rect.fromLTWH(1, 2, 600, 400));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('node-effort')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    for (final name in ['baixo', 'médio', 'alto']) {
+      expect(find.text(name), findsWidgets, reason: name);
+    }
+    expect(find.text('medium'), findsNothing);
   });
 
   testWidgets('shell é nome, comando e pasta; o resto some', (tester) async {

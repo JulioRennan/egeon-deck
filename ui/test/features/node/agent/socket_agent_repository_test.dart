@@ -1,3 +1,4 @@
+import 'package:egeon_deck/core/adapters/event_parsing.dart';
 import 'package:egeon_deck/features/node/agent/domain/entities/agent_status.dart';
 import 'package:egeon_deck/features/node/agent/domain/entities/model_choice.dart';
 import 'package:egeon_deck/features/node/agent/domain/repository/socket_agent_repository.dart';
@@ -42,6 +43,84 @@ void main() {
     expect(status.ultracode!.available, isTrue);
     expect(status.context!.used, 84000);
     expect(status.clearable, isTrue);
+  });
+
+  test(
+    'o agente recém-aberto (medidor sem números) chega do mesmo jeito',
+    () async {
+      final first = repository.watch('claude').first;
+      await pump();
+      harness.connection.say(events['node_agent_novo']!);
+      final status = await first;
+
+      expect(status.modelTitle, 'padrão');
+      expect(status.offersModel, isTrue);
+      expect(status.context, isNull);
+      expect(status.dial.levels, ['low', 'medium', 'high']);
+    },
+  );
+
+  group('evento ilegível', () {
+    late List<String> failures;
+
+    setUp(() {
+      failures = [];
+      final previous = ParseFailures.sink;
+      ParseFailures.reset();
+      ParseFailures.sink = (what, error, stack) => failures.add(what);
+      addTearDown(() {
+        ParseFailures.sink = previous;
+        ParseFailures.reset();
+      });
+    });
+
+    Map<String, Object?> broken() => {
+      ...events['node_agent']!,
+      'agent': {'model_title': 'x', 'dial': 'quebrado'},
+    };
+
+    test('antes do primeiro estado bom: a faixa mostra o que der', () async {
+      final seen = <AgentStatus>[];
+      final sub = repository.watch('claude').listen(seen.add);
+      await pump();
+      harness.connection.say(broken());
+      await pump();
+      harness.connection.say(events['node_agent']!);
+      await pump();
+
+      expect(failures, ['node/$wb/claude']);
+      expect(seen, hasLength(2));
+      expect(seen.first.modelTitle, 'padrão');
+      expect(seen.last.modelTitle, 'Opus 5.5');
+      await sub.cancel();
+    });
+
+    test('depois de um estado bom: nada emitido, o último continua', () async {
+      final seen = <AgentStatus>[];
+      final sub = repository.watch('claude').listen(seen.add);
+      await pump();
+      harness.connection.say(events['node_agent']!);
+      await pump();
+      harness.connection.say(broken());
+      await pump();
+
+      expect(failures, hasLength(1));
+      expect(seen.single.modelTitle, 'Opus 5.5');
+      await sub.cancel();
+    });
+
+    test('a mesma falha repetida registra uma linha só', () async {
+      final sub = repository.watch('claude').listen((_) {});
+      await pump();
+      harness.connection.say(broken());
+      harness.connection.say(broken());
+      harness.connection.say(broken());
+      await pump();
+
+      expect(failures, hasLength(1));
+      expect(ParseFailures.counts.values.single, 3);
+      await sub.cancel();
+    });
   });
 
   test('o estado do nó web ou da fila não vira agente', () async {

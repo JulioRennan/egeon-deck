@@ -6,13 +6,13 @@ import 'package:egeon_deck/features/processes/domain/repository/processes_reposi
 import 'package:egeon_deck/features/processes/domain/usecase/manage_processes.dart';
 import 'package:egeon_deck/features/processes/presentation/cubit/processes_cubit.dart';
 import 'package:egeon_deck/features/processes/presentation/widgets/processes_panel.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/eg_host.dart';
 import '../../support/fake_processes_repository.dart';
 import '../../support/inject_fakes.dart';
 import '../../support/pump.dart';
@@ -179,40 +179,32 @@ void main() {
       addTearDown(tester.view.reset);
       injectFakes(processes: repo);
       await tester.pumpWidget(
-        WidgetsApp(
-          color: const Color(0xFF000000),
-          textStyle: AppTheme.textStyle,
-          builder: (context, _) => Overlay(
-            initialEntries: [
-              OverlayEntry(
-                builder: (context) => Align(
-                  alignment: Alignment.topLeft,
-                  child: Builder(
-                    builder: (context) {
-                      below = context;
-                      return Focus(
-                        autofocus: true,
-                        onKeyEvent: (_, event) {
-                          if (event is KeyDownEvent) {
-                            terminalKeys.add(event.logicalKey);
-                          }
-                          return KeyEventResult.handled;
-                        },
-                        child: GestureDetector(
-                          key: const ValueKey('open'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            belowTaps++;
-                            showProcessesPanel(context);
-                          },
-                          child: const SizedBox(width: 40, height: 40),
-                        ),
-                      );
+        egHost(
+          Align(
+            alignment: Alignment.topLeft,
+            child: Builder(
+              builder: (context) {
+                below = context;
+                return Focus(
+                  autofocus: true,
+                  onKeyEvent: (_, event) {
+                    if (event is KeyDownEvent) {
+                      terminalKeys.add(event.logicalKey);
+                    }
+                    return KeyEventResult.handled;
+                  },
+                  child: GestureDetector(
+                    key: const ValueKey('open'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      belowTaps++;
+                      showProcessesPanel(context);
                     },
+                    child: const SizedBox(width: 40, height: 40),
                   ),
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
         ),
       );
@@ -249,16 +241,16 @@ void main() {
       expect(identical(first, second), isTrue);
       expect(
         tester
-            .widget<ColoredBox>(
+            .widget<Container>(
               find
                   .descendant(
                     of: find.byKey(const ValueKey('process-100')),
-                    matching: find.byType(ColoredBox),
+                    matching: find.byType(Container),
                   )
                   .first,
             )
-            .color,
-        isNot(const Color(0x00000000)),
+            .decoration,
+        isA<BoxDecoration>().having((d) => d.color, 'cor', isNotNull),
         reason: 'o estado (a seleção) segue o mesmo',
       );
       var closed = false;
@@ -310,7 +302,7 @@ void main() {
 
       final grip = find.byKey(const ValueKey('processes-resize'));
       final before = tester.getBottomRight(grip);
-      await tester.drag(grip, const Offset(-200, -100));
+      await tester.drag(grip, const Offset(-60, -100));
       await tester.pump();
       expect(tester.getBottomRight(grip).dx, lessThan(before.dx));
 
@@ -321,7 +313,7 @@ void main() {
       expect(tester.getTopLeft(title), moved);
     });
 
-    testWidgets('mostra a tabela, o resumo do core e o órfão em laranja', (
+    testWidgets('mostra a tabela, o resumo do core e a etiqueta de órfão', (
       tester,
     ) async {
       await pumpPanel(tester);
@@ -332,13 +324,13 @@ void main() {
         expect(find.byKey(ValueKey('process-$pid')), findsOneWidget);
       }
       expect(find.text('claude --resume'), findsOneWidget);
-      expect(find.text('app'), findsOneWidget, reason: 'sem nó é o app');
+      expect(find.text('—'), findsOneWidget, reason: 'sem nó é o app');
       expect(find.text('órfão'), findsNWidgets(2));
     });
 
     testWidgets('o filtro de órfãos esconde os do app', (tester) async {
       await pumpPanel(tester);
-      await tester.tap(find.byKey(const ValueKey('filter-orphans')));
+      await tester.tap(find.text('Órfãos'));
       await tester.pump();
       expect(find.byKey(const ValueKey('process-100')), findsNothing);
       expect(find.byKey(const ValueKey('process-300')), findsOneWidget);
@@ -444,18 +436,18 @@ void main() {
       await pumpPanel(tester);
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await mouse.addPointer(location: Offset.zero);
-      for (final key in [
-        'filter-all',
-        'filter-orphans',
-        'process-100',
-        'processes-close',
+      for (final target in [
+        find.text('Todos'),
+        find.text('Órfãos'),
+        find.byKey(const ValueKey('process-100')),
+        find.byKey(const ValueKey('processes-close')),
       ]) {
-        await mouse.moveTo(tester.getCenter(find.byKey(ValueKey(key))));
+        await mouse.moveTo(tester.getCenter(target));
         await tester.pump();
         expect(
           RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
           SystemMouseCursors.click,
-          reason: key,
+          reason: '$target',
         );
       }
     });

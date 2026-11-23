@@ -117,7 +117,7 @@ class AgentStatus {
           : EffortDialView.fromMap(map['dial']! as Map<String, Object?>),
       offersEffort: map['offers_effort'] as bool? ?? true,
       ultracode: ultracode == null ? null : Ultracode.fromMap(ultracode),
-      context: context == null ? null : ContextReading.fromMap(context),
+      context: context == null ? null : ContextReading.tryFromMap(context),
       clearable: map['clearable'] as bool? ?? true,
     );
   }

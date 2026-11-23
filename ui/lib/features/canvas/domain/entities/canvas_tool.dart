@@ -6,24 +6,25 @@ import 'dart:ui';
 /// digitar no terminal. As outras armam o próximo clique no canvas.
 enum CanvasTool {
   cursor,
-  terminal,
+  shell,
+  agent,
   web,
   queue;
 
-  /// A dica do botão na barra.
-  String get tooltip => switch (this) {
-    cursor => 'Cursor — arrastar o canvas, mover nós (⌘V)',
-    terminal => 'Terminal — clique ou arraste no canvas (⌘T)',
-    web => 'Web — clique ou arraste no canvas (⌘W)',
-    queue =>
-      'Fila de prompts — anote pedidos com print e mande um a um ao agente '
-          'ligado',
+  /// O nome do botão na barra.
+  String get label => switch (this) {
+    cursor => 'Cursor',
+    shell => 'Shell',
+    agent => 'Terminal de agente',
+    web => 'Web',
+    queue => 'Fila de prompts',
   };
 
   /// Que tipo de nó esta ferramenta cria. Nem toda ferramenta cria nó.
   NodeKind? get nodeKind => switch (this) {
     cursor => null,
-    terminal => NodeKind.shell,
+    shell => NodeKind.shell,
+    agent => NodeKind.agent,
     web => NodeKind.web,
     queue => NodeKind.queue,
   };

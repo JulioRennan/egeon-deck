@@ -62,4 +62,29 @@ void main() {
     expect(status.context, const ContextReading(used: 10, window: 100));
     expect(AgentStatus.fromMap(status.toMap()).toMap(), status.toMap());
   });
+
+  test(
+    'sem leitura do transcript (used e window nulos) o estado ainda chega',
+    () {
+      // O retrato que o core manda de um agente recém-aberto: a regra de não
+      // quebrar aqui é o que faz a faixa do maestro aparecer de primeira.
+      final status = AgentStatus.fromMap({
+        'model_title': 'padrão',
+        'offers_model': true,
+        'offers_effort': true,
+        'dial': {
+          'levels': ['low', 'medium', 'high'],
+          'index': 0,
+          'auto': true,
+          'pending': false,
+          'label': '',
+        },
+        'context': {'used': null, 'window': null},
+        'clearable': true,
+      });
+      expect(status.context, isNull);
+      expect(status.modelTitle, 'padrão');
+      expect(status.offersModel, isTrue);
+    },
+  );
 }

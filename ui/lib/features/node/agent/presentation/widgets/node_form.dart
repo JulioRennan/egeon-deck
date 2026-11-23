@@ -1,16 +1,20 @@
+import '../../../../../commons/utils/effort_names.dart';
+
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../../commons/widgets/app_dialog.dart';
-import '../../../../../commons/widgets/app_text_field.dart';
-import '../../../../../commons/widgets/form_controls.dart';
-import '../../../../../commons/widgets/form_label.dart';
+import '../../../../../commons/widgets/form_dialog.dart';
+import '../../../../../commons/widgets/form_kit.dart';
 import '../../../../../core/adapters/injector.dart';
 import '../../../../../core/adapters/path_picker.dart';
 import '../../../../../core/domain/entities/workbench_node.dart';
-import '../../../../../theme/app_colors.dart';
+import '../../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../../commons/widgets/eg/pressable.dart';
+import '../../../../../theme/egeon_colors.dart';
+import '../../../../../theme/egeon_tokens.dart';
+import '../../../../../theme/egeon_type.dart';
 import '../../domain/entities/node_form_submit.dart';
 import '../../domain/entities/node_form_view.dart';
 import '../../domain/entities/node_screen.dart';
@@ -28,7 +32,7 @@ Future<String?> showNodeForm(
   Rect? frame,
   Rect? visible,
   String? root,
-}) => showAppDialog<String>(
+}) => showFormDialog<String>(
   context,
   width: 720,
   builder: (_, close) => BlocProvider(
@@ -172,7 +176,7 @@ class _NodeFormBodyState extends State<NodeFormBody> {
         builder: (context, state) => switch (state) {
           NodeFormOpening() => _frame(const SizedBox(height: 80), null),
           NodeFormUnavailable(:final error) => _frame(
-            Text(_message(error), style: _hint),
+            Text(_message(error), style: _hint(context)),
             null,
           ),
           NodeFormDone() => const SizedBox.shrink(),
@@ -180,14 +184,14 @@ class _NodeFormBodyState extends State<NodeFormBody> {
         },
       );
 
-  Widget _frame(Widget child, NodeFormOpen? open) => DialogBody(
+  Widget _frame(Widget child, NodeFormOpen? open) => FormDialogBody(
     title: _cubit.editing
         ? 'Configurar ${_cubit.target.nodeId}'
         : 'Novo terminal',
     message: 'O nome vira o id do nó e aparece no endereço de dispatch.',
     actions: [
-      DialogButton('Cancelar', onTap: widget.close),
-      DialogButton(
+      FormDialogButton('Cancelar', onTap: widget.close),
+      FormDialogButton(
         _cubit.editing ? 'Aplicar' : 'Criar',
         primary: true,
         enabled: open != null && open is! NodeFormSaving,
@@ -216,7 +220,7 @@ class _NodeFormBodyState extends State<NodeFormBody> {
         Text(
           _message(error),
           key: const ValueKey('node-form-error'),
-          style: _hint.copyWith(color: AppColors.attention),
+          style: _hint(context).copyWith(color: context.eg.attention),
         ),
       ],
     ],
@@ -236,7 +240,7 @@ class _NodeFormBodyState extends State<NodeFormBody> {
         ),
         const SizedBox(height: 14),
         const FormLabel('NOME'),
-        AppTextField(
+        FormTextField(
           key: const ValueKey('node-name'),
           controller: _name,
           placeholder: 'revisor, front end, build…',
@@ -260,7 +264,7 @@ class _NodeFormBodyState extends State<NodeFormBody> {
 
   List<Widget> _shellFields() => [
     const FormLabel('COMANDO — vazio abre o zsh'),
-    AppTextField(
+    FormTextField(
       key: const ValueKey('node-cmd'),
       controller: _cmd,
       placeholder: 'ex: npm run dev',
@@ -323,7 +327,10 @@ class _NodeFormBodyState extends State<NodeFormBody> {
                     const FormLabel('ESFORÇO'),
                     PopupField(
                       key: const ValueKey('node-effort'),
-                      items: [defaultLabel, ...screen.efforts],
+                      items: [
+                        defaultLabel,
+                        for (final e in screen.efforts) effortName(e),
+                      ],
                       selected: _index([null, ...screen.efforts], _effort),
                       onSelect: (i) => setState(
                         () => _effort = i == 0 ? null : screen.efforts[i - 1],
@@ -381,9 +388,9 @@ class _NodeFormBodyState extends State<NodeFormBody> {
         constraints: const BoxConstraints(maxHeight: 88),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
-          color: AppColors.black(0.25),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.white(0.14)),
+          color: context.eg.obsidian,
+          borderRadius: BorderRadius.circular(EgeonRadius.md),
+          border: Border.all(color: context.eg.line),
         ),
         child: ListView(
           shrinkWrap: true,
@@ -412,7 +419,7 @@ class _NodeFormBodyState extends State<NodeFormBody> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const FormLabel('PAPEL — quem este terminal é'),
-            AppTextField(
+            FormTextField(
               key: const ValueKey('node-prompt'),
               controller: _prompt,
               maxLines: 6,
@@ -427,7 +434,7 @@ class _NodeFormBodyState extends State<NodeFormBody> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const FormLabel('REGRAS — somam às da bancada'),
-            AppTextField(
+            FormTextField(
               key: const ValueKey('node-rules'),
               controller: _rules,
               maxLines: 6,
@@ -453,7 +460,7 @@ class _NodeFormBodyState extends State<NodeFormBody> {
             '"Criar do zero" e marque "Salvar como componente reutilizável" — '
             'ele aparece aqui da próxima vez.',
             textAlign: TextAlign.center,
-            style: _hint.copyWith(fontSize: 12),
+            style: _hint(context).copyWith(fontSize: 12),
           ),
         ),
       );
@@ -501,9 +508,8 @@ class _NodeFormBodyState extends State<NodeFormBody> {
   };
 }
 
-TextStyle get _hint => TextStyle(
-  fontSize: 11,
-  color: AppColors.white(0.5),
+TextStyle _hint(BuildContext context) => EgeonType.caption.copyWith(
+  color: context.eg.textMuted,
   decoration: TextDecoration.none,
 );
 
@@ -524,66 +530,57 @@ class _ComponentCard extends StatefulWidget {
 }
 
 class _ComponentCardState extends State<_ComponentCard> {
-  var _hovering = false;
-
   @override
   Widget build(BuildContext context) {
+    final c = context.eg;
     final component = widget.component;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: Container(
+    return Pressable(
+      onPressed: widget.onTap,
+      semanticLabel: component.name,
+      builder: (context, s) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: s.hovered ? c.accentSoft : c.steel,
+          borderRadius: BorderRadius.circular(EgeonRadius.lg),
+          border: Border.all(color: s.hovered ? c.accent : c.line),
+        ),
+        child: SizedBox(
           width: 132,
           height: 96,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
-            color: _hovering
-                ? AppColors.accent.withValues(alpha: 0.14)
-                : AppColors.white(0.04),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: _hovering
-                  ? AppColors.accent.withValues(alpha: 0.7)
-                  : AppColors.white(0.12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                EgIcon(
+                  component.kind == NodeKind.agent
+                      ? EgIcons.agent
+                      : EgIcons.terminal,
+                  size: 20,
+                  color: s.hovered ? c.accent : c.textSecondary,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  component.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: EgeonType.label.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  component.subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: _hint(context),
+                ),
+              ],
             ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                component.kind == NodeKind.agent ? '✦' : '›_',
-                style: TextStyle(
-                  fontSize: 20,
-                  color: _hovering ? AppColors.accent : AppColors.white(0.5),
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                component.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.white(0.9),
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                component.subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: _hint.copyWith(fontSize: 10),
-              ),
-            ],
           ),
         ),
       ),

@@ -1,6 +1,6 @@
 import 'package:flutter/painting.dart';
 
-import '../../../../../theme/app_theme.dart';
+import '../../../../../theme/egeon_type.dart';
 
 /// Tamanho de uma célula da grade, medido a partir da fonte do terminal.
 class TerminalMetrics {
@@ -20,10 +20,10 @@ class TerminalMetrics {
   }
 
   static const baseStyle = TextStyle(
-    fontFamily: AppTheme.terminalFontFamily,
-    fontFamilyFallback: AppTheme.terminalFontFamilyFallback,
-    fontSize: AppTheme.terminalFontSize,
-    height: 1.2,
+    fontFamily: EgeonType.mono,
+    fontFamilyFallback: EgeonType.monoFallback,
+    fontSize: 14,
+    height: 20 / 14,
     decoration: TextDecoration.none,
   );
 

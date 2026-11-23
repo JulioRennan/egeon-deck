@@ -24,8 +24,11 @@ class AppMenuActions {
     required this.showCanvas,
     required this.showChat,
     required this.toggleSidebar,
+    required this.findBench,
     required this.nextTab,
     required this.previousTab,
+    required this.back,
+    required this.forward,
     required this.closeTab,
     required this.showProcesses,
     required this.canvas,
@@ -37,8 +40,13 @@ class AppMenuActions {
   final VoidCallback showCanvas;
   final VoidCallback showChat;
   final VoidCallback toggleSidebar;
+
+  /// ⌘K: abre a gaveta de bancadas para escolher.
+  final VoidCallback findBench;
   final VoidCallback nextTab;
   final VoidCallback previousTab;
+  final VoidCallback back;
+  final VoidCallback forward;
   final VoidCallback closeTab;
   final VoidCallback showProcesses;
 
@@ -167,17 +175,17 @@ class AppMenu extends StatelessWidget {
                 shortcut: _meta(LogicalKeyboardKey.arrowLeft),
                 onSelected: actions.previousTab,
               ),
-              // No Swift estes dois e os "Aba n" são itens escondidos; a barra
-              // da Flutter não esconde item, então eles aparecem.
+              // Voltar e Avançar não existem no Swift (lá ⌘[ ⌘] trocam de aba);
+              // aqui andam pelo histórico de bancadas da faixa de cima.
               PlatformMenuItem(
-                label: 'Próxima bancada',
+                label: 'Avançar',
                 shortcut: _meta(LogicalKeyboardKey.bracketRight),
-                onSelected: actions.nextTab,
+                onSelected: actions.forward,
               ),
               PlatformMenuItem(
-                label: 'Bancada anterior',
+                label: 'Voltar',
                 shortcut: _meta(LogicalKeyboardKey.bracketLeft),
-                onSelected: actions.previousTab,
+                onSelected: actions.back,
               ),
               PlatformMenuItem(
                 label: 'Fechar a aba',
@@ -275,9 +283,14 @@ class AppMenu extends StatelessWidget {
                 onSelected: actions.showChat,
               ),
               PlatformMenuItem(
-                label: 'Recolher a barra de bancadas',
+                label: 'Abrir ou fechar a gaveta de bancadas',
                 shortcut: _meta(LogicalKeyboardKey.slash),
                 onSelected: actions.toggleSidebar,
+              ),
+              PlatformMenuItem(
+                label: 'Buscar bancada…',
+                shortcut: _meta(LogicalKeyboardKey.keyK),
+                onSelected: actions.findBench,
               ),
             ],
           ),
@@ -285,7 +298,7 @@ class AppMenu extends StatelessWidget {
             members: [
               for (final (label, tool) in [
                 ('Cursor', CanvasTool.cursor),
-                ('Novo terminal', CanvasTool.terminal),
+                ('Novo terminal', CanvasTool.agent),
                 ('Novo web', CanvasTool.web),
                 ('Nova fila', CanvasTool.queue),
               ])

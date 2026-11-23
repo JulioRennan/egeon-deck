@@ -7,16 +7,17 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../commons/widgets/screen_captures.dart';
 import '../../../../core/adapters/injector.dart';
 import '../../../../core/adapters/png_file.dart' as png_file;
+import '../../../../core/adapters/window_chrome.dart';
 import '../../../../core/adapters/window_frame.dart';
 import '../../../../core/domain/entities/view_mode.dart';
 import '../../../../core/domain/entities/workbench.dart';
 import '../../../canvas/domain/entities/canvas_probe.dart';
 import '../../../canvas/presentation/cubit/canvas_commands.dart';
+import '../../../sidebar/domain/usecase/copy_project_path.dart';
 import '../../../sidebar/presentation/cubit/sidebar_cubit.dart';
 import '../../../sidebar/presentation/page/sidebar_page.dart';
-import '../../../sidebar/presentation/widgets/sidebar_panel.dart';
 import '../../../tabs/presentation/cubit/tabs_cubit.dart';
-import '../../../tabs/presentation/page/tabs_page.dart';
+import '../cubit/navigation_cubit.dart';
 import '../cubit/shell_cubit.dart';
 import '../cubit/ui_request_cubit.dart';
 import '../forms/app_forms.dart';
@@ -24,11 +25,16 @@ import '../forms/form_request.dart';
 import '../../../update/presentation/widgets/update_host.dart';
 import '../../../processes/presentation/widgets/processes_panel.dart';
 import '../widgets/app_menu.dart';
+import '../../../../commons/widgets/shell_layers.dart';
 import '../widgets/usage_corner.dart';
 import '../widgets/root_layout.dart';
 import '../widgets/shell_shortcuts.dart';
 import '../widgets/shell_curtains.dart';
-import '../widgets/view_toolbar.dart';
+import '../../../sidebar/presentation/widgets/sidebar_commands.dart';
+import '../widgets/bench_drawer.dart';
+import '../widgets/drawer_hover.dart';
+import '../widgets/bench_rail.dart';
+import '../widgets/top_bar.dart';
 import '../widgets/workbench_shell.dart';
 import 'shell_screen_control.dart';
 
@@ -49,6 +55,7 @@ class HomeShellPage extends StatefulWidget {
     this.appName = 'EgeonDeck Next',
     this.title = 'Egeon Deck',
     this.window = const ChannelWindowFrame(),
+    this.chrome = const ChannelWindowChrome(),
     this.activator = const ChannelWindowFrame(),
     this.writePng = png_file.writePng,
     super.key,
@@ -67,6 +74,7 @@ class HomeShellPage extends StatefulWidget {
 
   /// De onde vem a posição da janela, e como o PNG vai ao disco: o teste troca.
   final WindowFrameSource window;
+  final WindowChrome chrome;
   final WindowActivator activator;
   final Future<void> Function(String path, Uint8List png) writePng;
 
@@ -78,6 +86,16 @@ class _HomeShellPageState extends State<HomeShellPage> {
   late final OverlayEntry _entry = OverlayEntry(builder: _build);
   final _captures = ScreenCaptures();
 
+  /// O grupo do clique fora da gaveta: o botão do trilho que a abre é dele.
+  final _drawerGroup = Object();
+
+  /// Lido na hora: o cubit da casca nasce abaixo deste estado.
+  late final _drawerHover = DrawerHover(
+    onOpen: () => _shellContext?.read<ShellCubit>().peek(),
+    onClose: () => _shellContext?.read<ShellCubit>().endPeek(),
+  );
+  BuildContext? _shellContext;
+
   @override
   void didUpdateWidget(HomeShellPage old) {
     super.didUpdateWidget(old);
@@ -86,6 +104,7 @@ class _HomeShellPageState extends State<HomeShellPage> {
 
   @override
   void dispose() {
+    _drawerHover.dispose();
     _entry.remove();
     super.dispose();
   }
@@ -98,6 +117,7 @@ class _HomeShellPageState extends State<HomeShellPage> {
       BlocProvider(lazy: false, create: (_) => inject<ShellCubit>()),
       BlocProvider(lazy: false, create: (_) => inject<TabsCubit>()),
       BlocProvider(lazy: false, create: (_) => inject<SidebarCubit>()),
+      BlocProvider(lazy: false, create: (_) => inject<NavigationCubit>()),
       BlocProvider(
         lazy: false,
         create: (context) => inject<UiRequestCubit>((
@@ -116,10 +136,19 @@ class _HomeShellPageState extends State<HomeShellPage> {
     child: Overlay(initialEntries: [_entry]),
   );
 
+  /// ⌘K: abre a gaveta e pede à barra que abra a busca.
+  void _findBench(ShellCubit shell, SidebarCubit sidebar) {
+    shell.setCollapsed(false);
+    sidebar.requestFind();
+  }
+
   /// Roda abaixo do `Overlay`: é este `context` que as janelas usam.
   Widget _build(BuildContext overlayContext) {
+    _shellContext = overlayContext;
     final shell = overlayContext.read<ShellCubit>();
     final tabs = overlayContext.read<TabsCubit>();
+    final navigation = overlayContext.read<NavigationCubit>();
+    final sidebar = overlayContext.read<SidebarCubit>();
     return UpdateHost(
       dialogContext: () => overlayContext,
       onShowProcesses: () =>
@@ -130,8 +159,11 @@ class _HomeShellPageState extends State<HomeShellPage> {
           showCanvas: () => shell.setView(ViewMode.canvas),
           showChat: () => shell.setView(ViewMode.chat),
           toggleSidebar: shell.toggleCollapsed,
+          findBench: () => _findBench(shell, sidebar),
           nextTab: tabs.next,
           previousTab: tabs.previous,
+          back: navigation.back,
+          forward: navigation.forward,
           closeTab: tabs.closeActive,
           pickTab: tabs.selectNumber,
           showProcesses: () => unawaited(
@@ -147,43 +179,64 @@ class _HomeShellPageState extends State<HomeShellPage> {
             final busy = view.snapshot.busy;
             final banner = view.snapshot.banner;
             final lock = view.snapshot.lock;
-            final collapsed = switch (view) {
-              ShellExpanded() => false,
-              ShellCollapsed() => true,
-            };
+            final collapsed = view is ShellCollapsed;
             void ask(FormRequest request) =>
                 widget.onForm(overlayContext, request);
             final layout = RootLayout(
               collapsed: collapsed,
               beside: mode == ViewMode.chat,
-              sidebar: RepaintBoundary(
-                key: _captures.keyFor('sidebar'),
-                child: SidebarPage(
-                  compact: collapsed,
-                  commands: _commands(shell, ask),
+              rail: BlocBuilder<TabsCubit, TabsState>(
+                builder: (context, tabsState) => BenchRail(
+                  tabs: tabsState.tabs,
+                  drawerOpen: !collapsed,
+                  drawerGroup: _drawerGroup,
+                  drawerHover: _drawerHover,
+                  onPick: tabs.select,
+                  onClose: tabs.closeTab,
+                  onReorder: tabs.reorder,
+                  onNew: () => ask(const NewBench()),
+                  onToggleDrawer: shell.toggleCollapsed,
                 ),
               ),
-              shell: (contentInset, tabsInset) => WorkbenchShell(
-                contentInset: contentInset,
-                toolbar: ViewToolbar(
-                  bench: bench,
-                  trailing: bench == null
-                      ? null
-                      : UsageCorner(workbenchId: bench.id),
-                  onSelect: shell.setView,
-                  onPickColor: () {
-                    if (bench != null) {
-                      ask(
-                        RecolorBench(
-                          bench.id,
-                          bench.name,
-                          current: bench.color,
-                        ),
-                      );
-                    }
-                  },
+              drawer: BenchDrawer(
+                open: !collapsed,
+                group: _drawerGroup,
+                hover: _drawerHover,
+                onClose: () => shell.setCollapsed(true),
+                child: RepaintBoundary(
+                  key: _captures.keyFor('sidebar'),
+                  child: SidebarPage(
+                    commands: _commands(shell, ask),
+                    onCollapse: () => shell.setCollapsed(true),
+                  ),
                 ),
-                tabs: TabsPage(leftInset: tabsInset),
+              ),
+              shell: (frameLeft) => WorkbenchShell(
+                leftInset: frameLeft,
+                colorName: bench?.color,
+                lit: bench != null,
+                topBar: BlocBuilder<NavigationCubit, NavigationState>(
+                  builder: (context, history) => TopBar(
+                    bench: bench,
+                    projectName: view.snapshot.projectName,
+                    chrome: widget.chrome,
+                    canGoBack: history.canGoBack,
+                    canGoForward: history.canGoForward,
+                    onBack: navigation.back,
+                    onForward: navigation.forward,
+                    onSelectView: shell.setView,
+                    onPickBench: shell.toggleCollapsed,
+                  ),
+                ),
+                // O consumo no canto, no canvas e no chat: a camada fixa do canto.
+                layers: bench == null
+                    ? null
+                    : ShellLayers(
+                        corner: UsageCorner(
+                          workbenchId: bench.id,
+                          clock: view.snapshot.clock,
+                        ),
+                      ),
                 content: bench != null && mode == ViewMode.chat
                     ? widget.chat(context, bench)
                     : widget.canvas(context, bench),
@@ -211,9 +264,12 @@ class _HomeShellPageState extends State<HomeShellPage> {
             return ShellShortcuts(
               actions: ShellShortcutActions(
                 toggleSidebar: shell.toggleCollapsed,
+                findBench: () => _findBench(shell, sidebar),
                 showView: shell.setView,
                 nextTab: tabs.next,
                 previousTab: tabs.previous,
+                back: navigation.back,
+                forward: navigation.forward,
                 closeTab: tabs.closeActive,
                 pickTab: tabs.selectNumber,
                 copyTargets: shell.copyTargets,
@@ -239,7 +295,6 @@ class _HomeShellPageState extends State<HomeShellPage> {
     ShellCubit cubit,
     void Function(FormRequest) onForm,
   ) => SidebarCommands(
-    onToggleCollapse: cubit.toggleCollapsed,
     onCreateWorkspace: () => onForm(const NewWorkspace()),
     onCreateBench: () => onForm(const NewBench()),
     onCreateBenchFromWorktree: () => onForm(const NewBench(fromWorktree: true)),
@@ -264,5 +319,7 @@ class _HomeShellPageState extends State<HomeShellPage> {
     onRecolor: (b) => onForm(RecolorBench(b.id, b.name, current: b.color)),
     onClear: (b) => onForm(ClearBench(b.id, b.name)),
     onRemove: (b) => onForm(RemoveBench(b.id, b.name)),
+    onSaveAsTemplate: (b) => onForm(SaveAsTemplate(b.id, b.name)),
+    onCopyPath: (p) => unawaited(inject<CopyProjectPath>()(p.path)),
   );
 }

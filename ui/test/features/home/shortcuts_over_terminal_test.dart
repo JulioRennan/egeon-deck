@@ -35,9 +35,12 @@ void main() {
         child: ShellShortcuts(
           actions: ShellShortcutActions(
             toggleSidebar: () => calls.add('barra'),
+            findBench: () => calls.add('busca'),
             showView: (mode) => calls.add('modo:${mode.wire}'),
             nextTab: () => calls.add('próxima'),
             previousTab: () => calls.add('anterior'),
+            back: () => calls.add('voltar'),
+            forward: () => calls.add('avançar'),
             closeTab: () => calls.add('fechar'),
             pickTab: (n) => calls.add('aba$n'),
           ),
@@ -58,12 +61,12 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('os atalhos de aba com ⌘ não chegam ao pty', (tester) async {
+  testWidgets('os atalhos da casca com ⌘ não chegam ao pty', (tester) async {
     await mount(tester);
     await command(tester, LogicalKeyboardKey.digit1);
     await command(tester, LogicalKeyboardKey.bracketRight);
     await command(tester, LogicalKeyboardKey.keyW);
-    expect(calls, ['aba1', 'próxima', 'fechar']);
+    expect(calls, ['aba1', 'avançar', 'fechar']);
     expect(repository.keys, isEmpty);
     expect(repository.texts, isEmpty);
     expect(repository.pastes, isEmpty);

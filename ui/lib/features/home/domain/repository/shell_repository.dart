@@ -8,6 +8,9 @@ abstract interface class ShellRepository {
 
   Future<void> setView(ViewMode mode);
 
+  /// Põe a bancada na tela (a mesma troca de aba que o core já faz).
+  Future<void> activate(String benchId);
+
   Future<void> openSettings();
 
   Future<void> askAccessAgain();

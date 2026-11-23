@@ -244,6 +244,10 @@ pub struct NodeView {
     pub cwd: Option<String>,
     /// Onde o processo abre, já resolvido e com `~`: o subtítulo do card.
     pub dir: String,
+    /// O subtítulo de um card que não é pasta: a fila diz quantas tarefas
+    /// esperam (`QueueNode.swift:143`). Ausente nos demais nós.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cmd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

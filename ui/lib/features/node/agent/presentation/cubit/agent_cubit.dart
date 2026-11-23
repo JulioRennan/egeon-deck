@@ -21,7 +21,7 @@ class AgentCubit extends Cubit<AgentState> {
     required this._choose,
     required this._clear,
   }) : super(const AgentWaiting()) {
-    _subscription = watch(nodeId).listen(_onStatus);
+    _subscription = watch(nodeId).listen(_onStatus, onError: _onUnreadable);
   }
 
   final String nodeId;
@@ -30,6 +30,17 @@ class AgentCubit extends Cubit<AgentState> {
   StreamSubscription<AgentStatus>? _subscription;
 
   void _onStatus(AgentStatus status) => emit(AgentShown(status));
+
+  /// A assinatura falhou (a conexão com o core caiu): a faixa do agente não
+  /// pode ficar vazia. Sem nada na tela ainda, vale o que se sabe (o CLI
+  /// padrão, sem limpar); com a faixa já à vista, ela fica como está até o
+  /// próximo estado. Leitura de estado ilegível o repositório já resolve.
+  void _onUnreadable(Object error, StackTrace stack) {
+    if (error is! AgentError) return;
+    if (state is AgentWaiting) {
+      emit(const AgentShown(AgentStatus(clearable: false)));
+    }
+  }
 
   void chooseModel(String? model) => _fire(_choose(nodeId, ModelPick(model)));
 

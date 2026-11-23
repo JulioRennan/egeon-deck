@@ -1,3 +1,5 @@
+import 'event_parsing.dart';
+
 import 'dart:async';
 
 import '../domain/entities/organization.dart';
@@ -25,7 +27,7 @@ class OrganizationFeed {
   void _attach() {
     _subscription = _client
         .subscribe('workspaces')
-        .map(Organization.fromMap)
+        .parsed('workspaces', Organization.fromMap)
         .listen((org) {
           _last = org;
           _controller.add(org);

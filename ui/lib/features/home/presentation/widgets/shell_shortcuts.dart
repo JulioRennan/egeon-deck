@@ -7,9 +7,12 @@ import '../../../../core/domain/entities/view_mode.dart';
 class ShellShortcutActions {
   const ShellShortcutActions({
     required this.toggleSidebar,
+    required this.findBench,
     required this.showView,
     required this.nextTab,
     required this.previousTab,
+    required this.back,
+    required this.forward,
     required this.closeTab,
     required this.pickTab,
     this.copyTargets,
@@ -20,9 +23,16 @@ class ShellShortcutActions {
   });
 
   final VoidCallback toggleSidebar;
+
+  /// ⌘K: abre a gaveta de bancadas.
+  final VoidCallback findBench;
   final ValueChanged<ViewMode> showView;
   final VoidCallback nextTab;
   final VoidCallback previousTab;
+
+  /// ⌘[ e ⌘]: voltar e avançar entre as bancadas por onde se passou.
+  final VoidCallback back;
+  final VoidCallback forward;
   final VoidCallback closeTab;
 
   /// ⌘1…⌘9: a aba de número n (a primeira é 1).
@@ -44,8 +54,10 @@ class ShellShortcutActions {
 /// focado ou não. Teclas com ⌘ nunca chegam ao terminal — só o colar —, então
 /// o evento sobe até aqui.
 ///
-/// - ⌘/ recolhe a barra · ⌥⌘1 canvas · ⌥⌘2 chat
-/// - ⌘→ ⌘] aba da direita · ⌘← ⌘[ aba da esquerda · ⌘W fecha a aba
+/// - ⌘/ abre e fecha a gaveta de bancadas · ⌘K abre para buscar
+/// - ⌥⌘1 canvas · ⌥⌘2 chat
+/// - ⌘→ aba da direita · ⌘← aba da esquerda · ⌘W fecha a aba
+/// - ⌘[ volta · ⌘] avança (as bancadas por onde se passou)
 /// - ⌘1…⌘9 vai à aba de número n
 /// - ⇧⌘T copia os alvos de dispatch · ⌥⌘P abre Processos
 /// - ⌘= aproxima · ⌘- afasta · ⌘0 volta a 100%
@@ -93,6 +105,8 @@ class ShellShortcuts extends StatelessWidget {
     bindings: {
       const SingleActivator(LogicalKeyboardKey.slash, meta: true):
           actions.toggleSidebar,
+      const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+          actions.findBench,
       const SingleActivator(
         LogicalKeyboardKey.digit1,
         meta: true,
@@ -106,9 +120,9 @@ class ShellShortcuts extends StatelessWidget {
       ): () =>
           actions.showView(ViewMode.chat),
       const SingleActivator(LogicalKeyboardKey.bracketRight, meta: true):
-          actions.nextTab,
+          actions.forward,
       const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true):
-          actions.previousTab,
+          actions.back,
       const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
           actions.closeTab,
       for (var n = 1; n <= 9; n++)

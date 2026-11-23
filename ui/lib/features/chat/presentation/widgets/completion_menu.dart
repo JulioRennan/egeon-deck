@@ -3,8 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../../../commons/widgets/hand_cursor.dart';
-import '../../../../theme/app_colors.dart';
 import '../../domain/entities/chat_completion.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
 
 /// O menu de @menção e /slash acima da caixa de mensagem, com um título que diz
 /// o que é. A linha escolhida (setas) vai com Enter ou Tab e fica sempre à
@@ -95,9 +96,9 @@ class _CompletionMenuState extends State<CompletionMenu> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.only(top: 8, bottom: 6),
           decoration: BoxDecoration(
-            color: const Color(0xF7141926),
+            color: context.eg.carbon,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.white(0.12)),
+            border: Border.all(color: context.eg.lineStrong),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -110,11 +111,9 @@ class _CompletionMenuState extends State<CompletionMenu> {
                   key: const ValueKey('completion-title'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.4,
-                    color: AppColors.white(0.45),
+                  style: EgeonType.caption.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: context.eg.textMuted,
                     decoration: TextDecoration.none,
                   ),
                 ),
@@ -136,7 +135,7 @@ class _CompletionMenuState extends State<CompletionMenu> {
   );
 
   Widget _row(int i, CompletionItem item) {
-    final (glyph, color) = _glyph(item.kind);
+    final (glyph, color) = _glyph(context.eg, item.kind);
     return HandCursor(
       child: GestureDetector(
         key: ValueKey('completion-$i'),
@@ -146,9 +145,7 @@ class _CompletionMenuState extends State<CompletionMenu> {
           margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: i == widget.selected
-                ? AppColors.accent.withValues(alpha: 0.35)
-                : null,
+            color: i == widget.selected ? context.eg.accentSoft : null,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -167,10 +164,9 @@ class _CompletionMenuState extends State<CompletionMenu> {
               const SizedBox(width: 6),
               Text(
                 item.label,
-                style: const TextStyle(
-                  fontSize: 12.5,
+                style: EgeonType.small.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFFFFFFFF),
+                  color: context.eg.textPrimary,
                   decoration: TextDecoration.none,
                 ),
               ),
@@ -181,9 +177,8 @@ class _CompletionMenuState extends State<CompletionMenu> {
                     detail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.white(0.5),
+                    style: EgeonType.caption.copyWith(
+                      color: context.eg.textMuted,
                       decoration: TextDecoration.none,
                     ),
                   ),
@@ -196,12 +191,12 @@ class _CompletionMenuState extends State<CompletionMenu> {
   }
 
   /// O glifo diz de onde vem o comando, como na lista do Swift.
-  static (String, Color) _glyph(String kind) => switch (kind) {
-    'agent' => ('✦', AppColors.accent),
-    'builtin' => ('/', const Color(0xFF999999)),
-    'bundled' => ('✦', const Color(0xFFFF9F0A)),
-    'user' => ('★', const Color(0xFFFFD60A)),
-    'project' => ('◆', const Color(0xFF64D2FF)),
-    _ => ('⬢', const Color(0xFFBF5AF2)),
+  static (String, Color) _glyph(EgeonColors c, String kind) => switch (kind) {
+    'agent' => ('✦', c.accent),
+    'builtin' => ('/', c.textSecondary),
+    'bundled' => ('✦', c.attention),
+    'user' => ('★', c.idSand),
+    'project' => ('◆', c.idSky),
+    _ => ('⬢', c.idOrchid),
   };
 }

@@ -4,7 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/sidebar_cubit.dart';
 import '../widgets/bench_actions.dart';
 import '../widgets/group_actions.dart';
-import '../widgets/sidebar_segments.dart';
+import '../../domain/entities/sidebar_tab.dart';
+import '../widgets/sidebar_commands.dart';
 import '../widgets/sidebar_drop.dart';
 import '../widgets/sidebar_panel.dart';
 
@@ -12,10 +13,12 @@ import '../widgets/sidebar_panel.dart';
 /// formulário volta para a casca por [commands]. Precisa de um [SidebarCubit]
 /// acima, que a casca provê: ela também muda a aba quando o core pede de fora.
 class SidebarPage extends StatelessWidget {
-  const SidebarPage({required this.commands, this.compact = false, super.key});
+  const SidebarPage({required this.commands, this.onCollapse, super.key});
 
   final SidebarCommands commands;
-  final bool compact;
+
+  /// Recolher a gaveta: o último botão do cabeçalho.
+  final VoidCallback? onCollapse;
 
   @override
   Widget build(BuildContext context) {
@@ -29,8 +32,10 @@ class SidebarPage extends StatelessWidget {
             SidebarActive() => SidebarTab.active,
           },
           onTab: cubit.showTab,
-          compact: compact,
+          findRequests: cubit.findRequests,
+          takeFindPending: cubit.takeFindPending,
           commands: commands,
+          onCollapse: onCollapse,
           onDrop: (item, target) => _drop(cubit, item, target),
           onPlan: cubit.planMove,
           groups: GroupActions(

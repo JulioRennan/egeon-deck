@@ -1,6 +1,4 @@
 import 'package:egeon_deck/core/domain/entities/workbench.dart';
-import 'package:egeon_deck/core/domain/entities/workbench_clock.dart';
-import 'package:egeon_deck/features/workbench/presentation/widgets/clock_chip.dart';
 import 'package:egeon_deck/core/domain/entities/workbench_node.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
 import 'package:egeon_deck/features/canvas/presentation/cubit/canvas_cubit.dart';
@@ -25,10 +23,14 @@ import '../../support/in_memory_queue_repository.dart';
 import '../../support/in_memory_web_repository.dart';
 import '../../support/fake_workbench_repository.dart';
 import '../../support/inject_fakes.dart';
-import '../../support/overlay_host.dart';
+import '../../support/eg_host.dart';
 
 const bench = Workbench(id: 'b1', name: 'deck', path: '~/deck');
 const link = EdgeLink(a: 'claude', b: 'sh1', aToB: false, bToA: true);
+
+/// O canvas leva o tema do design system (a grade e a barra o leem).
+Widget overlayHost(Widget child, {Size size = const Size(1000, 800)}) =>
+    egHost(child, size: size, fill: true);
 
 void main() {
   group('o limite da ligação', () {
@@ -200,7 +202,6 @@ void main() {
     Future<void> mountCanvas(
       WidgetTester tester,
       Workbench shown, {
-      WorkbenchClock? clock,
       FakeWorkbenchRepository? workbenches,
     }) async {
       tester.view.physicalSize = const Size(1400, 900);
@@ -208,10 +209,7 @@ void main() {
       addTearDown(tester.view.reset);
       injectCanvas(workbenches: workbenches);
       await tester.pumpWidget(
-        overlayHost(
-          WorkbenchCanvas(bench: shown, clock: clock),
-          size: const Size(1400, 900),
-        ),
+        overlayHost(WorkbenchCanvas(bench: shown), size: const Size(1400, 900)),
       );
       await tester.pump();
       await tester.pump();
@@ -281,7 +279,7 @@ void main() {
       await mountCanvas(tester, bench);
       await tester.tap(find.byKey(const ValueKey('agent-clear')));
       await tester.pump();
-      expect(find.text('Limpar a conversa de "claude"?'), findsOneWidget);
+      expect(find.text('Limpar o contexto de claude?'), findsOneWidget);
       await tester.tap(find.text('Cancelar'));
       await tester.pump();
       expect(agents.single.cleared, 0, reason: 'cancelar não limpa');
@@ -292,42 +290,6 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(agents.single.cleared, 1);
-    });
-
-    testWidgets('sem cronômetro (a bancada não rodou), sem a faixa', (
-      tester,
-    ) async {
-      await mountCanvas(tester, bench);
-      expect(find.byType(ClockChip), findsNothing);
-    });
-
-    testWidgets('o cronômetro da bancada fica sob a barra de ações', (
-      tester,
-    ) async {
-      await mountCanvas(
-        tester,
-        bench,
-        clock: const WorkbenchClock(running: 75),
-      );
-      expect(find.byType(ClockChip), findsOneWidget);
-      expect(find.textContaining('01:15'), findsOneWidget);
-    });
-
-    testWidgets('clicar no cronômetro oferece zerar, e zerar vai ao core', (
-      tester,
-    ) async {
-      final workbenches = FakeWorkbenchRepository();
-      await mountCanvas(
-        tester,
-        bench,
-        clock: const WorkbenchClock(running: 75),
-        workbenches: workbenches,
-      );
-      await tester.tap(find.byType(ClockChip));
-      await tester.pump();
-      await tester.tap(find.text('Zerar cronômetro'));
-      await tester.pump();
-      expect(workbenches.log, contains('zerar:${bench.id}'));
     });
 
     testWidgets('worktree de um terminal: o formulário dele reaponta só ele', (

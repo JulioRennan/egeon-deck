@@ -41,6 +41,9 @@ class FakeAgentRepository implements AgentRepository {
   );
 
   AgentStatus _status;
+
+  /// Um estado que a UI não consegue ler: a assinatura só erra.
+  Object? failure;
   final _changes = StreamController<void>.broadcast();
   final choices = <ModelChoice>[];
   var cleared = 0;
@@ -57,7 +60,11 @@ class FakeAgentRepository implements AgentRepository {
     StreamSubscription<void>? changes;
     controller = StreamController<AgentStatus>(
       onListen: () {
-        controller.add(_status);
+        if (failure != null) {
+          controller.addError(failure!);
+        } else {
+          controller.add(_status);
+        }
         changes = _changes.stream.listen((_) => controller.add(_status));
       },
       onCancel: () => changes?.cancel(),

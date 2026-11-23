@@ -28,6 +28,10 @@ class SocketShellRepository implements ShellRepository {
     await _command('set_workbench', {'workbench': bench.id, 'view': mode.wire});
   }
 
+  @override
+  Future<void> activate(String benchId) =>
+      _command('activate_workbench', {'workbench': benchId});
+
   /// Os dois botões da cortina "sem acesso" valem para a bancada na tela. O
   /// resultado chega pela releitura do estado: a cortina some quando a pasta
   /// abre.

@@ -1,16 +1,23 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/spinner.dart';
-import '../../../node/card/presentation/widgets/card_status.dart'
-    show ActivityColors;
-import '../../../../theme/app_colors.dart';
+import '../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../commons/widgets/eg/pressable.dart';
+import '../../../../commons/widgets/eg/status.dart';
+import '../../../../commons/widgets/eg/status_dot.dart';
+import '../../../../commons/widgets/eg/tooltip.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
+import '../../../node/card/domain/entities/card_activity.dart'
+    show ActivityTone;
 import '../../domain/entities/chat_block.dart';
 import '../../domain/entities/chat_participant.dart';
 import '../../domain/entities/chat_queue.dart';
 import 'chat_palette.dart';
 
-/// A coluna de quem está na conversa: agentes em cima, terminais embaixo. O
-/// clique põe em foco — é para o focado que o composer manda.
+/// A coluna de quem está na conversa (`Participant` do DS): "Participantes",
+/// cada agente com o nome na cor, o endereço em mono e o estado em ponto; os
+/// terminais depois; e as filas de prompts como participantes à parte. O clique
+/// põe em foco — é para o focado que o composer manda.
 class ParticipantsColumn extends StatelessWidget {
   const ParticipantsColumn({
     required this.participants,
@@ -23,7 +30,7 @@ class ParticipantsColumn extends StatelessWidget {
     super.key,
   });
 
-  static const width = 216.0;
+  static const width = 232.0;
 
   final List<ChatParticipantInfo> participants;
 
@@ -40,6 +47,7 @@ class ParticipantsColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.eg;
     final agents = [
       for (final p in participants)
         if (p.isAgent) p,
@@ -48,66 +56,54 @@ class ParticipantsColumn extends StatelessWidget {
       for (final p in participants)
         if (!p.isAgent) p,
     ];
-    return Container(
-      width: width,
-      margin: const EdgeInsets.fromLTRB(0, 10, 10, 10),
-      padding: const EdgeInsets.all(8),
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.white(0.045),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.white(0.09)),
+        border: Border(right: BorderSide(color: c.lineSubtle)),
       ),
-      child: ListView(
-        children: [
-          _title('AGENTES'),
-          for (final p in agents)
-            _Row(participant: p, focused: p.id == focused, onTap: onPick),
-          if (shells.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _title('TERMINAIS'),
-            for (final p in shells)
-              _Row(participant: p, focused: p.id == focused, onTap: onPick),
-          ],
-          if (onPickQueue != null || onNewQueue != null) ...[
-            const SizedBox(height: 10),
-            _title('FILAS'),
-            for (final queue in queues)
-              _QueueRow(
-                queue: queue,
-                shown: queue.id == shownQueue,
-                onTap: () => onPickQueue?.call(queue.id),
-              ),
-            if (onNewQueue != null) _NewQueueRow(onTap: onNewQueue!),
-          ],
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Text(
-              'Clique foca · Tab alterna entre agentes',
-              style: TextStyle(
-                fontSize: 10.5,
-                color: AppColors.white(0.38),
-                decoration: TextDecoration.none,
+      child: SizedBox(
+        width: width,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+              child: Text(
+                'Participantes',
+                style: EgeonType.caption.copyWith(
+                  color: c.textMuted,
+                  fontWeight: FontWeight.w500,
+                  decoration: TextDecoration.none,
+                ),
               ),
             ),
-          ),
-        ],
+            for (final p in agents)
+              _Row(participant: p, focused: p.id == focused, onTap: onPick),
+            for (final p in shells)
+              _Row(participant: p, focused: p.id == focused, onTap: onPick),
+            if (onPickQueue != null || onNewQueue != null) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 10,
+                ),
+                child: SizedBox(
+                  height: 1,
+                  child: ColoredBox(color: c.lineSubtle),
+                ),
+              ),
+              for (final queue in queues)
+                _QueueRow(
+                  queue: queue,
+                  shown: queue.id == shownQueue,
+                  onTap: () => onPickQueue?.call(queue.id),
+                ),
+              if (onNewQueue != null) _NewQueueRow(onTap: onNewQueue!),
+            ],
+          ],
+        ),
       ),
     );
   }
-
-  Widget _title(String text) => Padding(
-    padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
-    child: Text(
-      text,
-      style: TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w600,
-        color: AppColors.white(0.45),
-        decoration: TextDecoration.none,
-      ),
-    ),
-  );
 }
 
 class _Row extends StatelessWidget {
@@ -121,125 +117,127 @@ class _Row extends StatelessWidget {
   final bool focused;
   final ValueChanged<String> onTap;
 
+  Status get _status {
+    if (participant.isDead) return Status.dead;
+    if (participant.isWorking) return Status.running;
+    if (participant.needsAttention ||
+        participant.tone == ActivityTone.orange ||
+        participant.statusTone == StatusTone.orange) {
+      return Status.attention;
+    }
+    if (participant.tone == ActivityTone.red ||
+        participant.statusTone == StatusTone.red) {
+      return Status.danger;
+    }
+    if (participant.tone == ActivityTone.green) return Status.success;
+    return Status.idle;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = context.eg;
     final who = ChatWho(
       id: participant.id,
       address: participant.address,
       isAgent: participant.isAgent,
     );
-    final color = participant.isAgent
-        ? ChatPalette.of(who)
-        : AppColors.white(0.6);
-    final status = participant.status;
-    final statusColor = switch (participant.statusTone) {
-      StatusTone.orange => AppColors.attention,
-      StatusTone.red => ActivityColors.red,
-      StatusTone.agent => color.withValues(alpha: 0.85),
-      null => AppColors.white(0.45),
-    };
+    final color = participant.isAgent ? ChatPalette.of(c, who) : c.textPrimary;
+    final status = _status;
+    final label = participant.status.isEmpty
+        ? status.label
+        : participant.status;
     // Terminal fechado fica na coluna, mas não recebe: sem mão e sem clique.
     final dead = participant.isDead;
-    return MouseRegion(
-      cursor: dead ? MouseCursor.defer : SystemMouseCursors.click,
-      child: GestureDetector(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Pressable(
         key: ValueKey('participant-${participant.id}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: dead ? null : () => onTap(participant.id),
-        child: Container(
-          height: 40,
-          margin: const EdgeInsets.only(bottom: 3),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+        onPressed: dead ? null : () => onTap(participant.id),
+        semanticLabel: '${participant.id}, $label',
+        builder: (context, s) => DecoratedBox(
           decoration: BoxDecoration(
-            color: focused ? color.withValues(alpha: 0.14) : null,
-            borderRadius: BorderRadius.circular(10),
-            border: focused
-                ? Border.all(color: color.withValues(alpha: 0.5))
+            color: focused
+                ? EgeonColors.overlay4
+                : s.hovered && !dead
+                ? EgeonColors.overlay4
                 : null,
+            borderRadius: BorderRadius.circular(8),
           ),
-          child: Row(
-            children: [
-              Text(
-                participant.isAgent ? '✦' : '❯',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: color,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      participant.id,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFEBEBEB),
-                        decoration: TextDecoration.none,
-                      ),
-                    ),
-                    if (status.isNotEmpty)
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        status,
-                        key: ValueKey('participant-status-${participant.id}'),
+                        participant.id,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          color: statusColor,
+                        style: EgeonType.label.copyWith(
+                          fontSize: 13,
+                          height: 18 / 13,
+                          fontWeight: FontWeight.w600,
+                          color: color,
                           decoration: TextDecoration.none,
                         ),
                       ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        participant.address,
+                        key: ValueKey('participant-address-${participant.id}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: EgeonType.monoMeta.copyWith(
+                          fontSize: 11,
+                          height: 15 / 11,
+                          color: c.textMuted,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                      // Só a falha escreve embaixo (o motivo importa); o papel e
+                      // o "precisa de você" ficam no ícone do canto (v3).
+                      if (participant.statusTone == StatusTone.red &&
+                          participant.status.isNotEmpty)
+                        Text(
+                          participant.status,
+                          key: ValueKey('participant-status-${participant.id}'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: EgeonType.caption.copyWith(
+                            fontSize: 11,
+                            color: c.danger,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              _Activity(participant),
-            ],
+                const SizedBox(width: 10),
+                Tooltip(
+                  message: label,
+                  child: KeyedSubtree(
+                    key: ValueKey('activity-${participant.activity}'),
+                    // Concluído é um ✓ verde (a v3); os outros estados ficam
+                    // como o StatusDot os desenha.
+                    child: status == Status.success
+                        ? SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: EgIcon(
+                              EgIcons.check,
+                              size: 12,
+                              color: c.success,
+                            ),
+                          )
+                        : StatusDot(status, animated: true),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// O que o participante faz agora: spinner trabalhando, ponto laranja pedindo,
-/// verde terminou.
-class _Activity extends StatelessWidget {
-  const _Activity(this.participant);
-
-  final ChatParticipantInfo participant;
-
-  @override
-  Widget build(BuildContext context) {
-    if (participant.isWorking) {
-      return SpinnerBuilder(
-        builder: (_, glyph) => Text(
-          glyph,
-          key: const ValueKey('activity-working'),
-          style: TextStyle(
-            fontFamily: 'Menlo',
-            fontSize: 12,
-            color: AppColors.white(0.6),
-            decoration: TextDecoration.none,
-          ),
-        ),
-      );
-    }
-    final color = ActivityColors.of(participant.tone);
-    if (color == null) return const SizedBox.shrink();
-    return Text(
-      '●',
-      key: ValueKey('activity-${participant.activity}'),
-      style: TextStyle(
-        fontSize: 12,
-        color: color,
-        decoration: TextDecoration.none,
       ),
     );
   }
@@ -258,77 +256,66 @@ class _QueueRow extends StatelessWidget {
   final bool shown;
   final VoidCallback onTap;
 
-  static const _teal = Color(0xFF40C8E0);
-
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      key: ValueKey('queue-${queue.id}'),
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        height: 44,
-        margin: const EdgeInsets.only(bottom: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          color: shown ? _teal.withValues(alpha: 0.06) : null,
-          borderRadius: BorderRadius.circular(10),
-          border: shown
-              ? Border.all(color: _teal.withValues(alpha: 0.45))
-              : null,
-        ),
-        child: Row(
-          children: [
-            const Text(
-              '☑',
-              style: TextStyle(
-                fontSize: 13,
-                color: _teal,
-                decoration: TextDecoration.none,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    queue.id,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.white(0.92),
-                      decoration: TextDecoration.none,
-                    ),
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Pressable(
+        key: ValueKey('queue-${queue.id}'),
+        onPressed: onTap,
+        semanticLabel: 'Fila ${queue.id}',
+        builder: (context, s) => DecoratedBox(
+          decoration: BoxDecoration(
+            color: shown
+                ? c.steel
+                : s.hovered
+                ? EgeonColors.overlay4
+                : null,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        queue.id,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: EgeonType.label.copyWith(
+                          fontSize: 13,
+                          height: 18 / 13,
+                          fontWeight: FontWeight.w600,
+                          color: c.textPrimary,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                      Text(
+                        queue.summary,
+                        key: ValueKey('queue-summary-${queue.id}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: EgeonType.monoMeta.copyWith(
+                          fontSize: 11,
+                          height: 15 / 11,
+                          color: queue.asking ? c.attention : c.textMuted,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    queue.summary,
-                    key: ValueKey('queue-summary-${queue.id}'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: queue.asking
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      color: queue.asking
-                          ? AppColors.attention
-                          : AppColors.white(0.5),
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// O "+ Nova fila": sem ele, bancada sem fila teria de voltar ao canvas para
@@ -339,26 +326,37 @@ class _NewQueueRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    return Pressable(
       key: const ValueKey('new-queue'),
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
+      onPressed: onTap,
+      semanticLabel: 'Nova fila',
+      builder: (context, s) => SizedBox(
         height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.centerLeft,
-        child: Text(
-          '+  Nova fila',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.white(0.55),
-            decoration: TextDecoration.none,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              EgIcon(
+                EgIcons.plus,
+                size: 14,
+                color: s.hovered ? c.textPrimary : c.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Nova fila',
+                style: EgeonType.label.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: s.hovered ? c.textPrimary : c.textSecondary,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ],
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

@@ -1,11 +1,11 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../commons/widgets/app_dialog.dart';
-import '../../../../commons/widgets/app_text_field.dart';
-import '../../../../commons/widgets/form_label.dart';
+import '../../../../commons/widgets/form_dialog.dart';
+import '../../../../commons/widgets/form_kit.dart';
 import '../../../../core/adapters/injector.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/worktree_source.dart';
 import '../cubit/worktree_branch_cubit.dart';
 
@@ -21,7 +21,7 @@ Future<String?> showNodeWorktreeForm(
   required String repo,
   required String currentPath,
   required String suggested,
-}) => showAppDialog<String>(
+}) => showFormDialog<String>(
   context,
   width: 460,
   builder: (_, close) => BlocProvider(
@@ -76,7 +76,7 @@ class _BodyState extends State<_Body> {
       BranchAsking(:final branch) => (branch, null),
       BranchJudged(:final branch, :final plan) => (branch, plan),
     };
-    return DialogBody(
+    return FormDialogBody(
       title: 'Worktree para "${widget.nodeId}"',
       message:
           'O terminal passa a abrir na worktree de ${widget.repo}, e sai de '
@@ -85,8 +85,8 @@ class _BodyState extends State<_Body> {
           'curso — e a conversa do agente começa do zero. Id, papel, arestas '
           'e posição no canvas continuam os mesmos.',
       actions: [
-        DialogButton('Cancelar', onTap: widget.close),
-        DialogButton(
+        FormDialogButton('Cancelar', onTap: widget.close),
+        FormDialogButton(
           'Abrir',
           primary: true,
           enabled: branch.isNotEmpty,
@@ -98,7 +98,7 @@ class _BodyState extends State<_Body> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const FormLabel('BRANCH'),
-          AppTextField(
+          FormTextField(
             key: const ValueKey('node-worktree-branch'),
             controller: _branch,
             placeholder: 'nome da branch',
@@ -111,7 +111,7 @@ class _BodyState extends State<_Body> {
           // cria branch e vai para uma que já existe, e sem esta linha as duas
           // são visualmente idênticas. Onde nasce, para conferir.
           SizedBox(
-            height: 30,
+            height: 34,
             child: switch (plan) {
               null => null,
               final plan => Column(
@@ -121,11 +121,11 @@ class _BodyState extends State<_Body> {
                     plan.message ?? '',
                     key: const ValueKey('node-worktree-verdict'),
                     maxLines: 2,
-                    style: TextStyle(
-                      fontSize: 10,
+                    style: EgeonType.caption.copyWith(
+                      fontSize: 11,
                       color: plan.isFresh
-                          ? AppColors.white(0.5)
-                          : AppColors.attention,
+                          ? context.eg.textMuted
+                          : context.eg.attention,
                       decoration: TextDecoration.none,
                     ),
                   ),
@@ -134,10 +134,8 @@ class _BodyState extends State<_Body> {
                     key: const ValueKey('node-worktree-folder'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Menlo',
-                      fontSize: 10,
-                      color: AppColors.white(0.5),
+                    style: EgeonType.monoMeta.copyWith(
+                      color: context.eg.textMuted,
                       decoration: TextDecoration.none,
                     ),
                   ),

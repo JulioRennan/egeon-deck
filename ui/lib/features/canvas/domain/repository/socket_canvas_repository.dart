@@ -1,3 +1,5 @@
+import '../../../../core/adapters/event_parsing.dart';
+
 import 'dart:async';
 import 'dart:ui';
 
@@ -30,7 +32,10 @@ class SocketCanvasRepository implements CanvasRepository {
   @override
   Stream<CanvasSnapshot> watch(String workbenchId) => _client
       .subscribe('workbench/$workbenchId/nodes')
-      .map((event) => _snapshot(workbenchId, event));
+      .parsed(
+        'workbench/$workbenchId/nodes',
+        (event) => _snapshot(workbenchId, event),
+      );
 
   CanvasSnapshot _snapshot(String workbenchId, EgeonMessage event) {
     final cards = [

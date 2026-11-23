@@ -3,14 +3,17 @@ import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_ui/material_ui.dart' show Theme;
 
 import 'core/adapters/egeon_paths.dart';
 import 'core/adapters/injector.dart';
 import 'core/cubits/connection_cubit.dart';
 import 'features/home/presentation/page/home_page.dart';
 import 'core/di/injection.dart';
-import 'theme/app_colors.dart';
-import 'theme/app_theme.dart';
+import 'theme/egeon_colors.dart';
+import 'features/home/presentation/page/design_sample_page.dart';
+import 'theme/egeon_theme.dart';
+import 'theme/egeon_type.dart';
 
 void main() => runApp(createEgeonDeckApp(Platform.environment));
 
@@ -22,6 +25,9 @@ EgeonDeckApp createEgeonDeckApp(Map<String, String> environment) {
   return EgeonDeckApp(
     connection: inject<ConnectionCubit>(),
     title: inject<EgeonPaths>().flavor.title,
+    showSample:
+        inject<EgeonPaths>().flavor == EgeonFlavor.dev &&
+        environment['EGEON_DESIGN_SAMPLE'] == '1',
   );
 }
 
@@ -32,12 +38,16 @@ class EgeonDeckApp extends StatefulWidget {
     super.key,
     required this.connection,
     this.title = 'Egeon Deck',
+    this.showSample = false,
   });
 
   final ConnectionCubit connection;
 
   /// O nome da janela: o dev se diz dev, para você não falar com o app errado.
   final String title;
+
+  /// Só no dev: abre a amostra do design system no lugar da `home`.
+  final bool showSample;
 
   @override
   State<EgeonDeckApp> createState() => _EgeonDeckAppState();
@@ -66,14 +76,23 @@ class _EgeonDeckAppState extends State<EgeonDeckApp> {
 
   @override
   Widget build(BuildContext context) {
+    const colors = EgeonColors.dark;
     return BlocProvider.value(
       value: widget.connection,
       child: WidgetsApp(
         title: widget.title,
         debugShowCheckedModeBanner: false,
-        color: AppColors.background,
-        textStyle: AppTheme.textStyle,
-        builder: (context, _) => HomePage(title: widget.title),
+        color: colors.obsidian,
+        textStyle: EgeonType.body.copyWith(
+          color: colors.textPrimary,
+          decoration: TextDecoration.none,
+        ),
+        builder: (context, _) => Theme(
+          data: EgeonTheme.dark(),
+          child: widget.showSample
+              ? const DesignSamplePage()
+              : HomePage(title: widget.title),
+        ),
       ),
     );
   }

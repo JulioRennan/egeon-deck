@@ -46,7 +46,7 @@ class CanvasToolCubit extends Cubit<CanvasToolState> {
   CanvasTool get tool => switch (state) {
     CanvasPointer() => CanvasTool.cursor,
     CanvasArmed(:final tool) => tool,
-    CanvasAnnouncing() || CanvasComponentArmed() => CanvasTool.terminal,
+    CanvasAnnouncing() || CanvasComponentArmed() => CanvasTool.agent,
   };
 
   void selectTool(CanvasTool tool) {
@@ -101,9 +101,9 @@ class CanvasToolCubit extends Cubit<CanvasToolState> {
     // sem você ter pedido.
     _bannerTimer?.cancel();
     emit(const CanvasPointer());
-    // Sem componente, o terminal é configurado antes de existir: o retângulo
+    // Sem componente, o terminal de agente é configurado antes de existir: o retângulo
     // marcado vai junto, e o formulário não custa a posição nem o tamanho.
-    if (tool == CanvasTool.terminal && component == null) {
+    if (tool == CanvasTool.agent && component == null) {
       _configure.add(frame);
       return;
     }

@@ -100,7 +100,8 @@ class InMemoryCanvasRepository implements CanvasRepository {
   /// Base do id do nó novo: o core é quem escolhe o id de verdade.
   static String _prefix(CanvasTool tool) => switch (tool) {
     CanvasTool.cursor => '',
-    CanvasTool.terminal => 'sh',
+    CanvasTool.shell => 'sh',
+    CanvasTool.agent => 'agente',
     CanvasTool.web => 'web',
     CanvasTool.queue => 'fila',
   };

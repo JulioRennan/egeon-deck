@@ -495,6 +495,7 @@ impl Org {
             },
             cwd: node.cwd.clone(),
             dir: abbreviate_tilde(&directory, &self.home),
+            subtitle: None,
             cmd: node.cmd.clone(),
             model: node.model.clone(),
             effort: node.effort.clone(),

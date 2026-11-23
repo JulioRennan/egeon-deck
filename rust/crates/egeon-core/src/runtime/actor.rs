@@ -6,6 +6,7 @@
 //! outros terminais.
 
 mod access;
+mod activity_watch;
 mod app_commands;
 mod bench_forms;
 mod bench_removal;
@@ -45,6 +46,7 @@ pub(super) fn not_ported(route: FeatureRoute, reply: Replier) {
     ));
 }
 
+use crate::features::activity::model::ActivitySummary;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -197,6 +199,7 @@ pub struct Actor {
     ui_requests: ui_requests::UiRequests,
     detail: node_detail::DetailState,
     exists: exists::ExistsState,
+    activity_watch: activity_watch::ActivityWatch,
     /// O app está na frente (decisão 33); sem a UI dizer, não está.
     pub(super) app_active: bool,
     /// O terminal com o foco, como `bancada/nó`.
@@ -237,6 +240,7 @@ impl Actor {
             ui_requests: ui_requests::UiRequests::default(),
             detail: node_detail::DetailState::default(),
             exists: exists::ExistsState::default(),
+            activity_watch: activity_watch::ActivityWatch::default(),
             app_active: false,
             focused: None,
             window: None,
@@ -380,6 +384,7 @@ impl Actor {
         self.node_tick(now);
         self.detail_tick(now);
         self.exists_tick(now);
+        self.activity_tick();
     }
 
     /// O git do usuário, com o PATH que os terminais recebem.
@@ -729,6 +734,7 @@ impl Actor {
                 body: EventBody::Workspaces(self.workspaces_state()),
             },
             Topic::Nodes(id) => {
+                self.queue_sync();
                 let state = self
                     .org
                     .index_of(id)
@@ -818,6 +824,13 @@ impl Actor {
     /// dispatch) e o cronômetro dela (do `org`).
     fn workspaces_state(&mut self) -> WorkspacesState {
         let summaries = self.dispatch.coordination.dispatcher.activity_summary();
+        self.workspaces_state_with(&summaries)
+    }
+
+    fn workspaces_state_with(
+        &mut self,
+        summaries: &BTreeMap<String, ActivitySummary>,
+    ) -> WorkspacesState {
         let ids: Vec<String> = self
             .org
             .state
@@ -840,9 +853,11 @@ impl Actor {
         })
     }
 
+    /// Os nós da bancada. As filas têm de estar criadas (`queue_sync`): quem
+    /// chama com `&mut self` sincroniza antes.
     fn nodes_state(&self, index: usize) -> Option<NodesState> {
         let dispatcher = &self.dispatch.coordination.dispatcher;
-        self.org.nodes_state(
+        let mut state = self.org.nodes_state(
             index,
             |id| self.nodes.get(id).is_some_and(|n| n.session.is_some()),
             |address| {
@@ -851,12 +866,22 @@ impl Actor {
                     .map(|t| (t.activity().clone(), t.pending()))
             },
             crate::commons::clock::local_offset_secs(SystemTime::now()),
-        )
+        )?;
+        // O subtítulo do card da fila é o resumo dela, que só o ator sabe.
+        for node in &mut state.nodes {
+            if node.kind == crate::protocol::org::NodeKind::Queue {
+                node.subtitle = self
+                    .queue
+                    .subtitle(state.workbench.as_str(), node.id.as_str());
+            }
+        }
+        Some(state)
     }
 
     /// O estado novo da organização a quem assina: a árvore e os nós de cada
     /// bancada assinada. Só monta o que alguém está olhando.
     pub(super) fn publish_org(&mut self) {
+        self.queue_sync();
         let watched: HashSet<Topic> = self
             .clients
             .values()
@@ -865,7 +890,15 @@ impl Actor {
             .collect();
         for topic in watched {
             let body = match &topic {
-                Topic::Workspaces => EventBody::Workspaces(self.workspaces_state()),
+                Topic::Workspaces => {
+                    // Só a publicação para todos conta como "já foi à tela": o
+                    // retrato de quem acabou de assinar vai só para ele, e
+                    // gravá-lo faria o relógio achar que os outros já têm a
+                    // árvore nova.
+                    let summaries = self.dispatch.coordination.dispatcher.activity_summary();
+                    self.activity_watch.published = summaries.clone();
+                    EventBody::Workspaces(self.workspaces_state_with(&summaries))
+                }
                 Topic::Nodes(id) => {
                     let Some(state) = self.org.index_of(id).and_then(|i| self.nodes_state(i))
                     else {

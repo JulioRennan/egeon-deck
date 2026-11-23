@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/widgets.dart';
 
-import '../../../../theme/app_colors.dart';
+import '../../../../theme/egeon_colors.dart';
 import '../../domain/entities/edge_curve.dart';
 import '../../domain/entities/edge_layout.dart';
 import '../../domain/entities/edge_link.dart';
@@ -22,6 +22,7 @@ class EdgePainter extends CustomPainter {
     required this.links,
     required this.frames,
     required this.zoom,
+    required this.colors,
     this.hovered,
     this.pending,
   });
@@ -29,6 +30,7 @@ class EdgePainter extends CustomPainter {
   final List<EdgeLink> links;
   final Map<String, Rect> frames;
   final double zoom;
+  final EgeonColors colors;
   final EdgeLink? hovered;
   final PendingLink? pending;
 
@@ -76,16 +78,15 @@ class EdgePainter extends CustomPainter {
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = (highlighted ? 2.5 : 1.8) * z
+        ..strokeWidth = 1.5 * z
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
-        ..color = highlighted ? AppColors.attention : AppColors.white(0.32),
+        ..color = highlighted ? colors.accent : colors.edge,
     );
 
-    // Ponta e bolinha em cor OPACA, e não na translúcida da linha: o triângulo
-    // cresce por cima do traçado, e com os dois a 32% os alphas somam — dá para
-    // ver o fio atravessando a seta por dentro.
-    final solid = highlighted ? AppColors.attention : AppColors.edgeLineSolid;
+    // Ponta e bolinha na mesma cor opaca do traço: sem alpha, o fio não
+    // aparece atravessando a seta por dentro.
+    final solid = highlighted ? colors.accent : colors.edge;
     final ends = EdgeCurve.endpoints(laid.route);
     // Bolinha só na extremidade sem ponta: as duas no mesmo lugar viram um
     // borrão, e a ponta já diz que a linha encosta ali.
@@ -143,6 +144,7 @@ class EdgePainter extends CustomPainter {
   @override
   bool shouldRepaint(EdgePainter old) =>
       old.zoom != zoom ||
+      old.colors != colors ||
       old.hovered != hovered ||
       old.links != links ||
       !mapEquals(old.frames, frames) ||

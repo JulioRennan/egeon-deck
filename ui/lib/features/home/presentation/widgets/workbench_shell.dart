@@ -1,48 +1,70 @@
 import 'package:flutter/widgets.dart';
 
-/// A bancada na janela: a barra de cima de borda a borda, a faixa de abas e o
-/// conteúdo embaixo. Quem cede à barra lateral é só o conteúdo — a barra de
-/// cima corre inteira em todo modo, e as cortinas cobrem só o conteúdo.
+import '../../../../theme/egeon_tokens.dart';
+import 'bench_frame.dart';
+
+/// A bancada na janela: a faixa de cima de borda a borda e, embaixo, a moldura
+/// com a cor da bancada em volta do conteúdo, as camadas fixas e as cortinas.
 class WorkbenchShell extends StatelessWidget {
   const WorkbenchShell({
-    required this.toolbar,
-    required this.tabs,
+    required this.topBar,
     required this.content,
+    this.colorName,
+    this.lit = true,
+    this.layers,
     this.curtains = const [],
-    this.contentInset = 0,
+    this.leftInset = frameLeft,
     super.key,
   });
 
-  final Widget toolbar;
-
-  /// A faixa de abas; quando some, o conteúdo sobe.
-  final Widget tabs;
+  final Widget topBar;
   final Widget content;
+
+  /// As camadas fixas por cima do conteúdo (barra de ações, consumo, composer).
+  final Widget? layers;
   final List<Widget> curtains;
 
-  /// Quanto o conteúdo cede à barra lateral: nada no canvas, onde o grid corre
-  /// por baixo do vidro, e a largura dela no chat.
-  final double contentInset;
+  /// A cor da bancada na tela, como o core a grava.
+  final String? colorName;
+
+  /// Sem bancada, a moldura fica sem o brilho.
+  final bool lit;
+
+  /// Onde a moldura começa: depois do trilho de bancadas e, com a gaveta fixa,
+  /// depois dela.
+  final double leftInset;
+
+  /// O respiro da moldura na v3: 12 abaixo da faixa, 24 à direita e embaixo, e
+  /// à esquerda 84 (24 de margem, 44 do trilho e 16 de vão).
+  static const gapTop = EgeonSpace.s3;
+  static const gapRight = EgeonSpace.s6;
+  static const gapBottom = EgeonSpace.s6;
+  static const frameLeft = 84.0;
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      toolbar,
-      tabs,
+      topBar,
       Expanded(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              left: contentInset,
-              child: KeyedSubtree(
-                key: const ValueKey('shell-content'),
-                child: content,
-              ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(leftInset, gapTop, gapRight, gapBottom),
+          child: BenchFrame(
+            colorName: colorName,
+            lit: lit,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: KeyedSubtree(
+                    key: const ValueKey('shell-content'),
+                    child: content,
+                  ),
+                ),
+                ?layers == null ? null : Positioned.fill(child: layers!),
+                for (final curtain in curtains) Positioned.fill(child: curtain),
+              ],
             ),
-            for (final curtain in curtains)
-              Positioned.fill(left: contentInset, child: curtain),
-          ],
+          ),
         ),
       ),
     ],

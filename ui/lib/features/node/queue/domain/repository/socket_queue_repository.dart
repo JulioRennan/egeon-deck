@@ -1,3 +1,5 @@
+import '../../../../../core/adapters/event_parsing.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -34,7 +36,8 @@ class SocketQueueRepository implements QueueRepository {
   Stream<PromptQueue> watch(String nodeId) => _client
       .subscribe(_topic(nodeId))
       .where((event) => event['kind'] == 'queue')
-      .map(
+      .parsed(
+        _topic(nodeId),
         (event) => PromptQueue.fromMap(event['queue']! as Map<String, Object?>),
       );
 

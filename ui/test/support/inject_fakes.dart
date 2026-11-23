@@ -22,6 +22,7 @@ import 'package:egeon_deck/features/workspace/domain/repository/workspace_reposi
 import 'package:egeon_deck/core/di/injection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'fake_chat_repository.dart';
 import 'fake_menu.dart';
 import 'fake_usage_repository.dart';
 
@@ -63,7 +64,7 @@ void injectFakes({
   put(workspaces);
   put(paths);
   put(canvas);
-  put(chat);
+  put<ChatRepository>(chat ?? FakeChatRepository());
   put(uiRequests);
   put(app);
   // Toda linha da barra lateral assina o consumo da sua bancada: sem falso

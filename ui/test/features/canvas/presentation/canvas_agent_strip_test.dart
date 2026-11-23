@@ -5,10 +5,10 @@ import '../../../support/in_memory_canvas_repository.dart';
 
 import 'package:egeon_deck/features/canvas/presentation/page/canvas_page.dart';
 import 'package:egeon_deck/features/node/agent/presentation/widgets/agent_accessory.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
-import 'package:egeon_deck/features/node/agent/domain/entities/model_choice.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../support/eg_host.dart';
 
 import '../../../support/fake_agent_repository.dart';
 import '../../../support/inject_fakes.dart';
@@ -35,10 +35,10 @@ void main() {
     final agent = FakeAgentRepository();
     injectFakes(canvas: canvas, agent: (_) => agent);
     await tester.pumpWidget(
-      WidgetsApp(
-        color: const Color(0xFF000000),
-        textStyle: AppTheme.textStyle,
-        builder: (context, _) => CanvasPage(
+      egHost(
+        fill: true,
+        size: const Size(1200, 800),
+        CanvasPage(
           workbenchId: 'b',
           bodyBuilder: (context, card) => ColoredBox(
             key: const ValueKey('body'),
@@ -55,17 +55,16 @@ void main() {
 
     final cardFinder = find.byKey(const ValueKey('card-claude'));
     final topBefore = tester.getTopLeft(cardFinder);
-    // O corpo começa depois da faixa: 46 do nome + 46 da faixa, vezes o zoom.
+    // O corpo começa depois da faixa: 56 do cabeçalho + 36 da faixa, vezes o zoom.
     final zoom = (tester.getBottomRight(cardFinder).dx - topBefore.dx) / 800;
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('body'))).dy - topBefore.dy,
       closeTo(92 * zoom, 0.5),
     );
 
-    final slider = tester.getRect(find.byKey(const ValueKey('effort-slider')));
-    final gesture = await tester.startGesture(
-      Offset(slider.left + 10, slider.center.dy),
-    );
+    // Arrastar a partir de uma pastilha da faixa não leva o card junto.
+    final chip = tester.getCenter(find.byKey(const ValueKey('model-picker')));
+    final gesture = await tester.startGesture(chip);
     await gesture.moveBy(const Offset(40, 0));
     await tester.pump(const Duration(milliseconds: 100));
     await gesture.up();
@@ -75,11 +74,6 @@ void main() {
       tester.getTopLeft(cardFinder),
       topBefore,
       reason: 'o card ficou parado',
-    );
-    expect(
-      agent.choices.first,
-      isA<EffortMove>(),
-      reason: 'e o gesto foi ao core',
     );
   });
 }

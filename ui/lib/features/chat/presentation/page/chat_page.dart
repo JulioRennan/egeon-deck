@@ -8,7 +8,7 @@ import '../../../node/terminal/presentation/widgets/terminal_body.dart';
 import '../../../../core/adapters/injector.dart';
 import '../../domain/entities/chat_participant.dart';
 import '../../domain/errors/chat_error.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../theme/egeon_colors.dart';
 import '../../di/chat_injection.dart';
 import '../cubit/chat_composer_cubit.dart';
 import '../cubit/chat_conversation_cubit.dart';
@@ -18,7 +18,9 @@ import '../widgets/chat_block_view.dart';
 import '../widgets/chat_composer.dart';
 import '../widgets/chat_thread_view.dart';
 import '../widgets/participants_column.dart';
-import '../widgets/permission_tray.dart';
+import '../widgets/permission_trays.dart';
+import '../widgets/size_reporter.dart';
+import '../../../../commons/widgets/shell_layers.dart';
 
 /// O chat de uma bancada: a thread e o composer. Só compõe; o cubit nasce aqui,
 /// preso à bancada, e fecha a assinatura quando a bancada troca.
@@ -26,10 +28,15 @@ class ChatPage extends StatelessWidget {
   const ChatPage({
     required this.workbenchId,
     this.offerQueues = false,
+    this.traitsFor,
     super.key,
   });
 
   final String workbenchId;
+
+  /// O "modelo · esforço" do agente que recebe, ao lado do enviar: quem junta o
+  /// chat ao estado do agente é a home.
+  final Widget Function(String nodeId)? traitsFor;
 
   /// Se a coluna oferece as filas da bancada, abertas num painel ao lado.
   final bool offerQueues;
@@ -53,15 +60,17 @@ class ChatPage extends StatelessWidget {
     ],
     child: _Chat(
       workbenchId: workbenchId,
+      traitsFor: traitsFor,
       queueWidth: offerQueues ? inject<QueuePanelWidth>() : null,
     ),
   );
 }
 
 class _Chat extends StatefulWidget {
-  const _Chat({required this.workbenchId, this.queueWidth});
+  const _Chat({required this.workbenchId, this.traitsFor, this.queueWidth});
 
   final String workbenchId;
+  final Widget Function(String nodeId)? traitsFor;
 
   /// A largura do painel das filas, uma só para todas as bancadas. Sem ela, a
   /// coluna não oferece filas.
@@ -78,6 +87,9 @@ class _ChatState extends State<_Chat> {
   /// chave ela é a mesma, e o texto do composer não se perde.
   final _conversation = GlobalKey(debugLabel: 'conversation');
   final _selection = FocusNode(skipTraversal: true);
+
+  /// A altura do composer que flutua: a conversa guarda esse espaço embaixo.
+  final _composerHeight = ValueNotifier<double>(0);
   final _composer = FocusNode(debugLabel: 'composer');
   StreamSubscription<void>? _sent;
   StreamSubscription<ChatError>? _refusals;
@@ -131,6 +143,7 @@ class _ChatState extends State<_Chat> {
     _refusalTimer?.cancel();
     _composer.dispose();
     _selection.dispose();
+    _composerHeight.dispose();
     super.dispose();
   }
 
@@ -144,89 +157,97 @@ class _ChatState extends State<_Chat> {
       builder: (context, state) {
         final conversation = KeyedSubtree(
           key: _conversation,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: switch (composer.state) {
-                  // O shell em foco no lugar da thread: o mesmo terminal do
-                  // canvas, sem tomar o teclado do composer.
-                  ComposerToShell(
-                    target: ChatParticipantInfo(:final screen?),
-                  ) =>
-                    TerminalBody(
-                      key: ValueKey('chat-terminal-$screen'),
-                      nodeId: screen,
-                    ),
-                  // A seleção é da thread inteira, não de cada texto.
-                  _ => SelectableRegion(
-                    selectionControls: emptyTextSelectionControls,
-                    focusNode: _selection,
-                    child: ChatThreadView(
-                      key: _thread,
-                      blocks: state.blocks,
-                      onTop: cubit.loadMore,
-                      actions: ChatRowActions(
-                        onToggleStep: cubit.toggleStep,
-                        onCycleGroup: cubit.cycleGroup,
-                        onQuote: (key) =>
-                            _thread.currentState?.revealMessage(key),
-                        onLink: cubit.openLink,
+          child: ValueListenableBuilder<double>(
+            valueListenable: _composerHeight,
+            builder: (context, composerHeight, _) {
+              // O composer flutua (como o do canvas); o respiro embaixo é a
+              // altura dele, a margem da camada e um pouco de ar.
+              final inset = composerHeight == 0
+                  ? 0.0
+                  : composerHeight + ShellLayers.bottomMargin + ShellLayers.gap;
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: switch (composer.state) {
+                      // O shell em foco no lugar da thread: o mesmo terminal do
+                      // canvas, sem tomar o teclado do composer.
+                      ComposerToShell(
+                        target: ChatParticipantInfo(:final screen?),
+                      ) =>
+                        Padding(
+                          padding: EdgeInsets.only(bottom: inset),
+                          child: TerminalBody(
+                            key: ValueKey('chat-terminal-$screen'),
+                            nodeId: screen,
+                          ),
+                        ),
+                      // A seleção é da thread inteira, não de cada texto.
+                      _ => SelectableRegion(
+                        selectionControls: emptyTextSelectionControls,
+                        focusNode: _selection,
+                        child: ChatThreadView(
+                          key: _thread,
+                          blocks: state.blocks,
+                          bottomInset: inset,
+                          mentions: {
+                            for (final p in state.participants)
+                              if (p.isAgent) p.id,
+                          },
+                          onTop: cubit.loadMore,
+                          actions: ChatRowActions(
+                            onToggleStep: cubit.toggleStep,
+                            onCycleGroup: cubit.cycleGroup,
+                            onQuote: (key) =>
+                                _thread.currentState?.revealMessage(key),
+                            onLink: cubit.openLink,
+                          ),
+                        ),
+                      ),
+                    },
+                  ),
+                  Positioned.fill(
+                    child: ShellLayers(
+                      permissions: _refusal == null
+                          ? null
+                          : Text(
+                              switch (_refusal!) {
+                                ChatRefused(:final message) => message,
+                                ChatOffline() =>
+                                  'Não foi possível criar a fila.',
+                              },
+                              key: const ValueKey('chat-notice'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.eg.attention,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                      composer: SizeReporter(
+                        onHeight: (h) => _composerHeight.value = h,
+                        child: ChatComposer(
+                          focusNode: _composer,
+                          margin: EdgeInsets.zero,
+                          participants: state.participants,
+                          onPickTarget: (id) => _pick(composer, id),
+                          // Dois agentes pedindo ao mesmo tempo: uma faixa por
+                          // pedido, na ordem do core, dentro do composer.
+                          above: permissionTrays(state, cubit),
+                          target: target,
+                          quote: composer.state.quote,
+                          onClearQuote: composer.clearQuote,
+                          onNextTarget: composer.focusNext,
+                          onComplete: composer.complete,
+                          onSend: composer.send,
+                          traits: target?.isAgent == true
+                              ? widget.traitsFor?.call(target!.id)
+                              : null,
+                        ),
                       ),
                     ),
                   ),
-                },
-              ),
-              // Dois agentes pedindo ao mesmo tempo: uma bandeja por pedido,
-              // na ordem do core.
-              for (final permission in state.permissions)
-                PermissionTray(
-                  key: ValueKey('permission-${permission.id}'),
-                  request: permission,
-                  // Quem pediu, pelo endereço que o core manda; sem participante
-                  // com ele, o próprio endereço (como o Swift).
-                  agentName:
-                      state.participants
-                          .where(
-                            (p) =>
-                                p.address == permission.address ||
-                                p.id == permission.agent,
-                          )
-                          .firstOrNull
-                          ?.id ??
-                      permission.address ??
-                      permission.agent ??
-                      'agente',
-                  onAnswer: cubit.answer,
-                  onChoose: cubit.choose,
-                  onAnswerAll: cubit.answerAll,
-                ),
-              if (_refusal case final failure?)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
-                  child: Text(
-                    switch (failure) {
-                      ChatRefused(:final message) => message,
-                      ChatOffline() => 'Não foi possível criar a fila.',
-                    },
-                    key: const ValueKey('chat-notice'),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.attention,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ),
-              ChatComposer(
-                focusNode: _composer,
-                target: target,
-                quote: composer.state.quote,
-                onClearQuote: composer.clearQuote,
-                onNextTarget: composer.focusNext,
-                onComplete: composer.complete,
-                onSend: composer.send,
-              ),
-            ],
+                ],
+              );
+            },
           ),
         );
         final open = switch (panel.state) {
@@ -237,22 +258,6 @@ class _ChatState extends State<_Chat> {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: open != null && queueWidth != null
-                  ? ValueListenableBuilder<double?>(
-                      valueListenable: queueWidth.notifier,
-                      builder: (context, width, _) => QueueSidePanel(
-                        key: ValueKey('queue-side-${open.id}'),
-                        thread: conversation,
-                        workbenchId: widget.workbenchId,
-                        queueNodeId: open.id,
-                        preferredWidth: width,
-                        onWidth: (value) => queueWidth.notifier.value = value,
-                        onClose: () => _closeQueue(panel),
-                      ),
-                    )
-                  : conversation,
-            ),
             if (state.participants.isNotEmpty)
               ParticipantsColumn(
                 participants: state.participants,
@@ -269,6 +274,22 @@ class _ChatState extends State<_Chat> {
                         panel.newQueue(agent: composer.state.queueAgent),
                       ),
               ),
+            Expanded(
+              child: open != null && queueWidth != null
+                  ? ValueListenableBuilder<double?>(
+                      valueListenable: queueWidth.notifier,
+                      builder: (context, width, _) => QueueSidePanel(
+                        key: ValueKey('queue-side-${open.id}'),
+                        thread: conversation,
+                        workbenchId: widget.workbenchId,
+                        queueNodeId: open.id,
+                        preferredWidth: width,
+                        onWidth: (value) => queueWidth.notifier.value = value,
+                        onClose: () => _closeQueue(panel),
+                      ),
+                    )
+                  : conversation,
+            ),
           ],
         );
       },

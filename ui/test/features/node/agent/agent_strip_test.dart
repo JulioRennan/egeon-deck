@@ -1,14 +1,17 @@
+import 'package:egeon_deck/features/node/agent/domain/errors/agent_error.dart';
 import 'package:egeon_deck/features/node/agent/domain/entities/agent_status.dart';
+import 'package:egeon_deck/features/node/agent/domain/entities/context_reading.dart';
 import 'package:egeon_deck/features/node/agent/domain/entities/effort_dial_view.dart';
 import 'package:egeon_deck/features/node/agent/domain/entities/model_choice.dart';
 import 'package:egeon_deck/features/node/agent/presentation/widgets/agent_accessory.dart';
-import 'package:egeon_deck/features/node/agent/presentation/widgets/effort_dial.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
+import 'package:egeon_deck/commons/utils/effort_names.dart';
+import 'package:egeon_deck/theme/egeon_colors.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/eg_host.dart';
 import '../../../support/fake_agent_repository.dart';
 import '../../../support/inject_fakes.dart';
 
@@ -17,18 +20,18 @@ Future<FakeAgentRepository> pumpStrip(
   FakeAgentRepository? repository,
   void Function(VoidCallback)? onRequestClear,
 }) async {
+  tester.view
+    ..physicalSize = const Size(2000, 800)
+    ..devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   final repo = repository ?? FakeAgentRepository();
   injectFakes(agent: (_) => repo);
   await tester.pumpWidget(
-    WidgetsApp(
-      color: const Color(0xFF000000),
-      textStyle: AppTheme.textStyle,
-      pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-        settings: settings,
-        pageBuilder: (context, _, _) => builder(context),
-      ),
-      home: Align(
-        alignment: Alignment.topLeft,
+    egHost(
+      size: const Size(2000, 800),
+      SizedBox(
+        width: 1900,
+        height: 36,
         child: AgentAccessory(
           workbenchId: 'bancada',
           nodeId: 'claude',
@@ -42,18 +45,25 @@ Future<FakeAgentRepository> pumpStrip(
   return repo;
 }
 
-String label(WidgetTester tester) =>
+String effortLabel(WidgetTester tester) =>
     tester.widget<Text>(find.byKey(const ValueKey('effort-label'))).data!;
 
+Future<void> open(WidgetTester tester, String key) async {
+  await tester.tap(find.byKey(ValueKey(key)));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
 /// O estado que o core mandaria com o seletor numa certa situação.
-AgentStatus withDial(EffortDialView dial) => AgentStatus(
-  modelTitle: FakeAgentRepository.sample.modelTitle,
-  models: FakeAgentRepository.sample.models,
-  offersModel: true,
-  dial: dial,
-  ultracode: FakeAgentRepository.sample.ultracode,
-  context: FakeAgentRepository.sample.context,
-);
+AgentStatus withDial(EffortDialView dial, {ContextReading? context}) =>
+    AgentStatus(
+      modelTitle: FakeAgentRepository.sample.modelTitle,
+      models: FakeAgentRepository.sample.models,
+      offersModel: true,
+      dial: dial,
+      ultracode: FakeAgentRepository.sample.ultracode,
+      context: context ?? FakeAgentRepository.sample.context,
+    );
 
 const levels = ['low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -62,14 +72,28 @@ void main() {
     tester,
   ) async {
     await pumpStrip(tester);
+    expect(find.text('modelo'), findsOneWidget);
     expect(find.text('Opus 5.5'), findsOneWidget);
-    expect(label(tester), 'medium');
+    expect(find.text('esforço'), findsOneWidget);
+    expect(effortLabel(tester), 'médio');
+    expect(find.text('contexto'), findsOneWidget);
     expect(find.text('18%'), findsOneWidget);
+    expect(find.text('ultracode'), findsOneWidget);
     expect(find.byKey(const ValueKey('agent-clear')), findsOneWidget);
-    expect(find.byKey(const ValueKey('ultracode')), findsOneWidget);
   });
 
-  testWidgets('o texto e a marca vêm do core: a UI não calcula "…"', (
+  testWidgets('a linha tem 36 de altura e o contexto fica na ponta direita', (
+    tester,
+  ) async {
+    await pumpStrip(tester);
+    final strip = tester.getRect(find.byType(AgentAccessory));
+    final chip = tester.getRect(find.byKey(const ValueKey('context-chip')));
+    expect(strip.height, 36);
+    expect(chip.right, lessThan(strip.right));
+    expect(chip.left, greaterThan(strip.center.dx));
+  });
+
+  testWidgets('o texto do esforço vem do core: a UI não calcula "…"', (
     tester,
   ) async {
     final repo = await pumpStrip(tester);
@@ -86,155 +110,59 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    expect(label(tester), 'max…');
+    expect(effortLabel(tester), 'máximo…');
   });
 
-  testWidgets(
-    'modelo sem esforço: o core manda sem níveis e o seletor se desliga',
-    (tester) async {
-      final repo = await pumpStrip(tester);
-      repo.push(withDial(const EffortDialView(label: 'sem esforço')));
-      await tester.pump();
-      await tester.pump();
-      expect(label(tester), 'sem esforço');
-      expect(find.byKey(const ValueKey('effort-auto')), findsNothing);
-      final slider = tester.getCenter(
-        find.byKey(const ValueKey('effort-slider')),
-      );
-      final gesture = await tester.startGesture(slider);
-      await gesture.up();
-      expect(repo.choices, isEmpty);
-    },
-  );
-
-  testWidgets(
-    'clicar numa marca devolve a intenção; assentar só depois da pausa',
-    (tester) async {
-      final repo = await pumpStrip(tester);
-      final rect = tester.getRect(find.byKey(const ValueKey('effort-slider')));
-
-      final gesture = await tester.startGesture(
-        Offset(rect.right - 7, rect.center.dy),
-      );
-      await gesture.up();
-      await tester.pump();
-      expect((repo.choices.single as EffortMove).index, 4);
-
-      // O core responde com a escolha por assentar; só então a UI conta o tempo.
-      repo.push(
-        withDial(
-          const EffortDialView(
-            levels: levels,
-            markIndex: 4,
-            auto: false,
-            pending: true,
-            label: 'max…',
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(repo.choices.whereType<EffortSettle>(), isEmpty);
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(repo.choices.whereType<EffortSettle>(), hasLength(1));
-    },
-  );
-
-  testWidgets('dois dedos no trackpad mudam o nível, como a roda', (
+  testWidgets('modelo sem esforço: o seletor e o auto se desligam', (
     tester,
   ) async {
     final repo = await pumpStrip(tester);
-    final slider = tester.getCenter(
-      find.byKey(const ValueKey('effort-slider')),
-    );
-    final gesture = await tester.createGesture(
-      kind: PointerDeviceKind.trackpad,
-    );
-    await gesture.panZoomStart(slider);
-    // Dedos para cima sobem o nível.
-    await gesture.panZoomUpdate(slider, pan: const Offset(0, 80));
-    await gesture.panZoomEnd();
+    repo.push(withDial(const EffortDialView(label: 'sem esforço')));
     await tester.pump();
-    expect(repo.choices.whereType<EffortMove>(), isNotEmpty);
-  });
-
-  testWidgets('sem nada por assentar, a pausa não manda nada', (tester) async {
-    final repo = await pumpStrip(tester);
-    final rect = tester.getRect(find.byKey(const ValueKey('effort-slider')));
-    final gesture = await tester.startGesture(
-      Offset(rect.left + 7, rect.center.dy),
-    );
-    await gesture.up();
-    // O core nunca marcou pendente (escolheu o que já valia).
-    await tester.pump(const Duration(seconds: 2));
-    expect(repo.choices.whereType<EffortSettle>(), isEmpty);
-  });
-
-  testWidgets('segurando o botão, a escolha não assenta', (tester) async {
-    final repo = await pumpStrip(tester);
-    repo.push(
-      withDial(
-        const EffortDialView(
-          levels: levels,
-          markIndex: 0,
-          auto: false,
-          pending: true,
-          label: 'low…',
-        ),
-      ),
-    );
     await tester.pump();
-    final rect = tester.getRect(find.byKey(const ValueKey('effort-slider')));
-    final gesture = await tester.startGesture(
-      Offset(rect.left + 7, rect.center.dy),
-    );
-    await tester.pump(const Duration(seconds: 3));
+    expect(effortLabel(tester), 'sem esforço');
+    await tester.tap(find.byKey(const ValueKey('effort-picker')));
+    await tester.pump();
+    expect(repo.choices, isEmpty);
     expect(
-      repo.choices.whereType<EffortSettle>(),
-      isEmpty,
-      reason: 'reiniciar no meio do arrasto mataria o slider',
+      find.text('Mais esforço pensa mais antes de agir e gasta mais.'),
+      findsNothing,
     );
-    await gesture.up();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(repo.choices.whereType<EffortSettle>(), hasLength(1));
   });
 
-  testWidgets('"auto" devolve a intenção de alternar', (tester) async {
+  testWidgets(
+    'o esforço abre com os níveis; escolher manda a marca e assenta',
+    (tester) async {
+      final repo = await pumpStrip(tester);
+      await open(tester, 'effort-picker');
+      expect(find.text('Esforço'), findsOneWidget);
+      for (final level in levels) {
+        expect(find.text(effortName(level)), findsWidgets, reason: level);
+      }
+      expect(
+        find.text('Mais esforço pensa mais antes de agir e gasta mais.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('máximo'));
+      await tester.pump();
+      expect((repo.choices.first as EffortMove).index, 4);
+      expect(repo.choices.whereType<EffortSettle>(), hasLength(1));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Esforço'), findsNothing, reason: 'o painel fecha');
+    },
+  );
+
+  testWidgets('não há pastilha "auto" na linha: o Automático mora só no menu '
+      'de esforço', (tester) async {
     final repo = await pumpStrip(tester);
+    expect(find.text('auto'), findsNothing);
+    expect(find.byKey(const ValueKey('effort-auto-chip')), findsNothing);
+    expect(find.byKey(const ValueKey('effort-auto')), findsNothing);
+    await open(tester, 'effort-picker');
+    expect(find.text('Automático'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('effort-auto')));
     await tester.pump();
     expect(repo.choices.single, isA<EffortToggleAuto>());
-  });
-
-  testWidgets('rolar sobre o slider manda a marca vizinha', (tester) async {
-    final repo = await pumpStrip(tester);
-    final center = tester.getCenter(
-      find.byKey(const ValueKey('effort-slider')),
-    );
-    final mouse = TestPointer(1, PointerDeviceKind.trackpad);
-    await tester.sendEventToBinding(mouse.hover(center));
-    // 14 pontos de trackpad para cima = um nível acima da marca que o core
-    // mostra (1): a UI não guarda marca própria.
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -14)));
-    await tester.pump();
-    expect(repo.choices.whereType<EffortMove>().map((m) => m.index), [2]);
-
-    repo.push(
-      withDial(
-        const EffortDialView(
-          levels: levels,
-          markIndex: 2,
-          auto: false,
-          pending: true,
-          label: 'high…',
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -14)));
-    await tester.pump();
-    expect(repo.choices.whereType<EffortMove>().map((m) => m.index), [2, 3]);
   });
 
   testWidgets('o seletor de modelo aparece pelo offers_model do core, não pela '
@@ -267,31 +195,108 @@ void main() {
     expect(find.byKey(const ValueKey('model-picker')), findsOneWidget);
   });
 
-  testWidgets('o modelo escolhido sai do menu', (tester) async {
+  testWidgets('o menu de modelo marca o atual, avisa que a conversa retoma', (
+    tester,
+  ) async {
     final repo = await pumpStrip(tester);
-    await tester.tap(find.byKey(const ValueKey('model-picker')));
-    await tester.pump();
+    await open(tester, 'model-picker');
+    expect(find.text('Modelo'), findsOneWidget);
     expect(find.text('Sonnet 5.5'), findsOneWidget);
     expect(find.text('padrão do CLI'), findsOneWidget);
+    expect(
+      find.text('Trocar retoma a conversa no novo modelo.'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Sonnet 5.5'));
     await tester.pump();
     expect((repo.choices.single as ModelPick).model, 'claude-sonnet-5-5');
   });
 
-  testWidgets('ultracode e limpar passam pelo core; limpar pede confirmação', (
-    tester,
-  ) async {
-    VoidCallback? confirm;
-    final repo = await pumpStrip(tester, onRequestClear: (c) => confirm = c);
+  testWidgets('ultracode passa pelo core', (tester) async {
+    final repo = await pumpStrip(tester);
     await tester.tap(find.byKey(const ValueKey('ultracode')));
     await tester.pump();
     expect((repo.choices.single as UltracodePick).on, isTrue);
+  });
 
-    await tester.tap(find.byKey(const ValueKey('agent-clear')));
-    await tester.pump();
-    expect(repo.cleared, 0, reason: 'a casca ainda não confirmou');
-    confirm!();
-    expect(repo.cleared, 1);
+  group('contexto', () {
+    testWidgets('a barra é accent e vira attention a partir de 80%', (
+      tester,
+    ) async {
+      final repo = await pumpStrip(tester);
+      Color? fill() {
+        final box = tester
+            .widgetList<DecoratedBox>(
+              find.descendant(
+                of: find.byKey(const ValueKey('context-chip')),
+                matching: find.byType(DecoratedBox),
+              ),
+            )
+            .map((d) => (d.decoration as BoxDecoration).color)
+            .whereType<Color>();
+        return box.firstWhere(
+          (c) =>
+              c == EgeonColors.dark.accent || c == EgeonColors.dark.attention,
+          orElse: () => const Color(0x00000000),
+        );
+      }
+
+      expect(fill(), EgeonColors.dark.accent);
+      repo.push(
+        withDial(
+          FakeAgentRepository.sample.dial,
+          context: const ContextReading(used: 850000, window: 1000000),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('85%'), findsOneWidget);
+      expect(fill(), EgeonColors.dark.attention);
+    });
+
+    testWidgets('o painel traz os tokens, o aviso e "Limpar contexto…"', (
+      tester,
+    ) async {
+      VoidCallback? confirm;
+      final repo = await pumpStrip(tester, onRequestClear: (c) => confirm = c);
+      await open(tester, 'context-chip');
+      expect(find.text('Contexto'), findsOneWidget);
+      expect(find.text('170K de 1M tokens'), findsOneWidget);
+      expect(find.text('Compacta sozinho perto de 90%.'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('context-clear')));
+      await tester.pump();
+      expect(repo.cleared, 0, reason: 'a casca ainda não confirmou');
+      confirm!();
+      expect(repo.cleared, 1);
+    });
+
+    testWidgets('a vassoura também limpa, com confirmação', (tester) async {
+      VoidCallback? confirm;
+      final repo = await pumpStrip(tester, onRequestClear: (c) => confirm = c);
+      await tester.tap(find.byKey(const ValueKey('agent-clear')));
+      await tester.pump();
+      expect(repo.cleared, 0);
+      confirm!();
+      expect(repo.cleared, 1);
+    });
+
+    testWidgets('sem leitura: travessão e "sem resposta"', (tester) async {
+      final repo = await pumpStrip(tester);
+      repo.push(
+        const AgentStatus(
+          modelTitle: 'padrão',
+          offersModel: true,
+          dial: EffortDialView(levels: levels, markIndex: 1, label: 'medium'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('context-pct')), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const ValueKey('context-pct'))).data,
+        '—',
+      );
+    });
   });
 
   testWidgets('mão em tudo que responde a clique', (tester) async {
@@ -300,9 +305,9 @@ void main() {
     await mouse.addPointer(location: Offset.zero);
     for (final key in [
       'model-picker',
-      'effort-auto',
-      'effort-slider',
+      'effort-picker',
       'ultracode',
+      'context-chip',
       'agent-clear',
     ]) {
       await mouse.moveTo(tester.getCenter(find.byKey(ValueKey(key))));
@@ -315,37 +320,38 @@ void main() {
     }
   });
 
-  testWidgets('o EffortDial isolado só desenha e devolve gestos', (
-    tester,
-  ) async {
-    final moves = <int>[];
-    var settles = 0;
-    await tester.pumpWidget(
-      Directionality(
-        textDirection: TextDirection.ltr,
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: EffortDial(
-            view: const EffortDialView(
-              levels: ['low', 'high'],
-              markIndex: 0,
-              auto: false,
-              pending: true,
-              label: 'low…',
-            ),
-            settleDelay: const Duration(milliseconds: 50),
-            onMove: moves.add,
-            onToggleAuto: () {},
-            onSettle: () => settles++,
-          ),
-        ),
-      ),
-    );
-    final rect = tester.getRect(find.byKey(const ValueKey('effort-slider')));
-    final g = await tester.startGesture(Offset(rect.right - 7, rect.center.dy));
-    await g.up();
-    await tester.pump(const Duration(milliseconds: 60));
-    expect(moves, [1]);
-    expect(settles, 1);
+  test('os níveis de esforço aparecem em português; o desconhecido passa', () {
+    expect(levels.map(effortName), [
+      'baixo',
+      'médio',
+      'alto',
+      'extra alto',
+      'máximo',
+    ]);
+    expect(effortName('high…'), 'alto…');
+    expect(effortName('ultra'), 'ultra');
+    expect(effortName(''), '');
   });
+
+  testWidgets(
+    'estado que a UI não sabe ler: a faixa mostra o que se sabe, não fica vazia',
+    (tester) async {
+      final repo = FakeAgentRepository()..failure = const AgentOffline();
+      await pumpStrip(tester, repository: repo);
+      expect(find.text('esforço'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('agent-clear')),
+        findsNothing,
+        reason: 'limpar espera o core dizer que dá',
+      );
+
+      // O estado bom que vier depois substitui o provisório.
+      repo
+        ..failure = null
+        ..push(FakeAgentRepository.sample);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('model-picker')), findsOneWidget);
+    },
+  );
 }

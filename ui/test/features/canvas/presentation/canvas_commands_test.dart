@@ -57,7 +57,7 @@ void main() {
     final commands = CanvasCommands();
     await pumpCanvas(tester, InMemoryCanvasRepository(), commands: commands);
 
-    commands.selectTool(CanvasTool.terminal);
+    commands.selectTool(CanvasTool.agent);
     await tester.pump();
     await tester.pump();
     expect(find.byType(ToolOverlay), findsOneWidget);

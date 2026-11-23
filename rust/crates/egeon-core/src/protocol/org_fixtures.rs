@@ -1291,6 +1291,7 @@ pub fn events() -> Vec<(&'static str, Event)> {
         cli_name: None,
         cwd: Some("../nexus-backend".into()),
         dir: "~/Documents/agro/deck".into(),
+        subtitle: None,
         cmd: None,
         model: None,
         effort: None,

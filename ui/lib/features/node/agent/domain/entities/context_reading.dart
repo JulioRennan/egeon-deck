@@ -8,10 +8,14 @@ class ContextReading {
   final int used;
   final int window;
 
-  factory ContextReading.fromMap(Map<String, Object?> map) => ContextReading(
-    used: (map['used']! as num).toInt(),
-    window: (map['window']! as num).toInt(),
-  );
+  /// O medidor como o core o manda: sem leitura do transcript ainda, `used` e
+  /// `window` vêm nulos e não há o que medir (anel vazio e travessão).
+  static ContextReading? tryFromMap(Map<String, Object?> map) {
+    final used = map['used'] as num?;
+    final window = map['window'] as num?;
+    if (used == null || window == null) return null;
+    return ContextReading(used: used.toInt(), window: window.toInt());
+  }
 
   Map<String, Object?> toMap() => {'used': used, 'window': window};
 

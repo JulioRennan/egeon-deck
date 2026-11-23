@@ -234,6 +234,9 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('git-box')));
       await tester.pump();
+      // O checkbox do DS leva o foco ao ser clicado; o nome volta ao campo.
+      await tester.tap(find.byType(EditableText).first);
+      await tester.pump();
       tester.testTextInput.enterText('app');
       await tester.pump();
       await tester.tap(find.text('Criar'));

@@ -5,7 +5,7 @@ import '../../../canvas/domain/entities/canvas_probe.dart' as canvas_probe;
 import '../../../../core/domain/entities/view_mode.dart';
 import '../../../../commons/widgets/screen_captures.dart';
 import '../../../sidebar/presentation/cubit/sidebar_cubit.dart';
-import '../../../sidebar/presentation/widgets/sidebar_segments.dart';
+import '../../../sidebar/domain/entities/sidebar_tab.dart';
 import '../../domain/repository/screen_control.dart';
 import '../cubit/shell_cubit.dart';
 

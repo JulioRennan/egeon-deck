@@ -35,6 +35,11 @@ class WatchChat {
     }
 
     void onUpdate(ChatUpdate update) {
+      // O diff não se leu: a thread pode ter ficado atrás, pede-se inteira.
+      if (update.unreadable) {
+        unawaited(heal());
+        return;
+      }
       final resets = update.ops.any((op) => op is ResetOp);
       if (!resets) {
         // Evento velho (já veio no instantâneo): descarta.

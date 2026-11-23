@@ -1,7 +1,8 @@
 import 'package:egeon_deck/features/node/queue/presentation/widgets/queue_side_panel.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../support/eg_host.dart';
 
 import '../../../support/in_memory_queue_repository.dart';
 import '../../../support/inject_fakes.dart';
@@ -23,14 +24,10 @@ void main() {
     final repo = InMemoryQueueRepository(queue: seeded());
     injectFakes(queue: (_) => repo);
     await tester.pumpWidget(
-      WidgetsApp(
-        color: const Color(0xFF000000),
-        textStyle: AppTheme.textStyle,
-        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-          settings: settings,
-          pageBuilder: (context, _, _) => builder(context),
-        ),
-        home: QueueSidePanel(
+      egHost(
+        fill: true,
+        size: Size(width, 800),
+        QueueSidePanel(
           thread: const SizedBox(key: ValueKey('thread')),
           workbenchId: 'bancada',
           queueNodeId: 'fila',

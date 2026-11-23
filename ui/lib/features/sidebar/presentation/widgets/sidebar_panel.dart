@@ -1,60 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/context_menu.dart';
-import '../../../../commons/widgets/glyphs.dart';
-import '../../../../commons/widgets/toolbar_button.dart';
-import '../../../../theme/app_colors.dart';
-import '../../domain/entities/sidebar_bench.dart';
+import '../../../../commons/widgets/eg/button.dart';
+import '../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../commons/widgets/eg/menu.dart';
+import '../../../../commons/widgets/eg/popover.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_tokens.dart';
+import '../../../../theme/egeon_type.dart';
+import '../../domain/entities/sidebar_filters.dart';
+import '../../domain/entities/sidebar_tab.dart';
 import '../../domain/entities/sidebar_tree.dart';
 import 'bench_actions.dart';
 import 'group_actions.dart';
 import 'sidebar_active_view.dart';
+import 'sidebar_commands.dart';
 import 'sidebar_drop.dart';
-import 'sidebar_segments.dart';
+import 'sidebar_filters_panel.dart';
+import 'sidebar_header.dart';
 import 'sidebar_tree_view.dart';
 
-/// O que o painel pede à casca e que não é da barra: abrir formulários.
-class SidebarCommands {
-  const SidebarCommands({
-    required this.onToggleCollapse,
-    required this.onCreateWorkspace,
-    required this.onCreateBench,
-    required this.onCreateBenchFromWorktree,
-    required this.onCreateBenchIn,
-    required this.onCreateBenchFromWorktreeIn,
-    required this.onEditWorkspace,
-    required this.onCreateProject,
-    required this.onRemoveWorkspace,
-    required this.onRemoveProject,
-    required this.onRename,
-    required this.onDuplicateAsWorktree,
-    required this.onEditRules,
-    required this.onRecolor,
-    required this.onClear,
-    required this.onRemove,
-  });
-
-  final VoidCallback onToggleCollapse;
-  final VoidCallback onCreateWorkspace;
-  final VoidCallback onCreateBench;
-  final VoidCallback onCreateBenchFromWorktree;
-  final void Function(SidebarProject project) onCreateBenchIn;
-  final void Function(SidebarProject project) onCreateBenchFromWorktreeIn;
-  final void Function(SidebarWorkspace workspace) onEditWorkspace;
-  final void Function(SidebarWorkspace workspace) onCreateProject;
-  final void Function(SidebarWorkspace workspace) onRemoveWorkspace;
-  final void Function(SidebarWorkspace workspace, SidebarProject project)
-  onRemoveProject;
-  final void Function(SidebarBench bench) onRename;
-  final void Function(SidebarBench bench) onDuplicateAsWorktree;
-  final void Function(SidebarBench bench) onEditRules;
-  final void Function(SidebarBench bench) onRecolor;
-  final void Function(SidebarBench bench) onClear;
-  final void Function(SidebarBench bench) onRemove;
-}
-
-/// A barra lateral por inteiro: cabeçalho com as duas abas e a lista que rola.
-class SidebarPanel extends StatelessWidget {
+/// A barra lateral por inteiro, para dentro da gaveta: cabeçalho (visão, busca
+/// e "Novo") e a lista que rola — a árvore ou as ativas, já filtradas pela
+/// busca.
+class SidebarPanel extends StatefulWidget {
   const SidebarPanel({
     required this.tree,
     required this.tab,
@@ -64,7 +34,9 @@ class SidebarPanel extends StatelessWidget {
     required this.commands,
     required this.onDrop,
     required this.onPlan,
-    this.compact = false,
+    this.findRequests,
+    this.takeFindPending,
+    this.onCollapse,
     super.key,
   });
 
@@ -77,84 +49,193 @@ class SidebarPanel extends StatelessWidget {
   final void Function(DragItem item, Drop target) onDrop;
   final PlanDrop onPlan;
 
-  /// Recolhida ao trilho.
-  final bool compact;
+  /// ⌘K: cada evento abre a busca e põe o foco nela.
+  final Stream<void>? findRequests;
 
-  static const expandedWidth = 308.0;
-  static const railWidth = 52.0;
+  /// Um ⌘K que chegou com a barra fora da tela: ela o atende ao nascer.
+  final bool Function()? takeFindPending;
 
-  void _createMenu(BuildContext context) {
-    final box = context.findRenderObject()! as RenderBox;
-    final origin = box.localToGlobal(Offset(box.size.width - 60, 40));
-    showContextMenu(
-      context,
-      position: origin,
-      entries: [
-        MenuEntry('Novo workspace…', commands.onCreateWorkspace),
-        const MenuEntry.separator(),
-        MenuEntry('Nova bancada…', commands.onCreateBench),
-        MenuEntry(
-          'Nova bancada a partir de worktree…',
-          commands.onCreateBenchFromWorktree,
-        ),
-      ],
-    );
+  /// Recolher a gaveta (o último botão do cabeçalho).
+  final VoidCallback? onCollapse;
+
+  @override
+  State<SidebarPanel> createState() => _SidebarPanelState();
+}
+
+class _SidebarPanelState extends State<SidebarPanel> {
+  final _query = TextEditingController();
+  final _focus = FocusNode(debugLabel: 'busca da barra lateral');
+  bool _searching = false;
+  String _text = '';
+  final _filters = ValueNotifier(SidebarFilters.none);
+  StreamSubscription<void>? _subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _listen();
+    if (widget.takeFindPending?.call() ?? false) _openSearch();
   }
 
-  String? get _emptyMessage {
-    if (compact) return null;
-    return switch (tab) {
-      SidebarTab.all =>
-        tree.isEmpty
-            ? 'Nenhuma bancada.\nUse + para criar,\nvazia ou de um template.'
-            : null,
-      SidebarTab.active =>
-        tree.activeCount == 0
-            ? 'Nenhuma bancada de pé.\nAbra uma na aba Todas.'
-            : null,
-    };
+  void _listen() => _subscription = widget.findRequests?.listen((_) {
+    if (widget.takeFindPending?.call() ?? true) _openSearch();
+  });
+
+  void _openSearch() {
+    setState(() => _searching = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searching = !_searching;
+      if (!_searching) {
+        _query.clear();
+        _text = '';
+      }
+    });
+  }
+
+  void _clear() {
+    _query.clear();
+    _filters.value = SidebarFilters.none;
+    setState(() => _text = '');
   }
 
   @override
+  void didUpdateWidget(SidebarPanel old) {
+    super.didUpdateWidget(old);
+    // O popover aberto relê a visão e a árvore: uma cópia nova o reconstrói
+    // (fora da construção, que não deixa avisar ouvintes).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _filters.value = SidebarFilters(
+        situations: _filters.value.situations,
+        workspaceId: _filters.value.workspaceId,
+      );
+    });
+    if (old.findRequests != widget.findRequests) {
+      _subscription?.cancel();
+      _listen();
+    }
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    _query.dispose();
+    _focus.dispose();
+    _filters.dispose();
+    super.dispose();
+  }
+
+  void _filtersPopover(Rect anchor) => showPopover(
+    context,
+    anchor: anchor,
+    placement: PopoverPlacement.bottomEnd,
+    width: filtersPanelWidth,
+    padding: const EdgeInsets.all(6),
+    builder: (_, _) => ListenableBuilder(
+      listenable: _filters,
+      builder: (_, _) => SidebarFiltersPanel(
+        filters: _filters.value,
+        onFilters: (f) {
+          _filters.value = f;
+          setState(() {});
+        },
+        tab: widget.tab,
+        onTab: widget.onTab,
+        tree: widget.tree,
+      ),
+    ),
+  );
+
+  void _newMenu(Rect anchor) => showMenu(
+    context,
+    anchor: anchor,
+    placement: PopoverPlacement.bottomEnd,
+    width: 260,
+    items: [
+      MenuItem(
+        'Novo workspace…',
+        icon: EgIcons.layers,
+        onSelected: widget.commands.onCreateWorkspace,
+      ),
+      const MenuSeparator(),
+      MenuItem(
+        'Nova bancada…',
+        icon: EgIcons.plus,
+        onSelected: widget.commands.onCreateBench,
+      ),
+      MenuItem(
+        'Nova bancada a partir de worktree…',
+        icon: EgIcons.worktree,
+        onSelected: widget.commands.onCreateBenchFromWorktree,
+      ),
+    ],
+  );
+
+  @override
   Widget build(BuildContext context) {
-    final message = _emptyMessage;
+    final filters = _filters.value;
+    final searching = _text.trim().isNotEmpty || !filters.isEmpty;
+    final shown = widget.tree.filtered(_text).narrowed(filters);
+    final active = widget.tab == SidebarTab.active;
+    final empty = active ? shown.activeCount == 0 : shown.isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _header(context),
+        SidebarHeader(
+          tab: widget.tab,
+          onTab: widget.onTab,
+          allCount: widget.tree.allCount,
+          activeCount: widget.tree.activeCount,
+          wantsAttention: widget.tree.wantsAttention,
+          searching: _searching,
+          onToggleSearch: _toggleSearch,
+          query: _query,
+          searchFocus: _focus,
+          onQuery: (value) => setState(() => _text = value),
+          onNew: _newMenu,
+          onFilters: _filtersPopover,
+          filterCount: filters.count,
+          onCollapse: widget.onCollapse,
+        ),
+        const SizedBox(height: EgeonSpace.s2),
+        if (!filters.isEmpty)
+          SidebarFilterSummary(
+            count: filters.count,
+            onClear: () {
+              _filters.value = SidebarFilters.none;
+              setState(() {});
+            },
+          ),
         Expanded(
           child: SingleChildScrollView(
+            // 10 do painel e 2 da lista (a v3), 4 de ar em cima.
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (tab == SidebarTab.all)
+                if (!active)
                   SidebarTreeView(
-                    tree: tree,
-                    groups: groups,
-                    benches: benches,
-                    onDrop: onDrop,
-                    onPlan: onPlan,
-                    compact: compact,
+                    tree: shown,
+                    groups: widget.groups,
+                    benches: widget.benches,
+                    commands: widget.commands,
+                    onDrop: widget.onDrop,
+                    onPlan: widget.onPlan,
                   )
                 else
                   SidebarActiveView(
-                    tree: tree,
-                    benches: benches,
-                    compact: compact,
+                    tree: shown,
+                    benches: widget.benches,
+                    commands: widget.commands,
                   ),
-                if (message != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: Text(
-                      message,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.white(0.45),
-                        decoration: TextDecoration.none,
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
+                if (empty)
+                  _Empty(searching: searching, active: active, onClear: _clear),
               ],
             ),
           ),
@@ -162,48 +243,54 @@ class SidebarPanel extends StatelessWidget {
       ],
     );
   }
+}
 
-  Widget _header(BuildContext context) {
-    final collapse = ToolbarButton(
-      onTap: commands.onToggleCollapse,
-      child: ChevronGlyph(
-        compact ? ChevronDirection.right : ChevronDirection.left,
-        color: AppColors.white(0.6),
+class _Empty extends StatelessWidget {
+  const _Empty({
+    required this.searching,
+    required this.active,
+    required this.onClear,
+  });
+
+  final bool searching;
+  final bool active;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    final message = searching
+        ? 'Nenhuma bancada com esses filtros.'
+        : active
+        ? 'Nenhuma bancada de pé.\nAbra uma na visão Todas.'
+        : 'Nenhuma bancada.\nUse + para criar,\nvazia ou de um template.';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        EgeonSpace.s4,
+        EgeonSpace.s6,
+        EgeonSpace.s4,
+        0,
       ),
-    );
-    if (compact) {
-      return SizedBox(height: 34, child: Center(child: collapse));
-    }
-    return SizedBox(
-      height: 48,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
-        child: Row(
-          children: [
-            Expanded(
-              child: SidebarSegments(
-                selected: tab,
-                allCount: tree.allCount,
-                activeCount: tree.activeCount,
-                onSelect: onTab,
-              ),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: EgeonType.small.copyWith(
+              color: c.textMuted,
+              decoration: TextDecoration.none,
             ),
-            const SizedBox(width: 8),
-            ToolbarButton(
-              onTap: () => _createMenu(context),
-              child: Text(
-                '+',
-                style: TextStyle(
-                  fontSize: 17,
-                  color: AppColors.white(0.6),
-                  decoration: TextDecoration.none,
-                ),
-              ),
+          ),
+          if (searching) ...[
+            const SizedBox(height: EgeonSpace.s3),
+            Button(
+              label: 'Limpar filtros',
+              size: ButtonSize.sm,
+              kind: ButtonKind.ghost,
+              onPressed: onClear,
             ),
-            const SizedBox(width: 6),
-            collapse,
           ],
-        ),
+        ],
       ),
     );
   }

@@ -4,14 +4,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../commons/widgets/app_dialog.dart';
-import '../../../../commons/widgets/glass_panel.dart';
-import '../../../../commons/widgets/hand_cursor.dart';
-import '../../../../commons/widgets/standard_dialogs.dart';
+import '../../../../commons/widgets/form_dialog.dart';
+import '../../../../commons/widgets/eg/glass_surface.dart';
+import '../../../../commons/widgets/eg/icon_button.dart';
+import '../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../commons/widgets/eg/segmented_control.dart';
 import '../../../../core/adapters/injector.dart';
-import '../../../../theme/app_colors.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/processes_view.dart';
 import '../cubit/processes_cubit.dart';
+import 'process_table.dart';
 
 /// Abre a janela "Processos" flutuando sobre a tela, sem barreira: o app
 /// segue usável por baixo, como a janela própria do Swift. Já aberta, a mesma
@@ -96,7 +99,7 @@ class ProcessesWindow extends StatefulWidget {
   final ValueChanged<Rect>? onFrame;
 
   static const size = Size(900, ProcessesPanel.height);
-  static const minSize = Size(560, 260);
+  static const minSize = Size(680, 260);
 
   @override
   State<ProcessesWindow> createState() => ProcessesWindowState();
@@ -180,7 +183,7 @@ class ProcessesWindowState extends State<ProcessesWindow> {
               // Clicar nela devolve o foco a ela, como clicar numa janela.
               child: Listener(
                 onPointerDown: (_) => focus(),
-                child: GlassPanel(
+                child: GlassSurface(
                   child: Stack(
                     children: [
                       Positioned.fill(
@@ -244,6 +247,7 @@ class ProcessesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProcessesCubit>();
+    final c = context.eg;
     return BlocBuilder<ProcessesCubit, ProcessesState>(
       builder: (context, state) {
         final (rows, selected, summary, orphans) = switch (state) {
@@ -266,37 +270,39 @@ class ProcessesPanel extends StatelessWidget {
                     ? null
                     : (details) => onMove!(details.delta),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
                   child: Row(
                     children: [
                       Text(
                         'Processos do $appName',
-                        style: _style(14, 1, semi: true),
+                        style: EgeonType.heading.copyWith(
+                          color: c.textPrimary,
+                          decoration: TextDecoration.none,
+                        ),
                       ),
                       const Spacer(),
-                      HandCursor(
-                        child: GestureDetector(
-                          key: const ValueKey('processes-close'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: onClose,
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Center(
-                              child: Text('✕', style: _style(12, 0.6)),
-                            ),
-                          ),
-                        ),
+                      IconButton(
+                        key: const ValueKey('processes-close'),
+                        icon: EgIcons.x,
+                        tooltip: 'Fechar',
+                        onPressed: onClose,
                       ),
                     ],
                   ),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: Row(
                   children: [
-                    _Segments(filter: state.filter, onChanged: cubit.setFilter),
+                    SegmentedControl<ProcessFilter>(
+                      value: state.filter,
+                      onChanged: cubit.setFilter,
+                      options: const [
+                        SegmentOption(ProcessFilter.all, 'Todos'),
+                        SegmentOption(ProcessFilter.orphans, 'Órfãos'),
+                      ],
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -304,17 +310,20 @@ class ProcessesPanel extends StatelessWidget {
                         key: const ValueKey('processes-summary'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: _style(12, 0.55, medium: true),
+                        style: EgeonType.caption.copyWith(
+                          color: c.textSecondary,
+                          decoration: TextDecoration.none,
+                        ),
                       ),
                     ),
-                    DialogButton(
+                    FormDialogButton(
                       'Encerrar selecionados',
                       small: true,
                       enabled: selected.isNotEmpty,
                       onTap: () => _killSelected(context),
                     ),
                     const SizedBox(width: 8),
-                    DialogButton(
+                    FormDialogButton(
                       'Encerrar órfãos',
                       small: true,
                       enabled: orphans > 0,
@@ -323,28 +332,29 @@ class ProcessesPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              Container(height: 1, color: AppColors.white(0.08)),
-              _Header(),
               Expanded(
                 child: rows.isEmpty
                     ? Center(
-                        child: Text(switch (state) {
-                          ProcessesScanning() => 'Varrendo…',
-                          ProcessesLoaded() => 'Nenhum processo.',
-                        }, style: _style(12, 0.4)),
-                      )
-                    : ListView.builder(
-                        itemCount: rows.length,
-                        itemBuilder: (context, index) => _Row(
-                          row: rows[index],
-                          selected: selected.contains(rows[index].pid),
-                          alternate: index.isOdd,
-                          onTap: (additive, range) => cubit.select(
-                            rows[index].pid,
-                            additive: additive,
-                            range: range,
+                        child: Text(
+                          switch (state) {
+                            ProcessesScanning() => 'Varrendo…',
+                            ProcessesLoaded() => 'Nenhum processo.',
+                          },
+                          style: EgeonType.caption.copyWith(
+                            color: c.textMuted,
+                            decoration: TextDecoration.none,
                           ),
                         ),
+                      )
+                    : ProcessTable(
+                        rows: rows,
+                        selected: selected,
+                        onTap: (row, {required additive, required range}) =>
+                            cubit.select(
+                              row.pid,
+                              additive: additive,
+                              range: range,
+                            ),
                       ),
               ),
             ],
@@ -381,173 +391,4 @@ class ProcessesPanel extends StatelessWidget {
     );
     if (ok) await cubit.killSelected();
   }
-}
-
-TextStyle _style(
-  double size,
-  double alpha, {
-  bool semi = false,
-  bool medium = false,
-  bool mono = false,
-}) => TextStyle(
-  color: AppColors.white(alpha),
-  fontSize: size,
-  fontWeight: semi
-      ? FontWeight.w600
-      : medium
-      ? FontWeight.w500
-      : FontWeight.w400,
-  fontFamily: mono ? 'Menlo' : null,
-  fontFeatures: mono ? const [FontFeature.tabularFigures()] : null,
-  decoration: TextDecoration.none,
-);
-
-/// Todos / Órfãos.
-class _Segments extends StatelessWidget {
-  const _Segments({required this.filter, required this.onChanged});
-
-  final ProcessFilter filter;
-  final ValueChanged<ProcessFilter> onChanged;
-
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: AppColors.white(0.08),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (value, label) in [
-          (ProcessFilter.all, 'Todos'),
-          (ProcessFilter.orphans, 'Órfãos'),
-        ])
-          HandCursor(
-            child: GestureDetector(
-              key: ValueKey('filter-${value.name}'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onChanged(value),
-              child: Container(
-                height: 22,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: filter == value ? AppColors.white(0.18) : null,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(label, style: _style(12, 0.9)),
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
-}
-
-const _widths = {'node': 220.0, 'state': 70.0, 'pid': 64.0, 'age': 80.0};
-
-class _Header extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Container(
-    height: 24,
-    padding: const EdgeInsets.symmetric(horizontal: 12),
-    color: AppColors.white(0.04),
-    child: Row(
-      children: [
-        SizedBox(
-          width: _widths['node'],
-          child: Text('Nó', style: _style(11, 0.5, semi: true)),
-        ),
-        SizedBox(
-          width: _widths['state'],
-          child: Text('Estado', style: _style(11, 0.5, semi: true)),
-        ),
-        SizedBox(
-          width: _widths['pid'],
-          child: Text('PID', style: _style(11, 0.5, semi: true)),
-        ),
-        SizedBox(
-          width: _widths['age'],
-          child: Text('Idade', style: _style(11, 0.5, semi: true)),
-        ),
-        Expanded(child: Text('Comando', style: _style(11, 0.5, semi: true))),
-      ],
-    ),
-  );
-}
-
-class _Row extends StatelessWidget {
-  const _Row({
-    required this.row,
-    required this.selected,
-    required this.alternate,
-    required this.onTap,
-  });
-
-  final ProcessRow row;
-  final bool selected;
-  final bool alternate;
-  final void Function(bool additive, bool range) onTap;
-
-  @override
-  Widget build(BuildContext context) => HandCursor(
-    child: GestureDetector(
-      key: ValueKey('process-${row.pid}'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        final keyboard = HardwareKeyboard.instance;
-        onTap(
-          keyboard.isMetaPressed || keyboard.isControlPressed,
-          keyboard.isShiftPressed,
-        );
-      },
-      child: Container(
-        height: 24,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        color: selected
-            ? AppColors.accent.withValues(alpha: 0.35)
-            : alternate
-            ? AppColors.white(0.03)
-            : null,
-        child: Row(
-          children: [
-            SizedBox(
-              width: _widths['node'],
-              child: Text(
-                row.node ?? 'app',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: _style(12, 0.9),
-              ),
-            ),
-            SizedBox(
-              width: _widths['state'],
-              child: Text(
-                row.orphan ? 'órfão' : 'no app',
-                style: row.orphan
-                    ? _style(12, 1).copyWith(color: AppColors.attention)
-                    : _style(12, 0.55),
-              ),
-            ),
-            SizedBox(
-              width: _widths['pid'],
-              child: Text('${row.pid}', style: _style(12, 0.9, mono: true)),
-            ),
-            SizedBox(
-              width: _widths['age'],
-              child: Text(row.age, style: _style(12, 0.9, mono: true)),
-            ),
-            Expanded(
-              child: Text(
-                row.command,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: _style(12, 0.9),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 }

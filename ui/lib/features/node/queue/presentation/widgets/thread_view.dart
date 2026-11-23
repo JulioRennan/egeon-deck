@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../../theme/app_colors.dart';
+import '../../../../../theme/egeon_colors.dart';
 import '../../domain/entities/queue_item.dart';
 
 /// A conversa de uma tarefa: o que o agente perguntou, comentou, e o que você
@@ -32,10 +32,10 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) {
     final mine = message.kind == MessageKind.reply;
     final color = switch (message.kind) {
-      MessageKind.question => AppColors.attention,
-      MessageKind.done => AppColors.done,
-      MessageKind.note => AppColors.white(0.55),
-      MessageKind.reply => AppColors.accent,
+      MessageKind.question => context.eg.attention,
+      MessageKind.done => context.eg.success,
+      MessageKind.note => context.eg.textMuted,
+      MessageKind.reply => context.eg.accent,
     };
     final who = mine ? 'você' : (message.author ?? 'agente');
     final label = switch (message.kind) {
@@ -47,7 +47,7 @@ class _Message extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 7),
       decoration: BoxDecoration(
-        color: AppColors.white(0.04),
+        color: context.eg.steel,
         borderRadius: BorderRadius.circular(6),
         border: Border(left: BorderSide(color: color, width: 2)),
       ),
@@ -67,7 +67,7 @@ class _Message extends StatelessWidget {
           Text(
             message.text,
             style: TextStyle(
-              color: AppColors.white(0.85),
+              color: context.eg.textPrimary,
               fontSize: 12,
               height: 1.3,
               decoration: TextDecoration.none,

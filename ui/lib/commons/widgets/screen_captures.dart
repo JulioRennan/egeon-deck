@@ -19,6 +19,9 @@ class ScreenCaptures {
     final boundary = context?.findRenderObject();
     if (context == null || boundary is! RenderRepaintBoundary) return null;
     final ratio = View.of(context).devicePixelRatio;
+    // Com algo animando dentro (o spinner), a região pode estar entre dois
+    // quadros: o motor só captura o que já foi pintado.
+    if (boundary.debugNeedsPaint) await WidgetsBinding.instance.endOfFrame;
     final image = await boundary.toImage(pixelRatio: ratio);
     try {
       final data = await image.toByteData(format: ui.ImageByteFormat.png);

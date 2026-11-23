@@ -1,9 +1,11 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/app_dialog.dart';
-import '../../../../commons/widgets/app_text_field.dart';
-import '../../../../commons/widgets/pick_list.dart';
-import '../../../../commons/widgets/workspace_badge.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_type.dart';
+
+import '../../../../commons/widgets/form_dialog.dart';
+import '../../../../commons/widgets/form_kit.dart';
+import '../../../../commons/widgets/workspace_mark.dart';
 import '../../../../core/adapters/path_picker.dart';
 import '../../domain/entities/workspace_draft.dart';
 import 'multi_project_editor.dart';
@@ -16,7 +18,7 @@ Future<WorkspaceDraft?> showWorkspaceForm(
   required bool editing,
   required PathPicker picker,
   required Future<String> Function(List<String> folders) suggestName,
-}) => showAppDialog<WorkspaceDraft>(
+}) => showFormDialog<WorkspaceDraft>(
   context,
   width: 380,
   builder: (_, close) => _FormBody(
@@ -158,10 +160,9 @@ class _FormBodyState extends State<_FormBody> {
     padding: const EdgeInsets.only(top: 12, bottom: 4),
     child: Text(
       text,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        color: Color(0xFFFFFFFF),
+      style: EgeonType.caption.copyWith(
+        fontWeight: FontWeight.w500,
+        color: context.eg.textSecondary,
         decoration: TextDecoration.none,
       ),
     ),
@@ -172,14 +173,14 @@ class _FormBodyState extends State<_FormBody> {
     final iconPath = _iconSource ?? (_clearIcon ? null : widget.initial.icon);
     return ListenableBuilder(
       listenable: _name,
-      builder: (context, _) => DialogBody(
+      builder: (context, _) => FormDialogBody(
         title: widget.editing ? 'Editar workspace' : 'Novo workspace',
         message:
             'Cada pasta vira um projeto; um multi-projeto junta algumas delas '
             'numa pasta só. As bancadas se organizam por projeto.',
         actions: [
-          DialogButton('Cancelar', onTap: widget.close),
-          DialogButton(
+          FormDialogButton('Cancelar', onTap: widget.close),
+          FormDialogButton(
             widget.editing ? 'Salvar' : 'Criar',
             primary: true,
             enabled: _name.text.trim().isNotEmpty,
@@ -193,7 +194,7 @@ class _FormBodyState extends State<_FormBody> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                WorkspaceBadge(
+                WorkspaceMark(
                   name: _name.text.isEmpty ? '?' : _name.text,
                   iconPath: iconPath,
                   side: 44,
@@ -203,7 +204,7 @@ class _FormBodyState extends State<_FormBody> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AppTextField(
+                      FormTextField(
                         controller: _name,
                         placeholder: 'nome do workspace',
                         autofocus: true,
@@ -212,12 +213,12 @@ class _FormBodyState extends State<_FormBody> {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          DialogButton(
+                          FormDialogButton(
                             'Imagem…',
                             small: true,
                             onTap: _pickImage,
                           ),
-                          DialogButton(
+                          FormDialogButton(
                             'Sem imagem',
                             small: true,
                             onTap: _dropImage,
@@ -245,12 +246,12 @@ class _FormBodyState extends State<_FormBody> {
               spacing: 6,
               runSpacing: 6,
               children: [
-                DialogButton(
+                FormDialogButton(
                   'Adicionar pastas…',
                   small: true,
                   onTap: _addFolders,
                 ),
-                DialogButton(
+                FormDialogButton(
                   'Tirar selecionadas',
                   small: true,
                   onTap: _removeFolders,
@@ -275,12 +276,12 @@ class _FormBodyState extends State<_FormBody> {
               spacing: 6,
               runSpacing: 6,
               children: [
-                DialogButton(
+                FormDialogButton(
                   'Novo multi-projeto…',
                   small: true,
                   onTap: () => _editMulti(null),
                 ),
-                DialogButton(
+                FormDialogButton(
                   'Editar…',
                   small: true,
                   onTap: () {
@@ -288,7 +289,7 @@ class _FormBodyState extends State<_FormBody> {
                     if (i != null) _editMulti(i);
                   },
                 ),
-                DialogButton('Tirar', small: true, onTap: _removeMulti),
+                FormDialogButton('Tirar', small: true, onTap: _removeMulti),
               ],
             ),
           ],

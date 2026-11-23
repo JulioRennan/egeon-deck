@@ -15,6 +15,7 @@ rust/      o app novo, lado Rust — core, terminal, driver, montagem e o `egeon
 ui/        o app novo, lado Flutter — a interface
 legado/    o app Swift de hoje (app/, tools/, poc/) — só referência para o porte
 docs/      00-prior-art · 01-decisoes (ADRs) · 02-mvp · 03-spec-chat · migracao/
+design/    a marca (logo, ícone) e o design system Graphite — o descritivo
 site/      a página do projeto
 ```
 
@@ -30,6 +31,7 @@ fundação: compilam, mas não há lógica portada.
 | Como o Swift está montado por dentro | `docs/migracao/2-arquitetura-atual.html` |
 | Conceitos e funcionalidades do produto (a especificação do porte) | `legado/CLAUDE.md` |
 | Por que cada decisão antiga foi tomada | `docs/01-decisoes.md` |
+| A marca e o manual do design system | `design/README.md` |
 
 ## Os componentes do app novo
 

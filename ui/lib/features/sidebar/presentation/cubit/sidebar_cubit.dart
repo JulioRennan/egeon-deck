@@ -11,7 +11,7 @@ import '../../domain/usecase/select_bench.dart';
 import '../../domain/usecase/set_project_stored.dart';
 import '../../domain/usecase/toggle_group.dart';
 import '../../domain/usecase/watch_sidebar.dart';
-import '../widgets/sidebar_segments.dart';
+import '../../domain/entities/sidebar_tab.dart';
 
 part 'sidebar_state.dart';
 
@@ -35,6 +35,26 @@ class SidebarCubit extends Cubit<SidebarState> {
   final MoveItem _move;
   final PlanMove _plan;
   StreamSubscription<SidebarTree>? _subscription;
+  final _find = StreamController<void>.broadcast();
+
+  /// ⌘K: cada evento pede à barra que abra a busca e ponha o foco nela. É um
+  /// comando de uma vez, não estado.
+  Stream<void> get findRequests => _find.stream;
+
+  var _findPending = false;
+
+  void requestFind() {
+    _findPending = true;
+    _find.add(null);
+  }
+
+  /// A barra que ainda não estava na tela (a gaveta fechada) busca o pedido ao
+  /// nascer: devolve se havia um e o dá por atendido.
+  bool takeFindPending() {
+    final pending = _findPending;
+    _findPending = false;
+    return pending;
+  }
 
   void _onTree(SidebarTree tree) => emit(switch (state) {
     SidebarAll() => SidebarAll(tree),
@@ -95,6 +115,7 @@ class SidebarCubit extends Cubit<SidebarState> {
   @override
   Future<void> close() async {
     await _subscription?.cancel();
+    await _find.close();
     return super.close();
   }
 }

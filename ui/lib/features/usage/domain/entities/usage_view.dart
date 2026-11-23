@@ -174,6 +174,7 @@ class UsagePanelView {
   final List<TariffShare> split;
   final List<UsageRow> agents;
   final List<UsageRow> models;
+
   final PriceTableView prices;
 
   factory UsagePanelView.fromMap(Map<String, Object?> map) {

@@ -1,14 +1,17 @@
 import 'dart:async';
 
+import '../../../node/agent/presentation/widgets/agent_traits.dart';
+
 import 'package:flutter/widgets.dart';
 
-import '../../../../commons/widgets/standard_dialogs.dart';
+import '../../../../commons/widgets/eg/button.dart';
+import '../../../../commons/widgets/eg/dialog.dart' as eg;
+import '../../../../commons/widgets/eg/dialog.dart' show showEgDialog;
+import '../../../../commons/widgets/form_dialog.dart';
 import '../../../../core/adapters/injector.dart';
 import '../../../../core/domain/entities/workbench.dart';
-import '../../../../core/domain/entities/workbench_clock.dart';
-import '../../../workbench/presentation/widgets/clock_chip.dart';
 import '../../../workbench/domain/errors/workbench_error.dart';
-import '../../../workbench/domain/usecase/reset_clock.dart';
+import '../../../workbench/domain/usecase/change_bench_color.dart';
 import '../../../workbench/domain/entities/worktree_info.dart';
 import '../../../workbench/domain/entities/worktree_source.dart';
 import '../../../workbench/domain/usecase/bench_creation.dart';
@@ -17,15 +20,19 @@ import '../../../canvas/domain/usecase/open_node_folder.dart';
 import '../../../node/agent/domain/errors/agent_error.dart';
 import '../../../node/agent/domain/usecase/retry_agent.dart';
 import '../../../../core/domain/entities/workbench_node.dart';
-import '../../../../theme/workbench_palette.dart';
+import '../../../../commons/utils/bench_identity.dart';
+import '../../../../theme/egeon_colors.dart';
 import '../../../canvas/domain/entities/canvas_card.dart';
+import '../../../canvas/domain/entities/canvas_component.dart';
 import '../../../canvas/domain/entities/edge_link.dart';
 import '../../../canvas/domain/errors/canvas_error.dart';
 import '../../../canvas/domain/usecase/edit_links.dart';
 import '../../../canvas/domain/usecase/remove_node.dart';
 import '../../../canvas/presentation/page/canvas_page.dart';
 import '../../../canvas/presentation/widgets/canvas_bench_actions.dart';
+import '../../../chat/presentation/widgets/chat_dock.dart';
 import '../forms/app_forms.dart';
+import '../../../../commons/widgets/shell_layers.dart';
 import '../forms/form_request.dart';
 import '../../../canvas/domain/entities/canvas_probe.dart';
 import '../../../canvas/presentation/cubit/canvas_commands.dart';
@@ -44,14 +51,10 @@ class WorkbenchCanvas extends StatelessWidget {
   const WorkbenchCanvas({
     required this.bench,
     this.sidebarInset = 0,
-    this.clock,
     super.key,
   });
 
   final Workbench bench;
-
-  /// O cronômetro da bancada, na faixa sob a barra de ações (ADR-085).
-  final WorkbenchClock? clock;
 
   /// O quanto da esquerda a barra lateral flutuante cobre.
   final double sidebarInset;
@@ -93,35 +96,51 @@ class WorkbenchCanvas extends StatelessWidget {
   );
 
   /// O menu do Terminal sem o core é só "Shell simples" e "Configurar…".
-  static Future<List<String>> _componentNames() =>
-      inject<ListComponents>()().catchError(
-        (_) => const <String>[],
+  Future<List<CanvasComponent>> _components() => inject<ListComponents>()
+      .choices(bench.id)
+      .catchError(
+        (_) => const <CanvasComponent>[],
         test: (error) => error is AgentError,
       );
 
   @override
-  Widget build(BuildContext context) => CanvasPage(
+  Widget build(BuildContext context) => Stack(
+    children: [
+      Positioned.fill(child: _canvas(context)),
+      // O composer fica no lugar fixo da pilha de baixo (E2/H6).
+      Positioned.fill(
+        child: ShellLayers(
+          composer: ChatDock(
+            workbenchId: bench.id,
+            traitsFor: (nodeId) =>
+                AgentTraits(workbenchId: bench.id, nodeId: nodeId),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  Widget _canvas(BuildContext context) => CanvasPage(
     key: ValueKey(bench.id),
     workbenchId: bench.id,
     probes: inject<CanvasProbeRegistry>(),
     commands: inject<CanvasCommands>(),
     sidebarInset: sidebarInset,
     nativeCapture: inject<WebCaptureRegistry>().capture,
-    glow: bench.color == null ? null : WorkbenchPalette.of(bench.color),
+    glow: bench.color == null
+        ? null
+        : BenchIdentity.of(bench.color).color(context.eg),
     bodyBuilder: _body,
     accessoryBuilder: _accessory,
-    componentNames: _componentNames,
-    infoBar: switch (clock) {
-      final clock? => ClockChip(
-        clock: clock,
-        // Recusa do core não tem o que mostrar: o relógio continua como está.
-        onReset: () => unawaited(
-          inject<ResetClock>()(bench.id)
-              .catchError((_) {}, test: (e) => e is WorkbenchError),
-        ),
-      ),
-      null => null,
-    },
+    components: _components,
+    benchName: bench.name,
+    benchColor: bench.color,
+    onPickColor: (name) => unawaited(
+      inject<ChangeBenchColor>()(
+        bench.id,
+        name,
+      ).catchError((_) {}, test: (e) => e is WorkbenchError),
+    ),
     onConfigureTerminal: (visible) =>
         unawaited(_nodeForm(context, visible: visible)),
     onConfigureTerminalAt: (frame) =>
@@ -214,15 +233,30 @@ Future<void> confirmClearAgent(
   String nodeId,
   VoidCallback clear,
 ) async {
-  final confirmed = await confirmDialog(
+  final confirmed = await showEgDialog<bool>(
     context,
-    title: 'Limpar a conversa de "$nodeId"?',
-    message:
-        'O agente esquece a conversa atual. O chat e a trilha da bancada '
-        'continuam como estão.',
-    confirmLabel: 'Limpar',
+    builder: (_, close) => eg.Dialog(
+      title: 'Limpar o contexto de $nodeId?',
+      width: 360,
+      actions: [
+        Button(
+          label: 'Cancelar',
+          kind: ButtonKind.ghost,
+          onPressed: () => close(false),
+        ),
+        Button(
+          label: 'Limpar',
+          kind: ButtonKind.danger,
+          onPressed: () => close(true),
+        ),
+      ],
+      child: const Text(
+        'A conversa recomeça do zero com o mesmo papel e regras. A trilha da '
+        'bancada continua.',
+      ),
+    ),
   );
-  if (confirmed) clear();
+  if (confirmed ?? false) clear();
 }
 
 /// O texto do limite: vazio é "sem limite", e o que não é número não muda

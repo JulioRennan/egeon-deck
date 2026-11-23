@@ -1,10 +1,12 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../../commons/widgets/context_menu.dart';
-import '../../../../../commons/widgets/glyphs.dart';
+import '../../../../../commons/widgets/eg/checkbox.dart';
+import '../../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../../commons/widgets/eg/icon_button.dart';
+import '../../../../../commons/widgets/eg/menu.dart';
 import '../../../../../commons/widgets/hand_cursor.dart';
-import '../../../../../commons/widgets/toolbar_button.dart';
-import '../../../../../theme/app_colors.dart';
+import '../../../../../theme/egeon_colors.dart';
+import '../../../../../theme/egeon_type.dart';
 import '../../domain/entities/prompt_queue.dart';
 
 /// A barra de cima da fila: para quem manda, o automático, mandar a próxima e
@@ -40,14 +42,13 @@ class QueueBar extends StatelessWidget {
     return Container(
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      color: const Color(0xFF242424),
+      color: context.eg.carbon,
       child: Row(
         children: [
           Text(
             'para',
-            style: TextStyle(
-              color: AppColors.white(0.55),
-              fontSize: 13,
+            style: EgeonType.small.copyWith(
+              color: context.eg.textMuted,
               fontWeight: FontWeight.w500,
               decoration: TextDecoration.none,
             ),
@@ -57,12 +58,16 @@ class QueueBar extends StatelessWidget {
             child: _TargetPicker(
               label: current?.label ?? 'ninguém ligado',
               enabled: targets.length > 1,
-              onTap: (position) => showContextMenu(
+              onTap: (anchor) => showMenu(
                 context,
-                position: position,
-                entries: [
+                anchor: anchor,
+                items: [
                   for (final t in targets)
-                    MenuEntry(t.label, () => onTarget(t.id)),
+                    MenuItem(
+                      t.label,
+                      checked: t.id == destination,
+                      onSelected: () => onTarget(t.id),
+                    ),
                 ],
               ),
             ),
@@ -70,53 +75,32 @@ class QueueBar extends StatelessWidget {
           const SizedBox(width: 8),
           _AutoBox(on: queue.auto, onChanged: onAuto),
           const SizedBox(width: 8),
-          _BarButton(
+          IconButton(
             key: const ValueKey('send-next'),
-            glyph: _Glyph.send,
-            onTap: onSendNext,
+            icon: EgIcons.send,
+            tooltip: 'Mandar a próxima',
+            compact: true,
+            onPressed: onSendNext,
           ),
-          _BarButton(
+          IconButton(
             key: const ValueKey('clear-done'),
-            glyph: _Glyph.check,
-            onTap: onClearDone,
+            icon: EgIcons.check,
+            tooltip: 'Tirar as feitas',
+            compact: true,
+            onPressed: onClearDone,
           ),
           if (onClose != null)
-            ToolbarButton(
+            IconButton(
               key: const ValueKey('queue-close'),
-              size: 28,
-              onTap: onClose!,
-              child: CustomPaint(
-                size: const Size(10, 10),
-                painter: _CrossPainter(AppColors.white(0.7)),
-              ),
+              icon: EgIcons.x,
+              tooltip: 'Fechar',
+              compact: true,
+              onPressed: onClose!,
             ),
         ],
       ),
     );
   }
-}
-
-class _CrossPainter extends CustomPainter {
-  const _CrossPainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) => canvas.drawPath(
-    Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, size.height)
-      ..moveTo(size.width, 0)
-      ..lineTo(0, size.height),
-    Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round,
-  );
-
-  @override
-  bool shouldRepaint(_CrossPainter old) => old.color != color;
 }
 
 class _TargetPicker extends StatelessWidget {
@@ -128,7 +112,7 @@ class _TargetPicker extends StatelessWidget {
 
   final String label;
   final bool enabled;
-  final ValueChanged<Offset> onTap;
+  final ValueChanged<Rect> onTap;
 
   @override
   Widget build(BuildContext context) => HandCursor(
@@ -139,7 +123,7 @@ class _TargetPicker extends StatelessWidget {
       onTap: enabled
           ? () {
               final box = context.findRenderObject()! as RenderBox;
-              onTap(box.localToGlobal(Offset(0, box.size.height + 4)));
+              onTap(box.localToGlobal(Offset.zero) & box.size);
             }
           : null,
       child: Row(
@@ -150,20 +134,15 @@ class _TargetPicker extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppColors.white(enabled ? 0.9 : 0.6),
-                fontSize: 13,
+              style: EgeonType.small.copyWith(
+                color: enabled ? context.eg.textPrimary : context.eg.textMuted,
                 decoration: TextDecoration.none,
               ),
             ),
           ),
           if (enabled) ...[
             const SizedBox(width: 4),
-            ChevronGlyph(
-              ChevronDirection.down,
-              color: AppColors.white(0.5),
-              size: 10,
-            ),
+            EgIcon(EgIcons.chevronDown, size: 12, color: context.eg.textMuted),
           ],
         ],
       ),
@@ -178,135 +157,10 @@ class _AutoBox extends StatelessWidget {
   final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) => HandCursor(
-    child: GestureDetector(
-      key: const ValueKey('queue-auto'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onChanged(!on),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(
-              color: on ? AppColors.accent : null,
-              borderRadius: BorderRadius.circular(3),
-              border: Border.all(
-                color: on ? AppColors.accent : AppColors.white(0.4),
-              ),
-            ),
-            child: on
-                ? CustomPaint(painter: _TickPainter())
-                : const SizedBox.shrink(),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            'Automático',
-            style: TextStyle(
-              color: AppColors.white(0.85),
-              fontSize: 13,
-              decoration: TextDecoration.none,
-            ),
-          ),
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => Checkbox(
+    key: const ValueKey('queue-auto'),
+    checked: on,
+    onChanged: onChanged,
+    label: const Text('Automático'),
   );
-}
-
-class _TickPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) => canvas.drawPath(
-    Path()
-      ..moveTo(size.width * 0.25, size.height * 0.52)
-      ..lineTo(size.width * 0.43, size.height * 0.7)
-      ..lineTo(size.width * 0.76, size.height * 0.3),
-    Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round,
-  );
-
-  @override
-  bool shouldRepaint(_TickPainter old) => false;
-}
-
-enum _Glyph { send, check }
-
-class _BarButton extends StatefulWidget {
-  const _BarButton({required this.glyph, required this.onTap, super.key});
-
-  final _Glyph glyph;
-  final VoidCallback onTap;
-
-  @override
-  State<_BarButton> createState() => _BarButtonState();
-}
-
-class _BarButtonState extends State<_BarButton> {
-  var _hovering = false;
-
-  @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    onEnter: (_) => setState(() => _hovering = true),
-    onExit: (_) => setState(() => _hovering = false),
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.onTap,
-      child: Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          color: _hovering ? AppColors.white(0.10) : null,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: CustomPaint(painter: _BarGlyphPainter(widget.glyph)),
-      ),
-    ),
-  );
-}
-
-class _BarGlyphPainter extends CustomPainter {
-  _BarGlyphPainter(this.glyph);
-
-  final _Glyph glyph;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final stroke = Paint()
-      ..color = AppColors.white(0.75)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    switch (glyph) {
-      case _Glyph.send:
-        canvas.drawPath(
-          Path()
-            ..moveTo(c.dx - 7, c.dy - 1)
-            ..lineTo(c.dx + 7, c.dy - 7)
-            ..lineTo(c.dx + 3, c.dy + 7)
-            ..lineTo(c.dx - 1, c.dy + 1)
-            ..close(),
-          stroke,
-        );
-      case _Glyph.check:
-        canvas
-          ..drawCircle(c, 7.5, stroke)
-          ..drawPath(
-            Path()
-              ..moveTo(c.dx - 3.5, c.dy)
-              ..lineTo(c.dx - 1, c.dy + 3)
-              ..lineTo(c.dx + 3.5, c.dy - 3),
-            stroke,
-          );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BarGlyphPainter old) => old.glyph != glyph;
 }

@@ -1,6 +1,8 @@
 import '../../../../core/domain/entities/activity_summary.dart';
 import '../../../../core/domain/entities/organization.dart';
 import 'sidebar_bench.dart';
+import 'sidebar_filters.dart';
+import 'stack_badge.dart';
 
 class SidebarProject {
   const SidebarProject({
@@ -13,6 +15,7 @@ class SidebarProject {
     this.joins = const [],
     this.benches = const [],
     this.activity = ActivitySummary.none,
+    this.stacks = const [],
   });
 
   final String id;
@@ -22,6 +25,10 @@ class SidebarProject {
   final String path;
   final bool pathExists;
   final bool collapsed;
+
+  /// As tecnologias do projeto, em selos sob o nome. Vazio enquanto o core não
+  /// detecta a stack.
+  final List<StackBadge> stacks;
 
   /// Guardado na gaveta do workspace.
   final bool stored;
@@ -91,6 +98,143 @@ class SidebarTree {
   final List<SidebarBench> stale;
 
   int get activeCount => recent.length + stale.length;
+
+  /// Alguma bancada precisa de você.
+  bool get wantsAttention =>
+      workspaces.any((w) => w.activity.wantsAttention) ||
+      orphans.any((b) => b.activity.wantsAttention);
+
+  /// A árvore só com o que casa com [query] no nome da bancada, do projeto ou
+  /// do workspace (sem diferenciar maiúsculas). Uma busca de workspace ou de
+  /// projeto traz tudo que há dentro dele; o que não tem bancada nem nome que
+  /// case some. Busca vazia devolve a própria árvore.
+  SidebarTree filtered(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return this;
+    bool has(String text) => text.toLowerCase().contains(q);
+    bool benchMatches(SidebarBench b, String? project, String? workspace) =>
+        has(b.name) ||
+        (project != null && has(project)) ||
+        (workspace != null && has(workspace));
+    return SidebarTree(
+      workspaces: [
+        for (final w in workspaces)
+          if (_keep(w, has, benchMatches))
+            _filterWorkspace(w, has, benchMatches),
+      ],
+      orphans: [
+        for (final b in orphans)
+          if (benchMatches(b, null, null)) b,
+      ],
+      recent: [
+        for (final b in recent)
+          if (benchMatches(b, b.project, b.owner?.name)) b,
+      ],
+      stale: [
+        for (final b in stale)
+          if (benchMatches(b, b.project, b.owner?.name)) b,
+      ],
+    );
+  }
+
+  static bool _keep(
+    SidebarWorkspace w,
+    bool Function(String) has,
+    bool Function(SidebarBench, String?, String?) matches,
+  ) =>
+      has(w.name) ||
+      w.projects.any(
+        (p) => has(p.name) || p.benches.any((b) => matches(b, p.name, w.name)),
+      );
+
+  static SidebarWorkspace _filterWorkspace(
+    SidebarWorkspace w,
+    bool Function(String) has,
+    bool Function(SidebarBench, String?, String?) matches,
+  ) {
+    final all = has(w.name);
+    return SidebarWorkspace(
+      id: w.id,
+      name: w.name,
+      icon: w.icon,
+      collapsed: false,
+      storedOpen: w.storedOpen,
+      activity: w.activity,
+      projects: [
+        for (final p in w.projects)
+          if (all ||
+              has(p.name) ||
+              p.benches.any((b) => matches(b, p.name, w.name)))
+            SidebarProject(
+              id: p.id,
+              name: p.name,
+              path: p.path,
+              pathExists: p.pathExists,
+              collapsed: false,
+              stored: p.stored,
+              joins: p.joins,
+              activity: p.activity,
+              stacks: p.stacks,
+              benches: [
+                for (final b in p.benches)
+                  if (all || has(p.name) || matches(b, p.name, w.name)) b,
+              ],
+            ),
+      ],
+    );
+  }
+
+  /// A árvore só com as bancadas que passam em [filters]; o projeto e o
+  /// workspace que ficam sem bancada saem. As órfãs não são de workspace
+  /// nenhum, então saem quando se escolhe um. Sem filtro devolve a própria.
+  SidebarTree narrowed(SidebarFilters filters) {
+    if (filters.isEmpty) return this;
+    final only = filters.workspaceId;
+    bool keep(SidebarBench b) => filters.matches(b);
+    bool fromOnly(SidebarBench b) => only == null || b.owner?.id == only;
+    return SidebarTree(
+      workspaces: [
+        for (final w in workspaces)
+          if (only == null || w.id == only) ?_narrowWorkspace(w, keep),
+      ],
+      orphans: only == null ? orphans.where(keep).toList() : const [],
+      recent: recent.where((b) => keep(b) && fromOnly(b)).toList(),
+      stale: stale.where((b) => keep(b) && fromOnly(b)).toList(),
+    );
+  }
+
+  static SidebarWorkspace? _narrowWorkspace(
+    SidebarWorkspace w,
+    bool Function(SidebarBench) keep,
+  ) {
+    final projects = [
+      for (final p in w.projects)
+        if (p.benches.any(keep))
+          SidebarProject(
+            id: p.id,
+            name: p.name,
+            path: p.path,
+            pathExists: p.pathExists,
+            collapsed: false,
+            stored: p.stored,
+            joins: p.joins,
+            activity: p.activity,
+            stacks: p.stacks,
+            benches: p.benches.where(keep).toList(),
+          ),
+    ];
+    if (projects.isEmpty) return null;
+    return SidebarWorkspace(
+      id: w.id,
+      name: w.name,
+      icon: w.icon,
+      collapsed: false,
+      storedOpen: w.storedOpen,
+      activity: w.activity,
+      projects: projects,
+    );
+  }
+
   int get allCount =>
       workspaces.fold(0, (total, w) => total + w.benchCount) + orphans.length;
   bool get isEmpty => allCount == 0;

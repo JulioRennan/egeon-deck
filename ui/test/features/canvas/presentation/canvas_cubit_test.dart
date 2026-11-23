@@ -177,37 +177,55 @@ void main() {
     },
   );
 
-  test(
-    'terminal sem componente não nasce: pede o formulário com o retângulo',
-    () async {
-      final (:cubit, :repository) = await canvasCubitFor();
-      final tools = toolCubitFor(repository);
-      final before = cubit.state.cards.length;
-      final asked = <Rect>[];
-      final subscription = tools.configureTerminal.listen(asked.add);
-      cubit.resetZoom();
-      tools.selectTool(CanvasTool.terminal);
-      await tools.placeByGesture(
-        const Offset(200, 200),
-        const Offset(300, 260),
-        cubit.state.viewport,
-      );
-      await pump();
-      expect(asked, hasLength(1));
-      expect(asked.single.width, 280, reason: 'o piso do mínimo vale aqui');
-      expect(cubit.state.cards, hasLength(before), reason: 'nada criado');
-      expect(tools.state, isA<CanvasPointer>());
-      await subscription.cancel();
-      await tools.close();
-      await cubit.close();
-    },
-  );
+  test('o shell nasce na hora, sem formulário', () async {
+    final (:cubit, :repository) = await canvasCubitFor();
+    final tools = toolCubitFor(repository);
+    final before = cubit.state.cards.length;
+    final asked = <Rect>[];
+    final subscription = tools.configureTerminal.listen(asked.add);
+    cubit.resetZoom();
+    tools.selectTool(CanvasTool.shell);
+    await tools.placeByGesture(
+      const Offset(200, 200),
+      const Offset(300, 260),
+      cubit.state.viewport,
+    );
+    await pump();
+    expect(asked, isEmpty);
+    expect(cubit.state.cards, hasLength(before + 1));
+    await subscription.cancel();
+    await tools.close();
+    await cubit.close();
+  });
+
+  test('terminal de agente sem componente não nasce: pede o formulário com o retângulo', () async {
+    final (:cubit, :repository) = await canvasCubitFor();
+    final tools = toolCubitFor(repository);
+    final before = cubit.state.cards.length;
+    final asked = <Rect>[];
+    final subscription = tools.configureTerminal.listen(asked.add);
+    cubit.resetZoom();
+    tools.selectTool(CanvasTool.agent);
+    await tools.placeByGesture(
+      const Offset(200, 200),
+      const Offset(300, 260),
+      cubit.state.viewport,
+    );
+    await pump();
+    expect(asked, hasLength(1));
+    expect(asked.single.width, 280, reason: 'o piso do mínimo vale aqui');
+    expect(cubit.state.cards, hasLength(before), reason: 'nada criado');
+    expect(tools.state, isA<CanvasPointer>());
+    await subscription.cancel();
+    await tools.close();
+    await cubit.close();
+  });
 
   test('escolher componente arma o terminal e avisa', () async {
     final (:cubit, :repository) = await canvasCubitFor();
     final tools = toolCubitFor(repository);
     tools.pickComponent('revisor');
-    expect(tools.tool, CanvasTool.terminal);
+    expect(tools.tool, CanvasTool.agent);
     expect(
       tools.state,
       isA<CanvasAnnouncing>().having(

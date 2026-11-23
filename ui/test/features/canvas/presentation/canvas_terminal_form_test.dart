@@ -1,5 +1,4 @@
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
-import 'package:egeon_deck/commons/widgets/app_tooltip.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind, kSecondaryButton;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,10 +63,10 @@ void main() {
       componentNames: const ['revisor', 'build'],
       onConfigureTerminal: configured.add,
     );
-    await tester.longPress(find.byKey(const ValueKey('tool-terminal')));
+    await tester.longPress(find.byKey(const ValueKey('tool-agent')));
     await tester.pump();
     await tester.pump();
-    expect(find.text('Shell simples'), findsOneWidget);
+    expect(find.text('Componentes salvos'), findsOneWidget);
     expect(find.text('revisor'), findsOneWidget);
     expect(find.text('build'), findsOneWidget);
     await tester.tap(find.text('Configurar novo terminal…'));
@@ -83,7 +82,7 @@ void main() {
     final repo = InMemoryCanvasRepository();
     await pumpCanvas(tester, repo, onConfigureTerminalAt: asked.add);
 
-    await tester.tap(find.byKey(const ValueKey('tool-terminal')));
+    await tester.tap(find.byKey(const ValueKey('tool-agent')));
     await tester.pump();
     await tester.tapAt(const Offset(600, 600));
     await tester.pump();
@@ -103,16 +102,16 @@ void main() {
       componentNames: const ['revisor'],
     );
     await tester.tap(
-      find.byKey(const ValueKey('tool-terminal')),
+      find.byKey(const ValueKey('tool-agent')),
       buttons: kSecondaryButton,
     );
     await tester.pump();
     await tester.pump();
-    expect(find.text('Shell simples'), findsOneWidget);
+    expect(find.text('Componentes salvos'), findsOneWidget);
     expect(find.text('revisor'), findsOneWidget);
   });
 
-  testWidgets('parar o mouse num botão da barra mostra a dica do Swift', (
+  testWidgets('parar o mouse num botão da barra mostra a dica, sem atalho', (
     tester,
   ) async {
     await pumpCanvas(tester, InMemoryCanvasRepository());
@@ -120,13 +119,10 @@ void main() {
     await mouse.addPointer(location: Offset.zero);
     addTearDown(mouse.removePointer);
     await mouse.moveTo(
-      tester.getCenter(find.byKey(const ValueKey('tool-terminal'))),
+      tester.getCenter(find.byKey(const ValueKey('tool-agent'))),
     );
     await tester.pump();
-    await tester.pump(AppTooltip.delay);
-    expect(
-      find.text('Terminal — clique ou arraste no canvas (⌘T)'),
-      findsOneWidget,
-    );
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Terminal de agente'), findsOneWidget);
   });
 }

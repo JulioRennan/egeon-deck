@@ -2,7 +2,10 @@ import 'package:egeon_deck/core/domain/entities/workbench_node.dart';
 
 import 'dart:ui';
 
-import 'package:egeon_deck/commons/widgets/attention_ring.dart';
+import 'package:egeon_deck/commons/widgets/eg/edge_label.dart';
+import 'package:egeon_deck/theme/egeon_colors.dart';
+import 'package:egeon_deck/commons/widgets/eg/eg_icon.dart';
+import 'package:egeon_deck/features/canvas/presentation/widgets/edge_controls.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/canvas_card.dart';
 import 'package:egeon_deck/features/node/card/domain/entities/card_activity.dart';
 import 'package:egeon_deck/features/canvas/domain/entities/edge_link.dart';
@@ -70,7 +73,7 @@ void main() {
     expect(find.text('a'), findsWidgets);
   });
 
-  testWidgets('quem espera você ganha a borda que gira; os outros não', (
+  testWidgets('quem espera você troca a borda e o anel para attention', (
     tester,
   ) async {
     final repo = InMemoryCanvasRepository(
@@ -88,24 +91,33 @@ void main() {
     );
     await pumpCanvas(tester, repo);
 
-    final rings = tester
-        .widgetList<AttentionRing>(find.byType(AttentionRing))
-        .toList();
-    expect(rings.where((r) => r.tone == AttentionTone.asking), hasLength(1));
+    BoxDecoration frame(String id) =>
+        tester
+                .widgetList<DecoratedBox>(
+                  find.descendant(
+                    of: card(id),
+                    matching: find.byType(DecoratedBox),
+                  ),
+                )
+                .first
+                .decoration
+            as BoxDecoration;
+    final attention = EgeonColors.dark.attention;
     expect(
-      find.descendant(of: card('b'), matching: find.byType(AttentionRing)),
-      findsOneWidget,
+      (frame('b').border! as Border).top.color,
+      attention.withValues(alpha: 0.7),
     );
     expect(
-      tester
-          .widget<AttentionRing>(
-            find.descendant(
-              of: card('a'),
-              matching: find.byType(AttentionRing),
-            ),
-          )
-          .tone,
-      isNull,
+      frame('b').boxShadow!.any(
+        (s) =>
+            s.color == attention.withValues(alpha: 0.14) && s.spreadRadius == 3,
+      ),
+      isTrue,
+      reason: 'o anel de 3px',
+    );
+    expect(
+      (frame('a').border! as Border).top.color,
+      isNot(attention.withValues(alpha: 0.7)),
     );
   });
 
@@ -386,7 +398,7 @@ void main() {
 
       await hoverOnLink(tester);
       expect(find.text('→'), findsOneWidget);
-      expect(find.text('↻ 2'), findsOneWidget);
+      expect(find.widgetWithText(EdgeLabel, '2'), findsOneWidget);
 
       await tester.tap(find.text('→'));
       await tester.pump();
@@ -404,14 +416,17 @@ void main() {
       final edited = <dynamic>[];
       await pumpCanvas(tester, repo, onEditLimit: edited.add);
       await hoverOnLink(tester);
-      expect(find.text('↻ ∞'), findsOneWidget);
+      expect(find.widgetWithText(EdgeLabel, '∞'), findsOneWidget);
 
-      await tester.tap(find.text('↻ ∞'));
+      await tester.tap(find.widgetWithText(EdgeLabel, '∞'));
       expect(edited, hasLength(1));
 
-      final remove = find.byWidgetPredicate(
-        (w) => w is CustomPaint && w.size == const Size.square(13),
-      );
+      final remove = find
+          .descendant(
+            of: find.byType(EdgeControlsLayer),
+            matching: find.byType(EgIcon),
+          )
+          .last;
       await tester.tap(remove);
       await tester.pump();
       await tester.pump();
@@ -437,7 +452,8 @@ void main() {
       await pumpCanvas(tester, repo);
       final clickable = <String, Finder>{
         'cursor': find.byKey(const ValueKey('tool-cursor')),
-        'terminal': find.byKey(const ValueKey('tool-terminal')),
+        'shell': find.byKey(const ValueKey('tool-shell')),
+        'agente': find.byKey(const ValueKey('tool-agent')),
         'web': find.byKey(const ValueKey('tool-web')),
         'fila': find.byKey(const ValueKey('tool-queue')),
         'zoom −': find.byKey(const ValueKey('zoom-out')),
@@ -476,30 +492,34 @@ void main() {
       final a = screenRect(tester, card('a'));
       final b = screenRect(tester, card('b'));
       await cursorOver(tester, Offset((a.right + b.left) / 2, a.center.dy));
-      for (final text in ['→', '↻ 2']) {
+      for (final (name, finder) in [
+        ('→', find.text('→')),
+        ('limite', find.widgetWithText(EdgeLabel, '2')),
+      ]) {
         expect(
-          await cursorOver(tester, tester.getCenter(find.text(text))),
+          await cursorOver(tester, tester.getCenter(finder)),
           SystemMouseCursors.click,
-          reason: '$text responde a clique',
+          reason: '$name responde a clique',
         );
       }
     });
 
-    testWidgets('a patinha mora no cabeçalho do card, e a alça é de arrastar', (
-      tester,
-    ) async {
-      final repo = InMemoryCanvasRepository(cards: cards, links: const []);
-      await pumpCanvas(tester, repo);
-      final rect = screenRect(tester, card('a'));
-      expect(
-        await cursorOver(tester, rect.topLeft + const Offset(80, 8)),
-        SystemMouseCursors.grab,
-      );
-      expect(
-        await cursorOver(tester, rect.bottomRight - const Offset(4, 4)),
-        SystemMouseCursors.precise,
-      );
-    });
+    testWidgets(
+      'o cabeçalho do card é seta (ADR-048: se arrasta), e a alça é de arrastar',
+      (tester) async {
+        final repo = InMemoryCanvasRepository(cards: cards, links: const []);
+        await pumpCanvas(tester, repo);
+        final rect = screenRect(tester, card('a'));
+        expect(
+          await cursorOver(tester, rect.topLeft + const Offset(80, 8)),
+          SystemMouseCursors.basic,
+        );
+        expect(
+          await cursorOver(tester, rect.bottomRight - const Offset(4, 4)),
+          SystemMouseCursors.precise,
+        );
+      },
+    );
 
     testWidgets('com a ferramenta armada, o cursor é de mira', (tester) async {
       final repo = InMemoryCanvasRepository(cards: cards, links: const []);

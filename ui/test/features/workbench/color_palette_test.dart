@@ -1,54 +1,58 @@
 import 'package:egeon_deck/features/workbench/presentation/widgets/color_palette_dialog.dart';
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/hand_cursor.dart';
 import '../../support/overlay_host.dart';
 
-void main() {
-  testWidgets('a grade tem as 24 cores e a atual vem legendada', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      overlayHost(
-        Builder(
-          builder: (context) => MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => showColorPalette(context, current: 'sand'),
-              child: const Text('abrir'),
-            ),
+Finder swatch(String label) => find.byWidgetPredicate(
+  (w) => w is Semantics && w.properties.label == label,
+);
+
+Future<void> open(WidgetTester tester, {String? current}) async {
+  await tester.pumpWidget(
+    overlayHost(
+      Builder(
+        builder: (context) => MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () =>
+                showColorPalette(context, benchName: 'deck', current: current),
+            child: const Text('abrir'),
           ),
         ),
       ),
-    );
-    await tester.tap(find.text('abrir'));
-    await tester.pump();
+    ),
+  );
+  await tester.tap(find.text('abrir'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
 
-    expect(find.byKey(const ValueKey('swatch-red')), findsOneWidget);
-    expect(find.byKey(const ValueKey('swatch-grey')), findsOneWidget);
-    expect(
-      find.byWidgetPredicate(
-        (w) =>
-            w.key is ValueKey &&
-            '${(w.key! as ValueKey).value}'.startsWith('swatch-'),
-      ),
-      findsNWidgets(24),
-    );
-    expect(find.text('Areia'), findsOneWidget, reason: 'a cor atual legendada');
+void main() {
+  testWidgets('a grade tem as 12 cores e o título leva o nome da bancada', (
+    tester,
+  ) async {
+    await open(tester, current: 'sky');
+    expect(find.text('Cor da bancada'), findsOneWidget);
+    expect(find.text('deck'), findsOneWidget);
+    for (final name in [
+      'Sky', 'Slate', 'Iris', 'Orchid', 'Mauve', 'Rose', //
+      'Clay', 'Sand', 'Olive', 'Moss', 'Jade', 'Teal',
+    ]) {
+      expect(swatch(name), findsOneWidget, reason: name);
+    }
     expectHandOnEveryClickable(tester);
   });
 
-  testWidgets('passar o ponteiro legenda a cor, e escolher a devolve', (
-    tester,
-  ) async {
+  testWidgets('escolher devolve o nome que o core grava', (tester) async {
     String? picked;
     await tester.pumpWidget(
       overlayHost(
         Builder(
           builder: (context) => GestureDetector(
-            onTap: () async => picked = await showColorPalette(context),
+            onTap: () async =>
+                picked = await showColorPalette(context, benchName: 'deck'),
             child: const Text('abrir'),
           ),
         ),
@@ -56,18 +60,17 @@ void main() {
     );
     await tester.tap(find.text('abrir'));
     await tester.pump();
-
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(
-      location: tester.getCenter(find.byKey(const ValueKey('swatch-violet'))),
-    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(swatch('Rose'));
     await tester.pump();
-    expect(find.text('Violeta'), findsOneWidget);
-    await mouse.removePointer();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(picked, 'red');
+  });
 
-    await tester.tap(find.byKey(const ValueKey('swatch-violet')));
-    await tester.pump();
-    expect(picked, 'violet');
-    expect(find.byKey(const ValueKey('swatch-violet')), findsNothing);
+  testWidgets('Cancelar fecha sem escolher', (tester) async {
+    await open(tester);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Cor da bancada'), findsNothing);
   });
 }

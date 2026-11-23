@@ -1,20 +1,25 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../../../theme/app_colors.dart';
+import '../../../../../commons/widgets/eg/eg_icon.dart';
+import '../../../../../commons/widgets/eg/text_field.dart';
 
-/// A barra de endereço: uma linha, Enter vai, Esc devolve o que a página
-/// mostra. Enquanto você digita, a página não mexe no texto.
+/// A barra de endereço: um `TextField` mono de uma linha, Enter vai (pela tecla, num só lugar), Esc devolve
+/// o que a página mostra. Enquanto você digita, a página não mexe no texto.
 class AddressField extends StatefulWidget {
   const AddressField({
     required this.address,
     required this.onSubmit,
+    this.loading = false,
     super.key,
   });
 
   /// O endereço da página agora.
   final String address;
   final ValueChanged<String> onSubmit;
+
+  /// A página está carregando: o spinner do campo.
+  final bool loading;
 
   @override
   State<AddressField> createState() => _AddressFieldState();
@@ -55,37 +60,18 @@ class _AddressFieldState extends State<AddressField> {
   }
 
   @override
-  Widget build(BuildContext context) => Container(
-    height: 20,
-    padding: const EdgeInsets.symmetric(horizontal: 6),
-    alignment: Alignment.centerLeft,
-    decoration: BoxDecoration(
-      color: const Color(0xFF171717),
-      borderRadius: BorderRadius.circular(4),
-    ),
-    child: Focus(
-      onKeyEvent: _onKey,
-      skipTraversal: true,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.text,
-        child: EditableText(
-          key: const ValueKey('address-field'),
-          controller: _controller,
-          focusNode: _focus,
-          style: TextStyle(
-            color: AppColors.white(0.85),
-            fontSize: 10,
-            fontFamily: 'Menlo',
-            decoration: TextDecoration.none,
-          ),
-          cursorColor: AppColors.white(0.9),
-          backgroundCursorColor: AppColors.white(0.2),
-          selectionColor: AppColors.accent.withValues(alpha: 0.4),
-          maxLines: 1,
-          keyboardType: TextInputType.url,
-          onSubmitted: (_) {},
-        ),
-      ),
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onKeyEvent: _onKey,
+    child: TextField(
+      key: const ValueKey('address-field'),
+      controller: _controller,
+      focusNode: _focus,
+      mono: true,
+      icon: EgIcons.globe,
+      loading: widget.loading,
+      placeholder: 'Endereço ou busca',
     ),
   );
 }

@@ -6,14 +6,16 @@ import '../../../support/inject_fakes.dart';
 
 import 'package:egeon_deck/features/node/queue/presentation/widgets/queue_body.dart';
 import 'package:egeon_deck/features/node/queue/presentation/widgets/queue_row.dart';
-import 'package:egeon_deck/theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:egeon_deck/commons/widgets/eg/spinner.dart';
 
-Future<void> pumpQueue(
+import '../../../support/eg_host.dart';
+
+Future<TestGesture> pumpQueue(
   WidgetTester tester,
   InMemoryQueueRepository repo,
 ) async {
@@ -23,18 +25,22 @@ Future<void> pumpQueue(
   addTearDown(tester.view.reset);
   injectFakes(queue: (_) => repo);
   await tester.pumpWidget(
-    WidgetsApp(
-      color: const Color(0xFF000000),
-      textStyle: AppTheme.textStyle,
-      pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-        settings: settings,
-        pageBuilder: (context, _, _) => builder(context),
-      ),
-      home: const QueueBody(workbenchId: 'bancada', nodeId: 'fila'),
+    egHost(
+      fill: true,
+      size: const Size(540, 800),
+      const QueueBody(workbenchId: 'bancada', nodeId: 'fila'),
     ),
   );
   await tester.pump();
   await tester.pump();
+  // A barra (destino, Automático…) só aparece com o ponteiro no card: o ponteiro
+  // fica no canto de cima, onde não toca em nenhuma tarefa.
+  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await mouse.addPointer(location: const Offset(2, 2));
+  addTearDown(mouse.removePointer);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 200));
+  return mouse;
 }
 
 PromptQueue seeded({bool linked = true}) => PromptQueue(
@@ -115,7 +121,16 @@ void main() {
 
     expect(repo.queue.items[1].status, ItemStatus.sent);
     expect(find.byKey(const ValueKey('send-item')), findsNothing);
-    expect(find.textContaining('enviada para Dev'), findsOneWidget);
+    expect(
+      find.textContaining('enviada'),
+      findsNothing,
+      reason: 'a v3 não escreve o estado: o spinner o diz',
+    );
+    expect(
+      find.byType(Spinner),
+      findsOneWidget,
+      reason: 'entregue = trabalhando',
+    );
   });
 
   testWidgets('sem ligação, mandar mostra o aviso em laranja', (tester) async {
@@ -180,7 +195,12 @@ void main() {
     tester,
   ) async {
     final repo = InMemoryQueueRepository(queue: seeded());
-    await pumpQueue(tester, repo);
+    final mouse = await pumpQueue(tester, repo);
+    // Pendente é só texto; a bolinha (o checkbox) aparece com o ponteiro na linha.
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('queue-row')).first),
+    );
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('status-dot')).first);
     await tester.pump();
     await tester.pump();
@@ -190,6 +210,90 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(repo.queue.items.map((i) => i.id), ['b2']);
+  });
+
+  testWidgets('a barra do card só aparece com o ponteiro nele', (tester) async {
+    tester.view
+      ..physicalSize = const Size(540, 800)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    injectFakes(queue: (_) => InMemoryQueueRepository(queue: seeded()));
+    await tester.pumpWidget(
+      egHost(
+        fill: true,
+        size: const Size(540, 800),
+        const QueueBody(workbenchId: 'bancada', nodeId: 'fila'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('queue-auto')), findsNothing);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(2, 2));
+    addTearDown(mouse.removePointer);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const ValueKey('queue-auto')), findsOneWidget);
+    await mouse.moveTo(const Offset(900, 900));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const ValueKey('queue-auto')), findsNothing);
+  });
+
+  testWidgets('pendente e feita são só texto; a bolinha vem com o ponteiro', (
+    tester,
+  ) async {
+    final repo = InMemoryQueueRepository(
+      queue: const PromptQueue(
+        items: [
+          QueueItem(id: 'a1', text: 'Pendente'),
+          QueueItem(id: 'b2', text: 'Feita', status: ItemStatus.done),
+        ],
+      ),
+    );
+    final mouse = await pumpQueue(tester, repo);
+    expect(find.byKey(const ValueKey('status-dot')), findsNothing);
+    expect(find.text('feita'), findsNothing, reason: 'sem legenda de estado');
+    await mouse.moveTo(tester.getCenter(find.text('Pendente')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('status-dot')), findsOneWidget);
+  });
+
+  testWidgets('a linha "Nova tarefa" só vem com o ponteiro; no painel fica', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(540, 800)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    injectFakes(queue: (_) => InMemoryQueueRepository(queue: seeded()));
+    Future<void> mount({VoidCallback? onClose}) async {
+      await tester.pumpWidget(
+        egHost(
+          fill: true,
+          size: const Size(540, 800),
+          QueueBody(workbenchId: 'bancada', nodeId: 'fila', onClose: onClose),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    await mount();
+    expect(find.text('Nova tarefa'), findsNothing);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(2, 2));
+    addTearDown(mouse.removePointer);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Nova tarefa'), findsOneWidget);
+    await mouse.moveTo(const Offset(900, 900));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Nova tarefa'), findsNothing);
+
+    await mount(onClose: () {});
+    expect(find.text('Nova tarefa'), findsOneWidget, reason: 'no painel fica');
   });
 
   testWidgets('o automático liga e desliga', (tester) async {
@@ -324,9 +428,7 @@ void main() {
         ],
       ),
     );
-    await pumpQueue(tester, repo);
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: Offset.zero);
+    final mouse = await pumpQueue(tester, repo);
     Future<void> expectHand(Finder finder, String name) async {
       await mouse.moveTo(tester.getCenter(finder));
       await tester.pump();
@@ -344,8 +446,9 @@ void main() {
       'enviar a próxima',
     );
     await expectHand(find.byKey(const ValueKey('clear-done')), 'limpar');
-    await expectHand(find.byKey(const ValueKey('status-dot')), 'bolinha');
+    // A bolinha só aparece com o ponteiro na linha: primeiro a linha.
     await expectHand(find.byKey(const ValueKey('queue-row')), 'tarefa');
+    await expectHand(find.byKey(const ValueKey('status-dot')), 'bolinha');
     await tester.tap(find.byKey(const ValueKey('queue-row')));
     await tester.pump();
     await tester.pump();

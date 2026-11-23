@@ -124,6 +124,47 @@
     "topic": "node/1a2b3c4d/claude",
     "workbench": "1a2b3c4d"
   },
+  "node_agent_novo": {
+    "agent": {
+      "clear_hint": "Conversa nova — a de agora fica no histórico",
+      "clearable": true,
+      "context": {
+        "used": null,
+        "window": null
+      },
+      "dial": {
+        "auto": true,
+        "index": 0,
+        "label": "",
+        "levels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "pending": false
+      },
+      "model_hint": "padrão do CLI",
+      "model_title": "padrão",
+      "models": [
+        {
+          "group": "featured",
+          "label": "Opus 5.5",
+          "selected": false,
+          "value": "claude-opus-5-5"
+        }
+      ],
+      "offers_effort": true,
+      "offers_model": true,
+      "ultracode": {
+        "available": true,
+        "on": false
+      }
+    },
+    "kind": "agent",
+    "node": "claude",
+    "topic": "node/1a2b3c4d/claude",
+    "workbench": "1a2b3c4d"
+  },
   "node_draft": {
     "effect": "draft",
     "text": "rascunho vindo do egeon",

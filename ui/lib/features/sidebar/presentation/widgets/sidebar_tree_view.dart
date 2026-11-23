@@ -2,21 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../../../../theme/app_colors.dart';
+import '../../../../theme/egeon_colors.dart';
+import '../../../../theme/egeon_tokens.dart';
+import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/sidebar_bench.dart';
 import '../../domain/entities/sidebar_tree.dart';
 import '../../domain/repository/sidebar_repository.dart';
 import 'bench_actions.dart';
-import 'bench_row.dart';
+import 'sidebar_commands.dart';
+import 'sidebar_item.dart';
+import 'sidebar_menus.dart';
+import '../../../../commons/widgets/eg/menu.dart';
+import '../../../../commons/widgets/eg/popover.dart';
 import 'drag_hooks.dart';
-import 'drawer_row.dart';
 import 'group_actions.dart';
-import 'group_row.dart';
 import 'sidebar_drop.dart';
 
-/// A aba Todas: workspace → projeto → bancada. Recolhida ao trilho, só sobram
-/// as pastilhas da inicial. Arrastar uma linha mostra uma guia de inserção
-/// onde ela vai cair; soltar avisa por [onDrop].
+/// A aba Todas: workspace → projeto → bancada. Arrastar uma linha mostra uma
+/// guia de inserção onde ela vai cair; soltar avisa por [onDrop].
 /// Pergunta ao core onde o item cairia: `null` se ele recusa.
 typedef PlanDrop = Future<MoveLanding?> Function(
   String kind,
@@ -32,7 +35,7 @@ class SidebarTreeView extends StatefulWidget {
     required this.benches,
     required this.onDrop,
     required this.onPlan,
-    this.compact = false,
+    required this.commands,
     super.key,
   });
 
@@ -41,14 +44,13 @@ class SidebarTreeView extends StatefulWidget {
   final BenchActions benches;
   final void Function(DragItem item, Drop target) onDrop;
   final PlanDrop onPlan;
-  final bool compact;
+  final SidebarCommands commands;
 
   @override
   State<SidebarTreeView> createState() => _SidebarTreeViewState();
 }
 
 class _SidebarTreeViewState extends State<SidebarTreeView> {
-  static const _outer = 8.0;
   static const _inset = 6.0;
   static const _cardGap = 8.0;
 
@@ -209,66 +211,40 @@ class _SidebarTreeViewState extends State<SidebarTreeView> {
 
   // ---- construção
 
+  void _menu(Rect anchor, List<MenuElement> items) => showMenu(
+    context,
+    anchor: anchor,
+    placement: PopoverPlacement.bottomEnd,
+    width: 232,
+    items: items,
+  );
+
   @override
-  Widget build(BuildContext context) => Stack(
-    key: _root,
-    children: [
-      widget.compact ? _rail() : _expanded(),
-      if (_guide != null)
-        Positioned.fromRect(
-          rect: _guide!,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              key: const ValueKey('drop-guide'),
-              decoration: BoxDecoration(
-                color: AppColors.accent,
-                borderRadius: BorderRadius.circular(1),
+  Widget build(BuildContext context) {
+    final c = context.eg;
+    return Stack(
+      key: _root,
+      children: [
+        _expanded(),
+        if (_guide != null)
+          Positioned.fromRect(
+            rect: _guide!,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                key: const ValueKey('drop-guide'),
+                decoration: BoxDecoration(
+                  color: c.accent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
               ),
             ),
           ),
-        ),
-    ],
-  );
-
-  Widget _rail() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 2),
-    child: Column(
-      children: [
-        for (final ws in _tree.workspaces) ...[
-          SidebarGroupRow.workspace(
-            workspace: ws,
-            actions: widget.groups,
-            compact: true,
-            key: ValueKey('ws-${ws.id}'),
-          ),
-          if (!ws.collapsed)
-            for (final project in ws.projects)
-              for (final bench in project.benches) ...[
-                SidebarBenchRow(
-                  key: ValueKey('rail-${bench.id}'),
-                  bench: bench,
-                  actions: widget.benches,
-                  compact: true,
-                ),
-                const SizedBox(height: 2),
-              ],
-          const SizedBox(height: 6),
-        ],
-        for (final bench in _tree.orphans) ...[
-          SidebarBenchRow(
-            key: ValueKey('rail-${bench.id}'),
-            bench: bench,
-            actions: widget.benches,
-            compact: true,
-          ),
-          const SizedBox(height: 2),
-        ],
       ],
-    ),
-  );
+    );
+  }
 
   Widget _expanded() => Padding(
-    padding: const EdgeInsets.fromLTRB(_outer, 2, _outer, 0),
+    padding: EdgeInsets.zero,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -282,21 +258,25 @@ class _SidebarTreeViewState extends State<SidebarTreeView> {
     key: ValueKey('card-${ws.id}'),
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      // O que se mede é o bloco todo, do cabeçalho até o fio de baixo.
+      // O que se mede é o bloco todo, do cabeçalho até a última linha.
       KeyedSubtree(
         key: _key('card:${ws.id}'),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SidebarGroupRow.workspace(
+            SidebarItem.workspace(
               key: ValueKey('ws-${ws.id}'),
               workspace: ws,
-              actions: widget.groups,
+              onPressed: () => widget.groups.onToggleWorkspace(ws.id),
+              onMenu: (anchor) => _menu(
+                anchor,
+                workspaceMenu(workspace: ws, actions: widget.groups),
+              ),
               drag: _hooks(DragWorkspace(ws.id)),
             ),
             if (!ws.collapsed)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: _inset),
+                padding: const EdgeInsets.only(top: 2),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -315,19 +295,14 @@ class _SidebarTreeViewState extends State<SidebarTreeView> {
                         const SizedBox(height: 2),
                         _project(ws, project),
                       ],
-                    const SizedBox(height: _inset),
                   ],
                 ),
               ),
-            Container(
-              height: 1,
-              margin: const EdgeInsets.fromLTRB(4, 6, 4, 0),
-              color: AppColors.white(0.10),
-            ),
           ],
         ),
       ),
-      const SizedBox(height: 12),
+      // 18 entre um workspace e o seguinte (a v3).
+      const SizedBox(height: 18),
     ],
   );
 
@@ -335,7 +310,7 @@ class _SidebarTreeViewState extends State<SidebarTreeView> {
     final open = !project.collapsed && project.benches.isNotEmpty;
     return Padding(
       key: ValueKey('project-${project.id}'),
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 2),
       child: KeyedSubtree(
         key: _key('project:${project.id}'),
         child: Column(
@@ -343,85 +318,130 @@ class _SidebarTreeViewState extends State<SidebarTreeView> {
           children: [
             KeyedSubtree(
               key: _key('header:${project.id}'),
-              child: SidebarGroupRow.project(
-                owner: ws,
+              child: SidebarItem.project(
                 project: project,
-                actions: widget.groups,
+                owner: ws,
+                onPressed: () => project.benches.isEmpty
+                    ? _createIn(project)
+                    : widget.groups.onToggleProject(ws.id, project.id),
+                onAdd: () => _createIn(project),
+                onMenu: (anchor) => _menu(
+                  anchor,
+                  projectMenu(
+                    workspace: ws,
+                    project: project,
+                    actions: widget.groups,
+                    commands: widget.commands,
+                  ),
+                ),
                 drag: _hooks(
                   DragProject(ws.id, project.id, stored: project.stored),
                 ),
               ),
             ),
-            if (open) ...[
-              const SizedBox(height: 4),
+            if (open)
               Container(
-                height: 1,
-                margin: const EdgeInsets.symmetric(horizontal: _inset),
-                color: AppColors.white(0.07),
-              ),
-              const SizedBox(height: 9),
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: _inset,
-                  right: _inset,
-                  bottom: _inset - 6,
+                margin: const EdgeInsets.fromLTRB(18, 6, 0, 14),
+                padding: const EdgeInsets.only(left: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(color: context.eg.lineSubtle),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final bench in project.benches) _bench(bench),
+                    ..._spaced([
+                      for (final bench in project.benches)
+                        _bench(bench, project: project),
+                    ]),
                   ],
                 ),
               ),
-            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _bench(SidebarBench bench) => Padding(
+  /// Projeto vazio: o clique cria; multi-projeto só nasce em worktree, e vai
+  /// direto. Os outros abrem o menu de criar.
+  void _createIn(SidebarProject project) => project.isMulti
+      ? widget.commands.onCreateBenchFromWorktreeIn(project)
+      : widget.commands.onCreateBenchIn(project);
+
+  /// Entre uma bancada e outra: um vão de 4, sem fio (a v3).
+  List<Widget> _spaced(List<Widget> items) => [
+    for (var i = 0; i < items.length; i++) ...[
+      if (i > 0) const SizedBox(height: EgeonSpace.s1),
+      items[i],
+    ],
+  ];
+
+  Widget _bench(SidebarBench bench, {SidebarProject? project}) => Padding(
     key: ValueKey('bench-${bench.id}'),
-    padding: const EdgeInsets.only(bottom: 6),
+    padding: EdgeInsets.zero,
     child: KeyedSubtree(
       key: _key('bench:${bench.id}'),
-      child: SidebarBenchRow(
+      child: SidebarItem.bench(
         bench: bench,
-        actions: widget.benches,
+        onPressed: () => widget.benches.onSelect(bench.id),
+        onMenu: (anchor) => _menu(
+          anchor,
+          benchMenu(
+            context,
+            bench: bench,
+            actions: widget.benches,
+            commands: widget.commands,
+            project: project,
+          ),
+        ),
         drag: _hooks(DragBench(bench.id)),
       ),
     ),
   );
 
-  Widget _orphans(List<SidebarBench> orphans) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    padding: const EdgeInsets.only(bottom: _inset),
-    decoration: BoxDecoration(
-      color: AppColors.white(0.03),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: AppColors.attention.withValues(alpha: 0.35)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SidebarGroupRow.orphans(orphanCount: orphans.length),
-        Container(
-          height: 1,
-          margin: const EdgeInsets.fromLTRB(_inset, 4, _inset, 9),
-          color: AppColors.white(0.07),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: _inset),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Órfã se arrasta como as outras: soltar num projeto é como ela
-              // ganha casa (`Sidebar.swift` liga o arrasto também nela).
-              for (final bench in orphans) _bench(bench),
-            ],
+  Widget _orphans(List<SidebarBench> orphans) {
+    final c = context.eg;
+    return Container(
+      margin: const EdgeInsets.only(bottom: EgeonSpace.s2),
+      padding: const EdgeInsets.only(bottom: _inset),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(EgeonRadius.lg),
+        border: Border.all(color: c.attention.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              EgeonSpace.s3,
+              EgeonSpace.s2,
+              EgeonSpace.s3,
+              EgeonSpace.s2,
+            ),
+            child: Text(
+              'Sem projeto',
+              style: EgeonType.small.copyWith(
+                color: c.attention,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
+              ),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _inset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Órfã se arrasta como as outras: soltar num projeto é como ela
+                // ganha casa (`Sidebar.swift` liga o arrasto também nela).
+                ..._spaced([for (final bench in orphans) _bench(bench)]),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

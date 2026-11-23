@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:egeon_deck/core/adapters/egeon_socket_client.dart';
+import 'package:egeon_deck/core/adapters/event_parsing.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_thread.dart';
 import 'package:egeon_deck/features/chat/domain/entities/chat_update.dart';
 import 'package:egeon_deck/features/chat/domain/repository/socket_chat_repository.dart';
@@ -66,6 +67,41 @@ void main() {
     expect(update.rev, 1);
     expect((update.ops.single as ResetOp).blocks.single.id, 'p|u1');
   });
+
+  test(
+    'um diff ilegível vira o aviso de evento perdido, e o stream segue',
+    () async {
+      final previous = ParseFailures.sink;
+      ParseFailures.reset();
+      ParseFailures.sink = (what, error, stack) {};
+      addTearDown(() {
+        ParseFailures.sink = previous;
+        ParseFailures.reset();
+      });
+      final seen = <ChatUpdate>[];
+      final sub = repository.watch(wb).listen(seen.add);
+      await pump();
+      Map<String, Object?> good(int rev) => {
+        'topic': 'chat/$wb',
+        'workbench': wb,
+        'rev': rev,
+        'ops': [
+          {
+            'op': 'reset',
+            'blocks': [prompt(1).raw],
+          },
+        ],
+      };
+      connection.say(good(1));
+      connection.say({'topic': 'chat/$wb', 'workbench': wb, 'rev': 'torto'});
+      connection.say(good(3));
+      await pump();
+
+      expect(seen.map((u) => u.unreadable), [false, true, false]);
+      expect(seen[1].workbench, wb);
+      await sub.cancel();
+    },
+  );
 
   test('os eventos de participantes e permissão do core são lidos', () {
     final events = jsonDecode(

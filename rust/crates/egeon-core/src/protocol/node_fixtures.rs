@@ -605,6 +605,52 @@ pub fn events() -> Vec<(&'static str, Event)> {
                 })),
             },
         ),
+        // O agente recém-aberto: sem leitura do transcript, o medidor vem com
+        // `used` e `window` nulos e o nó ainda não tem conversa. A UI tem de
+        // mostrar a faixa mesmo assim.
+        (
+            "node_agent_novo",
+            Event {
+                topic: topic("claude"),
+                body: EventBody::Node(Box::new(NodeDetail {
+                    workbench: wb(),
+                    node: node("claude"),
+                    kind: NodeKind::Agent,
+                    agent: Some(AgentDetail {
+                        model_title: "padrão".into(),
+                        model_hint: "padrão do CLI".into(),
+                        offers_model: true,
+                        models: vec![ModelChoice {
+                            label: "Opus 5.5".into(),
+                            value: Some("claude-opus-5-5".into()),
+                            group: ModelGroup::Featured,
+                            selected: false,
+                        }],
+                        offers_effort: true,
+                        dial: Dial {
+                            levels: vec!["low".into(), "medium".into(), "high".into()],
+                            index: 0,
+                            auto: true,
+                            pending: false,
+                            label: String::new(),
+                        },
+                        ultracode: Some(Ultracode {
+                            on: false,
+                            available: true,
+                        }),
+                        context: Some(ContextUse {
+                            used: None,
+                            window: None,
+                        }),
+                        clearable: true,
+                        clear_hint: "Conversa nova — a de agora fica no histórico".into(),
+                        conversation: None,
+                    }),
+                    queue: None,
+                    web: None,
+                })),
+            },
+        ),
         (
             "node_queue",
             Event {

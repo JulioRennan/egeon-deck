@@ -1,7 +1,6 @@
 import 'package:flutter/rendering.dart';
 
-import '../../../../../theme/app_colors.dart';
-import '../../../../../theme/terminal_palette.dart';
+import '../../../../../theme/egeon_terminal_palette.dart';
 import '../../domain/entities/terminal_color.dart';
 import '../../domain/entities/terminal_line.dart';
 import '../../domain/entities/terminal_style.dart';
@@ -13,8 +12,8 @@ class TerminalLinePainter extends CustomPainter {
   final TerminalLine line;
   final TerminalMetrics metrics;
 
-  /// A seleção: o destaque do app com transparência, por cima do texto.
-  static const selectionColor = Color(0x660A84FF);
+  /// A seleção: `termSelection`, por cima do texto.
+  static final selectionColor = EgeonTerminalPalette.selection;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -37,10 +36,10 @@ class TerminalLinePainter extends CustomPainter {
   void _paintRuns(Canvas canvas) {
     for (final run in line.runs) {
       final style = run.style;
-      var fg = _resolve(style.foreground) ?? AppColors.terminalForeground;
+      var fg = _resolve(style.foreground) ?? EgeonTerminalPalette.foreground;
       Color? bg = _resolve(style.background);
       if (style.inverse) {
-        final swapped = bg ?? AppColors.terminalBackground;
+        final swapped = bg ?? EgeonTerminalPalette.background;
         bg = fg;
         fg = swapped;
       }
@@ -72,8 +71,8 @@ class TerminalLinePainter extends CustomPainter {
     if (color == null) return null;
     final index = color.index;
     return index != null
-        ? TerminalPalette.indexed(index)
-        : TerminalPalette.rgb(color.rgb!);
+        ? EgeonTerminalPalette.indexed(index)
+        : EgeonTerminalPalette.rgb(color.rgb!);
   }
 
   static TextStyle _textStyle(TerminalStyle style, Color color) {

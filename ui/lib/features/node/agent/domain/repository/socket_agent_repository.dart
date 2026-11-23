@@ -1,3 +1,4 @@
+import '../../../../../core/adapters/event_parsing.dart';
 import '../../../../../core/adapters/egeon_socket_client.dart';
 import '../entities/agent_status.dart';
 import '../entities/model_choice.dart';
@@ -23,8 +24,10 @@ class SocketAgentRepository implements AgentRepository {
   Stream<AgentStatus> watch(String nodeId) => _client
       .subscribe('node/$workbenchId/$nodeId')
       .where((event) => event['kind'] == 'agent')
-      .map(
+      .parsed(
+        'node/$workbenchId/$nodeId',
         (event) => AgentStatus.fromMap(event['agent']! as Map<String, Object?>),
+        fallback: (_) => const AgentStatus(),
       );
 
   Future<EgeonMessage> _send(

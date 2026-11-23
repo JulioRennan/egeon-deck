@@ -36,10 +36,13 @@ ui/lib/
 │  ├─ domain/             mesma estrutura do domain, para o que é de mais de um módulo
 │  └─ cubits/             cubits globais (raro — costuma bastar o AppCubit na raiz)
 ├─ commons/
-│  ├─ widgets/            widgets compartilhados — design system e adaptação de lib de UI
+│  ├─ widgets/            widgets compartilhados — `eg/` são os componentes do
+│  │                      design system Graphite; fora dela, formulários
+│  │                      (`form_dialog`, `form_kit`), `ShellLayers` e adaptações
 │  ├─ utils/              utilitários básicos
 │  └─ forms/              validators e máscaras
-└─ theme/                 cores, temas, decorations, fontes
+└─ theme/                 tokens do Graphite: `EgeonColors` (`context.eg`), espaço,
+                          raio, tipo, movimento, vidro e `EgeonTheme`
 ```
 
 ## Features
@@ -48,7 +51,7 @@ ui/lib/
 features/
 ├─ home/        a casca — compõe sidebar, abas e conteúdo; alterna canvas e chat
 ├─ sidebar/     árvore workspace → projeto → bancada, aba Ativas, arrasto, gaveta
-├─ tabs/        faixa de abas
+├─ tabs/        o estado das bancadas abertas (selecionar, fechar, reordenar); a faixa de abas saiu da casca
 ├─ workspace/   formulários de workspace, projeto e multi-projeto
 ├─ workbench/   formulário da bancada, worktree, cor, relógio, limpar e remover
 ├─ canvas/      grid, zoom e pan, cards posicionados, arestas, ferramentas
@@ -143,6 +146,15 @@ features/
     passar; o cubit captura `on <F>Error` e o põe no estado (ou ignora, quando o
     próximo estado do core corrige a tela). Nada de `on Object` virando
     `String`.
+13. **Visual só pelo design system.** Nenhum hex, tamanho ou fonte solto fora
+    de `theme/`: tudo vem de `context.eg` e dos tokens (`EgeonSpace`,
+    `EgeonRadius`, `EgeonType`). Tela nova monta com os componentes de
+    `commons/widgets/eg/` (Button, Dialog, TextField, Select, Menu, Toast,
+    NoticeBanner, StatusDot…); não se redesenha botão, campo, menu nem
+    diálogo. Formulário em janela usa `form_dialog.dart` + `form_kit.dart`.
+    O que flutua sobre a bancada (consumo, permissão, composer) entra na
+    `ShellLayers`. Estado é cor **e** forma (`StatusDot`); identidade é o nome
+    na cor (`AgentName`), nunca dot redondo; vidro só em peça flutuante.
 
 ## Ferramentas
 

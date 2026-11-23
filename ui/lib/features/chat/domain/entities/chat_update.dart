@@ -87,7 +87,18 @@ class ChatUpdate {
     required this.workbench,
     required this.rev,
     required this.ops,
+    this.unreadable = false,
   });
+
+  /// Um evento que a UI não conseguiu ler: o diff se perdeu, e quem aplica
+  /// diffs precisa pedir a thread inteira em vez de seguir em cima de uma
+  /// lista que já não é a base do próximo.
+  const ChatUpdate.unreadable(this.workbench)
+    : rev = -1,
+      ops = const [],
+      unreadable = true;
+
+  final bool unreadable;
 
   final String workbench;
 

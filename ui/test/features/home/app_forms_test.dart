@@ -22,6 +22,11 @@ class Forms {
   late BuildContext context;
 
   Future<void> mount(WidgetTester tester) {
+    // A janela do formulário rola dentro da tela: a de teste tem de ser alta.
+    tester.view
+      ..physicalSize = const Size(1000, 1400)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     injectFakes(workbenches: bench, workspaces: workspace, paths: picker);
     return tester.pumpWidget(
       overlayHost(
@@ -78,9 +83,13 @@ void main() {
     final f = await mount(tester);
     await f.ask(tester, const RecolorBench('b1', 'deck', current: 'sand'));
     expect(find.text('Cor da bancada'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('swatch-teal')));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == 'Teal',
+      ),
+    );
     await tester.pump();
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(f.bench.log, ['cor:b1:teal']);
   });
 
