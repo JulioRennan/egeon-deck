@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import desktop_multi_window
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// A altura da faixa de cima do app (`EgeonSize.titlebar`, 44): os semáforos
@@ -111,6 +112,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     ) { [weak self] _ in self?.hideTitlebarForExit() }
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    // As janelas secundárias (Processos, decisão 51) rodam cada uma num motor
+    // próprio: os plugins e o canal da janela têm de ser registrados nele.
+    FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
+      RegisterGeneratedPlugins(registry: controller)
+      SecondaryWindowChannel.attach(to: controller)
+    }
     // O nó web: WKWebView com perfil isolado e captura, atrás do canal egeon/web.
     EgeonWebPlugin.register(
       with: flutterViewController.registrar(forPlugin: "EgeonWebPlugin"))
@@ -176,5 +183,45 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
 
     super.awakeFromNib()
+  }
+}
+
+/// Título, tamanho e fechar das janelas secundárias. O pacote só cria, mostra
+/// e esconde; o resto de cada janela vem por aqui.
+enum SecondaryWindowChannel {
+  static func attach(to controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "egeon/window", binaryMessenger: controller.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak controller] call, result in
+      guard let window = controller?.view.window else { return result(nil) }
+      switch call.method {
+      case "present":
+        guard let args = call.arguments as? [String: Any],
+          let title = args["title"] as? String,
+          let width = args["width"] as? Double, let height = args["height"] as? Double,
+          let minWidth = args["minWidth"] as? Double,
+          let minHeight = args["minHeight"] as? Double,
+          let autosave = args["autosave"] as? String
+        else { return result(FlutterMethodNotImplemented) }
+        // O app é sempre escuro: a barra de título também.
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.title = title
+        window.contentMinSize = NSSize(width: minWidth, height: minHeight)
+        window.setContentSize(NSSize(width: width, height: height))
+        window.center()
+        // Reabre onde estava, como o `setFrameAutosaveName` do Swift; a
+        // primeira vez fica no centro.
+        window.setFrameAutosaveName(autosave)
+        window.setFrameUsingName(autosave)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        result(nil)
+      case "close":
+        window.performClose(nil)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 }

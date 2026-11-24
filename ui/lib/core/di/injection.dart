@@ -1,3 +1,5 @@
+import '../adapters/app_windows.dart';
+import '../domain/usecase/join_core.dart';
 import '../../features/canvas/di/canvas_injection.dart';
 import '../../features/chat/di/chat_injection.dart';
 import '../../features/home/di/home_injection.dart';
@@ -53,6 +55,8 @@ void registerInfrastructure(Map<String, String> environment) {
   );
   Injector.factory<PathPicker>(SystemPathPicker.new);
   Injector.factory<ClipboardWriter>(SystemClipboard.new);
+  Injector.factory<AppWindows>(MultiWindowAppWindows.new);
+  Injector.factory<CurrentWindow>(ChannelCurrentWindow.new);
 
   registerHomeRepositories();
   registerTabsRepositories();
@@ -77,6 +81,7 @@ void registerInfrastructure(Map<String, String> environment) {
 /// raiz a fecha ao sair.
 void registerDomain() {
   Injector.factory(() => StartCore(inject()));
+  Injector.factory(() => JoinCore(inject()));
   Injector.factory(() => WatchCoreLink(inject()));
   Injector.factory(() => RelaunchCore(inject()));
   Injector.factory(() => StopCore(inject()));

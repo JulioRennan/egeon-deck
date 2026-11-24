@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:egeon_deck/core/adapters/app_windows.dart';
 import 'package:egeon_deck/commons/widgets/form_kit.dart';
 
 import 'package:egeon_deck/commons/utils/bench_identity.dart';
@@ -103,6 +104,7 @@ class Shell {
       processes: FakeProcessesRepository(const []),
       menu: menu,
       clipboard: clipboard,
+      windows: windows,
       chat: chatRepository,
       terminals: FakeTerminalRepository(),
       agent: (_) => FakeAgentRepository(),
@@ -113,6 +115,7 @@ class Shell {
 
   final menu = FakeMenuRepository('deck/claude\ndeck/sh');
   final clipboard = FakeClipboard();
+  final windows = FakeAppWindows();
 
   /// O que ocupa o lugar do canvas; sem isso, um texto.
   final Widget? content;
@@ -749,10 +752,10 @@ void main() {
     });
 
     testWidgets('⌥⌘P abre Processos com o nome do app', (tester) async {
-      await mount(tester);
+      final s = await mount(tester);
       await keys(tester, LogicalKeyboardKey.keyP, alt: true);
       await tester.pump();
-      expect(find.text('Processos do Egeon Deck'), findsOneWidget);
+      expect(s.windows.opened.single.title, 'Processos do Egeon Deck');
     });
 
     testWidgets('⌘W fecha a aba da frente, não a janela', (tester) async {
@@ -961,7 +964,8 @@ void main() {
       await chooseMenu(tester, 'Copiar alvos de dispatch');
       expect(s.clipboard.written, ['deck/claude\ndeck/sh']);
       await chooseMenu(tester, 'Processos…');
-      expect(find.text('Processos do Egeon Deck'), findsOneWidget);
+      expect(s.windows.opened.single.kind, WindowKind.processes);
+      expect(s.windows.opened.single.title, 'Processos do Egeon Deck');
     });
 
     testWidgets('tem Editar com os atalhos do macOS e o menu Canvas completo', (

@@ -1,0 +1,100 @@
+import 'dart:convert';
+
+import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/services.dart';
+
+/// As janelas do sistema que o app abre além da principal (decisão 51). Cada
+/// uma roda num motor Flutter próprio, que liga ao socket do core como mais um
+/// cliente.
+enum WindowKind { processes }
+
+/// O que a janela nova recebe ao nascer: que tela desenhar e o título.
+class WindowArguments {
+  const WindowArguments({required this.kind, required this.title});
+
+  final WindowKind kind;
+  final String title;
+
+  String encode() => jsonEncode({'kind': kind.name, 'title': title});
+
+  static WindowArguments? decode(String raw) {
+    try {
+      final map = jsonDecode(raw);
+      if (map is! Map) return null;
+      final kind = WindowKind.values.asNameMap()[map['kind']];
+      final title = map['title'];
+      if (kind == null || title is! String) return null;
+      return WindowArguments(kind: kind, title: title);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// O motor de uma janela aberta pelo pacote recebe
+  /// `["multi_window", <id>, <argumentos>]` no `main`; a principal, nada.
+  static WindowArguments? fromEntrypoint(List<String> args) =>
+      args.length >= 3 && args.first == 'multi_window' ? decode(args[2]) : null;
+}
+
+abstract interface class AppWindows {
+  /// Abre a janela de [arguments]; já aberta uma do mesmo tipo, traz essa
+  /// para a frente em vez de abrir outra.
+  Future<void> open(WindowArguments arguments);
+}
+
+class MultiWindowAppWindows implements AppWindows {
+  const MultiWindowAppWindows();
+
+  @override
+  Future<void> open(WindowArguments arguments) async {
+    for (final window in await WindowController.getAll()) {
+      if (WindowArguments.decode(window.arguments)?.kind == arguments.kind) {
+        await window.show();
+        return;
+      }
+    }
+    // Nasce escondida: o runner a ajusta (título, tamanho) antes de mostrar.
+    await WindowController.create(
+      WindowConfiguration(arguments: arguments.encode()),
+    );
+  }
+}
+
+/// A janela deste motor, pelo canal que cada runner registra nas janelas que
+/// o pacote cria.
+abstract interface class CurrentWindow {
+  /// Título, tamanho e mínimo; [autosave] guarda onde ela estava entre as
+  /// aberturas, como o `setFrameAutosaveName` do Swift. Depois, mostra.
+  Future<void> present({
+    required String title,
+    required Size size,
+    required Size minSize,
+    required String autosave,
+  });
+
+  Future<void> close();
+}
+
+class ChannelCurrentWindow implements CurrentWindow {
+  const ChannelCurrentWindow();
+
+  static const _channel = MethodChannel('egeon/window');
+
+  @override
+  Future<void> present({
+    required String title,
+    required Size size,
+    required Size minSize,
+    required String autosave,
+  }) => _channel.invokeMethod<void>('present', {
+    'title': title,
+    'width': size.width,
+    'height': size.height,
+    'minWidth': minSize.width,
+    'minHeight': minSize.height,
+    'autosave': autosave,
+  });
+
+  @override
+  Future<void> close() => _channel.invokeMethod<void>('close');
+}

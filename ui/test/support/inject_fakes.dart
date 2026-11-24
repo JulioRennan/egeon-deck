@@ -1,3 +1,4 @@
+import 'package:egeon_deck/core/adapters/app_windows.dart';
 import 'package:egeon_deck/core/adapters/injector.dart';
 import 'package:egeon_deck/core/adapters/clipboard_writer.dart';
 import 'package:egeon_deck/core/adapters/path_picker.dart';
@@ -50,6 +51,7 @@ void injectFakes({
   NodeFormRepository? nodeForms,
   MenuRepository? menu,
   ClipboardWriter? clipboard,
+  AppWindows? windows,
 }) {
   registerDomain();
   void put<T extends Object>(T? fake) {
@@ -76,6 +78,8 @@ void injectFakes({
   // A casca sempre os pede (⇧⌘T): sem falso dado, um que não copia nada.
   put<MenuRepository>(menu ?? FakeMenuRepository());
   put<ClipboardWriter>(clipboard ?? FakeClipboard());
+  // Nenhum teste abre janela do sistema (ver teste-sem-janela).
+  put<AppWindows>(windows ?? FakeAppWindows());
   if (agent != null) Injector.factoryParam<AgentRepository, String>(agent);
   if (queue != null) Injector.factoryParam<QueueRepository, String>(queue);
   if (web != null) Injector.factoryParam<WebRepository, String>(web);

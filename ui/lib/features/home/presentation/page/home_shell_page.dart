@@ -152,7 +152,7 @@ class _HomeShellPageState extends State<HomeShellPage> {
     return UpdateHost(
       dialogContext: () => overlayContext,
       onShowProcesses: () =>
-          unawaited(showProcessesPanel(overlayContext, appName: widget.title)),
+          unawaited(showProcessesWindow(appName: widget.title)),
       child: AppMenu(
         name: widget.appName,
         actions: AppMenuActions(
@@ -166,9 +166,8 @@ class _HomeShellPageState extends State<HomeShellPage> {
           forward: navigation.forward,
           closeTab: tabs.closeActive,
           pickTab: tabs.selectNumber,
-          showProcesses: () => unawaited(
-            showProcessesPanel(overlayContext, appName: widget.title),
-          ),
+          showProcesses: () =>
+              unawaited(showProcessesWindow(appName: widget.title)),
           canvas: inject<CanvasCommands>(),
           copyTargets: shell.copyTargets,
         ),
@@ -273,9 +272,8 @@ class _HomeShellPageState extends State<HomeShellPage> {
                 closeTab: tabs.closeActive,
                 pickTab: tabs.selectNumber,
                 copyTargets: shell.copyTargets,
-                showProcesses: () => unawaited(
-                  showProcessesPanel(overlayContext, appName: widget.title),
-                ),
+                showProcesses: () =>
+                    unawaited(showProcessesWindow(appName: widget.title)),
                 zoomIn: inject<CanvasCommands>().zoomIn,
                 zoomOut: inject<CanvasCommands>().zoomOut,
                 resetZoom: inject<CanvasCommands>().resetZoom,

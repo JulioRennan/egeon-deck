@@ -16,6 +16,7 @@ citados entre parênteses.
 
 ### Alterado
 
+- A janela Processos volta a ser uma janela própria do sistema, como no Egeon de hoje: dá para movê-la para fora do app ou para outra tela, e ela reabre onde estava (decisão 51).
 - Ao abrir o app, os projetos que têm bancada aparecem abertos e no topo do workspace.
 - A cor da bancada na moldura fica mais forte.
 - Escolher uma bancada pela gaveta não a fecha mais; ela fecha pelo clique fora, pelo Esc, pelo ⌘/ ou quando o mouse sai.

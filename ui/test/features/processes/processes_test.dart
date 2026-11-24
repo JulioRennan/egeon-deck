@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:egeon_deck/features/processes/domain/entities/processes_view.dart';
 import 'package:egeon_deck/features/processes/domain/errors/processes_error.dart';
 import 'package:egeon_deck/features/processes/domain/repository/processes_repository.dart';
@@ -163,113 +161,35 @@ void main() {
   });
 
   group('a janela', () {
-    late BuildContext below;
-    late List<LogicalKeyboardKey> terminalKeys;
-    late int belowTaps;
+    late int closes;
 
-    /// Por baixo, no canto: um "terminal" focado que anota as teclas e um
-    /// botão que conta cliques — a janela flutua sem barreira por cima.
+    /// A página que a janela do sistema desenha, no motor dela (decisão 51).
     Future<void> pumpPanel(WidgetTester tester) async {
       repo = FakeProcessesRepository(sampleProcesses());
-      terminalKeys = [];
-      belowTaps = 0;
+      closes = 0;
       tester.view
-        ..physicalSize = const Size(1000, 700)
+        ..physicalSize = const Size(900, 480)
         ..devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       injectFakes(processes: repo);
       await tester.pumpWidget(
         egHost(
-          Align(
-            alignment: Alignment.topLeft,
-            child: Builder(
-              builder: (context) {
-                below = context;
-                return Focus(
-                  autofocus: true,
-                  onKeyEvent: (_, event) {
-                    if (event is KeyDownEvent) {
-                      terminalKeys.add(event.logicalKey);
-                    }
-                    return KeyEventResult.handled;
-                  },
-                  child: GestureDetector(
-                    key: const ValueKey('open'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      belowTaps++;
-                      showProcessesPanel(context);
-                    },
-                    child: const SizedBox(width: 40, height: 40),
-                  ),
-                );
-              },
-            ),
-          ),
+          size: const Size(900, 480),
+          fill: true,
+          ProcessesWindowPage(onClose: () => closes++),
         ),
       );
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('open')));
-      await tester.pump();
       await tester.pump();
       await tester.pump();
     }
 
-    final title = find.text('Processos do Egeon Deck');
-
-    testWidgets('não trava o app: o clique fora chega ao que está embaixo', (
+    testWidgets('o título leva o nome do app, para os dois flavors', (
       tester,
     ) async {
-      await pumpPanel(tester);
-      expect(belowTaps, 1);
-      await tester.tap(find.byKey(const ValueKey('open')));
-      await tester.pump();
-      expect(belowTaps, 2, reason: 'sem barreira por cima do app');
-      expect(title, findsOneWidget, reason: 'clicar fora não fecha');
-    });
-
-    testWidgets('abrir de novo traz a mesma janela, não uma segunda', (
-      tester,
-    ) async {
-      await pumpPanel(tester);
-      await tester.tap(find.byKey(const ValueKey('process-100')));
-      await tester.pump();
-      final first = showProcessesPanel(below);
-      final second = showProcessesPanel(below);
-      await tester.pump();
-      expect(title, findsOneWidget);
-      expect(identical(first, second), isTrue);
       expect(
-        tester
-            .widget<Container>(
-              find
-                  .descendant(
-                    of: find.byKey(const ValueKey('process-100')),
-                    matching: find.byType(Container),
-                  )
-                  .first,
-            )
-            .decoration,
-        isA<BoxDecoration>().having((d) => d.color, 'cor', isNotNull),
-        reason: 'o estado (a seleção) segue o mesmo',
+        ProcessesPanel.titleFor('Egeon Deck (dev)'),
+        'Processos do Egeon Deck (dev)',
       );
-      var closed = false;
-      unawaited(first.then((_) => closed = true));
-      await tester.tap(find.byKey(const ValueKey('processes-close')));
-      await tester.pump();
-      expect(closed, isTrue);
-      expect(title, findsNothing);
-    });
-
-    testWidgets('o foco vem para ela: o Esc fecha e não chega ao terminal', (
-      tester,
-    ) async {
-      await pumpPanel(tester);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      expect(title, findsNothing);
-      expect(terminalKeys, isEmpty, reason: 'o terminal de trás não ouviu');
     });
 
     testWidgets('com a confirmação aberta, o Esc fecha só a confirmação', (
@@ -283,41 +203,13 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       expect(find.text('Encerrar 2 processos órfãos?'), findsNothing);
-      expect(title, findsOneWidget);
-    });
-
-    testWidgets('arrasta pelo título, redimensiona pelo canto e reabre ali', (
-      tester,
-    ) async {
-      await pumpPanel(tester);
-      final start = tester.getTopLeft(title);
-      await tester.drag(
-        find.byKey(const ValueKey('processes-title')),
-        const Offset(-30, -40),
-      );
-      await tester.pump();
-      final moved = tester.getTopLeft(title);
-      expect(moved.dx, lessThan(start.dx));
-      expect(moved.dy, lessThan(start.dy));
-
-      final grip = find.byKey(const ValueKey('processes-resize'));
-      final before = tester.getBottomRight(grip);
-      await tester.drag(grip, const Offset(-60, -100));
-      await tester.pump();
-      expect(tester.getBottomRight(grip).dx, lessThan(before.dx));
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      unawaited(showProcessesPanel(below));
-      await tester.pump();
-      expect(tester.getTopLeft(title), moved);
+      expect(closes, 0);
     });
 
     testWidgets('mostra a tabela, o resumo do core e a etiqueta de órfão', (
       tester,
     ) async {
       await pumpPanel(tester);
-      expect(find.text('Processos do Egeon Deck'), findsOneWidget);
       expect(find.byKey(const ValueKey('processes-summary')), findsOneWidget);
       expect(find.text('2 no app · 2 órfãos'), findsOneWidget);
       for (final pid in [100, 200, 300, 400]) {
@@ -422,11 +314,15 @@ void main() {
       expect(find.byKey(const ValueKey('process-500')), findsOneWidget);
     });
 
-    testWidgets('Esc e o X fecham, e o relógio para', (tester) async {
+    testWidgets('o Esc fecha a janela, e fechada o relógio para', (
+      tester,
+    ) async {
       await pumpPanel(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
-      expect(find.text('Processos do Egeon Deck'), findsNothing);
+      expect(closes, 1);
+      // Fechar a janela do sistema desmonta o motor dela.
+      await tester.pumpWidget(const SizedBox());
       final lists = repo.lists;
       await tester.pump(const Duration(seconds: 7));
       expect(repo.lists, lists, reason: 'janela fechada não varre');
@@ -440,7 +336,6 @@ void main() {
         find.text('Todos'),
         find.text('Órfãos'),
         find.byKey(const ValueKey('process-100')),
-        find.byKey(const ValueKey('processes-close')),
       ]) {
         await mouse.moveTo(tester.getCenter(target));
         await tester.pump();
