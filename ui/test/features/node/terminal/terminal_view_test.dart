@@ -1,3 +1,5 @@
+import 'package:egeon_deck/commons/utils/focused_edit.dart';
+import 'package:egeon_deck/core/adapters/native_edit.dart';
 import 'package:egeon_deck/features/node/terminal/domain/entities/terminal_cursor.dart';
 import 'package:egeon_deck/features/node/terminal/domain/entities/terminal_frame.dart';
 import 'package:egeon_deck/features/node/terminal/domain/entities/terminal_line.dart';
@@ -193,6 +195,39 @@ void main() {
 
     expect(repository.pastes, ['colado\ncom linhas']);
     expect(repository.texts, isEmpty);
+  });
+
+  testWidgets('o Colar do menu Editar chega ao terminal focado', (
+    tester,
+  ) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => call.method == 'Clipboard.getData'
+          ? <String, Object?>{'text': 'pelo menu'}
+          : null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await pumpTerminal(tester);
+    await tester.tap(find.byType(TerminalPage));
+    await tester.pump();
+
+    expect(invokeFocusedEdit(EditAction.paste), isTrue);
+    await tester.pump();
+
+    expect(repository.pastes, ['pelo menu']);
+    expect(repository.texts, isEmpty);
+  });
+
+  testWidgets('sem widget que a atenda, a ação fica para a cadeia nativa', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const SizedBox());
+    expect(invokeFocusedEdit(EditAction.paste), isFalse);
   });
 
   testWidgets('teclas especiais seguem pelo caminho de tecla', (tester) async {

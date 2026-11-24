@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../commons/utils/focused_edit.dart';
 import '../../../../core/adapters/native_edit.dart';
 import '../../../../core/domain/entities/view_mode.dart';
 import '../../../canvas/domain/entities/canvas_tool.dart';
@@ -91,9 +92,9 @@ class AppMenu extends StatelessWidget {
   static List<PlatformMenuItem> _group(List<PlatformMenuItem> members) =>
       members.isEmpty ? const [] : [PlatformMenuItemGroup(members: members)];
 
-  /// O item do menu Editar: o atalho padrão do macOS, e a ação vai à cadeia de
-  /// responders — onde a página web a atende. Campo de texto e terminal tratam
-  /// ⌘C/⌘V em Dart antes de o menu ver a tecla.
+  /// O item do menu Editar: o atalho padrão do macOS. A ação vai primeiro ao
+  /// widget focado da Flutter (terminal, caixa de texto) e, se nenhum a quiser,
+  /// à cadeia de responders, onde a página web a atende.
   PlatformMenuItem _edit(
     String label,
     EditAction action,
@@ -102,7 +103,9 @@ class AppMenu extends StatelessWidget {
   }) => PlatformMenuItem(
     label: label,
     shortcut: SingleActivator(key, meta: true, shift: shift),
-    onSelected: () => unawaited(actions.edit.send(action)),
+    onSelected: () {
+      if (!invokeFocusedEdit(action)) unawaited(actions.edit.send(action));
+    },
   );
 
   static SingleActivator _meta(

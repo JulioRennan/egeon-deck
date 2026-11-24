@@ -43,6 +43,8 @@ citados entre parênteses.
 
 ### Corrigido
 
+- Colar e copiar no terminal voltam a funcionar pelo ⌘V/⌘C e pelo menu Editar.
+- O modo de voz do Claude Code grava no terminal: o app pede o microfone ao macOS, como o Egeon de hoje; o navegador volta a abrir servidores locais (http://127.0.0.1).
 - Ícone novo: a mão do maestro segurando os fios de vários terminais, flat e monocromático; o app de desenvolvimento ganha a mesma mão em branco sobre azul (decisão 44).
 - Clicar num botão não deixa mais a borda de foco presa nele (abas Todas/Ativas, trilho, barra de ações e demais botões) (decisão 44).
 - Em janela estreita a barra de ações do canvas não passa mais por baixo do chip de consumo (anda para a esquerda até o chip), o chat com a gaveta aberta não estoura, e a janela ganha um tamanho mínimo de 1000 × 600 (decisão 44).

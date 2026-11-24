@@ -343,7 +343,28 @@ class _TerminalViewState extends State<TerminalView> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      Actions(actions: _editActions, child: _focusable(context));
+
+  /// O menu Editar (e o ⌘C/⌘V que o macOS entrega a ele em vez de à tecla)
+  /// chega como intent ao widget focado: sem isto o Colar do menu ia à cadeia
+  /// de responders do AppKit, que não conhece o terminal, e não colava nada.
+  late final Map<Type, Action<Intent>> _editActions = {
+    PasteTextIntent: CallbackAction<PasteTextIntent>(
+      onInvoke: (_) => unawaited(_paste()),
+    ),
+    CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
+      onInvoke: (_) {
+        if (widget.onCopy != null) unawaited(_copy());
+        return null;
+      },
+    ),
+    SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
+      onInvoke: (_) => widget.onSelectAll?.call(),
+    ),
+  };
+
+  Widget _focusable(BuildContext context) {
     return Focus(
       focusNode: _focus,
       autofocus: widget.autofocus,
