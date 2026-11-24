@@ -10,6 +10,7 @@ pub mod reorder;
 pub mod routes;
 pub mod service;
 pub mod sidebar_drop;
+pub mod startup;
 pub mod store;
 pub mod tree;
 

@@ -99,6 +99,59 @@ void main() {
     expect(answer, 'novo nome');
   });
 
+  testWidgets('⌘V cola no campo da janela; o ⌘ que ninguém atende para nela', (
+    tester,
+  ) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => switch (call.method) {
+        'Clipboard.getData' => {'text': 'colado'},
+        'Clipboard.hasStrings' => {'value': true},
+        _ => null,
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    String? answer = 'não rodou';
+    var below = 0;
+    await tester.pumpWidget(
+      CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
+              below++,
+          const SingleActivator(LogicalKeyboardKey.keyW, meta: true): () =>
+              below++,
+        },
+        child: overlayHost(
+          _Opener((context) async {
+            answer = await promptDialog(
+              context,
+              title: 'Renomear bancada',
+              confirmLabel: 'Renomear',
+              initial: '',
+            );
+          }),
+        ),
+      ),
+    );
+    await tester.tap(find.text('abrir'));
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+    expect(below, 0);
+    await tester.tap(find.text('Renomear'));
+    await tester.pump();
+    expect(answer, 'colado');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
   testWidgets('vazio na pergunta de uma linha conta como cancelar', (
     tester,
   ) async {

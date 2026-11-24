@@ -48,7 +48,12 @@ Future<T?> showFormDialog<T>(
               event.logicalKey != LogicalKeyboardKey.metaRight
           ? KeyEventResult.handled
           : KeyEventResult.ignored,
-      child: Builder(builder: (context) => builder(context, close)),
+      // Os atalhos de texto (⌘V, ⌘C, ⌘A, ⌘Z) moram na raiz do `WidgetsApp`,
+      // acima deste bloqueio: sem uma cópia aqui dentro o ⌘V morreria antes de
+      // chegar ao campo.
+      child: DefaultTextEditingShortcuts(
+        child: Builder(builder: (context) => builder(context, close)),
+      ),
     ),
   ),
 );

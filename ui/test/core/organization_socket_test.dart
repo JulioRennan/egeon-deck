@@ -166,17 +166,17 @@ void main() {
     expect(t.stale.single.owner, isNull, reason: 'órfã não tem de onde vir');
   });
 
-  test(
-    'as abas são as bancadas com posição, na ordem, e a ativa marcada',
-    () async {
-      final list = SocketTabsRepository(feed).watch().first;
-      await publish();
-      final t = await list;
-      expect(t.map((x) => x.name), ['deck', 'deck-2']);
-      expect(t.map((x) => x.isActive), [true, false]);
-      expect(t.first.color, 'teal');
-    },
-  );
+  test('o trilho são as bancadas ativas, na ordem da aba Ativas, e a da tela marcada', () async {
+    final list = SocketTabsRepository(feed).watch().first;
+    await publish();
+    final t = await list;
+    expect(t.map((x) => x.name), [
+      'deck',
+      'solta',
+    ], reason: 'aba aberta sem estar ativa (deck-2) não entra');
+    expect(t.map((x) => x.isActive), [true, false]);
+    expect(t.first.color, 'teal');
+  });
 
   test('a casca mostra a bancada da aba ativa, no modo dela', () async {
     final state = SocketShellRepository(feed).watch().first;

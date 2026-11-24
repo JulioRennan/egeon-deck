@@ -148,8 +148,18 @@ class AppMenu extends StatelessWidget {
     UpdateCubit cubit,
     bool inChat,
     AppSnapshot app,
-  ) => PlatformMenuBar(
-    menus: [
+  ) => _StableMenuBar(
+    signature: (
+      name,
+      inChat,
+      app.update.menu,
+      app.update.menuEnabled,
+      app.update.auto,
+      app.reaperEnabled,
+      actions.pickTab == null,
+      actions.copyTargets == null,
+    ),
+    menus: () => [
       PlatformMenu(
         label: name,
         menus: [
@@ -354,4 +364,50 @@ class AppMenu extends StatelessWidget {
     ],
     child: child,
   );
+}
+
+/// Manda os menus ao macOS só quando algo que aparece neles mudou. O
+/// `PlatformMenuBar` compara os itens por identidade, e cada build cria itens
+/// e funções novos: sem isto, toda remontagem da casca (a cada estado novo do
+/// core) trocava o menu inteiro no AppKit e fechava o menu que estava aberto.
+/// As ações guardadas são dos cubits da página, que vivem tanto quanto ela.
+class _StableMenuBar extends StatefulWidget {
+  const _StableMenuBar({
+    required this.signature,
+    required this.menus,
+    required this.child,
+  });
+
+  /// Tudo o que muda o texto ou o estado de algum item.
+  final Object signature;
+  final List<PlatformMenuItem> Function() menus;
+  final Widget child;
+
+  @override
+  State<_StableMenuBar> createState() => _StableMenuBarState();
+}
+
+class _StableMenuBarState extends State<_StableMenuBar> {
+  late Object _signature;
+  late List<PlatformMenuItem> _menus;
+
+  @override
+  void initState() {
+    super.initState();
+    _signature = widget.signature;
+    _menus = widget.menus();
+  }
+
+  @override
+  void didUpdateWidget(_StableMenuBar old) {
+    super.didUpdateWidget(old);
+    if (widget.signature != _signature) {
+      _signature = widget.signature;
+      _menus = widget.menus();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      PlatformMenuBar(menus: _menus, child: widget.child);
 }

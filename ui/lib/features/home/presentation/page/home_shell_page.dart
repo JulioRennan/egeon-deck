@@ -191,9 +191,9 @@ class _HomeShellPageState extends State<HomeShellPage> {
                   drawerOpen: !collapsed,
                   drawerGroup: _drawerGroup,
                   drawerHover: _drawerHover,
+                  // Reflexo da aba Ativas: a ordem e quem entra são do core,
+                  // então o trilho não reordena nem fecha.
                   onPick: tabs.select,
-                  onClose: tabs.closeTab,
-                  onReorder: tabs.reorder,
                   onNew: () => ask(const NewBench()),
                   onToggleDrawer: shell.toggleCollapsed,
                 ),

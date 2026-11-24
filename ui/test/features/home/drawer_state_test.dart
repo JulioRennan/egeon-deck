@@ -49,21 +49,17 @@ void main() {
     await cubit.close();
   });
 
-  test('a gaveta aberta fecha ao escolher outra bancada', () async {
+  test('a gaveta aberta continua aberta ao escolher outra bancada', () async {
     final cubit = make();
     shell.push(_on('a'));
     await Future<void>.delayed(Duration.zero);
     cubit.setCollapsed(false);
     shell.push(_on('a'));
     await Future<void>.delayed(Duration.zero);
-    expect(
-      cubit.state,
-      isA<ShellExpanded>(),
-      reason: 'a mesma bancada não fecha',
-    );
+    expect(cubit.state, isA<ShellExpanded>());
     shell.push(_on('b'));
     await Future<void>.delayed(Duration.zero);
-    expect(cubit.state, isA<ShellCollapsed>());
+    expect(cubit.state, isA<ShellExpanded>());
     expect(cubit.state.snapshot.bench?.id, 'b');
     await cubit.close();
   });
@@ -93,14 +89,18 @@ void main() {
     await cubit.close();
   });
 
-  test('aberta pelo mouse, fecha ao escolher outra bancada', () async {
-    final cubit = make();
-    shell.push(_on('a'));
-    await Future<void>.delayed(Duration.zero);
-    cubit.peek();
-    shell.push(_on('b'));
-    await Future<void>.delayed(Duration.zero);
-    expect(cubit.state, isA<ShellCollapsed>());
-    await cubit.close();
-  });
+  test(
+    'aberta pelo mouse, continua aberta ao escolher outra bancada',
+    () async {
+      final cubit = make();
+      shell.push(_on('a'));
+      await Future<void>.delayed(Duration.zero);
+      cubit.peek();
+      shell.push(_on('b'));
+      await Future<void>.delayed(Duration.zero);
+      expect(cubit.state, isA<ShellPeeking>());
+      expect(cubit.state.snapshot.bench?.id, 'b');
+      await cubit.close();
+    },
+  );
 }

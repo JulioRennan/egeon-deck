@@ -212,8 +212,8 @@ void main() {
     testEg('desenha o fio a 18% e o brilho a 14% na cor da bancada', (
       tester,
     ) async {
-      expect(GlowPainter.edgeAlpha, 0.18);
-      expect(GlowPainter.glowAlpha, 0.14);
+      expect(GlowPainter.edgeAlpha, 0.32);
+      expect(GlowPainter.glowAlpha, 0.22);
       expect(GlowPainter.glowBlur, 32);
       await tester.pumpWidget(
         egHost(

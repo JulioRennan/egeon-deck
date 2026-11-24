@@ -59,15 +59,15 @@ class BenchFrame extends StatelessWidget {
   }
 }
 
-/// O fio e o brilho de dentro da moldura: `inset 0 0 0 1px cor@18%` e
-/// `inset 0 0 32px cor@14%` do v3.
+/// O fio e o brilho de dentro da moldura, mais fortes que o v3 (que pede
+/// fio a 18% e brilho a 14%): a pedido, a cor da bancada marca bem a borda.
 class GlowPainter extends CustomPainter {
   GlowPainter(this.color);
 
   final Color color;
 
-  static const edgeAlpha = 0.18;
-  static const glowAlpha = 0.14;
+  static const edgeAlpha = 0.32;
+  static const glowAlpha = 0.22;
   static const glowBlur = 32.0;
 
   @override

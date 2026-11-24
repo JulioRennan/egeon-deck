@@ -27,6 +27,7 @@ use crate::features::workbench::tabs::tabs_to_reopen;
 use crate::features::workspace::model::WorkspaceConfig;
 use crate::features::workspace::routes::OrgState;
 use crate::features::workspace::service::reconcile;
+use crate::features::workspace::startup::open_projects_with_benches;
 use crate::features::workspace::store as space_store;
 use crate::features::workspace::tree::WorkspaceTree;
 use crate::protocol::org::{
@@ -119,10 +120,15 @@ pub fn load(paths: &Paths, home: &str, main_repo: impl Fn(&str) -> Option<String
     assign_missing_colors(&mut workbenches);
     let colored = before != workbenches.iter().map(|w| w.color).collect::<Vec<_>>();
 
-    let reconciled = reconcile(&workspaces, &workbenches, home, main_repo);
+    let mut reconciled = reconcile(&workspaces, &workbenches, home, main_repo);
     notes.extend(reconciled.notes);
+    let opened = open_projects_with_benches(&mut reconciled.workspaces, &reconciled.workbenches);
     Loaded {
-        needs_save: benches.needs_save || spaces_need_save || colored || reconciled.changed,
+        needs_save: benches.needs_save
+            || spaces_need_save
+            || colored
+            || reconciled.changed
+            || opened,
         notes,
         org: Org {
             state: OrgState {

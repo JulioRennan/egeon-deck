@@ -450,9 +450,7 @@ void main() {
       expect(find.byType(SidebarPanel), findsNothing);
     });
 
-    testWidgets('escolher outra bancada fecha a gaveta aberta por cima', (
-      tester,
-    ) async {
+    testWidgets('escolher outra bancada deixa a gaveta aberta', (tester) async {
       final s = await mount(tester);
       await s.show(
         tester,
@@ -461,7 +459,7 @@ void main() {
         ),
       );
       await settleDrawer(tester);
-      expect(find.byType(SidebarPanel), findsNothing);
+      expect(find.byType(SidebarPanel), findsOneWidget);
     });
 
     testWidgets('não há fixar: o canvas continua por baixo e Esc a fecha', (
@@ -1016,6 +1014,43 @@ void main() {
       expect(last, isNot(contains('✓ Limpar órfãos')));
       expect(last, contains('Ver como chat'));
     });
+
+    testWidgets(
+      'o menu só vai de novo ao AppKit quando muda: reenviar fecha o aberto',
+      (tester) async {
+        final s = await mount(tester);
+        // O `PlatformMenuBar` não guarda os itens no initState: a primeira
+        // remontagem sempre reenvia uma vez. O que conta é daí em diante.
+        s.app.push(const AppSnapshot());
+        await tester.pump();
+        await tester.pump();
+        menuCalls.clear();
+        await s.show(
+          tester,
+          const ShellSnapshot(
+            bench: Workbench(id: 'b2', name: 'outra', path: '~'),
+          ),
+        );
+        s.tabs.push([const WorkbenchTab(id: 'b2', name: 'outra')]);
+        s.app.push(const AppSnapshot());
+        await tester.pump();
+        await tester.pump();
+        expect(menuCalls, isEmpty);
+
+        await s.show(
+          tester,
+          const ShellSnapshot(
+            bench: Workbench(
+              id: 'b2',
+              name: 'outra',
+              path: '~',
+              view: ViewMode.chat,
+            ),
+          ),
+        );
+        expect(menuCalls, hasLength(1));
+      },
+    );
   });
 
   group('pedidos do core à tela (decisão 35)', () {

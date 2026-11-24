@@ -1,7 +1,7 @@
 import '../../../../core/domain/entities/activity_summary.dart';
 import '../../../../core/domain/entities/organization.dart';
 
-/// Uma aba: bancada aberta, na ordem em que foi aberta. Chega montada pelo
+/// Uma tecla do trilho: uma bancada ativa. Chega montada pelo
 /// core Rust; a UI só desenha.
 class WorkbenchTab {
   const WorkbenchTab({
@@ -20,16 +20,19 @@ class WorkbenchTab {
   final String? color;
   final ActivitySummary summary;
 
-  /// As abas da organização: as bancadas com posição, na ordem delas.
+  /// As teclas do trilho: as bancadas ativas, na ordem da aba Ativas da barra
+  /// lateral (as das últimas 24 horas, depois as de pé há mais tempo). O trilho
+  /// é um reflexo dela, não das abas abertas.
   static List<WorkbenchTab> listOf(Organization org) => [
-    for (final b in org.openTabs)
-      WorkbenchTab(
-        id: b.id,
-        name: b.name,
-        isActive: b.tabActive,
-        color: b.color,
-        summary: b.activity,
-      ),
+    for (final a in org.active)
+      if (org.bench(a.workbench) case final b?)
+        WorkbenchTab(
+          id: b.id,
+          name: b.name,
+          isActive: b.tabActive,
+          color: b.color,
+          summary: b.activity,
+        ),
   ];
 
   @override

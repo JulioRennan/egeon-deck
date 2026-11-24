@@ -31,20 +31,14 @@ class ShellCubit extends Cubit<ShellState> {
   /// A gaveta de bancadas está fechada.
   bool get collapsed => state is ShellCollapsed;
 
-  /// O estado novo do core, com a gaveta como estava — salvo a aberta por
-  /// cima, que fecha quando outra bancada vai para a tela (escolheu uma).
-  ShellState _withSnapshot(ShellSnapshot snapshot) {
-    final switched =
-        snapshot.bench?.id != null &&
-        snapshot.bench?.id != state.snapshot.bench?.id;
-    return switch (state) {
-      ShellCollapsed() => ShellCollapsed(snapshot),
-      ShellExpanded() when switched => ShellCollapsed(snapshot),
-      ShellExpanded() => ShellExpanded(snapshot),
-      ShellPeeking() when switched => ShellCollapsed(snapshot),
-      ShellPeeking() => ShellPeeking(snapshot),
-    };
-  }
+  /// O estado novo do core, com a gaveta como estava: escolher outra bancada
+  /// por ela não a fecha (o usuário quer seguir navegando). Quem a fecha é o
+  /// clique fora, o Esc, o ⌘/ ou o mouse que sai.
+  ShellState _withSnapshot(ShellSnapshot snapshot) => switch (state) {
+    ShellCollapsed() => ShellCollapsed(snapshot),
+    ShellExpanded() => ShellExpanded(snapshot),
+    ShellPeeking() => ShellPeeking(snapshot),
+  };
 
   /// ⌘/: abre a gaveta ou, com ela à vista, fecha. Aberta pelo mouse, o
   /// clique a deixa aberta: quem passou o mouse e clicou quer ela ali.

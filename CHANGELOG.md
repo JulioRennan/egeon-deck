@@ -16,6 +16,10 @@ citados entre parênteses.
 
 ### Alterado
 
+- Ao abrir o app, os projetos que têm bancada aparecem abertos e no topo do workspace.
+- A cor da bancada na moldura fica mais forte.
+- Escolher uma bancada pela gaveta não a fecha mais; ela fecha pelo clique fora, pelo Esc, pelo ⌘/ ou quando o mouse sai.
+- O trilho à esquerda mostra as bancadas ativas, na ordem da aba Ativas, em vez das abas abertas; ⌘1…⌘9 seguem essa lista.
 - A janela perde a barra de título: a faixa de cima agora tem voltar e avançar (⌘[ ⌘]), a troca Canvas | Chat (só ícones, com o nome e o atalho na dica) e o caminho projeto / bancada, e arrasta a janela; a área da bancada ganha uma moldura com a cor dela. A faixa de abas sai da casca (decisão 45).
 - A barra lateral vira a gaveta de bancadas: abre pelo trilho de bancadas à esquerda (cada bancada com as iniciais na cor dela e o estado), por cima do canvas ou ao lado no chat, fecha com Esc; ⌘K também a abre (decisão 46).
 - A barra lateral ganha o visual novo: cabeçalho com Todas | Ativas (com o ponto de atenção), busca por bancada, projeto e workspace (⌘K a abre e foca) e "Novo"; as linhas mostram o estado em texto curto e, embaixo, o custo, e o ⋯ de cada nível abre um menu de vidro (salvar como template, copiar caminho do projeto…) (decisão 44).
@@ -44,6 +48,8 @@ citados entre parênteses.
 ### Corrigido
 
 - Colar e copiar no terminal voltam a funcionar pelo ⌘V/⌘C e pelo menu Editar.
+- Colar, copiar, selecionar tudo e desfazer (⌘V, ⌘C, ⌘A, ⌘Z) funcionam nos campos das janelas de formulário (nova bancada, terminal, workspace, renomear).
+- Os menus da barra do macOS (o do app, Editar, Canvas…) não fecham mais sozinhos logo depois de abertos.
 - O modo de voz do Claude Code grava no terminal: o app pede o microfone ao macOS, como o Egeon de hoje; o navegador volta a abrir servidores locais (http://127.0.0.1).
 - Ícone novo: a mão do maestro segurando os fios de vários terminais, flat e monocromático; o app de desenvolvimento ganha a mesma mão em branco sobre azul (decisão 44).
 - Clicar num botão não deixa mais a borda de foco presa nele (abas Todas/Ativas, trilho, barra de ações e demais botões) (decisão 44).
