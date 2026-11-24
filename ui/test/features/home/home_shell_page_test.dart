@@ -415,27 +415,19 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Todas as bancadas'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      var opacity = tester
-          .widgetList<Opacity>(
+      double slide() => tester
+          .widgetList<FractionalTranslation>(
             find.ancestor(
               of: find.byType(SidebarPanel),
-              matching: find.byType(Opacity),
+              matching: find.byType(FractionalTranslation),
             ),
           )
           .first
-          .opacity;
-      expect(opacity, inExclusiveRange(0, 1), reason: 'no meio da entrada');
+          .translation
+          .dx;
+      expect(slide(), inExclusiveRange(-1, 0), reason: 'no meio da entrada');
       await tester.pump(const Duration(milliseconds: 120));
-      opacity = tester
-          .widgetList<Opacity>(
-            find.ancestor(
-              of: find.byType(SidebarPanel),
-              matching: find.byType(Opacity),
-            ),
-          )
-          .first
-          .opacity;
-      expect(opacity, 1);
+      expect(slide(), 0);
     });
 
     testWidgets('Esc fecha a gaveta aberta por cima', (tester) async {

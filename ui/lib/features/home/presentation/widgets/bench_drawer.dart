@@ -90,12 +90,14 @@ class _BenchDrawerState extends State<BenchDrawer>
         final t =
             (widget.open ? EgeonMotion.easeStandard : EgeonMotion.easeExit)
                 .transform(_controller.value);
+        // Só desliza, sem esmaecer: o vidro (BackdropFilter) dentro de um
+        // Opacity é refeito a cada quadro e pisca. A gaveta sai de trás do
+        // trilho, recortada na sua faixa.
         return IgnorePointer(
           ignoring: !widget.open,
-          child: Opacity(
-            opacity: t,
+          child: ClipRect(
             child: FractionalTranslation(
-              translation: Offset(-0.06 * (1 - t), 0),
+              translation: Offset(-(1 - t), 0),
               child: DrawerHoverRegion(hover: widget.hover, child: body!),
             ),
           ),
