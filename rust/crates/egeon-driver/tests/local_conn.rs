@@ -1,5 +1,7 @@
 //! Escuta local de verdade, sempre numa pasta temporária — nunca `~/.egeon`.
 
+#![cfg(unix)]
+
 use std::os::unix::net::UnixListener as StdListener;
 use std::path::PathBuf;
 

@@ -17,10 +17,7 @@ use crate::features::path_text;
 
 pub fn status(git: &Git, path: &str) -> Result<Status, Failure> {
     let dir = Path::new(path);
-    let root = git
-        .run(&["rev-parse", "--show-toplevel"], dir)?
-        .trim()
-        .to_owned();
+    let root = path_text::from_git(git.run(&["rev-parse", "--show-toplevel"], dir)?.trim());
     if root.is_empty() {
         return Err(Failure::NotARepo(path.to_owned()));
     }
@@ -93,7 +90,7 @@ fn read_checked_out(git: &Git, repo: &str) -> (std::collections::BTreeMap<String
     let mut path: Option<String> = None;
     for line in lines(&listing) {
         if let Some(p) = line.strip_prefix("worktree ") {
-            path = Some(p.to_owned());
+            path = Some(path_text::from_git(p));
         } else if let (Some(branch), Some(path)) = (line.strip_prefix("branch refs/heads/"), &path)
         {
             if exists(path) {
@@ -291,7 +288,7 @@ pub fn main_worktree(git: &Git, path: &str) -> Option<String> {
     let listing = worktree_listing(git, path)?;
     lines(&listing)
         .into_iter()
-        .find_map(|line| line.strip_prefix("worktree ").map(str::to_owned))
+        .find_map(|line| line.strip_prefix("worktree ").map(path_text::from_git))
 }
 
 /// A raiz da worktree em que a pasta está (a ligada, se for uma). `None` fora
@@ -301,7 +298,7 @@ pub fn top_level(git: &Git, path: &str) -> Option<String> {
         .run(&["rev-parse", "--show-toplevel"], Path::new(path))
         .ok()?;
     let root = root.trim();
-    (!root.is_empty()).then(|| root.to_owned())
+    (!root.is_empty()).then(|| path_text::from_git(root))
 }
 
 /// De qual repositório uma pasta faz parte, sempre pelo checkout principal.
@@ -378,7 +375,7 @@ fn resolved(path: &str) -> PathBuf {
     let mut rest: Vec<std::ffi::OsString> = Vec::new();
     let mut head = PathBuf::from(path);
     loop {
-        if let Ok(real) = std::fs::canonicalize(&head) {
+        if let Ok(real) = crate::commons::paths::canonicalize(&head) {
             return rest.iter().rev().fold(real, |acc, part| acc.join(part));
         }
         match (

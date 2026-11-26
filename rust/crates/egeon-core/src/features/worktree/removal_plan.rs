@@ -72,11 +72,10 @@ pub fn involved(
         }
     }
 
-    let inside = format!("{}/", root.trim_end_matches('/'));
     for node in config.nodes.iter().filter(|n| n.kind != NodeKind::Web) {
         let path = config.resolved_directory(node, home);
         if path == root
-            || path.starts_with(&inside)
+            || path_text::inside(&path, &root).is_some()
             || !Path::new(&path).exists()
             || !service::is_linked_worktree(git, &path)
         {
