@@ -1,9 +1,16 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+
 /// Qual cópia do app novo está rodando, como no Swift: o estável segura os
 /// agentes de verdade, e o dev é o que se derruba e reconstrói. Com uma pasta
 /// só, os dois subiriam os mesmos terminais e brigariam pelo workbenches.json.
 ///
-/// Quem diz é `EGEON_FLAVOR=dev`, que o `scripts/make.sh` grava no
-/// `LSEnvironment` do bundle dev; o lançador repassa a variável ao core.
+/// O estável só vale num build release, fora de um bundle "Dev" e sem
+/// `EGEON_FLAVOR=dev`; na dúvida, dev. O `LSEnvironment` que o
+/// `scripts/make.sh` grava sozinho não basta: o macOS guarda o Info.plist em
+/// cache e o bundle reconstruído no mesmo caminho subiu sem a variável — ligado
+/// ao core e aos agentes de verdade. O lançador repassa o flavor ao core.
 enum EgeonFlavor {
   stable(folder: '.egeon-next', title: 'Egeon Deck'),
   dev(folder: '.egeon-next-dev', title: 'Egeon Deck (dev)');
@@ -13,17 +20,33 @@ enum EgeonFlavor {
   final String folder;
   final String title;
 
-  static EgeonFlavor fromEnvironment(Map<String, String> environment) =>
-      environment['EGEON_FLAVOR'] == 'dev' ? dev : stable;
+  static EgeonFlavor resolve(
+    Map<String, String> environment, {
+    required bool release,
+    required String executable,
+  }) {
+    final isDev =
+        environment['EGEON_FLAVOR'] == 'dev' ||
+        !release ||
+        executable.contains('Dev.app/');
+    return isDev ? dev : stable;
+  }
 }
 
 /// Onde o app novo guarda as coisas: `$EGEON_HOME` ou a pasta do flavor
 /// (`~/.egeon-next`, `~/.egeon-next-dev`). Nunca `~/.egeon`, que é do Egeon
 /// estável.
 class EgeonPaths {
-  EgeonPaths(Map<String, String> environment)
-    : _env = environment,
-      flavor = EgeonFlavor.fromEnvironment(environment);
+  EgeonPaths(
+    Map<String, String> environment, {
+    bool release = kReleaseMode,
+    String? executable,
+  }) : _env = environment,
+       flavor = EgeonFlavor.resolve(
+         environment,
+         release: release,
+         executable: executable ?? Platform.resolvedExecutable,
+       );
 
   final Map<String, String> _env;
   final EgeonFlavor flavor;

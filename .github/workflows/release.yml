@@ -1,0 +1,132 @@
+# Compila o app novo em cada plataforma e cria a release como RASCUNHO
+# (decisão 52). Quem assina e publica é o `scripts/release.sh`, na máquina que
+# guarda a chave das atualizações: ela nunca vem ao GitHub.
+#
+# Disparo: a tag vX.Y.Z (o release.sh a cria), ou à mão pelo Actions, que só
+# compila e guarda os arquivos, sem release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust (arm64 e x86_64, para o app universal)
+        run: |
+          rustup toolchain install stable --profile minimal -c clippy,rustfmt
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: ui/.fvmrc
+          channel: stable
+          cache: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+      - name: Testes do core
+        working-directory: rust
+        run: cargo test --workspace
+      - name: Testes da UI
+        working-directory: ui
+        run: flutter test
+      - name: App universal
+        working-directory: ui
+        # O make.sh chama `fvm flutter`; no CI o flutter já está no PATH.
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          # shellcheck disable=SC2016 # o $1 e o $@ são do script que nasce aqui.
+          printf '#!/bin/sh\n[ "$1" = flutter ] && shift\nexec flutter "$@"\n' > "$RUNNER_TEMP/bin/fvm"
+          chmod +x "$RUNNER_TEMP/bin/fvm"
+          PATH="$RUNNER_TEMP/bin:$PATH" EG_SIGN_ID=- scripts/make.sh release stable
+      - name: Empacota
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent "ui/build/EgeonDeck Next.app" dist/EgeonDeck-macos-universal.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+          if-no-files-found: error
+
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      # A mesma imagem do desenvolvimento local (scripts/linux): o que passa no
+      # container da sua máquina passa aqui.
+      - name: Imagem Linux
+        run: docker build -t egeon-linux-dev scripts/linux
+      - name: Testes do core
+        run: scripts/linux/run.sh cargo test --workspace --manifest-path rust/Cargo.toml
+      - name: Testes da UI
+        run: scripts/linux/run.sh bash -lc 'cd ui && flutter test'
+      - name: AppImage e .deb
+        run: scripts/linux/run.sh scripts/linux/package.sh "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  # A linha do Windows fica escrita e desligada (a variável EGEON_WINDOWS do
+  # repositório a liga): entra quando o porte compilar
+  # (driver com named pipe e ConPTY, runner Win32). Arquivo da decisão 52:
+  # EgeonDeck-windows-x86_64.zip.
+  windows:
+    if: ${{ vars.EGEON_WINDOWS == 'on' }}
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "porte do Windows ainda não existe"
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Notas do CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "CHANGELOG sem a seção [$version]"; exit 1; }
+      - name: Rascunho
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --draft --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md

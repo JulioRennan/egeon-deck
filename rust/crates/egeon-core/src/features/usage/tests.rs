@@ -653,3 +653,33 @@ fn arquivos_com_bom_e_chave_repetida_abrem_pelo_json_file() {
         "a primeira chave vence"
     );
 }
+
+#[test]
+fn modelo_que_so_o_catalogo_conhece_tem_preco_e_a_tabela_acompanha_as_mudancas() {
+    let home = tempfile::tempdir().expect("pasta");
+    let mut memo = store::PriceMemo::default();
+    let fable = "claude-fable-5-2";
+    assert!(PriceTable::from_built_in().price(fable).is_none());
+
+    let catalog = BTreeMap::from([(
+        fable.to_owned(),
+        ModelPrice::new("Fable 5.2", 8.0, 40.0, 0.2),
+    )]);
+    let table = memo.table(home.path(), &catalog);
+    assert_eq!(table.name(fable), "Fable 5.2");
+    assert_eq!(table.origin[fable], Origin::ClaudeCode);
+
+    fs::write(
+        store::pricing_file(home.path()),
+        r#"{"claude-fable-5-2":{"name":"Meu Fable","input":1,"output":2,"cacheRead":0.5}}"#,
+    )
+    .expect("grava");
+    assert_eq!(memo.table(home.path(), &catalog).name(fable), "Meu Fable");
+
+    fs::remove_file(store::pricing_file(home.path())).expect("apaga");
+    assert!(
+        memo.table(home.path(), &BTreeMap::new())
+            .price(fable)
+            .is_none()
+    );
+}

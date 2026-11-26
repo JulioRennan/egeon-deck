@@ -56,7 +56,7 @@ fn real_main() -> ExitCode {
         }
     }
     let env = |name: &str| std::env::var(name).ok();
-    let flavor = Flavor::from_env(env("EGEON_FLAVOR").as_deref());
+    let flavor = Flavor::from_env_in_build(env("EGEON_FLAVOR").as_deref(), !cfg!(debug_assertions));
     let home = match egeon_home(flavor, env("EGEON_HOME").as_deref(), env("HOME").as_deref()) {
         Ok(home) => home,
         Err(err) => {

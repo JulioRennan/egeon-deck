@@ -8,9 +8,16 @@ use std::time::{Duration, Instant};
 
 use egeon_driver::main_loop::{MainLoopError, on_main, run};
 
+#[cfg(target_os = "macos")]
 fn main_thread() -> bool {
     // SAFETY: `pthread_main_np` não tem pré-condição.
     unsafe { libc::pthread_main_np() == 1 }
+}
+
+#[cfg(target_os = "linux")]
+fn main_thread() -> bool {
+    // SAFETY: `gettid` e `getpid` não têm pré-condição.
+    unsafe { libc::gettid() == libc::getpid() }
 }
 
 fn check(name: &str, ok: bool, failures: &mut Vec<String>) {
@@ -50,7 +57,7 @@ fn main() -> ExitCode {
     let result = run(|| {
         let (tx, rx) = mpsc::channel();
         on_main(move || {
-            let _ = tx.send(unsafe { libc::pthread_main_np() } == 1);
+            let _ = tx.send(main_thread());
         });
         rx.recv_timeout(Duration::from_secs(5)).ok()
     });

@@ -1,5 +1,9 @@
 //! Troca do app, tudo numa pasta temporária: nada aqui instala nem troca o
 //! app em `/Applications`.
+//!
+//! A troca do bundle `.app` com `ditto` e `codesign` é do macOS; a do AppImage
+//! tem os testes dela.
+#![cfg(target_os = "macos")]
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

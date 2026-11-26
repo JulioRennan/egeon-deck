@@ -1,5 +1,5 @@
 //! Socket de domínio unix: nada exposto na rede, e o kernel diz qual processo
-//! abriu cada conexão (`LOCAL_PEERPID`).
+//! abriu cada conexão (`LOCAL_PEERPID` no macOS, `SO_PEERCRED` no Linux).
 
 use std::io;
 use std::os::fd::{AsRawFd, RawFd};
@@ -11,7 +11,11 @@ use egeon_core::ports::local_conn::{BoxFuture, LocalConn, LocalConnError, LocalL
 use tokio::net::UnixListener;
 
 /// `sun_path` do macOS tem 104 bytes, com o terminador.
+#[cfg(target_os = "macos")]
 const MAX_PATH: usize = 103;
+/// `sun_path` do Linux tem 108 bytes, com o terminador.
+#[cfg(target_os = "linux")]
+const MAX_PATH: usize = 107;
 
 /// O arquivo no disco: dispositivo e inode.
 type FileId = (u64, u64);
@@ -121,6 +125,7 @@ fn file_id(path: &Path) -> Option<FileId> {
 ///
 /// A alternativa — o remetente se identificar no pedido — não é verificável: quem
 /// monta o `curl` é o agente, e ele pode escrever qualquer endereço ali.
+#[cfg(target_os = "macos")]
 fn peer_pid(fd: RawFd) -> Option<u32> {
     let mut pid: libc::pid_t = 0;
     let mut size = size_of::<libc::pid_t>() as libc::socklen_t;
@@ -137,6 +142,30 @@ fn peer_pid(fd: RawFd) -> Option<u32> {
     (result == 0 && pid > 0).then_some(pid as u32)
 }
 
+/// O `ucred` de quem chamou `connect`: o mesmo processo que o `LOCAL_PEERPID`
+/// do macOS diz.
+#[cfg(target_os = "linux")]
+fn peer_pid(fd: RawFd) -> Option<u32> {
+    let mut cred = libc::ucred {
+        pid: 0,
+        uid: 0,
+        gid: 0,
+    };
+    let mut size = size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: `cred` e `size` são locais vivos com o tamanho declarado.
+    let result = unsafe {
+        libc::getsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&mut cred as *mut libc::ucred).cast(),
+            &mut size,
+        )
+    };
+    (result == 0 && cred.pid > 0).then_some(cred.pid as u32)
+}
+
+#[cfg(target_os = "macos")]
 fn no_sigpipe(fd: RawFd) {
     let on: libc::c_int = 1;
     // SAFETY: `on` é um local vivo com o tamanho declarado. Falhar só devolve o
@@ -151,3 +180,8 @@ fn no_sigpipe(fd: RawFd) {
         );
     }
 }
+
+/// O Linux não tem a opção por socket. O Rust já ignora o SIGPIPE em
+/// executáveis, e a escrita num socket fechado volta como `EPIPE`.
+#[cfg(target_os = "linux")]
+fn no_sigpipe(_fd: RawFd) {}

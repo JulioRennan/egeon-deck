@@ -31,7 +31,7 @@ use crate::features::node::model::NodeKind;
 use crate::features::queue::chat::ChatQueue;
 use crate::features::usage::PriceTable;
 use crate::features::usage::panel::{Panel, Pill};
-use crate::features::usage::store::UsageStore;
+use crate::features::usage::store::{PriceMemo, UsageStore};
 use crate::features::workbench::model::WorkbenchConfig;
 use crate::protocol::handler::{RouteReply, RouteRequest};
 use crate::protocol::message::{CommandKind, Reply, Topic};
@@ -50,6 +50,7 @@ pub(super) struct ChatState {
     runtime: Option<ChatRuntime>,
     waiting: HashMap<u64, Waiter>,
     next_token: u64,
+    prices: PriceMemo,
 }
 
 /// O que o chat lê do ator: a organização, o dispatch (atividade, conversa e
@@ -60,6 +61,7 @@ struct OrgHost<'a> {
     commands: Option<&'a CommandRegistry>,
     /// As filas de cada bancada, já lidas do ator: o host só empresta `&self`.
     queues: BTreeMap<String, Vec<ChatQueue>>,
+    prices: PriceTable,
     now: SystemTime,
 }
 
@@ -140,7 +142,7 @@ impl ChatHost for OrgHost<'_> {
     }
 
     fn prices(&self) -> PriceTable {
-        PriceTable::from_built_in()
+        self.prices.clone()
     }
 }
 
@@ -362,11 +364,19 @@ impl Actor {
                 UsageStore::new(home.clone(), user_home),
             )
         });
+        let catalog = self
+            .detail
+            .catalog
+            .as_ref()
+            .and_then(|c| c.prices.clone())
+            .unwrap_or_default();
+        let prices = self.chat.prices.table(&home, &catalog).clone();
         let host = OrgHost {
             org: &self.org,
             dispatch: &self.dispatch,
             commands: self.detail.commands(),
             queues,
+            prices,
             now: SystemTime::now(),
         };
         f(runtime, &host)

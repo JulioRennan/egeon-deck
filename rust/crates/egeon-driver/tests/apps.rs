@@ -1,5 +1,9 @@
 //! Apps, sockets e containers de verdade, sem abrir nem fechar app nenhum do
 //! usuário.
+//!
+//! Apps com bundle, `lsof` e `open` são do macOS; o par Linux não tem apps a
+//! listar e é testado em `src/apps/linux.rs`.
+#![cfg(target_os = "macos")]
 
 use std::collections::HashSet;
 use std::fs;

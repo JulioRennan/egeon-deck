@@ -11,6 +11,10 @@ use egeon_core::ports::procs::{
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as platform;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux as platform;
 
 /// A pasta atual de um processo, para quem já tem o pid (o terminal).
 pub(crate) fn cwd_of(pid: u32) -> Option<std::path::PathBuf> {

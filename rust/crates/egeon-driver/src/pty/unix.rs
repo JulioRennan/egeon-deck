@@ -329,13 +329,15 @@ fn open_pty(size: PtySize) -> Result<(OwnedFd, OwnedFd), PtyError> {
     let (mut master, mut slave) = (-1, -1);
     let mut winsize = winsize(size);
     // SAFETY: ponteiros para locais vivos; `openpty` aceita nulo no nome e no termios.
+    // Ponteiro cru, e não `&mut`: o macOS declara o `winsize` mutável e o Linux
+    // constante, e o `*mut` serve aos dois.
     let result = unsafe {
         libc::openpty(
             &mut master,
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut winsize,
+            &raw mut winsize,
         )
     };
     if result < 0 {

@@ -534,6 +534,9 @@ impl FolderPermissions for Reset {
 #[cfg(unix)]
 #[test]
 fn pasta_legivel_ausente_e_bloqueada() {
+    if crate::commons::testing::running_as_root() {
+        return;
+    }
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_str().unwrap().to_owned();
@@ -631,6 +634,9 @@ fn pedir_sem_o_que_zerar_e_so_a_conferencia() {
 #[cfg(unix)]
 #[test]
 fn pasta_protegida_negada_zera_o_servico_e_confere_de_novo() {
+    if crate::commons::testing::running_as_root() {
+        return;
+    }
     use std::os::unix::fs::PermissionsExt;
     let home = tempfile::tempdir().unwrap();
     let docs = home.path().join("Documents");

@@ -221,7 +221,14 @@ fn caracteres_e_modificadores() -> Res {
         alt: true,
         ..Mods::default()
     };
-    assert_eq!(s.encode_key(&ch("b", alt, Some("∫"))), b"\x1bb");
+    // No macOS o Option compõe "∫" e o encoder o trata como Alt; no Linux, que
+    // não compõe com Alt, a opção não existe e o texto já chega "b".
+    let alt_text = if cfg!(target_os = "macos") {
+        "∫"
+    } else {
+        "b"
+    };
+    assert_eq!(s.encode_key(&ch("b", alt, Some(alt_text))), b"\x1bb");
     assert_eq!(
         s.encode_key(&ch("ç", Mods::default(), None)),
         "ç".as_bytes()

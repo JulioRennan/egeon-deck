@@ -25,14 +25,17 @@ class EgeonAppLauncher {
     this._executable,
     ProcessStarter? starter,
     Map<String, String>? environment,
+    String? uiExecutable,
   }) : _starter = starter ?? _defaultStarter,
-       _environment = environment ?? Platform.environment;
+       _environment = environment ?? Platform.environment,
+       _uiExecutable = uiExecutable ?? Platform.resolvedExecutable;
 
   final EgeonPaths paths;
   final EgeonTransport _probe;
   final String? _executable;
   final ProcessStarter _starter;
   final Map<String, String> _environment;
+  final String _uiExecutable;
 
   Process? _child;
 
@@ -97,15 +100,14 @@ class EgeonAppLauncher {
     }
   }
 
-  /// `EGEON_APP_BIN`, o irmão do executável da UI (dentro do `.app`) ou, em
-  /// desenvolvimento, o binário de `rust/target` mais perto da pasta atual.
+  /// `EGEON_APP_BIN`, o irmão do executável da UI (dentro do `.app` no macOS;
+  /// em `build/linux/<arch>/<modo>/bundle/` no Linux, onde o `scripts/linux/package.sh` o põe) ou,
+  /// em desenvolvimento, o binário de `rust/target` mais perto da pasta atual.
   String? locate() {
     final fromEnv = _environment['EGEON_APP_BIN'];
     if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
 
-    final sibling = File(
-      '${File(Platform.resolvedExecutable).parent.path}/egeon-app',
-    );
+    final sibling = File('${File(_uiExecutable).parent.path}/egeon-app');
     if (sibling.existsSync()) return sibling.path;
 
     var dir = Directory.current;

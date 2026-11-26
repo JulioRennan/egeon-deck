@@ -12,7 +12,7 @@ use base64::engine::general_purpose::STANDARD;
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use serde_json::json;
 
-use super::controller::{CHECK_EVERY, FEED, FIRST_CHECK_AFTER};
+use super::controller::{CHECK_EVERY, FEED, FIRST_CHECK_AFTER, cannot_install_hint};
 use super::release::{AssetNames, NEXT_BUNDLE_ID};
 use super::*;
 use crate::ports::installer::{AppInstaller, InstallError, Swap, UnpackedApp};
@@ -53,17 +53,43 @@ fn names() -> AssetNames {
 }
 
 #[test]
-fn os_nomes_dos_assets_sao_parametro_e_o_padrao_e_o_do_app_novo() {
-    let next = AssetNames::default();
+fn os_nomes_dos_assets_sao_parametro_e_o_padrao_e_o_desta_plataforma() {
+    let of = |os, arch| {
+        let n = AssetNames::for_platform(os, arch);
+        (n.zip, n.signature)
+    };
+    let pair = |zip: &str| (zip.to_owned(), format!("{zip}.sig"));
     assert_eq!(
-        (next.zip.as_str(), next.signature.as_str()),
-        ("EgeonDeckNext.zip", "EgeonDeckNext.zip.sig")
+        of("macos", "aarch64"),
+        pair("EgeonDeck-macos-universal.zip")
     );
+    assert_eq!(of("macos", "x86_64"), pair("EgeonDeck-macos-universal.zip"));
+    assert_eq!(
+        of("linux", "x86_64"),
+        pair("EgeonDeck-linux-x86_64.AppImage")
+    );
+    assert_eq!(
+        of("linux", "aarch64"),
+        pair("EgeonDeck-linux-aarch64.AppImage")
+    );
+    assert_eq!(
+        of("windows", "x86_64"),
+        pair("EgeonDeck-windows-x86_64.zip")
+    );
+    assert_eq!(
+        AssetNames::default(),
+        AssetNames::for_platform(std::env::consts::OS, std::env::consts::ARCH)
+    );
+    // Sem arquivo publicado para a plataforma, nenhuma release serve.
+    let riscv = AssetNames::for_platform("linux", "riscv64");
+    let published = release("v1.7.0", &["EgeonDeck-linux-x86_64.AppImage"]);
+    assert_eq!(AvailableUpdate::parse(&published, &riscv), None);
+    let next = AssetNames::default();
     assert_eq!(NEXT_BUNDLE_ID, "dev.duckcoder.egeondeck.next");
     // O zip do app antigo não serve ao novo, e vice-versa.
     let old = release("v1.7.0", &BOTH);
     assert!(AvailableUpdate::parse(&old, &next).is_none());
-    let new = release("v1.7.0", &["EgeonDeckNext.zip", "EgeonDeckNext.zip.sig"]);
+    let new = release("v1.7.0", &[next.zip.as_str(), next.signature.as_str()]);
     assert!(AvailableUpdate::parse(&new, &next).is_some());
     assert!(AvailableUpdate::parse(&new, &names()).is_none());
 }
@@ -591,9 +617,14 @@ fn falhas_de_download_voltam_a_disponivel_com_a_mensagem() {
         "{text}"
     );
     assert!(
-        text.ends_with("Mova-o para /Applications e tente de novo."),
+        text.ends_with(cannot_install_hint(std::env::consts::OS)),
         "{text}"
     );
+    assert_eq!(
+        cannot_install_hint("macos"),
+        "Mova-o para /Applications e tente de novo."
+    );
+    assert!(cannot_install_hint("linux").contains("AppImage"));
     assert_eq!(stuck.controller.state(), &State::Available(newer()));
 
     // O download não passou na conferência. E a opção "reiniciar quando

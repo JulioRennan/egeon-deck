@@ -28,13 +28,30 @@ impl AssetNames {
     pub fn legacy() -> Self {
         Self::new("EgeonDeck.zip", "EgeonDeck.zip.sig")
     }
+
+    /// O arquivo que o app instala sozinho em cada plataforma, com o `.sig`
+    /// ao lado (decisão 52). O `.deb` procura o AppImage da mesma arquitetura
+    /// só para saber que há versão nova: ele não se troca. Plataforma sem
+    /// arquivo publicado procura um nome que nenhuma release tem, e nunca acha
+    /// atualização.
+    pub fn for_platform(os: &str, arch: &str) -> Self {
+        let file = match (os, arch) {
+            ("macos", _) => "EgeonDeck-macos-universal.zip".to_owned(),
+            ("linux", "x86_64" | "aarch64") => format!("EgeonDeck-linux-{arch}.AppImage"),
+            ("windows", "x86_64") => "EgeonDeck-windows-x86_64.zip".to_owned(),
+            _ => format!("EgeonDeck-{os}-{arch}.indisponivel"),
+        };
+        let signature = format!("{file}.sig");
+        Self::new(file, signature)
+    }
 }
 
 impl Default for AssetNames {
-    /// Provisório, à espera do Julio: o mesmo repositório, com
-    /// `EgeonDeckNext.zip` e `EgeonDeckNext.zip.sig`.
+    /// Os da plataforma em que este core foi compilado: `consts` são
+    /// constantes de compilação, e o mesmo binário procura sempre o mesmo
+    /// arquivo.
     fn default() -> Self {
-        Self::new("EgeonDeckNext.zip", "EgeonDeckNext.zip.sig")
+        Self::for_platform(std::env::consts::OS, std::env::consts::ARCH)
     }
 }
 

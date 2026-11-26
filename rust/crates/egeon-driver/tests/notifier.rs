@@ -1,5 +1,6 @@
-//! Notificação e som no macOS. O executável de teste não está num `.app`, que
-//! é justamente o caso em que a central não existe.
+//! Notificação e som. O executável de teste não está num app empacotado (um
+//! `.app` no macOS; um AppImage ou o `.deb` no Linux), que é justamente o caso
+//! em que a central não existe.
 
 use egeon_core::ports::notifier::{Notice, Notifier, SoundError};
 use egeon_driver::SystemNotifier;

@@ -17,7 +17,8 @@ use egeon_core::commons::paths;
 /// ambiente do terminal, como no `egeon-app` que o lançou.
 fn socket() -> Result<PathBuf, paths::PathsError> {
     let var = |name: &str| std::env::var(name).ok();
-    let flavor = paths::Flavor::from_env(var("EGEON_FLAVOR").as_deref());
+    let flavor =
+        paths::Flavor::from_env_in_build(var("EGEON_FLAVOR").as_deref(), !cfg!(debug_assertions));
     paths::egeon_home(flavor, var("EGEON_HOME").as_deref(), var("HOME").as_deref())
         .map(|home| paths::Paths::new(home).socket())
 }

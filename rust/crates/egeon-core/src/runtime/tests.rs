@@ -1189,6 +1189,9 @@ async fn nos_sem_frame_usam_a_janela_da_ui_ao_abrir() {
 /// botões não abrem nada na tela (o `FakeOpener` só anota).
 #[tokio::test]
 async fn cortina_sem_acesso_trava_e_destrava_a_bancada() {
+    if crate::commons::testing::running_as_root() {
+        return;
+    }
     use std::os::unix::fs::PermissionsExt;
     let dir = TempHome::new();
     let folder = dir.0.join("fechada");
@@ -1229,6 +1232,9 @@ async fn cortina_sem_acesso_trava_e_destrava_a_bancada() {
 /// o shell fica como estava.
 #[tokio::test]
 async fn destravar_reergue_os_agentes_e_nao_os_shells() {
+    if crate::commons::testing::running_as_root() {
+        return;
+    }
     use std::os::unix::fs::PermissionsExt;
     let dir = TempHome::new();
     let folder = dir.0.join("fechada");

@@ -4,6 +4,8 @@ pub mod clock;
 pub mod ids;
 pub mod log;
 pub mod paths;
+#[cfg(all(test, unix))]
+pub mod testing;
 
 /// Ler e gravar JSON como o Swift (`parse`, `write_pretty`, `read_bytes`). O
 /// código mora em `features::json_file`, onde as features de organização já o

@@ -13,6 +13,7 @@ citados entre parênteses.
 
 - "Novo projeto…" no menu do workspace: dá nome, escolhe a pasta-mãe (sugere a que os projetos dele já dividem) e cria a pasta, com `git init` se quiser, sem sair do app (ADR-092).
 - A gaveta de bancadas abre ao passar o mouse na faixa do trilho, à esquerda da bancada, e fecha ao tirar; clicar no botão a deixa aberta (decisão 44).
+- App para Linux (x86_64 e arm64): AppImage, que se atualiza sozinho como no macOS, e .deb, que avisa da versão nova com o link; terminais, agentes, notificações e a janela de Processos (decisão 52).
 
 ### Alterado
 
@@ -51,6 +52,9 @@ citados entre parênteses.
 - Colar e copiar no terminal voltam a funcionar pelo ⌘V/⌘C e pelo menu Editar.
 - Colar, copiar, selecionar tudo e desfazer (⌘V, ⌘C, ⌘A, ⌘Z) funcionam nos campos das janelas de formulário (nova bancada, terminal, workspace, renomear).
 - Os menus da barra do macOS (o do app, Editar, Canvas…) não fecham mais sozinhos logo depois de abertos.
+- Os cards de uma bancada não somem mais quando um agente fica aguardando um vizinho: o canvas ficava vazio até ele responder.
+- O app de teste (dev) não liga mais ao app de uso por engano: build de depuração e o bundle "Dev" sempre usam a pasta do dev, mesmo quando o macOS perde a variável que os distinguia.
+- O custo dos agentes em modelos que só o Claude Code instalado conhece (como o Fable 5.2) volta a ser calculado; o que já tinha sido contado sem preço ganha o valor, e o `pricing.json` editado vale sem reabrir o app (ADR-085).
 - O modo de voz do Claude Code grava no terminal: o app pede o microfone ao macOS, como o Egeon de hoje; o navegador volta a abrir servidores locais (http://127.0.0.1).
 - Ícone novo: a mão do maestro segurando os fios de vários terminais, flat e monocromático; o app de desenvolvimento ganha a mesma mão em branco sobre azul (decisão 44).
 - Clicar num botão não deixa mais a borda de foco presa nele (abas Todas/Ativas, trilho, barra de ações e demais botões) (decisão 44).

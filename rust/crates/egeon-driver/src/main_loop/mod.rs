@@ -14,6 +14,10 @@ use thiserror::Error;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as platform;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux as platform;
 
 #[derive(Debug, Error)]
 pub enum MainLoopError {

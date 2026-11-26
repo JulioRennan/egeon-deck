@@ -1,8 +1,9 @@
-//! Traz o libghostty-vt pré-compilado do projeto Ghostty e o liga estático
-//! (decisão 14 de `docs/migracao/3-proposta.html`).
+//! Traz o libghostty-vt do projeto Ghostty e o liga estático (decisões 14 e 52
+//! de `docs/migracao/3-proposta.html`): no macOS, o binário oficial; no Linux,
+//! que não tem binário oficial, compilado aqui do tarball de fonte com Zig.
 //!
-//! A origem é fixa: versão, URL e sha256 abaixo, tirados do `SHA256SUMS`
-//! publicado com a versão. O arquivo baixado é conferido toda vez que este
+//! A origem é fixa: versão, URLs e sha256 abaixo, tirados do `SHA256SUMS`
+//! publicado com a versão. O que foi baixado é conferido toda vez que este
 //! script roda, inclusive o que já estava no cache.
 
 use std::env;
@@ -23,6 +24,13 @@ const APPLE_LIB_IN_ZIP: &str = "ghostty-vt.xcframework/macos-arm64_x86_64/libgho
 /// O `.a` acima, tirado do zip conferido. Conferir o que vai para o link, e não
 /// só o zip, pega o cache mexido sem extrair de novo a cada build.
 const APPLE_LIB_SHA256: &str = "5388c66b81d8fadc63d4fd6ca8984d2be4645a98d2397ad9d43437a6b96c7cf5";
+/// `libghostty-vt-1.0.1.tar.gz` e `-deps.tar.gz` em `SHA256SUMS` da 1.0.1: o
+/// fonte e os pacotes Zig de que ele precisa, para compilar sem rede.
+const SOURCE_SHA256: &str = "333dfce97641ef9b536bb9e08907ad86abaaada50e8f7417b70d9284adef37aa";
+const DEPS_SHA256: &str = "91a4e10960a52bf5bf4b15aa2a2cddaff8a89d6cd903d3055bda4fd17de3356d";
+/// O `minimum_zig_version` do `build.zig.zon` da 1.0.1. O build do Ghostty
+/// aceita qualquer 0.17.x; aqui é a exata, para dois builds darem o mesmo `.a`.
+const ZIG_VERSION: &str = "0.17.0";
 /// Pasta com um `libghostty-vt.a` pronto: build sem rede, ou o plano B
 /// (compilado do fonte com Zig). Pula o download e a conferência.
 const LIB_DIR_ENV: &str = "EGEON_GHOSTTY_VT_DIR";
@@ -51,15 +59,18 @@ fn main() -> Res<()> {
 }
 
 fn official_lib() -> Res<PathBuf> {
-    let os = env::var("CARGO_CFG_TARGET_OS")?;
-    if os != "macos" {
-        return Err(format!(
-            "libghostty-vt {VERSION}: só o binário de macOS está ligado aqui (alvo: {os}). \
+    match env::var("CARGO_CFG_TARGET_OS")?.as_str() {
+        "macos" => apple_lib(&cache_dir()?),
+        "linux" => linux_lib(&cache_dir()?),
+        os => Err(format!(
+            "libghostty-vt {VERSION}: sem receita para o alvo {os}. \
              Aponte {LIB_DIR_ENV} para uma pasta com libghostty-vt.a."
         )
-        .into());
+        .into()),
     }
+}
 
+fn cache_dir() -> Res<PathBuf> {
     // Fora do OUT_DIR para não baixar de novo a cada perfil (debug, release,
     // clippy). O cargo não diz ao script onde fica o target; o
     // `CARGO_TARGET_DIR` do ambiente vale quando existe, e o padrão é
@@ -71,7 +82,10 @@ fn official_lib() -> Res<PathBuf> {
     };
     let cache = target.join("libghostty-vt").join(VERSION);
     fs::create_dir_all(&cache)?;
+    Ok(cache)
+}
 
+fn apple_lib(cache: &Path) -> Res<PathBuf> {
     let lib_dir = cache.join("lib");
     let lib = lib_dir.join("libghostty-vt.a");
     // Sem isto, apagar o cache deixa o cargo achando que nada mudou, e o erro
@@ -91,6 +105,131 @@ fn official_lib() -> Res<PathBuf> {
     extract(&zip_path, APPLE_LIB_IN_ZIP, &lib)?;
     check(&lib, APPLE_LIB_SHA256)?;
     Ok(lib_dir)
+}
+
+/// Compila do tarball de fonte, como o `PACKAGING-LIBGHOSTTY.md` da versão
+/// manda: com os pacotes do tarball de dependências e sem rede.
+///
+/// O `.a` compilado não é reprodutível byte a byte entre máquinas, então não há
+/// sha256 dele para fixar: o carimbo ao lado guarda o sha256 de quando foi
+/// feito aqui, e é ele que pega o cache mexido.
+fn linux_lib(cache: &Path) -> Res<PathBuf> {
+    let arch = env::var("CARGO_CFG_TARGET_ARCH")?;
+    let target = format!("{arch}-linux-gnu");
+    let lib_dir = cache
+        .join(format!("{target}-zig-{ZIG_VERSION}"))
+        .join("lib");
+    let lib = lib_dir.join("libghostty-vt.a");
+    let stamp = lib_dir.join("libghostty-vt.a.sha256");
+    println!("cargo:rerun-if-changed={}", lib.display());
+    if lib.exists() && fs::read_to_string(&stamp).ok() == Some(sha256(&lib)?) {
+        return Ok(lib_dir);
+    }
+
+    check_zig()?;
+    let source = fetch(
+        cache,
+        &format!("libghostty-vt-{VERSION}.tar.gz"),
+        SOURCE_SHA256,
+    )?;
+    let deps = fetch(
+        cache,
+        &format!("libghostty-vt-{VERSION}-deps.tar.gz"),
+        DEPS_SHA256,
+    )?;
+
+    // Tudo do build numa pasta do processo: dois `cargo` ao mesmo tempo não
+    // compilam um por cima do outro, e o que sobrar de um build interrompido
+    // não entra no seguinte.
+    let work = partial(&cache.join(format!("build-{target}")));
+    let _ = fs::remove_dir_all(&work);
+    fs::create_dir_all(&work)?;
+    let built = build_from_source(&work, &source, &deps, &target);
+    let result = built.and_then(|built| {
+        fs::create_dir_all(&lib_dir)?;
+        let part = partial(&lib);
+        fs::copy(&built, &part)?;
+        fs::rename(&part, &lib)?;
+        fs::write(&stamp, sha256(&lib)?)?;
+        Ok(lib_dir)
+    });
+    let _ = fs::remove_dir_all(&work);
+    result
+}
+
+fn build_from_source(work: &Path, source: &Path, deps: &Path, target: &str) -> Res<PathBuf> {
+    for tarball in [source, deps] {
+        run(Command::new("tar")
+            .arg("-xzf")
+            .arg(tarball)
+            .arg("-C")
+            .arg(work))?;
+    }
+    let source_dir = work.join(format!("libghostty-vt-{VERSION}"));
+    let prefix = work.join("prefix");
+    // Cache global novo e vazio: com o Zig 0.17, um cache que já tem o arquivo
+    // de um pacote pode derrubar o build com "reached unreachable code"
+    // (PACKAGING-LIBGHOSTTY.md).
+    let zig_cache = work.join("zig-cache");
+    run(Command::new("zig")
+        .current_dir(&source_dir)
+        .env("ZIG_GLOBAL_CACHE_DIR", &zig_cache)
+        .arg("build")
+        .arg("--prefix")
+        .arg(&prefix)
+        .arg("--system")
+        .arg(work.join(format!("libghostty-vt-{VERSION}-deps")))
+        .arg(format!("-Dtarget={target}"))
+        // Sem isto o `.a` usaria as instruções da máquina que compilou, e o
+        // AppImage cairia num processador mais velho.
+        .arg("-Dcpu=baseline")
+        .arg("-Doptimize=ReleaseFast"))?;
+    Ok(prefix.join("lib").join("libghostty-vt.a"))
+}
+
+fn check_zig() -> Res<()> {
+    let output = Command::new("zig").arg("version").output().map_err(|e| {
+        format!("zig não rodou ({e}); instale o Zig {ZIG_VERSION} ou use {LIB_DIR_ENV}")
+    })?;
+    let found = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if found != ZIG_VERSION {
+        return Err(format!(
+            "libghostty-vt {VERSION} é compilado com Zig {ZIG_VERSION}; o zig do PATH é {found:?}"
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// O tarball conferido no cache, baixado se faltar ou não conferir.
+fn fetch(cache: &Path, name: &str, want: &str) -> Res<PathBuf> {
+    let path = cache.join(name);
+    if !path.exists() || sha256(&path)? != want {
+        download(&format!("{BASE_URL}/{VERSION}/{name}"), &path)?;
+    }
+    check(&path, want)?;
+    Ok(path)
+}
+
+/// Roda e, se falhar, devolve o fim do que a ferramenta disse: o cargo só
+/// mostra a saída do script quando ele falha.
+fn run(command: &mut Command) -> Res<()> {
+    let output = command
+        .output()
+        .map_err(|e| format!("{:?} não rodou: {e}", command.get_program()))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let tail: Vec<&str> = stderr.lines().rev().take(40).collect();
+    let tail: Vec<&str> = tail.into_iter().rev().collect();
+    Err(format!(
+        "{:?} saiu com {}:\n{}",
+        command.get_program(),
+        output.status,
+        tail.join("\n")
+    )
+    .into())
 }
 
 /// Arquivo que não confere é apagado: o próximo build baixa de novo em vez de

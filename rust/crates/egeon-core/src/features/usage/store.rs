@@ -9,10 +9,11 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use super::ledger::{Cursor, UsageLedger};
 use super::model::ModelPrice;
-use super::prices::{PriceTable, file_overrides};
+use super::prices::{Origin, PriceTable, file_overrides};
 use super::trace::parse_conversations;
 use crate::features::agent::claude::usage as claude_usage;
 use crate::features::json_file::write_pretty;
@@ -56,6 +57,48 @@ pub fn load_prices(home: &Path, catalog: &BTreeMap<String, ModelPrice>) -> Price
         .and_then(|b| crate::features::json_file::parse::<BTreeMap<String, ModelPrice>>(&b).ok())
         .unwrap_or_default();
     PriceTable::layered(catalog, &file_overrides(custom))
+}
+
+/// A tabela em vigor, refeita quando o `pricing.json` editado à mão ou o
+/// catálogo do Claude Code atualizado mudam — valem na próxima leitura, sem
+/// reabrir o app. O `reloadPricesIfChanged` do Swift.
+#[derive(Debug, Default)]
+pub struct PriceMemo {
+    stamp: Option<SystemTime>,
+    catalog: Option<BTreeMap<String, ModelPrice>>,
+    table: Option<PriceTable>,
+}
+
+impl PriceMemo {
+    pub fn table(&mut self, home: &Path, catalog: &BTreeMap<String, ModelPrice>) -> &PriceTable {
+        let stamp = fs::metadata(pricing_file(home))
+            .and_then(|m| m.modified())
+            .ok();
+        let stale =
+            self.table.is_none() || stamp != self.stamp || self.catalog.as_ref() != Some(catalog);
+        if stale {
+            let first = self.table.is_none();
+            self.stamp = stamp;
+            self.catalog = Some(catalog.clone());
+            let next = load_prices(home, catalog);
+            if self.table.as_ref() != Some(&next) {
+                let count = |o: Origin| next.origin.values().filter(|v| **v == o).count();
+                crate::log!(
+                    "consumo: tabela de preços {} — Claude Code {}, embutida {}, pricing.json {}",
+                    if first {
+                        "carregada"
+                    } else {
+                        "mudou, vale daqui para frente"
+                    },
+                    count(Origin::ClaudeCode),
+                    count(Origin::BuiltIn),
+                    count(Origin::File)
+                );
+                self.table = Some(next);
+            }
+        }
+        self.table.get_or_insert_with(PriceTable::from_built_in)
+    }
 }
 
 #[derive(Debug)]

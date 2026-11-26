@@ -53,11 +53,22 @@ struct Inner {
     prompted: Option<AvailableUpdate>,
 }
 
-/// O `.app` que contém este executável: o app instalado, que a troca
-/// substitui. Fora de um bundle (`cargo run`, teste) não há o que trocar, e
-/// o caminho cai ao lado do executável: `can_install` o recusa.
+/// O app instalado, que a troca substitui: o `.app` que contém este
+/// executável, ou o AppImage de onde ele roda — dentro do AppImage o
+/// executável está numa montagem só de leitura, e o arquivo a trocar é o que o
+/// runtime aponta em `$APPIMAGE`. Fora dos dois (`cargo run`, teste, `.deb`) o
+/// caminho cai no executável, e `can_install` o recusa.
 fn app_bundle() -> PathBuf {
-    let exe = std::env::current_exe().unwrap_or_default();
+    installed_app(
+        std::env::var_os("APPIMAGE").as_deref(),
+        std::env::current_exe().unwrap_or_default(),
+    )
+}
+
+fn installed_app(appimage: Option<&std::ffi::OsStr>, exe: PathBuf) -> PathBuf {
+    if let Some(appimage) = appimage.filter(|a| !a.is_empty()) {
+        return PathBuf::from(appimage);
+    }
     let bundle = exe
         .ancestors()
         .find(|p| p.extension().is_some_and(|e| e == "app"))
@@ -364,12 +375,14 @@ mod tests {
         base
     }
 
+    /// Com os arquivos desta plataforma, que o app procura.
     fn release(tag: &str) -> String {
+        let names = crate::features::update::AssetNames::default();
         json!({
             "tag_name": tag, "html_url": "https://example.com/r", "body": "novidades",
             "assets": [
-                {"name": "EgeonDeckNext.zip", "browser_download_url": "https://example.com/a.zip"},
-                {"name": "EgeonDeckNext.zip.sig", "browser_download_url": "https://example.com/a.sig"},
+                {"name": names.zip, "browser_download_url": "https://example.com/a.zip"},
+                {"name": names.signature, "browser_download_url": "https://example.com/a.sig"},
             ],
         })
         .to_string()
@@ -468,5 +481,30 @@ mod tests {
         dev.actor.update_tick(t0 + Duration::from_secs(60));
         dev.settle().await;
         assert_eq!(update(&mut dev, "/update").await["state"], "idle");
+    }
+
+    #[test]
+    fn o_app_instalado_e_o_appimage_o_bundle_ou_o_executavel() {
+        use std::ffi::OsStr;
+        use std::path::PathBuf;
+
+        use super::installed_app;
+        let mounted = PathBuf::from("/tmp/.mount_EgeonAb12/usr/bin/egeon-app");
+        let appimage = OsStr::new("/home/u/Apps/EgeonDeck-linux-x86_64.AppImage");
+        assert_eq!(
+            installed_app(Some(appimage), mounted.clone()),
+            PathBuf::from("/home/u/Apps/EgeonDeck-linux-x86_64.AppImage")
+        );
+        // `.deb`, `cargo run`: o próprio executável, que não se troca.
+        assert_eq!(installed_app(None, mounted.clone()), mounted);
+        assert_eq!(
+            installed_app(Some(OsStr::new("")), mounted.clone()),
+            mounted
+        );
+        let in_bundle = PathBuf::from("/Applications/Egeon Deck.app/Contents/MacOS/egeon-app");
+        assert_eq!(
+            installed_app(None, in_bundle),
+            PathBuf::from("/Applications/Egeon Deck.app")
+        );
     }
 }

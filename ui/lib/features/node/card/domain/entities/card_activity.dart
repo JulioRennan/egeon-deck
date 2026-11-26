@@ -40,7 +40,7 @@ class CardActivity {
     this.glyph,
     this.tone,
     this.pending = 0,
-    this.waitingOn,
+    this.waitingOn = const [],
     this.error,
     this.attempt,
   });
@@ -57,7 +57,10 @@ class CardActivity {
 
   /// Prompts na fila do agente: o "N na fila".
   final int pending;
-  final String? waitingOn;
+
+  /// Em `awaiting`: os vizinhos que ainda não responderam. Lista no fio — lida
+  /// como texto, derrubava a bancada inteira e o canvas ficava vazio.
+  final List<String> waitingOn;
   final String? error;
   final int? attempt;
 
@@ -70,7 +73,10 @@ class CardActivity {
           glyph: ActivityGlyph.parse(map['glyph']),
           tone: ActivityTone.parse(map['tone']),
           pending: (map['pending'] as num?)?.toInt() ?? 0,
-          waitingOn: map['waiting_on'] as String?,
+          waitingOn: [
+            for (final peer in map['waiting_on'] as List<Object?>? ?? const [])
+              ?peer as String?,
+          ],
           error: map['error'] as String?,
           attempt: (map['attempt'] as num?)?.toInt(),
         );

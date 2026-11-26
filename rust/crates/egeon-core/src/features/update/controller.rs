@@ -245,9 +245,9 @@ impl UpdateController {
             self.restart_when_ready = false;
             self.state = State::Available(update);
             return vec![self.fail(&format!(
-                "O app não está num lugar onde possa ser trocado ({}). \
-                 Mova-o para /Applications e tente de novo.",
-                self.installer.destination().display()
+                "O app não está num lugar onde possa ser trocado ({}). {}",
+                self.installer.destination().display(),
+                cannot_install_hint(std::env::consts::OS)
             ))];
         }
         if update.signature.is_none() {
@@ -436,5 +436,14 @@ fn message(title: &str, text: &str) -> Effect {
     Effect::Message {
         title: title.to_owned(),
         text: text.to_owned(),
+    }
+}
+
+/// O que fazer quando o app não se troca. No Linux é o `.deb` (ou o binário
+/// solto): só o AppImage se troca sozinho, e o resto baixa da página.
+pub fn cannot_install_hint(os: &str) -> &'static str {
+    match os {
+        "linux" => "Só o AppImage se atualiza sozinho: baixe a versão nova na página da release.",
+        _ => "Mova-o para /Applications e tente de novo.",
     }
 }

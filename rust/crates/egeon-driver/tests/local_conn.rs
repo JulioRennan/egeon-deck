@@ -124,8 +124,10 @@ async fn caminho_longo_demais_e_recusado() {
 
     let result = SystemLocalConn.listen(&path);
 
+    // O `sun_path` com o terminador: 104 bytes no macOS, 108 no Linux.
+    let max = if cfg!(target_os = "linux") { 107 } else { 103 };
     assert!(matches!(
         result,
-        Err(LocalConnError::PathTooLong { max: 103, .. })
+        Err(LocalConnError::PathTooLong { max: m, .. }) if m == max
     ));
 }

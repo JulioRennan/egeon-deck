@@ -20,6 +20,10 @@ objc2-core-foundation.workspace = true
 objc2-user-notifications.workspace = true
 plist.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus.workspace = true
+futures-util.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true
 

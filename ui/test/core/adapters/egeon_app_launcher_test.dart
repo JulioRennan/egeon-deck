@@ -8,7 +8,12 @@ import '../../support/fake_process.dart';
 import '../../support/fake_transport.dart';
 
 void main() {
-  final paths = EgeonPaths({'HOME': '/Users/x', 'EGEON_HOME': '/tmp/h'});
+  final paths = EgeonPaths(
+    {'HOME': '/Users/x', 'EGEON_HOME': '/tmp/h'},
+    release: true,
+    executable:
+        '/Applications/EgeonDeck Next.app/Contents/MacOS/EgeonDeck Next',
+  );
 
   test('core já atendendo: não lança outro', () async {
     var launched = false;
@@ -87,5 +92,39 @@ void main() {
       environment: {'EGEON_APP_BIN': '/opt/egeon-app'},
     );
     expect(launcher.locate(), '/opt/egeon-app');
+  });
+
+  group('locate', () {
+    late Directory bundle;
+
+    setUp(() => bundle = Directory.systemTemp.createTempSync('egeon-bundle'));
+    tearDown(() => bundle.deleteSync(recursive: true));
+
+    EgeonAppLauncher launcherAt(String uiExecutable) => EgeonAppLauncher(
+      paths: paths,
+      probe: FakeTransport(),
+      environment: const {},
+      uiExecutable: uiExecutable,
+    );
+
+    test('bundle do Linux: o egeon-app ao lado do executável da UI', () {
+      // build/linux/x64/release/bundle/{egeon_deck, egeon-app, lib/, data/}
+      File('${bundle.path}/egeon-app').writeAsStringSync('');
+      expect(
+        launcherAt('${bundle.path}/egeon_deck').locate(),
+        '${bundle.path}/egeon-app',
+      );
+    });
+
+    test('EGEON_APP_BIN vence o irmão do executável', () {
+      File('${bundle.path}/egeon-app').writeAsStringSync('');
+      final launcher = EgeonAppLauncher(
+        paths: paths,
+        probe: FakeTransport(),
+        environment: const {'EGEON_APP_BIN': '/opt/egeon-app'},
+        uiExecutable: '${bundle.path}/egeon_deck',
+      );
+      expect(launcher.locate(), '/opt/egeon-app');
+    });
   });
 }

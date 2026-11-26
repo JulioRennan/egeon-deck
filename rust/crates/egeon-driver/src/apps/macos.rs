@@ -2,10 +2,10 @@
 
 use std::path::Path;
 
-use egeon_core::ports::procs::RunningApp;
+use egeon_core::ports::procs::{RunningApp, SocketLinks};
 use objc2_app_kit::NSRunningApplication;
 
-pub(super) const LSOF: &str = "/usr/sbin/lsof";
+const LSOF: &str = "/usr/sbin/lsof";
 pub(super) const DOCKER: &str = "/Applications/Docker.app/Contents/Resources/bin/docker";
 const LSAPPINFO: &str = "/usr/bin/lsappinfo";
 
@@ -41,6 +41,39 @@ fn parse_lsappinfo(output: &str) -> Vec<RunningApp> {
         }
     }
     apps
+}
+
+pub(super) fn socket_links() -> Option<SocketLinks> {
+    let output = super::run(Path::new(LSOF), &["-U", "-F", "pdn"], false)?;
+    Some(parse_lsof(&output))
+}
+
+/// Os sockets unix de cada processo, da saída `lsof -U -F pdn`: o endereço do
+/// próprio socket (`d`) e, se conectado, o do outro lado (`n->0x…`).
+fn parse_lsof(output: &str) -> SocketLinks {
+    let mut links = SocketLinks::default();
+    let mut pid = 0;
+    for line in output.split('\n') {
+        let Some(tag) = line.chars().next() else {
+            continue;
+        };
+        let value = &line[tag.len_utf8()..];
+        match tag {
+            'p' => pid = value.parse().unwrap_or(0),
+            'd' => {
+                links.own.entry(pid).or_default().insert(value.to_string());
+            }
+            'n' if value.starts_with("->0x") => {
+                links
+                    .peers
+                    .entry(pid)
+                    .or_default()
+                    .insert(value[2..].to_string());
+            }
+            _ => {}
+        }
+    }
+    links
 }
 
 /// O mesmo pedido do ⌘Q. Processo que não é app (sem janela, sem bundle) não
@@ -86,5 +119,17 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn lsof_liga_cada_socket_ao_processo_dono() {
+        let lsof = "p10\nf3\nd0xaaa\nn/tmp/s.sock\nf4\nd0xbbb\nn->0xccc\n\
+                    p20\nf5\nd0xccc\nn/tmp/s.sock\np30\nf3\nd0xddd\nn->0xeee\n";
+        let links = parse_lsof(lsof);
+        assert_eq!(links.own[&10].len(), 2);
+        assert!(links.peers[&10].contains("0xccc"));
+        assert!(links.own[&20].contains("0xccc"));
+        assert!(!links.peers.contains_key(&20));
+        assert!(links.peers[&30].contains("0xeee"));
     }
 }

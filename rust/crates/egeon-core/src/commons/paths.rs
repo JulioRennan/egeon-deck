@@ -31,6 +31,17 @@ impl Flavor {
         }
     }
 
+    /// Build de depuração é sempre o dev: rodar o core ou o `egeon` de
+    /// `target/debug` sem `EGEON_HOME` não pode cair nos agentes de verdade.
+    /// Só o release segue a variável.
+    pub fn from_env_in_build(value: Option<&str>, release: bool) -> Self {
+        if release {
+            Self::from_env(value)
+        } else {
+            Self::Dev
+        }
+    }
+
     pub fn is_dev(self) -> bool {
         self == Self::Dev
     }
@@ -261,6 +272,17 @@ mod tests {
         assert_eq!(Flavor::Stable.identifier(), "egeon-next");
         assert_eq!(Flavor::Dev.identifier(), "egeon-next-dev");
         assert!(Flavor::Dev.is_dev() && !Flavor::Stable.is_dev());
+    }
+
+    #[test]
+    fn depuracao_e_sempre_dev() {
+        assert_eq!(Flavor::from_env_in_build(None, false), Flavor::Dev);
+        assert_eq!(
+            Flavor::from_env_in_build(Some("stable"), false),
+            Flavor::Dev
+        );
+        assert_eq!(Flavor::from_env_in_build(None, true), Flavor::Stable);
+        assert_eq!(Flavor::from_env_in_build(Some("dev"), true), Flavor::Dev);
     }
 
     #[test]

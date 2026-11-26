@@ -11,6 +11,10 @@ use egeon_core::ports::file_clone::FileCloner;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as platform;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux as platform;
 
 /// O clonador do sistema em que o programa roda.
 #[derive(Debug, Clone, Copy, Default)]

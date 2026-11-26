@@ -474,6 +474,9 @@ fn a_remocao_termina_mesmo_com_alguem_escrevendo_na_pasta() {
 #[cfg(unix)]
 #[test]
 fn avisa_das_sobras_quando_ninguem_consegue_apagar_a_pasta() {
+    if crate::commons::testing::running_as_root() {
+        return;
+    }
     use std::os::unix::fs::PermissionsExt;
     let s = Sandbox::new();
     let (repo, worktree) = s.repo_with_worktree();

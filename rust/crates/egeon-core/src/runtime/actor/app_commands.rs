@@ -285,12 +285,14 @@ mod tests {
         base
     }
 
+    /// Com os arquivos desta plataforma, que o app procura.
     fn release(tag: &str) -> String {
+        let names = crate::features::update::AssetNames::default();
         json!({
             "tag_name": tag, "html_url": "https://example.com/r", "body": "novidades",
             "assets": [
-                {"name": "EgeonDeckNext.zip", "browser_download_url": "https://example.com/a.zip"},
-                {"name": "EgeonDeckNext.zip.sig", "browser_download_url": "https://example.com/a.sig"},
+                {"name": names.zip, "browser_download_url": "https://example.com/a.zip"},
+                {"name": names.signature, "browser_download_url": "https://example.com/a.sig"},
             ],
         })
         .to_string()

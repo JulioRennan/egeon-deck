@@ -268,8 +268,13 @@ void main() {
       final registry = CanvasProbeRegistry();
       final repo = InMemoryCanvasRepository(cards: cards, links: const []);
       await pumpCanvas(tester, repo, probes: registry);
+      // Dentro de um arquivo comum nada se cria, nem como root (no container
+      // Linux o `/pasta/que/não/existe` seria criado).
+      final dir = Directory.systemTemp.createTempSync('egeon-shot');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/arquivo')..writeAsStringSync('');
       final result = await tester.runAsync(
-        () => registry.active!.snapshot('a', '/pasta/que/nao/existe/a.png'),
+        () => registry.active!.snapshot('a', '${file.path}/sub/a.png'),
       );
       expect(result, startsWith('erro:'));
     });

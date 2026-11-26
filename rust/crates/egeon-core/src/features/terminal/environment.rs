@@ -33,8 +33,16 @@ pub fn from_process(
     path_dirs: &[PathBuf],
 ) -> Vec<(String, String)> {
     let parent = std::env::vars_os()
-        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)));
+        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+        .filter(|(key, _)| !in_test_from_real_config(key));
     compose(parent, cli_dir, strip, path_dirs, |path| path.exists())
+}
+
+/// O `cargo test` costuma rodar dentro de um terminal de agente, com o
+/// `CLAUDE_CONFIG_DIR` real no ambiente: herdado, um nó de teste gravaria a
+/// confiança no `.claude.json` de verdade.
+fn in_test_from_real_config(key: &str) -> bool {
+    cfg!(test) && key == "CLAUDE_CONFIG_DIR"
 }
 
 /// Ambiente completo para um processo filho, a partir de `parent`.

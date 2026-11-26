@@ -26,6 +26,10 @@ objc2-foundation = "0.3"
 objc2-core-foundation = "0.3"
 objc2-app-kit = "0.3"
 objc2-user-notifications = "0.3"
+# Só o egeon-driver, no Linux: a central de notificações do freedesktop pelo
+# D-Bus, no runtime tokio que o app já usa.
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+futures-util = { version = "0.3", default-features = false }
 # Info.plist do app baixado, na troca do app.
 plist = "1"
 tempfile = "3"
