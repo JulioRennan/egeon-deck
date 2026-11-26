@@ -57,7 +57,9 @@ fn real_main() -> ExitCode {
     }
     let env = |name: &str| std::env::var(name).ok();
     let flavor = Flavor::from_env_in_build(env("EGEON_FLAVOR").as_deref(), !cfg!(debug_assertions));
-    let home = match egeon_home(flavor, env("EGEON_HOME").as_deref(), env("HOME").as_deref()) {
+    // O `HOME` no unix, o `%USERPROFILE%` no Windows: quem sabe é o driver.
+    let user_home = egeon_driver::environment::home_dir().map(|h| h.to_string_lossy().into_owned());
+    let home = match egeon_home(flavor, env("EGEON_HOME").as_deref(), user_home.as_deref()) {
         Ok(home) => home,
         Err(err) => {
             log!("egeon-app: {err}");
@@ -73,10 +75,15 @@ fn real_main() -> ExitCode {
         // O `egeon` sai do mesmo build e mora ao lado do `egeon-app`.
         cli_binary: std::env::current_exe()
             .ok()
-            .and_then(|exe| Some(exe.parent()?.join("egeon")))
+            .and_then(|exe| {
+                Some(
+                    exe.parent()?
+                        .join(format!("egeon{}", std::env::consts::EXE_SUFFIX)),
+                )
+            })
             .filter(|cli| cli.exists()),
         ui_parent: exit_with_stdin,
-        default_cwd: env("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from),
+        default_cwd: user_home.map_or_else(|| PathBuf::from("/"), PathBuf::from),
         version: env!("CARGO_PKG_VERSION").to_owned(),
         build: option_env!("EGEON_BUILD").unwrap_or_default().to_owned(),
     };

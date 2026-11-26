@@ -102,11 +102,10 @@ pub fn worktree_root(
 ) -> String {
     let paths: Vec<String> = members.iter().map(|m| m.url_path(home)).collect();
     let parent = common_parent(&paths, home);
-    format!(
-        "{}/worktrees/{}/{}",
-        parent.trim_end_matches('/'),
-        sanitize(&project.name),
-        sanitize(branch)
+    let root = path_text::join(&parent, "worktrees");
+    path_text::join(
+        &path_text::join(&root, &sanitize(&project.name)),
+        &sanitize(branch),
     )
 }
 
@@ -142,19 +141,24 @@ pub fn branches(
 /// `pathComponents` do Foundation).
 fn components(path: &str) -> Vec<&str> {
     let mut out = Vec::new();
-    if path.starts_with('/') {
+    if path.starts_with(path_text::is_separator) {
         out.push("/");
     }
-    out.extend(path.split('/').filter(|c| !c.is_empty()));
+    out.extend(
+        path.split(path_text::is_separator)
+            .filter(|c| !c.is_empty()),
+    );
     out
 }
 
-fn join_components(parts: &[&str]) -> String {
+/// `sep` é a barra em que os caminhos vieram escritos.
+fn join_components(parts: &[&str], sep: char) -> String {
+    let sep = sep.to_string();
     match parts {
         [] => String::new(),
-        ["/"] => "/".to_owned(),
-        ["/", rest @ ..] => format!("/{}", rest.join("/")),
-        all => all.join("/"),
+        ["/"] => sep,
+        ["/", rest @ ..] => format!("{sep}{}", rest.join(&sep)),
+        all => all.join(&sep),
     }
 }
 
@@ -174,15 +178,16 @@ pub fn common_parent(paths: &[String], home: &str) -> String {
     let Some(first) = parents.first() else {
         return home.to_owned();
     };
+    let sep = path_text::style(&paths[0]);
     let mut common: Vec<&str> = first.clone();
     for other in &parents[1..] {
         let shared = common.iter().zip(other).take_while(|(a, b)| a == b).count();
         common.truncate(shared);
     }
     if common.len() > 1 {
-        return join_components(&common);
+        return join_components(&common, sep);
     }
-    join_components(&parents[0])
+    join_components(&parents[0], sep)
 }
 
 /// O que salvar o formulário do workspace faz com a lista de projetos.

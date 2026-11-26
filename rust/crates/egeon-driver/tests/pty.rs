@@ -1,5 +1,7 @@
 //! Pty de verdade: processos reais num pty real. Nada aqui toca `~/.egeon`.
 
+#![cfg(unix)]
+
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;

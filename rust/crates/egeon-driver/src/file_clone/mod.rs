@@ -2,7 +2,6 @@
 
 use std::fs::{self, OpenOptions};
 use std::io;
-use std::os::unix::fs::symlink;
 use std::path::Path;
 
 use egeon_core::ports::file_clone::FileCloner;
@@ -15,6 +14,10 @@ use macos as platform;
 mod linux;
 #[cfg(target_os = "linux")]
 use linux as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 /// O clonador do sistema em que o programa roda.
 #[derive(Debug, Clone, Copy, Default)]
@@ -37,7 +40,7 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(from)?;
     let kind = meta.file_type();
     if kind.is_symlink() {
-        return symlink(fs::read_link(from)?, to);
+        return crate::links::symlink(&fs::read_link(from)?, to);
     }
     if kind.is_dir() {
         fs::create_dir(to)?;
@@ -60,12 +63,35 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
 /// Permissões e data de modificação da pasta, como o `copyItem` do Swift.
 fn finish(to: &Path, meta: &fs::Metadata) -> io::Result<()> {
     fs::set_permissions(to, meta.permissions())?;
-    fs::File::open(to)?.set_modified(meta.modified()?)
+    open_for_times(to)?.set_modified(meta.modified()?)
+}
+
+/// Um handle que muda a data de um arquivo ou pasta.
+#[cfg(unix)]
+fn open_for_times(path: &Path) -> io::Result<fs::File> {
+    fs::File::open(path)
+}
+
+/// O Windows só abre pasta com `FILE_FLAG_BACKUP_SEMANTICS`, e mudar a data
+/// pede `FILE_WRITE_ATTRIBUTES`.
+#[cfg(windows)]
+fn open_for_times(path: &Path) -> io::Result<fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_WRITE_ATTRIBUTES: u32 = 0x100;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    OpenOptions::new()
+        .access_mode(FILE_WRITE_ATTRIBUTES)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn symlink(target: &str, link: std::path::PathBuf) -> io::Result<()> {
+        crate::links::symlink(Path::new(target), &link)
+    }
 
     fn tree(root: &Path) -> io::Result<()> {
         fs::create_dir_all(root.join("a/b"))?;
@@ -97,7 +123,7 @@ mod tests {
         tree(&dir.path().join("origem"))?;
         let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
         for path in ["a/b/f.txt", "a/b", "a"] {
-            fs::File::open(dir.path().join("origem").join(path))?.set_modified(old)?;
+            open_for_times(&dir.path().join("origem").join(path))?.set_modified(old)?;
         }
         copy_tree(&dir.path().join("origem"), &dir.path().join("copia"))?;
         for path in ["a/b/f.txt", "a/b", "a"] {
