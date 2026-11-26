@@ -429,10 +429,19 @@ mod tests {
         rig.settle().await;
         assert_eq!(update(&mut rig, "/update").await["state"], "idle");
 
-        // Porta que ninguém atende: a consulta falha e o estado volta.
+        // Porta que ninguém atende: a consulta falha e o estado volta. No
+        // Windows a conexão recusada leva uns 2 s (o SYN é repetido), mais que
+        // o silêncio que o `settle` espera.
         update(&mut rig, "/update?check=1&feed=http://127.0.0.1:1/release").await;
-        rig.settle().await;
-        assert_eq!(update(&mut rig, "/update").await["state"], "idle");
+        let mut state = serde_json::Value::Null;
+        for _ in 0..40 {
+            rig.settle().await;
+            state = update(&mut rig, "/update").await["state"].clone();
+            if state != "checking" {
+                break;
+            }
+        }
+        assert_eq!(state, "idle");
     }
 
     #[test]

@@ -8,6 +8,7 @@ use super::model::{ProjectConfig, WorkspaceConfig};
 use super::routes::*;
 use crate::features::activity::model::ActivitySummary;
 use crate::features::node::model::{NodeConfig, NodeKind};
+use crate::features::path_text::native;
 use crate::features::workbench::model::WorkbenchConfig;
 use crate::features::worktree::git::Git;
 use crate::protocol::handler::RouteRequest;
@@ -206,7 +207,7 @@ fn guardar_abre_a_gaveta_e_tirar_nao_e_o_drawer_alterna() {
 #[test]
 fn projeto_novo_cria_a_pasta_o_git_e_entra_no_workspace() {
     let tmp = tempfile::tempdir().unwrap();
-    let home = std::fs::canonicalize(tmp.path()).unwrap();
+    let home = crate::commons::paths::canonicalize(tmp.path()).unwrap();
     let home_s = home.to_str().unwrap();
     std::fs::create_dir_all(home.join("Documents/duck")).unwrap();
     let git = Git::new(
@@ -216,7 +217,7 @@ fn projeto_novo_cria_a_pasta_o_git_e_entra_no_workspace() {
     );
     let mut s = state();
     s.workspaces[0].projects = vec![ProjectConfig::for_folder(
-        &format!("{home_s}/Documents/duck/a"),
+        &native(&format!("{home_s}/Documents/duck/a")),
         home_s,
     )];
     s.workspaces[0].collapsed = Some(true);
@@ -228,14 +229,17 @@ fn projeto_novo_cria_a_pasta_o_git_e_entra_no_workspace() {
         &git,
     );
     assert_eq!(reply.status, 200, "{}", reply.json);
-    assert_eq!(reply.json["path"], "~/Documents/duck/api");
+    assert_eq!(reply.json["path"], native("~/Documents/duck/api"));
     assert_eq!(reply.json["created"], true);
     assert!(home.join("Documents/duck/api/.git").exists());
     // O retrato já mostra o projeto novo, com o workspace aberto.
     let projects = reply.json["tree"]["workspaces"][0]["projects"]
         .as_array()
         .unwrap();
-    assert_eq!(projects.last().unwrap()["path"], "~/Documents/duck/api");
+    assert_eq!(
+        projects.last().unwrap()["path"],
+        native("~/Documents/duck/api")
+    );
     assert_eq!(reply.json["tree"]["workspaces"][0]["collapsed"], false);
     let [
         effect @ OrgEffect::AddProject { workspace_id, .. },
@@ -265,7 +269,7 @@ fn projeto_novo_cria_a_pasta_o_git_e_entra_no_workspace() {
         home_s,
         &git,
     );
-    assert_eq!(reply.json["path"], "~/Documents/solta");
+    assert_eq!(reply.json["path"], native("~/Documents/solta"));
     assert!(home.join("Documents/solta").is_dir() && !home.join("Documents/solta/.git").exists());
 }
 

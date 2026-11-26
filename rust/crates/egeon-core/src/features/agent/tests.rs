@@ -1106,13 +1106,11 @@ fn catalogo_le_usuario_projeto_e_plugins_ligados() {
     );
     write(
         &config.join("plugins/installed_plugins.json"),
-        &format!(
-            r#"{{"version": 2, "plugins": {{
-              "figma@oficial": [{{"installPath": "{}"}}],
-              "off@oficial": [{{"installPath": "{}"}}]}}}}"#,
-            plugin.display(),
-            off.display()
-        ),
+        &json!({"version": 2, "plugins": {
+            "figma@oficial": [{"installPath": plugin}],
+            "off@oficial": [{"installPath": off}]
+        }})
+        .to_string(),
     );
 
     let found = slash_catalog::commands(&config, Some(&project), None, None);
@@ -1979,6 +1977,9 @@ fn gravacao_atomica_nao_deixa_arquivo_temporario() {
     }
 }
 
+/// Só no unix: no Windows o atributo só-leitura proíbe trocar o arquivo, e o
+/// cuidado que o teste guarda (o 0600 das credenciais) não existe lá.
+#[cfg(unix)]
 #[test]
 fn seeder_mantem_a_permissao_do_original() {
     let dir = fresh_dir("seed-");
@@ -2005,11 +2006,34 @@ fn seeder_mantem_a_permissao_do_original() {
 fn resolve_usa_a_checagem_de_executavel_do_driver() {
     let dir = fresh_dir("bin-");
     write(&dir.path().join("claude"), "x");
-    let path = format!("/nao/existe:{}", dir.path().display());
+    let path = std::env::join_paths([Path::new("/nao/existe"), dir.path()])
+        .expect("PATH")
+        .to_string_lossy()
+        .into_owned();
     let any_file: super::claude::catalog::Executable = |p| p.is_file();
     let never: super::claude::catalog::Executable = |_| false;
     assert!(super::claude::catalog::resolve("claude", &path, any_file).is_some());
     assert!(super::claude::catalog::resolve("claude", &path, never).is_none());
+}
+
+/// O instalador nativo do Windows deixa o `claude.exe`, e lá só executa o que
+/// tem extensão: o nome com o sufixo do sistema também é procurado.
+#[test]
+fn resolve_acha_o_binario_com_o_sufixo_de_executavel_do_sistema() {
+    let dir = fresh_dir("exe-");
+    let exe = format!("claude{}", std::env::consts::EXE_SUFFIX);
+    write(&dir.path().join(&exe), "x");
+    let path = dir.path().to_string_lossy().into_owned();
+    let with_suffix: super::claude::catalog::Executable = |p| {
+        p.is_file()
+            && p.file_name()
+                .is_some_and(|n| n.to_string_lossy().ends_with(std::env::consts::EXE_SUFFIX))
+    };
+    let found = super::claude::catalog::resolve("claude", &path, with_suffix);
+    assert_eq!(
+        found.as_deref().and_then(Path::file_name),
+        Some(std::ffi::OsStr::new(&exe))
+    );
 }
 
 /// O manual do maestro passa pela mesma régua de YAML da skill dos vizinhos, e diz

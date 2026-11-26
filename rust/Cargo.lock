@@ -368,6 +368,7 @@ dependencies = [
  "egeon-driver",
  "egeon-terminal",
  "tokio",
+ "uds_windows",
 ]
 
 [[package]]
@@ -379,6 +380,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+ "uds_windows",
 ]
 
 [[package]]
@@ -419,6 +421,8 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "uds_windows",
+ "windows-sys 0.61.2",
  "zbus",
 ]
 

@@ -288,7 +288,7 @@ fn connected(app: u32, live: &BTreeSet<String>, drivers: &Drivers<'_>) -> BTreeS
 /// tira o `/private` de `/tmp`, `/var` e `/etc`. O que não existe fica como
 /// veio.
 fn real(path: &str) -> String {
-    let resolved = std::fs::canonicalize(path)
+    let resolved = crate::commons::paths::canonicalize(path)
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| path.to_owned());
     for system in ["tmp", "var", "etc"] {

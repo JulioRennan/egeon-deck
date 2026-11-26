@@ -20,6 +20,11 @@ fn main_thread() -> bool {
     unsafe { libc::gettid() == libc::getpid() }
 }
 
+#[cfg(windows)]
+fn main_thread() -> bool {
+    std::thread::current().name() == Some("main")
+}
+
 fn check(name: &str, ok: bool, failures: &mut Vec<String>) {
     if !ok {
         failures.push(name.to_string());
