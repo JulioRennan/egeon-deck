@@ -86,14 +86,29 @@ class ChannelCurrentWindow implements CurrentWindow {
     required Size size,
     required Size minSize,
     required String autosave,
-  }) => _channel.invokeMethod<void>('present', {
-    'title': title,
-    'width': size.width,
-    'height': size.height,
-    'minWidth': minSize.width,
-    'minHeight': minSize.height,
-    'autosave': autosave,
-  });
+  }) async {
+    final arguments = {
+      'title': title,
+      'width': size.width,
+      'height': size.height,
+      'minWidth': minSize.width,
+      'minHeight': minSize.height,
+      'autosave': autosave,
+    };
+    // No Windows o motor da janela já roda o Dart quando o runner registra o
+    // canal, e nos primeiros quadros ele pode ainda não existir: sem a
+    // repetição a janela, que nasce escondida, nunca apareceria.
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await _channel.invokeMethod<void>('present', arguments);
+      } on MissingPluginException {
+        if (attempt == _presentAttempts) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
+  }
+
+  static const _presentAttempts = 20;
 
   @override
   Future<void> close() => _channel.invokeMethod<void>('close');

@@ -126,6 +126,7 @@ impl Harness {
             std::fs::write(&file, text).unwrap();
             // O que mora em `bin/` é programa: o catálogo só vale para um
             // `claude` que o PATH do filho acha e que roda.
+            #[cfg(unix)]
             if name.starts_with("bin/") {
                 use std::os::unix::fs::PermissionsExt;
                 std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -1187,6 +1188,7 @@ async fn nos_sem_frame_usam_a_janela_da_ui_ao_abrir() {
 /// Decisão 39: a pasta que o sistema não deixa ler trava a bancada; "pedir
 /// de novo" confere outra vez; liberada, a cortina sai na releitura. Os
 /// botões não abrem nada na tela (o `FakeOpener` só anota).
+#[cfg(unix)]
 #[tokio::test]
 async fn cortina_sem_acesso_trava_e_destrava_a_bancada() {
     if crate::commons::testing::running_as_root() {
@@ -1230,6 +1232,7 @@ async fn cortina_sem_acesso_trava_e_destrava_a_bancada() {
 /// O `restartAgents` do Swift ao destravar: liberada a pasta, todo agente
 /// da bancada sobe de novo (o que subiu com ela negada estava fora dela), e
 /// o shell fica como estava.
+#[cfg(unix)]
 #[tokio::test]
 async fn destravar_reergue_os_agentes_e_nao_os_shells() {
     if crate::commons::testing::running_as_root() {
@@ -3291,6 +3294,7 @@ async fn worktree_com_template_nasce_do_molde_e_responde_o_id_da_nova() {
 /// US-206: a worktree roda sobre uma cópia e leva segundos; o que você mexe
 /// nesse meio-tempo não pode ser desfeito quando ela termina. O gancho
 /// `post-checkout` atrasa o `git worktree add` o bastante para o teste mexer.
+#[cfg(unix)]
 #[tokio::test]
 async fn editar_durante_a_worktree_sobrevive_ao_reapontamento() {
     use std::os::unix::fs::PermissionsExt;

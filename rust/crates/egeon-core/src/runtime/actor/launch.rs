@@ -134,6 +134,7 @@ impl Actor {
             rules_for(node, bench.rules.as_deref()).as_deref(),
             &hook_file,
             &shell.interactive(Role::Shell, &bash_dir),
+            shell.syntax(),
         );
         // Como o Swift ao criar o terminal (`main.swift`, `conversationStarted`):
         // a linha acima já leva a conversa, e da próxima subida em diante ela é
