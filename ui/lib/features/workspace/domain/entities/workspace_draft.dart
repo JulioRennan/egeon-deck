@@ -1,3 +1,5 @@
+import '../../../../commons/utils/path_names.dart';
+
 /// Um multi-projeto no formulário: um nome e as pastas que ele junta.
 class MultiDraft {
   const MultiDraft({this.id, required this.name, this.folders = const []});
@@ -9,9 +11,7 @@ class MultiDraft {
 
   /// As pastas pelo último componente, juntas por " + ": o que a lista mostra
   /// ao lado do nome. O nome padrão, esse, é do core (`multi_name`).
-  String get foldersLabel => folders
-      .map((f) => f.replaceAll(RegExp(r'/+$'), '').split('/').last)
-      .join(' + ');
+  String get foldersLabel => folders.map(lastPathComponent).join(' + ');
 
   MultiDraft copyWith({String? name, List<String>? folders}) => MultiDraft(
     id: id,
