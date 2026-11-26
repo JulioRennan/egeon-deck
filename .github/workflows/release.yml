@@ -140,6 +140,6 @@ jobs:
           pre=()
           case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease) ;; esac
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --draft --verify-tag "${pre[@]}" \
+            --draft --verify-tag ${pre[@]+"${pre[@]}"} \
             --title "$GITHUB_REF_NAME" \
             --notes-file notes.md
