@@ -85,11 +85,11 @@ impl Cache {
 /// `is_executable` é de quem conhece o sistema (o bit de execução é de unix): o
 /// core não tem `cfg` por plataforma, então o driver entrega a checagem.
 pub fn resolve(name: &str, path: &str, is_executable: Executable) -> Option<PathBuf> {
-    path.split(':')
-        .filter(|d| !d.is_empty())
-        .map(|d| Path::new(d).join(name))
+    std::env::split_paths(path)
+        .filter(|d| !d.as_os_str().is_empty())
+        .map(|d| d.join(name))
         .find(|candidate| is_executable(candidate))
-        .map(|candidate| fs::canonicalize(&candidate).unwrap_or(candidate))
+        .map(|candidate| crate::commons::paths::canonicalize(&candidate).unwrap_or(candidate))
 }
 
 /// O arquivo existe e roda? (`isExecutableFile` do Swift.)

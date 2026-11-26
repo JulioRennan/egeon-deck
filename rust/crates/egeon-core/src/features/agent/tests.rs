@@ -1106,13 +1106,11 @@ fn catalogo_le_usuario_projeto_e_plugins_ligados() {
     );
     write(
         &config.join("plugins/installed_plugins.json"),
-        &format!(
-            r#"{{"version": 2, "plugins": {{
-              "figma@oficial": [{{"installPath": "{}"}}],
-              "off@oficial": [{{"installPath": "{}"}}]}}}}"#,
-            plugin.display(),
-            off.display()
-        ),
+        &json!({"version": 2, "plugins": {
+            "figma@oficial": [{"installPath": plugin}],
+            "off@oficial": [{"installPath": off}]
+        }})
+        .to_string(),
     );
 
     let found = slash_catalog::commands(&config, Some(&project), None, None);
@@ -1979,6 +1977,9 @@ fn gravacao_atomica_nao_deixa_arquivo_temporario() {
     }
 }
 
+/// Só no unix: no Windows o atributo só-leitura proíbe trocar o arquivo, e o
+/// cuidado que o teste guarda (o 0600 das credenciais) não existe lá.
+#[cfg(unix)]
 #[test]
 fn seeder_mantem_a_permissao_do_original() {
     let dir = fresh_dir("seed-");
@@ -2005,7 +2006,10 @@ fn seeder_mantem_a_permissao_do_original() {
 fn resolve_usa_a_checagem_de_executavel_do_driver() {
     let dir = fresh_dir("bin-");
     write(&dir.path().join("claude"), "x");
-    let path = format!("/nao/existe:{}", dir.path().display());
+    let path = std::env::join_paths([Path::new("/nao/existe"), dir.path()])
+        .expect("PATH")
+        .to_string_lossy()
+        .into_owned();
     let any_file: super::claude::catalog::Executable = |p| p.is_file();
     let never: super::claude::catalog::Executable = |_| false;
     assert!(super::claude::catalog::resolve("claude", &path, any_file).is_some());

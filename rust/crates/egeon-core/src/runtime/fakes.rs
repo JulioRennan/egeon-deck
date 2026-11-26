@@ -580,17 +580,32 @@ impl FileCloner for FakeCloner {
     }
 }
 
-/// Links e permissões de verdade, pelo `std` do Unix: o teste vê o disco.
+/// Links e permissões de verdade, pelo `std` do sistema: o teste vê o disco.
 #[derive(Default)]
 pub struct FakeLinks;
 
 impl FileLinks for FakeLinks {
+    #[cfg(unix)]
     fn symlink(&self, target: &Path, link: &Path) -> std::io::Result<()> {
         std::os::unix::fs::symlink(target, link)
     }
+    #[cfg(windows)]
+    fn symlink(&self, target: &Path, link: &Path) -> std::io::Result<()> {
+        if target.is_dir() {
+            std::os::windows::fs::symlink_dir(target, link)
+        } else {
+            std::os::windows::fs::symlink_file(target, link)
+        }
+    }
+    #[cfg(unix)]
     fn make_executable(&self, path: &Path) -> std::io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+    }
+    // Sem bit de execução no Windows.
+    #[cfg(windows)]
+    fn make_executable(&self, path: &Path) -> std::io::Result<()> {
+        std::fs::metadata(path).map(|_| ())
     }
 }
 

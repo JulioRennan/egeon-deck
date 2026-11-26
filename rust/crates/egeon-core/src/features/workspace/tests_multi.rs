@@ -3,8 +3,10 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+#[cfg(unix)]
 use std::path::Path;
 
+#[cfg(unix)]
 use super::links;
 use super::model::{ProjectConfig, WorkspaceConfig};
 use super::multi::*;
@@ -578,7 +580,7 @@ fn lembrar_e_esquecer() {
 #[test]
 fn cria_a_pasta_e_o_git_init_e_adota_a_que_ja_existe() {
     let tmp = tempfile::tempdir().unwrap();
-    let home = fs::canonicalize(tmp.path()).unwrap();
+    let home = crate::commons::paths::canonicalize(tmp.path()).unwrap();
     let home_s = home.to_str().unwrap();
     let git = crate::features::worktree::git::Git::new(
         std::env::vars_os()

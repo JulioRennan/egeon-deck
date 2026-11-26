@@ -503,7 +503,11 @@ mod tests {
         assert_eq!(reply["ok"], true);
         let written = String::from_utf8(b.writes()).unwrap();
         let path = written.trim_end();
-        assert!(path.contains("egeon-next-drop/drop-"), "{path}");
+        let sep = std::path::MAIN_SEPARATOR;
+        assert!(
+            path.contains(&format!("egeon-next-drop{sep}drop-")),
+            "{path}"
+        );
         assert_eq!(std::fs::read(path).unwrap(), b"hello");
         let _ = std::fs::remove_file(path);
 

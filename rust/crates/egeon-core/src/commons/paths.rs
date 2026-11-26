@@ -116,12 +116,37 @@ fn inside(path: &Path, root: &Path) -> bool {
     canonical(path).starts_with(canonical(root))
 }
 
+/// O `fs::canonicalize` sem o prefixo verbatim do Windows (`\\?\C:\…`), que o
+/// git recusa e que não casa com o caminho como o usuário o escreve. Volta ao
+/// caminho comum quando ele cabe no limite do Win32; no unix é o próprio
+/// `fs::canonicalize`.
+pub fn canonicalize(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+    std::fs::canonicalize(path).map(without_verbatim)
+}
+
+fn without_verbatim(path: PathBuf) -> PathBuf {
+    /// O `MAX_PATH` do Win32: acima dele só o verbatim abre.
+    const MAX_PATH: usize = 260;
+    let Some(text) = path.to_str() else {
+        return path;
+    };
+    if let Some(share) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{share}"));
+    }
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if rest.len() < MAX_PATH && rest.as_bytes().get(1) == Some(&b':') => {
+            PathBuf::from(rest)
+        }
+        _ => path,
+    }
+}
+
 fn canonical(path: &Path) -> PathBuf {
     let path = lexical(path);
     let mut existing = path.as_path();
     let mut rest = Vec::new();
     loop {
-        if let Ok(real) = std::fs::canonicalize(existing) {
+        if let Ok(real) = canonicalize(existing) {
             return rest.iter().rev().fold(real, |acc, part| acc.join(part));
         }
         match (existing.parent(), existing.file_name()) {
@@ -186,6 +211,13 @@ impl Paths {
         self.config("bin")
     }
 
+    /// O `egeon` instalado em [`Paths::cli_dir`]: `egeon.exe` no Windows, que
+    /// só executa pela extensão.
+    pub fn cli_binary(&self) -> PathBuf {
+        self.cli_dir()
+            .join(format!("egeon{}", std::env::consts::EXE_SUFFIX))
+    }
+
     /// O que é de uma bancada e não do app: memória dos agentes, histórico do
     /// chat. Bancada primeiro, assunto dentro — apagar, copiar ou olhar uma
     /// bancada é mexer numa pasta só.
@@ -218,6 +250,16 @@ mod tests {
     use super::*;
 
     const HOME: Option<&str> = Some("/Users/eu");
+
+    #[test]
+    fn verbatim_do_windows_volta_ao_caminho_comum() {
+        let plain = |s: &str| without_verbatim(PathBuf::from(s));
+        assert_eq!(plain(r"\\?\C:\Users\eu"), PathBuf::from(r"C:\Users\eu"));
+        assert_eq!(plain(r"\\?\UNC\srv\pasta"), PathBuf::from(r"\\srv\pasta"));
+        assert_eq!(plain("/Users/eu"), PathBuf::from("/Users/eu"));
+        let long = format!(r"\\?\C:\{}", "a".repeat(300));
+        assert_eq!(plain(&long), PathBuf::from(&long));
+    }
 
     /// `FlavorTests.testLogsAreSeparate`: o estável e o dev não escrevem no
     /// mesmo log.

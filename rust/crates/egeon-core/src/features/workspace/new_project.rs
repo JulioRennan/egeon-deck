@@ -52,11 +52,16 @@ pub struct Plan {
 /// O pai de um caminho, como o `deletingLastPathComponent`: a raiz fica na
 /// raiz e um nome solto não tem pai.
 fn parent_of(path: &str) -> String {
-    let trimmed = path.trim_end_matches('/');
-    match trimmed.rfind('/') {
-        Some(0) => "/".to_owned(),
+    let trimmed = path.trim_end_matches(path_text::is_separator);
+    match trimmed.rfind(path_text::is_separator) {
+        // O pai é a raiz (`/`, ou `C:\` no Windows): fica com a barra.
+        Some(i)
+            if !path_text::is_absolute(&trimmed[..i]) && path_text::is_absolute(&trimmed[..=i]) =>
+        {
+            trimmed[..=i].to_owned()
+        }
         Some(i) => trimmed[..i].to_owned(),
-        None if path.starts_with('/') => "/".to_owned(),
+        None if path.starts_with(path_text::is_separator) => path[..1].to_owned(),
         None => String::new(),
     }
 }
@@ -101,7 +106,7 @@ pub fn plan(
     if name.is_empty() {
         return Err(Problem::EmptyName);
     }
-    if name.contains('/') || name.contains(':') || name.starts_with('.') {
+    if name.contains(path_text::is_separator) || name.contains(':') || name.starts_with('.') {
         return Err(Problem::InvalidName);
     }
     let base = path_text::normalize(parent, home);
@@ -110,7 +115,7 @@ pub fn plan(
             &base, home,
         )));
     }
-    let full = format!("{}/{name}", base.trim_end_matches('/'));
+    let full = path_text::join(&base, name);
     let path = path_text::abbreviate_tilde(&full, home);
     if let Some(existing) = workspace.project_owning(&full, home) {
         return Err(Problem::AlreadyProject(existing.name.clone()));

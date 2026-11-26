@@ -49,11 +49,14 @@ impl Sandbox {
     /// O caminho real (sem symlink): `/var/…` e `/private/var/…` do macOS são a
     /// mesma pasta, e o git sempre devolve a segunda.
     fn root(&self) -> PathBuf {
-        fs::canonicalize(self.dir.path()).unwrap()
+        crate::commons::paths::canonicalize(self.dir.path()).unwrap()
     }
 
     fn path(&self, rel: &str) -> String {
-        self.root().join(rel).to_string_lossy().into_owned()
+        self.root()
+            .join(path_text::native(rel))
+            .to_string_lossy()
+            .into_owned()
     }
 
     /// O HOME do teste: a raiz, sem barra no fim (como o `NSHomeDirectory`).
@@ -131,9 +134,13 @@ fn pasta_fora_de_git_nao_e_repositorio() {
 
 #[test]
 fn caminho_sugerido_fica_fora_do_repo_e_com_a_branch_achatada() {
+    // Por componente: o core junta com a barra do sistema.
     assert_eq!(
-        service::suggested_path("/Users/eu/code/deck", &branch("feature/PROJ-1")),
-        "/Users/eu/code/worktrees/deck/feature-PROJ-1"
+        Path::new(&service::suggested_path(
+            "/Users/eu/code/deck",
+            &branch("feature/PROJ-1")
+        )),
+        Path::new("/Users/eu/code/worktrees/deck/feature-PROJ-1")
     );
 }
 
@@ -778,8 +785,8 @@ fn destino_so_existe_para_quem_vai() {
     assert_eq!(p.destination(), None, "desligado");
     p.enabled = true;
     assert_eq!(
-        p.destination().as_deref(),
-        Some("/repos/worktrees/deck/feat-x")
+        p.destination().as_deref().map(Path::new),
+        Some(Path::new("/repos/worktrees/deck/feat-x"))
     );
     p.branch = "  ".into();
     assert_eq!(p.destination(), None, "branch em branco não é destino");
@@ -1125,6 +1132,7 @@ mod route {
     use serde_json::{Value, json};
 
     use super::*;
+    #[cfg(unix)]
     use crate::features::workspace::model::WorkspaceConfig;
     use crate::features::worktree::routes::{OrgSnapshot, WorktreeEffect, worktree};
     use crate::protocol::handler::RouteRequest;
@@ -1409,9 +1417,9 @@ mod removal_plan_tests {
 
     use super::*;
     use crate::features::workbench::removal::{Removal, RemovalTarget};
-    use crate::features::worktree::removal_plan::{
-        RemovalContext, involved, loss_lines, multi_roots, payload,
-    };
+    #[cfg(unix)]
+    use crate::features::worktree::removal_plan::multi_roots;
+    use crate::features::worktree::removal_plan::{RemovalContext, involved, loss_lines, payload};
 
     fn bench_at(path: &str, nodes: Vec<NodeConfig>) -> WorkbenchConfig {
         WorkbenchConfig::new("deck", path, nodes)
@@ -1756,7 +1764,7 @@ fn pasta_escolhida_vira_bancada_nova_com_os_nos_do_template() {
         panic!("{effects:?}");
     };
     assert_eq!(config.name, "feature-x");
-    assert_eq!(config.path, "~/worktrees/repo/feature-x");
+    assert_eq!(config.path, path_text::native("~/worktrees/repo/feature-x"));
     assert_eq!(config.template.as_deref(), Some("dupla"));
     assert_eq!(config.view, template.1.view);
     assert!(config.project.is_none());
@@ -2011,7 +2019,7 @@ fn formulario_sem_origem_le_a_pasta_e_da_o_nome_do_repositorio() {
     assert!(info.multi.is_none());
     let plan = form::plan_at(&git(), &repo, "~/repo", "nova", &s.home()).unwrap();
     assert_eq!(plan.verdict, crate::protocol::org::BranchVerdict::Create);
-    assert_eq!(plan.folder, "~/worktrees/repo/nova");
+    assert_eq!(plan.folder, path_text::native("~/worktrees/repo/nova"));
 
     let plain = s.path("solta");
     fs::create_dir_all(&plain).unwrap();
