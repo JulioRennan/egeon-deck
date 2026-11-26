@@ -67,4 +67,54 @@ void main() {
     final show = calls.singleWhere((c) => c.method == 'window_show');
     expect((show.arguments as Map)['windowId'], 'p1');
   });
+
+  group('present', () {
+    const channel = MethodChannel('egeon/window');
+    late List<MethodCall> presented;
+
+    tearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+
+    Future<void> present() => const ChannelCurrentWindow().present(
+      title: 'Processos',
+      size: const Size(900, 600),
+      minSize: const Size(700, 400),
+      autosave: 'processes',
+    );
+
+    test(
+      'manda título, tamanho, mínimo e o nome da posição lembrada',
+      () async {
+        presented = [];
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              presented.add(call);
+              return null;
+            });
+        await present();
+        expect(presented.single.arguments, {
+          'title': 'Processos',
+          'width': 900.0,
+          'height': 600.0,
+          'minWidth': 700.0,
+          'minHeight': 400.0,
+          'autosave': 'processes',
+        });
+      },
+    );
+
+    test('canal ainda não registrado pelo runner: tenta de novo', () async {
+      var attempts = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            attempts++;
+            if (attempts < 3) throw MissingPluginException();
+            return null;
+          });
+      await present();
+      expect(attempts, 3);
+    });
+  });
 }
