@@ -186,6 +186,13 @@ impl Paths {
         self.config("bin")
     }
 
+    /// O `egeon` instalado em [`Paths::cli_dir`]: `egeon.exe` no Windows, que
+    /// só executa pela extensão.
+    pub fn cli_binary(&self) -> PathBuf {
+        self.cli_dir()
+            .join(format!("egeon{}", std::env::consts::EXE_SUFFIX))
+    }
+
     /// O que é de uma bancada e não do app: memória dos agentes, histórico do
     /// chat. Bancada primeiro, assunto dentro — apagar, copiar ou olhar uma
     /// bancada é mexer numa pasta só.

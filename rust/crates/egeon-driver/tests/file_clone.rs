@@ -2,11 +2,17 @@
 
 use std::fs;
 use std::io;
-use std::os::unix::fs::symlink;
 use std::path::Path;
 
 use egeon_core::ports::file_clone::FileCloner;
-use egeon_driver::SystemFileCloner;
+use egeon_core::ports::links::FileLinks;
+use egeon_driver::{SystemFileCloner, SystemLinks};
+
+/// No Windows, criar link pede o modo de desenvolvedor ou administrador (o
+/// runner do CI é administrador).
+fn symlink(target: &str, link: std::path::PathBuf) -> io::Result<()> {
+    SystemLinks.symlink(Path::new(target), &link)
+}
 
 fn write_tree(root: &Path) -> io::Result<()> {
     fs::create_dir_all(root.join("node_modules/pacote"))?;
@@ -90,10 +96,6 @@ fn origem_que_nao_existe_e_erro() -> io::Result<()> {
 
 #[test]
 fn link_e_bit_de_execucao() {
-    use egeon_core::ports::links::FileLinks;
-    use egeon_driver::SystemLinks;
-    use std::os::unix::fs::PermissionsExt;
-
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("alvo");
     fs::write(&target, "x").unwrap();
@@ -105,10 +107,24 @@ fn link_e_bit_de_execucao() {
         "link existente é erro"
     );
 
-    fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
-    SystemLinks.make_executable(&target).unwrap();
-    assert_eq!(
-        fs::metadata(&target).unwrap().permissions().mode() & 0o777,
-        0o755
-    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+        SystemLinks.make_executable(&target).unwrap();
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+    }
+    // Sem bit de execução no Windows: basta o arquivo existir.
+    #[cfg(windows)]
+    {
+        SystemLinks.make_executable(&target).unwrap();
+        assert!(
+            SystemLinks
+                .make_executable(&dir.path().join("nada"))
+                .is_err()
+        );
+    }
 }

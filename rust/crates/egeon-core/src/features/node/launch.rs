@@ -18,7 +18,8 @@ use crate::features::agent::claude::hooks::{FLAVOR_VARIABLE, HOME_VARIABLE, TARG
 use crate::features::agent::model::AgentProfile;
 use crate::features::agent::rules::agent_rules_block;
 use crate::features::processes::mark;
-use crate::features::terminal::model::{TERM, shell_quote};
+use crate::features::terminal::model::TERM;
+use crate::features::terminal::shell::ShellSyntax;
 
 /// O comando de um nó de shell sem comando próprio no macOS. No Linux vem do
 /// shell do usuário (`terminal::shell::LaunchShell::interactive`).
@@ -40,8 +41,9 @@ pub struct LaunchPlan {
 }
 
 /// A linha de comando do nó. `catalog` é [`catalog`], `rules` o bloco de
-/// [`agent_rules_block`], `hook_file` o `claude-hooks.json` e `default_shell`
-/// o que sobe no nó sem comando ([`DEFAULT_SHELL`] no macOS).
+/// [`agent_rules_block`], `hook_file` o `claude-hooks.json`, `default_shell`
+/// o que sobe no nó sem comando ([`DEFAULT_SHELL`] no macOS) e `syntax` a do
+/// shell que vai rodar a linha (as aspas dos argumentos).
 pub fn launch_plan(
     node: &NodeConfig,
     profile: Option<&AgentProfile>,
@@ -49,6 +51,7 @@ pub fn launch_plan(
     rules: Option<&str>,
     hook_file: &str,
     default_shell: &str,
+    syntax: ShellSyntax,
 ) -> LaunchPlan {
     let plain = |command: String| LaunchPlan {
         command,
@@ -84,7 +87,7 @@ pub fn launch_plan(
     let quoted = |flags: &[String]| {
         flags
             .iter()
-            .map(|f| shell_quote(f))
+            .map(|f| syntax.quote(f))
             .collect::<Vec<_>>()
             .join(" ")
     };
@@ -111,7 +114,7 @@ pub fn launch_plan(
         extras.extend(report.into_iter().flatten());
         let flags = format!(" {}", quoted(&extras));
         return LaunchPlan {
-            command: conversation_command(&base, &flags, node, profile),
+            command: conversation_command(&base, &flags, node, profile, syntax),
             prompt_to_inject: None,
             hooked,
             notes: Vec::new(),
@@ -160,6 +163,7 @@ pub fn conversation_command(
     flags: &str,
     node: &NodeConfig,
     profile: &AgentProfile,
+    syntax: ShellSyntax,
 ) -> String {
     let Some(id) = node
         .conversation_id
@@ -175,13 +179,13 @@ pub fn conversation_command(
         return format!("{base}{flags}");
     };
     let line = |arguments: &[String]| {
-        let quoted: Vec<String> = arguments.iter().map(|a| shell_quote(a)).collect();
+        let quoted: Vec<String> = arguments.iter().map(|a| syntax.quote(a)).collect();
         format!("{base} {}{flags}", quoted.join(" "))
     };
     // `conversationStarted` diz se já houve uma primeira subida: sem isso a linha
     // de estreia mostraria "No conversation found" antes de criar.
     if node.has_started_conversation() {
-        format!("{} || {}", line(&resume), line(&fresh))
+        syntax.or_else(&line(&resume), &line(&fresh))
     } else {
         line(&fresh)
     }

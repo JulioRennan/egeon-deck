@@ -5,9 +5,15 @@
 //! python para o gancho de permissão.
 
 use std::io::{self, Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::{Duration, Instant};
+
+// O std não tem `AF_UNIX` no Windows; a `uds_windows` dá o mesmo socket com a
+// mesma interface (decisão 54).
+#[cfg(windows)]
+use uds_windows::UnixStream;
 
 /// Quanto esperar o socket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

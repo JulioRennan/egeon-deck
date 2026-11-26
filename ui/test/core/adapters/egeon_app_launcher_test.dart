@@ -68,6 +68,41 @@ void main() {
     expect(process.killed, isTrue);
   });
 
+  group('stop no Windows', () {
+    Future<(EgeonAppLauncher, FakeProcess)> started() async {
+      final process = FakeProcess();
+      final launcher = EgeonAppLauncher(
+        paths: paths,
+        probe: FakeTransport()..refuse = true,
+        executable: r'C:\Egeon\egeon-app.exe',
+        environment: const {},
+        windows: true,
+        stopTimeout: const Duration(milliseconds: 50),
+        starter: (e, a, {environment, mode = ProcessStartMode.normal}) async =>
+            process,
+      );
+      await launcher.ensureRunning();
+      return (launcher, process);
+    }
+
+    test('fecha o cano e deixa o core sair sozinho, sem matar', () async {
+      final (launcher, process) = await started();
+      final stopping = launcher.stop();
+      await Future<void>.delayed(Duration.zero);
+      expect(process.stdinClosed, isTrue);
+      process.exit();
+      await stopping;
+      expect(process.killed, isFalse);
+    });
+
+    test('core que não sai no prazo é encerrado à força', () async {
+      final (launcher, process) = await started();
+      await launcher.stop();
+      expect(process.stdinClosed, isTrue);
+      expect(process.killed, isTrue);
+    });
+  });
+
   test('o dev passa o flavor ao core', () async {
     Map<String, String>? env;
     final launcher = EgeonAppLauncher(
@@ -100,6 +135,10 @@ void main() {
     setUp(() => bundle = Directory.systemTemp.createTempSync('egeon-bundle'));
     tearDown(() => bundle.deleteSync(recursive: true));
 
+    // Rodando no Windows, o temporário vem com `\` e o locate devolve o
+    // caminho do sistema: compara-se sem olhar o separador.
+    String? slashes(String? path) => path?.replaceAll(r'\', '/');
+
     EgeonAppLauncher launcherAt(String uiExecutable) => EgeonAppLauncher(
       paths: paths,
       probe: FakeTransport(),
@@ -111,8 +150,38 @@ void main() {
       // build/linux/x64/release/bundle/{egeon_deck, egeon-app, lib/, data/}
       File('${bundle.path}/egeon-app').writeAsStringSync('');
       expect(
-        launcherAt('${bundle.path}/egeon_deck').locate(),
-        '${bundle.path}/egeon-app',
+        slashes(launcherAt('${bundle.path}/egeon_deck').locate()),
+        slashes('${bundle.path}/egeon-app'),
+      );
+    });
+
+    test('Windows: o egeon-app.exe ao lado do egeon_deck.exe', () {
+      File('${bundle.path}/egeon-app.exe').writeAsStringSync('');
+      final launcher = EgeonAppLauncher(
+        paths: paths,
+        probe: FakeTransport(),
+        environment: const {},
+        uiExecutable: '${bundle.path}/egeon_deck.exe',
+        windows: true,
+      );
+      expect(
+        slashes(launcher.locate()),
+        slashes('${bundle.path}/egeon-app.exe'),
+      );
+    });
+
+    test('Windows não toma o egeon-app sem .exe por irmão', () {
+      File('${bundle.path}/egeon-app').writeAsStringSync('');
+      final launcher = EgeonAppLauncher(
+        paths: paths,
+        probe: FakeTransport(),
+        environment: const {},
+        uiExecutable: '${bundle.path}/egeon_deck.exe',
+        windows: true,
+      );
+      expect(
+        slashes(launcher.locate()),
+        isNot(slashes('${bundle.path}/egeon-app')),
       );
     });
 

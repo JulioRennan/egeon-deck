@@ -60,7 +60,7 @@ impl Installation<'_> {
 /// Instala o que mudou e devolve os problemas, em texto para o log.
 pub fn install(plan: &Installation<'_>) -> Vec<String> {
     let mut problems = Vec::new();
-    let egeon = plan.paths.cli_dir().join("egeon");
+    let egeon = plan.paths.cli_binary();
     install_cli(plan, &egeon, &mut problems);
     install_hooks(plan, &egeon, &mut problems);
     install_skills(plan, &mut problems);
@@ -287,7 +287,7 @@ mod tests {
         }
 
         fn egeon(&self) -> PathBuf {
-            self.paths.cli_dir().join("egeon")
+            self.paths.cli_binary()
         }
 
         /// A pasta de configuração que o app novo cria.
@@ -398,6 +398,7 @@ mod tests {
     // O shell de um agente tem `CLAUDE_CONFIG_DIR` apontando para a configuração
     // REAL do usuário. O app novo não escreve nela: nem sob o HOME, nem em
     // qualquer pasta fora da sua pasta de dados.
+    #[cfg(unix)]
     #[test]
     fn config_dir_herdado_do_shell_nao_recebe_skill() {
         let w = World::new();
@@ -432,6 +433,7 @@ mod tests {
 
     // Um `CLAUDE_CONFIG_DIR` que ainda não existe, dentro da pasta de dados que
     // é alcançada por um link, ainda é "dentro".
+    #[cfg(unix)]
     #[test]
     fn config_dir_ainda_nao_criado_atras_de_um_link_conta_como_dentro() {
         let w = World::new();

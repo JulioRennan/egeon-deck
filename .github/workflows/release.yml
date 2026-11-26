@@ -105,31 +105,44 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      # O alvo gnu e não o msvc: o libghostty-vt estático não liga com o
-      # link.exe da Microsoft. O toolchain gnu do rustup traz o próprio mingw.
-      - name: Rust (x86_64-pc-windows-gnu)
-        run: |
-          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal -c clippy,rustfmt
-          rustup default stable-x86_64-pc-windows-gnu
       - name: Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: ui/.fvmrc
           channel: stable
           cache: true
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust -> target
-      - name: Testes do core
-        working-directory: rust
-        run: cargo test --workspace
+      # A UI antes do Rust: enquanto o porte anda, cada rodada dá o sinal da UI
+      # mesmo com o lado Rust incompleto.
       - name: Testes da UI
         working-directory: ui
         run: flutter test
-      - name: App
+      # Roda mesmo com teste falhando: o C++ do runner só compila aqui, e o
+      # sinal dele não pode esperar o último teste passar.
+      - name: UI (release)
+        if: ${{ !cancelled() }}
+        working-directory: ui
+        run: flutter build windows --release
+      # O alvo gnu e não o msvc: o libghostty-vt estático não liga com o
+      # link.exe da Microsoft. O toolchain gnu do rustup traz o próprio mingw.
+      # Daqui em diante roda mesmo com a UI falhando: um lado não pode esconder
+      # o outro enquanto o porte anda.
+      - name: Rust (x86_64-pc-windows-gnu)
+        if: ${{ !cancelled() }}
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal -c clippy,rustfmt
+          rustup default stable-x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ !cancelled() }}
+        with:
+          workspaces: rust -> target
+      - name: Testes do core
+        if: ${{ !cancelled() }}
+        working-directory: rust
+        run: cargo test --workspace
+      - name: Core (release)
+        if: ${{ !cancelled() }}
         run: |
           cargo build --release --manifest-path rust/Cargo.toml -p egeon-app -p egeon-cli
-          (cd ui && flutter build windows --release)
           # O lançador da UI procura o core ao lado do próprio executável.
           cp rust/target/release/egeon-app.exe rust/target/release/egeon.exe ui/build/windows/x64/runner/Release/
       - name: Empacota
