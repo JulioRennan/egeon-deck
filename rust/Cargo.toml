@@ -6,7 +6,7 @@ members = ["crates/*"]
 exclude = ["crates/.omc", "crates/target"]
 
 [workspace.package]
-version = "0.0.0"
+version = "2.0.0-alpha.1"
 edition = "2024"
 license = "AGPL-3.0-only"
 publish = false

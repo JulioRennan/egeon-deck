@@ -126,7 +126,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Tag com sufixo (v2.0.0-alpha.1) sai como pré-release.
+          pre=()
+          case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease) ;; esac
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --draft --verify-tag \
+            --draft --verify-tag "${pre[@]}" \
             --title "$GITHUB_REF_NAME" \
             --notes-file notes.md

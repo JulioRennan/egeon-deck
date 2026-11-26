@@ -103,6 +103,8 @@ export ARCH
   "$APPDIR" "$DIST/EgeonDeck-linux-$ARCH.AppImage"
 
 echo "== .deb"
+# O Debian ordena 2.0.0-alpha.1 depois da 2.0.0; com ~ ela vem antes, como no SemVer.
+DEB_VERSION=${VERSION/-/\~}
 PKG="$WORK/deb"
 mkdir -p "$PKG/DEBIAN" "$PKG/opt/egeon-deck" "$PKG/usr/bin" \
   "$PKG/usr/share/applications" "$PKG/usr/share/pixmaps"
@@ -113,7 +115,7 @@ desktop /usr/bin/egeon-deck > "$PKG/usr/share/applications/$APP_ID.desktop"
 cp "$ICON" "$PKG/usr/share/pixmaps/egeon-deck.png"
 cat > "$PKG/DEBIAN/control" <<EOF
 Package: egeon-deck
-Version: $VERSION
+Version: $DEB_VERSION
 Architecture: $DEB_ARCH
 Maintainer: Duck Coder Tecnologia
 Depends: libgtk-3-0

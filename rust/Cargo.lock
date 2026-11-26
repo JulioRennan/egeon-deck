@@ -362,7 +362,7 @@ dependencies = [
 
 [[package]]
 name = "egeon-app"
-version = "0.0.0"
+version = "2.0.0-alpha.1"
 dependencies = [
  "egeon-core",
  "egeon-driver",
@@ -372,7 +372,7 @@ dependencies = [
 
 [[package]]
 name = "egeon-cli"
-version = "0.0.0"
+version = "2.0.0-alpha.1"
 dependencies = [
  "egeon-core",
  "serde",
@@ -383,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "egeon-core"
-version = "0.0.0"
+version = "2.0.0-alpha.1"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
@@ -404,7 +404,7 @@ dependencies = [
 
 [[package]]
 name = "egeon-driver"
-version = "0.0.0"
+version = "2.0.0-alpha.1"
 dependencies = [
  "block2",
  "egeon-core",
@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "egeon-terminal"
-version = "0.0.0"
+version = "2.0.0-alpha.1"
 dependencies = [
  "egeon-core",
  "fancy-regex",

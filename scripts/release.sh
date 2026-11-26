@@ -17,9 +17,13 @@ cd "$ROOT"
 
 MODE=${1:-}
 VERSION=${2:-}
-[[ "$MODE" =~ ^(tag|publish)$ && "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-  || { echo "uso: scripts/release.sh tag|publish X.Y.Z"; exit 1; }
+[[ "$MODE" =~ ^(tag|publish)$ && "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] \
+  || { echo "uso: scripts/release.sh tag|publish X.Y.Z[-alpha.N]"; exit 1; }
 TAG="v$VERSION"
+# Com sufixo (2.0.0-alpha.1) é pré-release: não vira a "mais recente", e o
+# atualizador de quem está na estável não a vê.
+PRERELEASE=false
+[[ "$VERSION" == *-* ]] && PRERELEASE=true
 
 # Os arquivos que o app troca sozinho levam .sig; o .deb se atualiza à parte.
 SIGNED=(
@@ -93,7 +97,11 @@ publish)
   UPLOAD=("$WORK/EgeonDeck-macos-universal.zip")
   for f in "${SIGNED[@]}"; do UPLOAD+=("$WORK/$f.sig"); done
   gh release upload "$TAG" --clobber "${UPLOAD[@]}"
-  gh release edit "$TAG" --draft=false --latest
+  if $PRERELEASE; then
+    gh release edit "$TAG" --draft=false --prerelease --latest=false
+  else
+    gh release edit "$TAG" --draft=false --latest
+  fi
   gh release view "$TAG" --json url -q .url
   ;;
 esac

@@ -9,6 +9,10 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.1] - 2026-11-25
+
+Primeira versão do app novo (Rust + Flutter), para teste: macOS e Linux. Não se atualiza sozinha; a próxima se instala à mão.
+
 ### Adicionado
 
 - "Novo projeto…" no menu do workspace: dá nome, escolhe a pasta-mãe (sugere a que os projetos dele já dividem) e cria a pasta, com `git init` se quiser, sem sair do app (ADR-092).
