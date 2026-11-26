@@ -106,10 +106,41 @@ está em uso: não tocar no bundle nem nos arquivos dele.
   parênteses. Refactor, teste, docs internos e o trabalho de porte que não muda
   o que o usuário vê não entram. Formato Keep a Changelog, versões SemVer.
   **Versão só sobe com tag lançada a pedido**: sem pedido explícito de
-  release/nova versão, tudo fica em `[Unreleased]`. O processo de release do app
-  novo ainda não foi definido; o de hoje está em `legado/CLAUDE.md`.
+  release/nova versão, tudo fica em `[Unreleased]`. O processo está em
+  "Lançar uma versão", abaixo; o do Swift, em `legado/CLAUDE.md`.
 - **Decisões viram ADR** em `docs/01-decisoes.md` — leia antes de propor rota
   para editor, portal de janela, tmux ou detecção de ociosidade: já custaram
   protótipo.
 - Licença **AGPL-3.0-only** (copyleft de rede). Dependência incompatível —
   proprietária ou GPL-2-only — não entra, em Rust ou em Dart.
+
+## Lançar uma versão
+
+Decisão 52. O GitHub Actions (`.github/workflows/release.yml`) compila e a
+máquina do Julio assina e publica (`scripts/release.sh`). Alvos por enquanto:
+**macOS Apple Silicon** (`EgeonDeck-macos-arm64.zip`) e **Linux x86_64**
+(`EgeonDeck-linux-x86_64.AppImage` e `egeon-deck_X.Y.Z_amd64.deb`). Só com
+pedido explícito do Julio.
+
+Beta é versão com sufixo (`2.0.0-beta.1`): sai como **pré-release**, fora da
+"mais recente", e o atualizador de quem está na estável não a vê.
+
+1. Versão igual nos dois lados: `version` do `[workspace.package]` em
+   `rust/Cargo.toml` e `version:` do `ui/pubspec.yaml` (`2.0.0-beta.1+1`).
+2. No `CHANGELOG.md`, o `[Unreleased]` vira `## [2.0.0-beta.1] - AAAA-MM-DD`
+   (as notas da release saem dessa seção), com um `[Unreleased]` vazio em cima.
+3. Verificação das duas pastas, commit e push.
+4. `scripts/release.sh tag 2.0.0-beta.1`: confere versões e CHANGELOG e
+   empurra a tag `v2.0.0-beta.1`, que dispara o CI.
+5. Acompanhe: `gh run watch $(gh run list -w release -L 1 --json databaseId -q '.[0].databaseId')`.
+   O último job cria a release como rascunho de pré-release.
+6. `scripts/release.sh publish 2.0.0-beta.1`: reassina o app do macOS com o
+   certificado `egeon-dev`, assina o zip e o AppImage com a chave do Keychain
+   (`.sig`) e publica.
+
+Para validar o pipeline sem release, empurre uma branch `ci/<nome>`: o CI
+compila tudo e guarda os arquivos como artefatos do run, sem o job de release.
+O mesmo container do CI roda local: `scripts/linux/run.sh scripts/linux/package.sh <arch>`
+na arquitetura da máquina. O x86_64 emulado num Mac (`EGEON_LINUX_PLATFORM=linux/amd64`)
+não roda o Zig sob o Rosetta nem o appimagetool: compile o libghostty-vt cruzado
+no container ARM e passe a pasta em `EGEON_GHOSTTY_VT_DIR`; sai só o .deb.
