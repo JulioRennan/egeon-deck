@@ -96,16 +96,52 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  # A linha do Windows fica escrita e desligada (a variável EGEON_WINDOWS do
-  # repositório a liga): entra quando o porte compilar
-  # (driver com named pipe e ConPTY, runner Win32). Arquivo da decisão 52:
-  # EgeonDeck-windows-x86_64.zip.
+  # Windows (decisão 54). Ainda fora do `needs` da release: o porte está em
+  # curso, e uma falha aqui não pode segurar a beta do macOS e do Linux.
   windows:
-    if: ${{ vars.EGEON_WINDOWS == 'on' }}
     runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-      - run: echo "porte do Windows ainda não existe"
+      # O alvo gnu e não o msvc: o libghostty-vt estático não liga com o
+      # link.exe da Microsoft. O toolchain gnu do rustup traz o próprio mingw.
+      - name: Rust (x86_64-pc-windows-gnu)
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal -c clippy,rustfmt
+          rustup default stable-x86_64-pc-windows-gnu
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: ui/.fvmrc
+          channel: stable
+          cache: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+      - name: Testes do core
+        working-directory: rust
+        run: cargo test --workspace
+      - name: Testes da UI
+        working-directory: ui
+        run: flutter test
+      - name: App
+        run: |
+          cargo build --release --manifest-path rust/Cargo.toml -p egeon-app -p egeon-cli
+          (cd ui && flutter build windows --release)
+          # O lançador da UI procura o core ao lado do próprio executável.
+          cp rust/target/release/egeon-app.exe rust/target/release/egeon.exe ui/build/windows/x64/runner/Release/
+      - name: Empacota
+        run: |
+          mkdir -p dist
+          cd ui/build/windows/x64/runner/Release
+          7z a -tzip "$GITHUB_WORKSPACE/dist/EgeonDeck-windows-x86_64.zip" . >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+          if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
