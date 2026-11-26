@@ -11,7 +11,7 @@ use super::model::{NodeConfig, NodeKind, NodeTemplate, Resolved};
 use super::service::{ConfigItem, config_items};
 use crate::features::agent::model::AgentProfile;
 use crate::features::agent::model_catalog::ModelCatalog;
-use crate::features::path_text::{abbreviate_tilde, expand_tilde, standardize};
+use crate::features::path_text::{self, abbreviate_tilde, expand_tilde, standardize};
 
 /// O primeiro item de modelo e de esforço: não passar nada ao CLI.
 pub const DEFAULT_MODEL_OPTION: &str = "padrão do CLI";
@@ -241,7 +241,7 @@ pub fn stored_folder(path: &str, root: Option<&str>, home: &str) -> String {
     if path == root {
         return String::new();
     }
-    match path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))) {
+    match path_text::inside(&path, &root) {
         Some(rest) => rest.to_owned(),
         None => abbreviate_tilde(&path, home),
     }
@@ -250,7 +250,7 @@ pub fn stored_folder(path: &str, root: Option<&str>, home: &str) -> String {
 /// O que a pasta grava ao confirmar. Relativo continua relativo; absoluto
 /// continua absoluto, encurtado para `~`.
 pub fn normalized_folder(path: &str, home: &str) -> String {
-    if !(path.starts_with('/') || path.starts_with('~')) {
+    if !(path_text::is_absolute(path) || path.starts_with('~')) {
         return path.to_owned();
     }
     abbreviate_tilde(&expand_tilde(path, home), home)

@@ -11,5 +11,8 @@ egeon-driver.workspace = true
 egeon-terminal.workspace = true
 tokio.workspace = true
 
+[target.'cfg(windows)'.dev-dependencies]
+uds_windows.workspace = true
+
 [lints]
 workspace = true

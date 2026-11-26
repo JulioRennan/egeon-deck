@@ -89,7 +89,7 @@ fn cwd_que_nao_existe_cai_na_raiz_falando() {
     ws.nodes = vec![ok.clone(), perdido.clone(), solto.clone()];
 
     let achado = ws.directory(&ok, HOME);
-    assert_eq!(achado.path, format!("{root}/api"));
+    assert_eq!(achado.path, crate::features::path_text::join(&root, "api"));
     assert_eq!(achado.warning, None);
 
     let caiu = ws.directory(&perdido, HOME);

@@ -60,7 +60,7 @@ impl Installation<'_> {
 /// Instala o que mudou e devolve os problemas, em texto para o log.
 pub fn install(plan: &Installation<'_>) -> Vec<String> {
     let mut problems = Vec::new();
-    let egeon = plan.paths.cli_dir().join("egeon");
+    let egeon = plan.paths.cli_binary();
     install_cli(plan, &egeon, &mut problems);
     install_hooks(plan, &egeon, &mut problems);
     install_skills(plan, &mut problems);
@@ -162,7 +162,7 @@ fn resolve(path: &Path) -> PathBuf {
     let mut rest = Vec::new();
     let mut current = path;
     loop {
-        if let Ok(real) = fs::canonicalize(current) {
+        if let Ok(real) = crate::commons::paths::canonicalize(current) {
             return rest.iter().rev().fold(real, |acc, part| acc.join(part));
         }
         match (current.parent(), current.file_name()) {
@@ -287,7 +287,7 @@ mod tests {
         }
 
         fn egeon(&self) -> PathBuf {
-            self.paths.cli_dir().join("egeon")
+            self.paths.cli_binary()
         }
 
         /// A pasta de configuração que o app novo cria.
@@ -327,10 +327,11 @@ mod tests {
         assert_eq!(fs::read(w.egeon()).unwrap(), b"binario v1");
         assert_eq!(*w.links.executable.lock().unwrap(), [w.egeon()]);
 
-        // Os ganchos chamam o binário instalado, com as aspas do caminho.
+        // Os ganchos chamam o binário instalado, como o `hooks` o escreve em
+        // cada sistema (com aspas no unix; no Windows, sem elas).
         let hooks = fs::read_to_string(w.paths.home().join("claude-hooks.json")).unwrap();
         let value: serde_json::Value = serde_json::from_str(&hooks).unwrap();
-        let command = format!("\"{}\" hook stop", w.egeon().display());
+        let command = crate::features::agent::claude::hooks::command(&w.egeon(), "stop");
         assert_eq!(
             value["hooks"]["Stop"][0]["hooks"][0]["command"],
             command.as_str()
@@ -398,6 +399,7 @@ mod tests {
     // O shell de um agente tem `CLAUDE_CONFIG_DIR` apontando para a configuração
     // REAL do usuário. O app novo não escreve nela: nem sob o HOME, nem em
     // qualquer pasta fora da sua pasta de dados.
+    #[cfg(unix)]
     #[test]
     fn config_dir_herdado_do_shell_nao_recebe_skill() {
         let w = World::new();
@@ -432,6 +434,7 @@ mod tests {
 
     // Um `CLAUDE_CONFIG_DIR` que ainda não existe, dentro da pasta de dados que
     // é alcançada por um link, ainda é "dentro".
+    #[cfg(unix)]
     #[test]
     fn config_dir_ainda_nao_criado_atras_de_um_link_conta_como_dentro() {
         let w = World::new();

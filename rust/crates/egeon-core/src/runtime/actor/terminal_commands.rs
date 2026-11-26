@@ -502,8 +502,14 @@ mod tests {
         let reply = b.send(json!({"cmd": "drop", "node": "t1", "png": "aGVsbG8="}));
         assert_eq!(reply["ok"], true);
         let written = String::from_utf8(b.writes()).unwrap();
-        let path = written.trim_end();
-        assert!(path.contains("egeon-next-drop/drop-"), "{path}");
+        // Com `~` ou `\` (o temporário do Windows) o caminho vai entre aspas
+        // simples, como o shell o leria.
+        let path = written.trim_end().trim_matches('\'');
+        let sep = std::path::MAIN_SEPARATOR;
+        assert!(
+            path.contains(&format!("egeon-next-drop{sep}drop-")),
+            "{path}"
+        );
         assert_eq!(std::fs::read(path).unwrap(), b"hello");
         let _ = std::fs::remove_file(path);
 
