@@ -3,14 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../../../commons/widgets/eg/tooltip.dart';
+import '../../../../../commons/utils/path_names.dart';
 import '../../../../../theme/egeon_colors.dart';
 import '../../../../../theme/egeon_type.dart';
 
 /// O caminho curto do cabeçalho: `~/…/a/b` quando passa de três partes.
 /// Endereço (o nó web) e o que não é caminho ficam como estão.
 String shortPath(String path) {
-  if (!path.startsWith('~') && !path.startsWith('/')) return path;
-  final parts = path.split('/');
+  if (!looksLikePath(path)) return path;
+  final parts = path.split(RegExp(r'[\\/]'));
   return parts.length > 3
       ? '~/…/${parts.sublist(parts.length - 2).join('/')}'
       : path;

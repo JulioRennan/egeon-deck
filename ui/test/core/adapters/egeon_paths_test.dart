@@ -64,4 +64,45 @@ void main() {
     );
     expect(paths.flavor, EgeonFlavor.dev);
   });
+
+  group('Windows (decisão 54)', () {
+    test('sem HOME, a pasta pessoal é o USERPROFILE, com o separador dele', () {
+      final paths = EgeonPaths(
+        {'USERPROFILE': r'C:\Users\x'},
+        release: true,
+        executable: r'C:\EgeonDeck\egeon_deck.exe',
+        windows: true,
+      );
+      expect(paths.flavor, EgeonFlavor.stable);
+      expect(paths.home, r'C:\Users\x\.egeon-next');
+      expect(paths.socket, r'C:\Users\x\.egeon-next\sock');
+    });
+
+    test('o USERPROFILE vence o HOME de um Git Bash', () {
+      final paths = EgeonPaths({
+        'HOME': '/c/Users/x',
+        'USERPROFILE': r'C:\Users\x',
+        'EGEON_FLAVOR': 'dev',
+      }, windows: true);
+      expect(paths.home, r'C:\Users\x\.egeon-next-dev');
+    });
+
+    test('fora do Windows o HOME vence o USERPROFILE', () {
+      final paths = EgeonPaths({
+        'HOME': '/Users/x',
+        'USERPROFILE': r'C:\Users\y',
+        'EGEON_FLAVOR': 'dev',
+      }, windows: false);
+      expect(paths.home, '/Users/x/.egeon-next-dev');
+    });
+
+    test('EGEON_HOME vence, e o socket segue o separador dele', () {
+      final paths = EgeonPaths({
+        'EGEON_HOME': r'C:\Temp\egeon',
+        'USERPROFILE': r'C:\Users\x',
+      });
+      expect(paths.home, r'C:\Temp\egeon');
+      expect(paths.socket, r'C:\Temp\egeon\sock');
+    });
+  });
 }

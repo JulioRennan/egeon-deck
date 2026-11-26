@@ -17,7 +17,8 @@ typedef ProcessStarter = Future<Process> Function(
 ///
 /// O filho nasce com o stdin em cano e a opção `--exit-with-stdin`: o core
 /// sai quando o cano fecha, o que acontece com a UI morta de qualquer jeito
-/// (`kill -9` inclusive). O ⌘Q passa por [stop], que manda SIGTERM.
+/// (`kill -9` inclusive). O ⌘Q passa por [stop], que manda SIGTERM; no Windows
+/// não há sinal e o `kill` é o encerramento direto do processo.
 class EgeonAppLauncher {
   EgeonAppLauncher({
     required this.paths,
@@ -26,9 +27,11 @@ class EgeonAppLauncher {
     ProcessStarter? starter,
     Map<String, String>? environment,
     String? uiExecutable,
+    bool? windows,
   }) : _starter = starter ?? _defaultStarter,
        _environment = environment ?? Platform.environment,
-       _uiExecutable = uiExecutable ?? Platform.resolvedExecutable;
+       _uiExecutable = uiExecutable ?? Platform.resolvedExecutable,
+       _windows = windows ?? Platform.isWindows;
 
   final EgeonPaths paths;
   final EgeonTransport _probe;
@@ -36,6 +39,7 @@ class EgeonAppLauncher {
   final ProcessStarter _starter;
   final Map<String, String> _environment;
   final String _uiExecutable;
+  final bool _windows;
 
   Process? _child;
 
@@ -101,20 +105,33 @@ class EgeonAppLauncher {
   }
 
   /// `EGEON_APP_BIN`, o irmão do executável da UI (dentro do `.app` no macOS;
-  /// em `build/linux/<arch>/<modo>/bundle/` no Linux, onde o `scripts/linux/package.sh` o põe) ou,
+  /// em `build/linux/<arch>/<modo>/bundle/` no Linux, onde o `scripts/linux/package.sh` o põe;
+  /// o `egeon-app.exe` na pasta do `egeon_deck.exe` no Windows) ou,
   /// em desenvolvimento, o binário de `rust/target` mais perto da pasta atual.
   String? locate() {
     final fromEnv = _environment['EGEON_APP_BIN'];
     if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
 
-    final sibling = File('${File(_uiExecutable).parent.path}/egeon-app');
+    final name = _windows ? 'egeon-app.exe' : 'egeon-app';
+    final folder = File(_uiExecutable).parent.path;
+    final separator = folder.contains(r'\') ? r'\' : '/';
+    final sibling = File('$folder$separator$name');
     if (sibling.existsSync()) return sibling.path;
 
+    // No Windows o core compila para o alvo `-gnu` (decisão 54), que o cargo
+    // põe numa pasta com o nome do alvo.
+    final targets = _windows
+        ? const ['', 'x86_64-pc-windows-gnu/']
+        : const [''];
     var dir = Directory.current;
     for (var i = 0; i < 6; i++) {
-      for (final profile in const ['debug', 'release']) {
-        final candidate = File('${dir.path}/rust/target/$profile/egeon-app');
-        if (candidate.existsSync()) return candidate.path;
+      for (final target in targets) {
+        for (final profile in const ['debug', 'release']) {
+          final candidate = File(
+            '${dir.path}/rust/target/$target$profile/$name',
+          );
+          if (candidate.existsSync()) return candidate.path;
+        }
       }
       if (dir.parent.path == dir.path) break;
       dir = dir.parent;

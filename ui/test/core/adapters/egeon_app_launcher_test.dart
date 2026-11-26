@@ -116,6 +116,30 @@ void main() {
       );
     });
 
+    test('Windows: o egeon-app.exe ao lado do egeon_deck.exe', () {
+      File('${bundle.path}/egeon-app.exe').writeAsStringSync('');
+      final launcher = EgeonAppLauncher(
+        paths: paths,
+        probe: FakeTransport(),
+        environment: const {},
+        uiExecutable: '${bundle.path}/egeon_deck.exe',
+        windows: true,
+      );
+      expect(launcher.locate(), '${bundle.path}/egeon-app.exe');
+    });
+
+    test('Windows não toma o egeon-app sem .exe por irmão', () {
+      File('${bundle.path}/egeon-app').writeAsStringSync('');
+      final launcher = EgeonAppLauncher(
+        paths: paths,
+        probe: FakeTransport(),
+        environment: const {},
+        uiExecutable: '${bundle.path}/egeon_deck.exe',
+        windows: true,
+      );
+      expect(launcher.locate(), isNot('${bundle.path}/egeon-app'));
+    });
+
     test('EGEON_APP_BIN vence o irmão do executável', () {
       File('${bundle.path}/egeon-app').writeAsStringSync('');
       final launcher = EgeonAppLauncher(
