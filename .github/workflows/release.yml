@@ -139,6 +139,11 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: rust
         run: cargo test --workspace --no-fail-fast
+      # O ConPTY já travou de forma intermitente: uma rodada verde só não prova.
+      - name: Terminal do Windows, 5 vezes
+        if: ${{ !cancelled() }}
+        working-directory: rust
+        run: for i in 1 2 3 4 5; do echo "== rodada $i"; cargo test -p egeon-driver --test pty_windows || exit 1; done
       - name: Core (release)
         if: ${{ !cancelled() }}
         run: |
