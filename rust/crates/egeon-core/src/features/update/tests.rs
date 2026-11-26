@@ -59,11 +59,8 @@ fn os_nomes_dos_assets_sao_parametro_e_o_padrao_e_o_desta_plataforma() {
         (n.zip, n.signature)
     };
     let pair = |zip: &str| (zip.to_owned(), format!("{zip}.sig"));
-    assert_eq!(
-        of("macos", "aarch64"),
-        pair("EgeonDeck-macos-universal.zip")
-    );
-    assert_eq!(of("macos", "x86_64"), pair("EgeonDeck-macos-universal.zip"));
+    assert_eq!(of("macos", "aarch64"), pair("EgeonDeck-macos-arm64.zip"));
+    assert_eq!(of("macos", "x86_64"), pair("EgeonDeck-macos-arm64.zip"));
     assert_eq!(
         of("linux", "x86_64"),
         pair("EgeonDeck-linux-x86_64.AppImage")

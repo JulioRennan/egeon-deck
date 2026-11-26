@@ -27,9 +27,8 @@ PRERELEASE=false
 
 # Os arquivos que o app troca sozinho levam .sig; o .deb se atualiza à parte.
 SIGNED=(
-  EgeonDeck-macos-universal.zip
+  EgeonDeck-macos-arm64.zip
   EgeonDeck-linux-x86_64.AppImage
-  EgeonDeck-linux-aarch64.AppImage
 )
 
 ask() {
@@ -79,11 +78,11 @@ publish)
             | awk -F'"' '/"egeon-dev"/ { print $2; exit }')
   if [ -n "$SIGN_ID" ]; then
     MAC="$WORK/mac"
-    ditto -x -k "$WORK/EgeonDeck-macos-universal.zip" "$MAC"
+    ditto -x -k "$WORK/EgeonDeck-macos-arm64.zip" "$MAC"
     APP=$(find "$MAC" -maxdepth 1 -name '*.app' | head -1)
     codesign --force --sign "$SIGN_ID" --preserve-metadata=entitlements,flags "$APP"
-    rm "$WORK/EgeonDeck-macos-universal.zip"
-    ditto -c -k --keepParent "$APP" "$WORK/EgeonDeck-macos-universal.zip"
+    rm "$WORK/EgeonDeck-macos-arm64.zip"
+    ditto -c -k --keepParent "$APP" "$WORK/EgeonDeck-macos-arm64.zip"
     rm -rf "$MAC"
   else
     echo "aviso: sem o certificado egeon-dev; o app do macOS segue com a assinatura ad-hoc do CI"
@@ -94,7 +93,7 @@ publish)
   done
 
   ask "Subir os arquivos assinados e PUBLICAR $TAG?"
-  UPLOAD=("$WORK/EgeonDeck-macos-universal.zip")
+  UPLOAD=("$WORK/EgeonDeck-macos-arm64.zip")
   for f in "${SIGNED[@]}"; do UPLOAD+=("$WORK/$f.sig"); done
   gh release upload "$TAG" --clobber "${UPLOAD[@]}"
   if $PRERELEASE; then

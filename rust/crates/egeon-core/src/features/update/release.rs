@@ -36,7 +36,9 @@ impl AssetNames {
     /// atualização.
     pub fn for_platform(os: &str, arch: &str) -> Self {
         let file = match (os, arch) {
-            ("macos", _) => "EgeonDeck-macos-universal.zip".to_owned(),
+            // Só se compila para Apple Silicon; um mac Intel procura o mesmo
+            // arquivo, como fazia quando o zip era universal.
+            ("macos", _) => "EgeonDeck-macos-arm64.zip".to_owned(),
             ("linux", "x86_64" | "aarch64") => format!("EgeonDeck-linux-{arch}.AppImage"),
             ("windows", "x86_64") => "EgeonDeck-windows-x86_64.zip".to_owned(),
             _ => format!("EgeonDeck-{os}-{arch}.indisponivel"),

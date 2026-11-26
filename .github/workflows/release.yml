@@ -26,10 +26,10 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Rust (arm64 e x86_64, para o app universal)
-        run: |
-          rustup toolchain install stable --profile minimal -c clippy,rustfmt
-          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      # Só Apple Silicon por enquanto: sem o alvo x86_64 instalado, o
+      # embed_core.sh embute o core só de arm64.
+      - name: Rust (arm64)
+        run: rustup toolchain install stable --profile minimal -c clippy,rustfmt
       - name: Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -45,7 +45,7 @@ jobs:
       - name: Testes da UI
         working-directory: ui
         run: flutter test
-      - name: App universal
+      - name: App
         working-directory: ui
         # O make.sh chama `fvm flutter`; no CI o flutter já está no PATH.
         run: |
@@ -57,7 +57,7 @@ jobs:
       - name: Empacota
         run: |
           mkdir -p dist
-          ditto -c -k --keepParent "ui/build/EgeonDeck Next.app" dist/EgeonDeck-macos-universal.zip
+          ditto -c -k --keepParent "ui/build/EgeonDeck Next.app" dist/EgeonDeck-macos-arm64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: macos
@@ -67,12 +67,12 @@ jobs:
   linux:
     strategy:
       fail-fast: false
+      # Só x86_64 por enquanto; o aarch64 volta com uma linha
+      # (runner ubuntu-22.04-arm, arch aarch64): o package.sh já sabe gerar.
       matrix:
         include:
           - runner: ubuntu-22.04
             arch: x86_64
-          - runner: ubuntu-22.04-arm
-            arch: aarch64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -126,6 +126,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Release que já existe (a tag foi refeita) só ganha os arquivos novos,
+          # no lugar dos antigos: quem já tem o link continua baixando dela.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            exit 0
+          fi
           # Tag com sufixo (v2.0.0-alpha.1) sai como pré-release.
           pre=()
           case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease) ;; esac
