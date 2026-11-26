@@ -16,14 +16,18 @@ use macos::{candidates, shell};
 mod linux;
 #[cfg(target_os = "linux")]
 use linux::{candidates, shell};
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows::{candidates, shell};
 
 // Sem lista de instaladores conhecida, o `PATH` herdado segue como está.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 fn candidates(_home: &Path) -> Vec<PathBuf> {
     Vec::new()
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 fn shell() -> PathBuf {
     PathBuf::from("/bin/sh")
 }
@@ -31,6 +35,18 @@ fn shell() -> PathBuf {
 /// O shell em que os terminais sobem (decisão 53).
 pub fn user_shell() -> PathBuf {
     shell()
+}
+
+/// A pasta do usuário: o `HOME` no unix, o `%USERPROFILE%` no Windows. É a
+/// base da pasta de dados (`~/.egeon-next`) e a pasta padrão dos terminais.
+pub fn home_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    let home = windows::home();
+    #[cfg(not(windows))]
+    let home = std::env::var_os("HOME")
+        .filter(|home| !home.is_empty())
+        .map(PathBuf::from);
+    home
 }
 
 /// Os diretórios de instalador deste sistema, na ordem em que entram na frente

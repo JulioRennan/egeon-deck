@@ -30,6 +30,11 @@ objc2-user-notifications = "0.3"
 # D-Bus, no runtime tokio que o app já usa.
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 futures-util = { version = "0.3", default-features = false }
+# Só o egeon-driver e o egeon-cli, no Windows (decisão 54): o socket AF_UNIX
+# que o std e o tokio não têm lá, o ConPTY e as chamadas do Win32.
+uds_windows = "1.2"
+portable-pty = "0.9"
+windows-sys = "0.61"
 # Info.plist do app baixado, na troca do app.
 plist = "1"
 tempfile = "3"
