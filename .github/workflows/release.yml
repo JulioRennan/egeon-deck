@@ -2,13 +2,17 @@
 # (decisão 52). Quem assina e publica é o `scripts/release.sh`, na máquina que
 # guarda a chave das atualizações: ela nunca vem ao GitHub.
 #
-# Disparo: a tag vX.Y.Z (o release.sh a cria), ou à mão pelo Actions, que só
-# compila e guarda os arquivos, sem release.
+# Disparo: a tag vX.Y.Z (o release.sh a cria); um push de branch ci/** ou o
+# botão do Actions só compilam e guardam os arquivos, sem release.
 name: release
 
 on:
   push:
     tags: ["v*"]
+    # Um push de branch ci/<qualquer> compila e guarda os arquivos sem release:
+    # é como se valida o pipeline (o workflow_dispatch só vale quando o arquivo
+    # está na main).
+    branches: ["ci/**"]
   workflow_dispatch:
 
 permissions:

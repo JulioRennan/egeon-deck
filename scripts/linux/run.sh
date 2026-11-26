@@ -29,8 +29,10 @@ SUFFIX="${EGEON_LINUX_TARGET_SUFFIX:-}"
 # links para /Users/…/.pub-cache. Cada lado fica com a sua cópia, e cada
 # sufixo com a dele, para dois agentes não compilarem por cima um do outro.
 # Quatro jobs: o Zig e o ld em paralelo estouraram os 7,6 GB da VM do Docker.
+# --init: sem um PID 1 que recolha órfãos, o shell que morre vira zumbi, e o
+# `ps -p` dos testes o vê vivo (exit_with_stdin estourava o tempo no CI).
 # O bash 3.2 do macOS, com set -u, trata array vazio como variável indefinida.
-exec docker run --rm ${TTY[@]+"${TTY[@]}"} ${PLATFORM[@]+"${PLATFORM[@]}"} \
+exec docker run --rm --init ${TTY[@]+"${TTY[@]}"} ${PLATFORM[@]+"${PLATFORM[@]}"} \
   -v "$ROOT:/src" \
   -v egeon-linux-cargo:/root/.cargo/registry \
   -v egeon-linux-pub:/root/.pub-cache \
