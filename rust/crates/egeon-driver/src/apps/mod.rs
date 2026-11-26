@@ -14,6 +14,10 @@ use macos as platform;
 mod linux;
 #[cfg(target_os = "linux")]
 use linux as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 /// O driver de apps do sistema em que o programa roda.
 #[derive(Debug, Clone, Copy, Default)]
@@ -71,7 +75,8 @@ fn run(program: &Path, args: &[&str], require_success: bool) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-#[cfg(test)]
+// O `docker` falso é um script de shell.
+#[cfg(all(test, unix))]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 

@@ -53,7 +53,10 @@ mod tests {
     #[test]
     fn data_fora_do_calendario_vira_zero() {
         // Antes do ano -9999: o `Timestamp` não representa.
-        let far = UNIX_EPOCH - Duration::from_secs(400_000_000_000);
+        // O `SystemTime` do Windows não vai antes de 1601: lá a data nem existe.
+        let Some(far) = UNIX_EPOCH.checked_sub(Duration::from_secs(400_000_000_000)) else {
+            return;
+        };
         assert_eq!(offset_in(&TimeZone::UTC, far), 0);
     }
 }

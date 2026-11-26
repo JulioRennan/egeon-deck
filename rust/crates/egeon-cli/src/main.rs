@@ -4,8 +4,8 @@
 
 #![forbid(unsafe_code)]
 
+use std::ffi::OsString;
 use std::io::{Read, Write};
-use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -19,15 +19,31 @@ fn socket() -> Result<PathBuf, paths::PathsError> {
     let var = |name: &str| std::env::var(name).ok();
     let flavor =
         paths::Flavor::from_env_in_build(var("EGEON_FLAVOR").as_deref(), !cfg!(debug_assertions));
-    paths::egeon_home(flavor, var("EGEON_HOME").as_deref(), var("HOME").as_deref())
+    paths::egeon_home(flavor, var("EGEON_HOME").as_deref(), var(HOME).as_deref())
         .map(|home| paths::Paths::new(home).socket())
 }
 
+/// A pasta do usuário, a mesma que o `egeon-app` usa: no Windows o
+/// `%USERPROFILE%`, e não o `HOME` que o Git Bash define.
+#[cfg(not(windows))]
+const HOME: &str = "HOME";
+#[cfg(windows)]
+const HOME: &str = "USERPROFILE";
+
+/// O argumento como os bytes que o agente digitou. No Windows o sistema
+/// entrega UTF-16: vira UTF-8, que é o que o protocolo leva.
+#[cfg(unix)]
+fn arg_bytes(arg: OsString) -> Vec<u8> {
+    std::os::unix::ffi::OsStringExt::into_vec(arg)
+}
+
+#[cfg(not(unix))]
+fn arg_bytes(arg: OsString) -> Vec<u8> {
+    arg.to_string_lossy().into_owned().into_bytes()
+}
+
 fn main() -> ExitCode {
-    let args: Vec<Vec<u8>> = std::env::args_os()
-        .skip(1)
-        .map(OsStringExt::into_vec)
-        .collect();
+    let args: Vec<Vec<u8>> = std::env::args_os().skip(1).map(arg_bytes).collect();
     let mut stdin = std::io::stdin().lock();
 
     if args.first().map(Vec::as_slice) == Some(b"hook".as_slice()) {

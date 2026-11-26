@@ -14,6 +14,7 @@ use super::launch::*;
 use super::model::{NodeConfig, NodeKind};
 use crate::features::agent::model::AgentProfile;
 use crate::features::json_file::parse;
+use crate::features::terminal::shell::ShellSyntax;
 
 /// O mesmo caminho que o `stub` do oráculo usa para o `claude-hooks.json`.
 const HOOK_FILE: &str = "/oraculo/claude-hooks.json";
@@ -70,6 +71,7 @@ fn a_linha_de_comando_o_catalogo_e_as_regras_saem_como_no_swift() {
             rules.as_deref(),
             HOOK_FILE,
             DEFAULT_SHELL,
+            ShellSyntax::Posix,
         );
 
         let expected: Value = parse(&read(&root().join("esperado/launch").join(&name))).unwrap();
@@ -248,6 +250,7 @@ fn nota_de_log_quando_o_marcador_nao_sobe() {
         None,
         HOOK_FILE,
         DEFAULT_SHELL,
+        ShellSyntax::Posix,
     );
     assert_eq!(plan.command, "codex '--model' 'gpt-5'");
     assert_eq!(plan.prompt_to_inject, None);
@@ -290,4 +293,40 @@ fn flavor_estavel_nao_exporta_a_variavel() {
 
     let (env, _) = node_environment(&shell, None, &ctx(vec![], zsh, home));
     assert_eq!(get(&env, "EGEON_FLAVOR"), Some("dev"));
+}
+
+/// No PowerShell (Windows, decisão 54) a mesma linha sai na sintaxe dele: sem
+/// `||`, que o 5.1 não tem, e com a aspa simples dobrada em vez de `'\''`.
+#[test]
+fn no_powershell_a_retomada_e_as_aspas_saem_no_jeito_dele() {
+    let agents = profiles();
+    for name in [
+        "claude-retomando.json",
+        "a04-conversa-hostil.json",
+        "a18-aspa-isolada.json",
+    ] {
+        let case = cases().into_iter().find(|(n, _)| n == name).unwrap().1;
+        let profile = case.profile.as_deref().and_then(|k| agents.get(k));
+        let plan = |syntax| {
+            launch_plan(
+                &case.node,
+                profile,
+                catalog(&case.node).as_deref(),
+                rules_for(&case.node, case.rules.as_deref()).as_deref(),
+                HOOK_FILE,
+                DEFAULT_SHELL,
+                syntax,
+            )
+            .command
+        };
+        let (posix, powershell) = (plan(ShellSyntax::Posix), plan(ShellSyntax::PowerShell));
+        assert!(!powershell.contains(" || "), "{name}: {powershell}");
+        assert!(!powershell.contains(r"'\''"), "{name}: {powershell}");
+        if posix.contains(" || ") {
+            assert!(
+                powershell.contains("; if ($LASTEXITCODE) { "),
+                "{name}: {powershell}"
+            );
+        }
+    }
 }
