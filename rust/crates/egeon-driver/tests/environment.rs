@@ -3,6 +3,8 @@
 //! só, com um teste só: mexer em variável de ambiente corre contra qualquer outra
 //! thread que a leia.
 
+#![cfg(unix)]
+
 use std::path::PathBuf;
 use std::time::Duration;
 
