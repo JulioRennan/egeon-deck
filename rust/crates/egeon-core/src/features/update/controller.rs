@@ -243,12 +243,13 @@ impl UpdateController {
     fn download(&mut self, update: AvailableUpdate) -> Vec<Effect> {
         if !self.installer.can_install() {
             self.restart_when_ready = false;
-            self.state = State::Available(update);
-            return vec![self.fail(&format!(
+            let text = format!(
                 "O app não está num lugar onde possa ser trocado ({}). {}",
                 self.installer.destination().display(),
-                cannot_install_hint(std::env::consts::OS)
-            ))];
+                cannot_install_hint(std::env::consts::OS, &update.page)
+            );
+            self.state = State::Available(update);
+            return vec![self.fail(&text)];
         }
         if update.signature.is_none() {
             self.restart_when_ready = false;
@@ -440,10 +441,11 @@ fn message(title: &str, text: &str) -> Effect {
 }
 
 /// O que fazer quando o app não se troca. No Linux é o `.deb` (ou o binário
-/// solto): só o AppImage se troca sozinho, e o resto baixa da página.
-pub fn cannot_install_hint(os: &str) -> &'static str {
+/// solto): só o AppImage se troca sozinho, e o resto baixa da página da
+/// release, que vai na mensagem (decisão 52: "só avisa, com o link").
+pub fn cannot_install_hint(os: &str, page: &str) -> String {
     match os {
-        "linux" => "Só o AppImage se atualiza sozinho: baixe a versão nova na página da release.",
-        _ => "Mova-o para /Applications e tente de novo.",
+        "linux" => format!("Só o AppImage se atualiza sozinho: baixe a versão nova em {page}"),
+        _ => "Mova-o para /Applications e tente de novo.".to_owned(),
     }
 }

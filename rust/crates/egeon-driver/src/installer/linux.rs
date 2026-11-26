@@ -27,6 +27,8 @@ use egeon_core::ports::installer::{InstallError, Swap, UnpackedApp};
 /// O app que ainda roda não sente: o AppImage montado segura o arquivo velho.
 const SWAP_SCRIPT: &str = r#"#!/bin/sh
 pid="$1"; novo="$2"; destino="$3"; reabrir="$4"
+# O script mora no temp: some ao sair, dê certo ou não.
+trap 'rm -f "$0"' EXIT
 tentativas=0
 while kill -0 "$pid" 2>/dev/null; do
   tentativas=$((tentativas + 1))
@@ -215,6 +217,30 @@ mod tests {
             desktop_version("[Desktop Entry]\nX-AppImage-Version=\n"),
             None
         );
+    }
+
+    #[test]
+    fn o_script_da_troca_se_apaga_ao_sair_dando_certo_ou_nao() -> io::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let destination = dir.path().join("app.AppImage");
+        fs::write(&destination, "velho")?;
+        for staged in [dir.path().join("novo"), dir.path().join("nao-existe")] {
+            if staged.ends_with("novo") {
+                fs::write(&staged, "novo")?;
+            }
+            let script = dir.path().join("troca.sh");
+            fs::write(&script, SWAP_SCRIPT)?;
+            let status = Command::new("/bin/sh")
+                .arg(&script)
+                .args(["999999".as_ref(), staged.as_os_str()])
+                .arg(&destination)
+                .arg("0")
+                .stdout(Stdio::null())
+                .status()?;
+            assert!(!script.exists(), "sobrou o script (saída {status})");
+        }
+        assert_eq!(fs::read_to_string(&destination)?, "novo");
+        Ok(())
     }
 
     #[test]

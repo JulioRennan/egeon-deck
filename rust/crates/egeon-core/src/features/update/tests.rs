@@ -617,14 +617,18 @@ fn falhas_de_download_voltam_a_disponivel_com_a_mensagem() {
         "{text}"
     );
     assert!(
-        text.ends_with(cannot_install_hint(std::env::consts::OS)),
+        text.ends_with(&cannot_install_hint(std::env::consts::OS, &newer().page)),
         "{text}"
     );
     assert_eq!(
-        cannot_install_hint("macos"),
+        cannot_install_hint("macos", "https://x/r"),
         "Mova-o para /Applications e tente de novo."
     );
-    assert!(cannot_install_hint("linux").contains("AppImage"));
+    assert_eq!(
+        cannot_install_hint("linux", "https://github.com/o/r/releases/tag/v1.7.0"),
+        "Só o AppImage se atualiza sozinho: baixe a versão nova em \
+         https://github.com/o/r/releases/tag/v1.7.0"
+    );
     assert_eq!(stuck.controller.state(), &State::Available(newer()));
 
     // O download não passou na conferência. E a opção "reiniciar quando
