@@ -18,6 +18,10 @@ use macos as platform;
 mod linux;
 #[cfg(target_os = "linux")]
 use linux as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 #[derive(Debug, Error)]
 pub enum MainLoopError {

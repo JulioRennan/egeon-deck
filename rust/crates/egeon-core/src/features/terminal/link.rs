@@ -55,7 +55,9 @@ pub fn resolve(
     }
     for candidate in candidates {
         let expanded = expand_home(&candidate, home);
-        if expanded.starts_with('/') {
+        // `has_root`, não `is_absolute`: no Windows o `/x` digitado também é
+        // da raiz (do disco atual), como no unix.
+        if Path::new(&expanded).has_root() {
             let path = standardize(Path::new(&expanded));
             if exists(&path) {
                 return Some(OpenTarget::File(path));
@@ -95,15 +97,14 @@ fn strip_location(text: &str) -> String {
 }
 
 fn expand_home(path: &str, home: &Path) -> String {
-    let home = home.to_string_lossy();
-    if let Some(rest) = path.strip_prefix("$HOME/") {
-        return format!("{home}/{rest}");
+    let rest = path
+        .strip_prefix("$HOME/")
+        .or_else(|| path.strip_prefix("~/"));
+    if let Some(rest) = rest {
+        return home.join(rest).to_string_lossy().into_owned();
     }
     if path == "~" {
-        return home.into_owned();
-    }
-    if let Some(rest) = path.strip_prefix("~/") {
-        return format!("{home}/{rest}");
+        return home.to_string_lossy().into_owned();
     }
     path.to_owned()
 }
@@ -142,10 +143,13 @@ mod tests {
         ]
         .into();
         let dirs: Vec<&Path> = dirs.iter().map(Path::new).collect();
+        // O disco de mentira é escrito com `/`; no Windows o caminho montado
+        // sai com `\`.
+        let text_of = |p: &Path| p.to_string_lossy().replace('\\', "/");
         match resolve(text, &dirs, Path::new(HOME), |p| {
-            p.to_str().is_some_and(|s| disk.contains(s))
+            disk.contains(text_of(p).as_str())
         })? {
-            OpenTarget::File(p) => Some(p.to_string_lossy().into_owned()),
+            OpenTarget::File(p) => Some(text_of(&p)),
             OpenTarget::Url(u) => Some(u),
         }
     }

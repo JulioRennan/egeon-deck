@@ -402,10 +402,10 @@ impl WorkbenchConfig {
     /// O `..` resolve só pelo texto: o caminho tem de ser previsível, sem
     /// depender de symlink.
     pub fn resolve(cwd: &str, root: &str, home: &str) -> String {
-        if cwd.starts_with('~') || cwd.starts_with('/') {
+        if cwd.starts_with('~') || path_text::is_absolute(cwd) {
             return path_text::expand_tilde(cwd, home);
         }
-        path_text::standardize(&format!("{}/{cwd}", root.trim_end_matches('/')))
+        path_text::standardize(&path_text::join(root, cwd))
     }
 
     pub fn resolved_directory(&self, node: &NodeConfig, home: &str) -> String {

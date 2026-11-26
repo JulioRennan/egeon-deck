@@ -529,7 +529,10 @@ fn short_path(path: Option<&str>) -> String {
     let Some(path) = path else {
         return String::new();
     };
-    let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
+    let parts: Vec<&str> = path
+        .split(crate::features::path_text::is_separator)
+        .filter(|p| !p.is_empty())
+        .collect();
     let start = parts.len().saturating_sub(2);
     parts[start..].join("/")
 }

@@ -83,13 +83,23 @@ impl Cache {
 /// PATH já enriquecido pelo ambiente do app.
 ///
 /// `is_executable` é de quem conhece o sistema (o bit de execução é de unix): o
-/// core não tem `cfg` por plataforma, então o driver entrega a checagem.
+/// core não tem `cfg` por plataforma, então o driver entrega a checagem. O
+/// nome com o sufixo de executável do sistema vem depois do nome puro: no
+/// Windows o binário do instalador nativo é o `claude.exe`, e o driver só
+/// aceita o que tem extensão do `PATHEXT`. No unix o sufixo é vazio.
 pub fn resolve(name: &str, path: &str, is_executable: Executable) -> Option<PathBuf> {
-    path.split(':')
-        .filter(|d| !d.is_empty())
-        .map(|d| Path::new(d).join(name))
+    let suffix = std::env::consts::EXE_SUFFIX;
+    let suffixed = format!("{name}{suffix}");
+    let names = if suffix.is_empty() {
+        vec![name]
+    } else {
+        vec![name, suffixed.as_str()]
+    };
+    std::env::split_paths(path)
+        .filter(|d| !d.as_os_str().is_empty())
+        .flat_map(|d| names.iter().map(move |n| d.join(n)))
         .find(|candidate| is_executable(candidate))
-        .map(|candidate| fs::canonicalize(&candidate).unwrap_or(candidate))
+        .map(|candidate| crate::commons::paths::canonicalize(&candidate).unwrap_or(candidate))
 }
 
 /// O arquivo existe e roda? (`isExecutableFile` do Swift.)
