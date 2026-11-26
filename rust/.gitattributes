@@ -1,0 +1,5 @@
+# O Git do Windows converte texto para CRLF no checkout (core.autocrlf). Aqui
+# o texto é embutido no binário (`include_str!`: o guia, o uso do `egeon`, a
+# skill) e comparado byte a byte com os fixtures do Swift: com CRLF o binário
+# do Windows sairia diferente e os testes quebrariam. LF em todo sistema.
+* text=auto eol=lf

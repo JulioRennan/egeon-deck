@@ -3,8 +3,10 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+#[cfg(unix)]
 use std::path::Path;
 
+#[cfg(unix)]
 use super::links;
 use super::model::{ProjectConfig, WorkspaceConfig};
 use super::multi::*;

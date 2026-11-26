@@ -7,6 +7,10 @@ use std::path::Path;
 mod unix;
 #[cfg(unix)]
 use unix as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 /// O que o sistema deixa executar a quem roda (`access(X_OK)` no unix). Como no
 /// Swift, pasta com o bit de busca conta; link quebrado, arquivo sem o bit e

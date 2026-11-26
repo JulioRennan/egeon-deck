@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../../../commons/widgets/form_dialog.dart';
+import '../../../../commons/utils/path_names.dart';
 import '../../../../core/adapters/injector.dart';
 import '../../../workbench/domain/entities/bench_template.dart';
 import '../../../workbench/domain/errors/workbench_error.dart';
@@ -130,8 +131,8 @@ Future<void> _newBench(BuildContext context, NewBench request) async {
 
 /// O último trecho do caminho: o nome que a bancada leva se nada for digitado.
 String _folderName(String path) {
-  final parts = path.split('/').where((part) => part.isNotEmpty);
-  return parts.isEmpty ? 'bancada' : parts.last;
+  final name = lastPathComponent(path);
+  return name.isEmpty ? 'bancada' : name;
 }
 
 /// "Nova bancada a partir de worktree…": do projeto, ou de um repositório

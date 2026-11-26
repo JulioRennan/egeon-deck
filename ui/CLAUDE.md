@@ -18,6 +18,7 @@ lib/
 ├─ commons/     widgets/ · utils/ · forms/
 └─ theme/
 macos/          o runner nativo
+windows/        o runner Win32 (decisão 54): canal egeon/window, janela única, dark
 test/
 ```
 

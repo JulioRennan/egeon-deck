@@ -13,11 +13,19 @@
 //!   de shell POSIX e roda num `sh` lançado pelo fish de login, que já montou
 //!   o PATH do usuário;
 //! - outro fora do POSIX (`nu`, `xonsh`…): abre nele, sem registro, e a linha
-//!   roda pelo `/bin/sh`.
+//!   roda pelo `/bin/sh`;
+//! - PowerShell (o do Windows, decisão 54): abre nele, sem registro, com a
+//!   linha no jeito dele — `Set-Location`, aspas do PowerShell e sem `exec`
+//!   ([`ShellSyntax`]).
 
 use std::path::{Path, PathBuf};
 
 use super::model::{LAUNCH_SHELL, shell_quote};
+
+/// As opções de todo PowerShell lançado: sem a faixa de abertura, e o
+/// `Bypass` só para este processo — sem ele o 5.1 recusa os `.ps1`, e o
+/// `claude` instalado pelo npm é um `claude.ps1`.
+const POWERSHELL_OPTIONS: [&str; 3] = ["-NoLogo", "-ExecutionPolicy", "Bypass"];
 
 /// Como o shell é chamado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +38,82 @@ pub enum ShellKind {
     Fish,
     /// Não entende a linha do Egeon: ela vai pelo `/bin/sh`.
     Other,
+    /// O PowerShell: a linha é montada na sintaxe dele.
+    PowerShell,
+}
+
+/// A sintaxe da linha que o shell roda: o que muda é a aspa de um argumento e
+/// o "senão" de um comando que falhou.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellSyntax {
+    Posix,
+    PowerShell,
+}
+
+impl ShellSyntax {
+    /// Um argumento de programa, literal: nada dentro dele é expandido.
+    pub fn quote(self, text: &str) -> String {
+        match self {
+            Self::Posix => shell_quote(text),
+            Self::PowerShell => powershell_argument(text),
+        }
+    }
+
+    /// `first`, e `then` se `first` sair com erro.
+    pub fn or_else(self, first: &str, then: &str) -> String {
+        match self {
+            Self::Posix => format!("{first} || {then}"),
+            // O PowerShell 5.1 não tem `||`; o `$LASTEXITCODE` é o código do
+            // último programa.
+            Self::PowerShell => format!("{first}; if ($LASTEXITCODE) {{ {then} }}"),
+        }
+    }
+}
+
+/// Texto literal do PowerShell: entre aspas simples nada é expandido, e a
+/// aspa simples se escreve dobrada.
+fn powershell_literal(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "''"))
+}
+
+/// Um argumento para um programa (o `claude`), lançado pelo PowerShell 5.1.
+///
+/// O 5.1 monta a linha do programa sem escapar as aspas duplas de dentro do
+/// argumento (só põe aspas em volta quando há espaço), e o programa a parte
+/// pelas regras do C: um `"` do texto fecharia o argumento. Então o texto vai
+/// já escapado para essas regras — `"` vira `\"`, as barras antes dele dobram,
+/// e as do fim também quando o 5.1 vai pôr aspas em volta.
+fn powershell_argument(text: &str) -> String {
+    // O 5.1 descarta o argumento vazio ao chamar um programa; `""` chega ao
+    // programa como um argumento vazio.
+    if text.is_empty() {
+        return powershell_literal("\"\"");
+    }
+    let mut escaped = String::with_capacity(text.len());
+    let mut slashes = 0usize;
+    for c in text.chars() {
+        match c {
+            '\\' => slashes += 1,
+            '"' => {
+                escaped.extend(std::iter::repeat_n('\\', slashes * 2 + 1));
+                escaped.push('"');
+                slashes = 0;
+                continue;
+            }
+            _ => {}
+        }
+        if c != '\\' {
+            escaped.extend(std::iter::repeat_n('\\', slashes));
+            slashes = 0;
+            escaped.push(c);
+        }
+    }
+    let wrapped = text.chars().any(char::is_whitespace);
+    escaped.extend(std::iter::repeat_n(
+        '\\',
+        if wrapped { slashes * 2 } else { slashes },
+    ));
+    powershell_literal(&escaped)
 }
 
 /// O que lança o filho: o processo do pty e o seu primeiro argumento.
@@ -72,11 +156,19 @@ impl LaunchShell {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
+        // O `.exe` do Windows não muda o tipo.
+        let name = match name.len().checked_sub(4) {
+            Some(cut) if name.is_char_boundary(cut) && name[cut..].eq_ignore_ascii_case(".exe") => {
+                name[..cut].to_owned()
+            }
+            _ => name,
+        };
         let kind = match name.as_str() {
             "zsh" => ShellKind::Zsh,
             "bash" => ShellKind::Bash,
             "sh" | "dash" | "ash" | "ksh" | "mksh" | "pdksh" | "yash" => ShellKind::Posix,
             "fish" => ShellKind::Fish,
+            "powershell" | "pwsh" => ShellKind::PowerShell,
             _ => ShellKind::Other,
         };
         LaunchShell { path, kind }
@@ -91,11 +183,22 @@ impl LaunchShell {
         self.path.to_string_lossy().into_owned()
     }
 
+    /// A sintaxe da linha que este shell roda.
+    pub fn syntax(&self) -> ShellSyntax {
+        match self.kind {
+            ShellKind::PowerShell => ShellSyntax::PowerShell,
+            _ => ShellSyntax::Posix,
+        }
+    }
+
     /// O shell interativo do usuário, que a linha deixa no terminal quando o
     /// nó não tem comando. `bash_dir` é a pasta dos rcfiles do bash.
     pub fn interactive(&self, role: Role, bash_dir: &Path) -> String {
         let path = self.path_text();
         match (self.kind, role) {
+            // Sem `exec` no PowerShell: o próprio processo fica aberto
+            // (`-NoExit`) quando a linha não traz comando.
+            (ShellKind::PowerShell, _) => String::new(),
             // O rcfile só vale em shell interativo que não é de login: é ele
             // que faz as vezes do login (veja `bash_hook_files`).
             (ShellKind::Bash, Role::Shell) => format!(
@@ -112,6 +215,9 @@ impl LaunchShell {
     /// O `clear` vem do Swift: o `cd` e o perfil do login podem escrever antes
     /// do programa, e a tela começa limpa.
     pub fn launch(&self, cwd: &Path, command: Option<&str>, role: Role, bash_dir: &Path) -> Launch {
+        if self.kind == ShellKind::PowerShell {
+            return self.powershell_launch(cwd, command);
+        }
         let interactive;
         let given = command.map(str::trim).filter(|c| !c.is_empty());
         let command = match given {
@@ -168,6 +274,34 @@ impl LaunchShell {
                 program: self.path.clone(),
                 args: vec!["-lc".to_owned(), line],
             },
+        }
+    }
+}
+
+impl LaunchShell {
+    /// `Set-Location` em vez de `cd` (o `-LiteralPath` não lê `[` e `]` da
+    /// pasta como curinga) e `Clear-Host` em vez de `clear`. Sem comando, o
+    /// PowerShell fica aberto depois da linha (`-NoExit`), com o perfil do
+    /// usuário carregado, que é o login dele.
+    fn powershell_launch(&self, cwd: &Path, command: Option<&str>) -> Launch {
+        let given = command.map(str::trim).filter(|c| !c.is_empty());
+        let mut line = format!(
+            "Set-Location -LiteralPath {}; Clear-Host",
+            powershell_literal(&cwd.to_string_lossy())
+        );
+        if let Some(command) = given {
+            line.push_str("; ");
+            line.push_str(command);
+        }
+        let mut args: Vec<String> = POWERSHELL_OPTIONS.map(str::to_owned).to_vec();
+        if given.is_none() {
+            args.push("-NoExit".to_owned());
+        }
+        args.push("-Command".to_owned());
+        args.push(line);
+        Launch {
+            program: self.path.clone(),
+            args,
         }
     }
 }
@@ -305,6 +439,74 @@ mod tests {
         assert_eq!(kind("/usr/bin/dash"), ShellKind::Posix);
         assert_eq!(kind("/usr/bin/fish"), ShellKind::Fish);
         assert_eq!(kind("/usr/bin/nu"), ShellKind::Other);
+        assert_eq!(
+            kind("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"),
+            ShellKind::PowerShell
+        );
+        assert_eq!(kind("pwsh.EXE"), ShellKind::PowerShell);
+        assert_eq!(kind("/bin/zsh.exe"), ShellKind::Zsh);
+    }
+
+    #[test]
+    fn powershell_sobe_com_a_linha_dele_e_fica_aberto_sem_comando() {
+        let ps = LaunchShell::new(PathBuf::from("powershell.exe"));
+        let dir = Path::new(BASH_DIR);
+        assert_eq!(ps.interactive(Role::Shell, dir), "");
+        let launch = ps.launch(
+            Path::new("C:/Users/eu/o'projeto [1]"),
+            None,
+            Role::Shell,
+            dir,
+        );
+        assert_eq!(launch.program, PathBuf::from("powershell.exe"));
+        assert_eq!(
+            args(&launch),
+            vec![
+                "-NoLogo",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-NoExit",
+                "-Command",
+                "Set-Location -LiteralPath 'C:/Users/eu/o''projeto [1]'; Clear-Host"
+            ]
+        );
+        let agent = ps.launch(Path::new("C:/p"), Some(" claude "), Role::Agent, dir);
+        assert_eq!(
+            args(&agent),
+            vec![
+                "-NoLogo",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                "Set-Location -LiteralPath 'C:/p'; Clear-Host; claude"
+            ]
+        );
+        // A linha vazia que o `interactive` devolve é "sem comando".
+        let empty = ps.launch(Path::new("C:/p"), Some(""), Role::Shell, dir);
+        assert!(args(&empty).contains(&"-NoExit"));
+    }
+
+    #[test]
+    fn aspas_e_senao_de_cada_sintaxe() {
+        let posix = LaunchShell::zsh().syntax();
+        assert_eq!(posix, ShellSyntax::Posix);
+        assert_eq!(posix.quote("o'brien"), r"'o'\''brien'");
+        assert_eq!(posix.or_else("a", "b"), "a || b");
+        let ps = LaunchShell::new(PathBuf::from("powershell.exe")).syntax();
+        assert_eq!(ps.quote("simples"), "'simples'");
+        assert_eq!(ps.quote("o'brien $HOME"), "'o''brien $HOME'");
+        // As aspas duplas vão escapadas para o programa as ler como texto.
+        assert_eq!(ps.quote(r#"diz "oi""#), r#"'diz \"oi\"'"#);
+        assert_eq!(ps.quote(r#"a\"b"#), r#"'a\\\"b'"#);
+        // Barra no fim: dobrada só quando o 5.1 vai pôr aspas em volta.
+        assert_eq!(
+            ps.quote(r"C:\pasta com espaço\"),
+            r"'C:\pasta com espaço\\'"
+        );
+        assert_eq!(ps.quote(r"C:\pasta\"), r"'C:\pasta\'");
+        assert_eq!(ps.quote(""), r#"'""'"#);
+        assert_eq!(posix.quote(""), "''");
+        assert_eq!(ps.or_else("a", "b"), "a; if ($LASTEXITCODE) { b }");
     }
 
     #[test]

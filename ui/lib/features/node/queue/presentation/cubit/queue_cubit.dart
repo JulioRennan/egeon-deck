@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../../commons/widgets/pasted_image.dart';
+import '../../../../../commons/utils/path_names.dart';
 import '../../domain/entities/prompt_queue.dart';
 import '../../domain/entities/queue_effect.dart';
 import '../../domain/errors/queue_error.dart';
@@ -183,7 +184,7 @@ class QueueCubit extends Cubit<QueueState> {
       for (final path in paths)
         if (extensions.contains(path.split('.').last.toLowerCase()))
           PastedImage(
-            name: path.split('/').last,
+            name: lastPathComponent(path),
             bytes: Uint8List(0),
             path: path,
           ),
