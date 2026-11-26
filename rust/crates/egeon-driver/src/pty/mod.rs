@@ -8,15 +8,20 @@ use crate::environment;
 
 #[cfg(unix)]
 mod unix;
+#[cfg(unix)]
+use unix as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 /// O driver de pty do sistema em que o app roda.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SystemPty;
 
-#[cfg(unix)]
 impl PtyDriver for SystemPty {
     fn spawn(&self, spec: PtySpec) -> Result<PtyChild, PtyError> {
-        unix::spawn(spec)
+        platform::spawn(spec)
     }
 
     fn path_dirs(&self, home: &Path) -> Vec<PathBuf> {

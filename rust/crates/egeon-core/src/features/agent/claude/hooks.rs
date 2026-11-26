@@ -48,8 +48,32 @@ pub fn settings_file(directory: &Path) -> PathBuf {
 /// A linha de comando é interpretada por um shell e o caminho carrega o nome da
 /// pasta do usuário: as aspas são o que faz o gancho sobreviver a um home com
 /// espaço no nome.
+///
+/// No Windows o Claude Code roda o gancho pelo Git Bash ou pelo PowerShell, e
+/// não há forma com aspas que sirva aos dois (o PowerShell pede `&` antes de
+/// um caminho entre aspas, e o bash não aceita o `&`). Com barras normais e
+/// sem espaço, o caminho cru vale nos dois; com espaço no nome do usuário vai
+/// o `egeon` do `PATH`, que no agente lançado pelo Egeon já começa pela pasta
+/// dele.
 fn command(egeon: &Path, event: &str) -> String {
-    format!("\"{}\" hook {event}", egeon.display())
+    let text = egeon.to_string_lossy();
+    if !is_windows_path(&text) {
+        return format!("\"{text}\" hook {event}");
+    }
+    if text.chars().any(char::is_whitespace) {
+        return format!("egeon hook {event}");
+    }
+    format!("{} hook {event}", text.replace('\\', "/"))
+}
+
+/// `C:\…`, `C:/…` ou `\\servidor\…`: o caminho que o driver do Windows dá.
+fn is_windows_path(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/');
+    drive || text.starts_with(r"\\")
 }
 
 /// Só os ganchos. Nada de chave interna do CLI aqui dentro: o que este arquivo
@@ -83,4 +107,30 @@ pub fn install(directory: &Path, egeon: &Path) -> std::io::Result<()> {
         let _ = fs::remove_file(directory.join(old));
     }
     super::write_atomic(&settings_file(directory), settings_body(egeon).as_bytes())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn caminho_do_windows_vai_cru_com_barras_ou_pelo_path_com_espaco() {
+        assert_eq!(
+            command(Path::new("/Users/eu/.egeon-next/bin/egeon"), "stop"),
+            "\"/Users/eu/.egeon-next/bin/egeon\" hook stop"
+        );
+        assert_eq!(
+            command(Path::new(r"C:\Users\eu\.egeon-next\bin\egeon.exe"), "stop"),
+            "C:/Users/eu/.egeon-next/bin/egeon.exe hook stop"
+        );
+        assert_eq!(
+            command(
+                Path::new(r"C:\Users\Eu Mesmo\.egeon-next\bin\egeon.exe"),
+                "ask"
+            ),
+            "egeon hook ask"
+        );
+        assert!(is_windows_path(r"\\servidor\pasta\egeon.exe"));
+        assert!(!is_windows_path("C:"));
+    }
 }

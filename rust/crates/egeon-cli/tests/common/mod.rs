@@ -7,6 +7,7 @@
 
 use std::cell::Cell;
 use std::io::{Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,6 +18,8 @@ use std::time::{Duration, Instant};
 
 use egeon_cli::commands::{self, Streams};
 use egeon_cli::hook::{self, Clock, Setup};
+#[cfg(windows)]
+use uds_windows::{UnixListener, UnixStream};
 
 #[derive(Debug, Clone)]
 pub struct Seen {

@@ -165,6 +165,18 @@ pub fn install_script(path: &Path, make_executable: &dyn Fn(&Path)) {
     }
 }
 
+/// O bash que roda o script do usuário: o `/bin/bash` onde ele existe (macOS
+/// e Linux, como no Swift); senão o `bash` do `PATH` — no Windows, o do Git
+/// for Windows, que vem com o próprio git.
+fn script_bash() -> &'static str {
+    const SYSTEM_BASH: &str = "/bin/bash";
+    if Path::new(SYSTEM_BASH).is_file() {
+        SYSTEM_BASH
+    } else {
+        "bash"
+    }
+}
+
 /// Copia para a worktree tudo que o git não versiona: arquivos novos e também
 /// os ignorados — `.env`, `node_modules`, `.dart_tool`, `Pods`, `build`. Sem
 /// isso a worktree nasce sem configuração e sem dependências, e a "segunda
@@ -202,7 +214,7 @@ pub fn copy_unversioned(
     }
 
     // O script do usuário: roda como ele escreveu, e a última linha é o resumo.
-    let output = std::process::Command::new("/bin/bash")
+    let output = std::process::Command::new(script_bash())
         .arg(script)
         .arg(source)
         .arg(destination)

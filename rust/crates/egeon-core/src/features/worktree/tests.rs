@@ -1125,6 +1125,7 @@ mod route {
     use serde_json::{Value, json};
 
     use super::*;
+    #[cfg(unix)]
     use crate::features::workspace::model::WorkspaceConfig;
     use crate::features::worktree::routes::{OrgSnapshot, WorktreeEffect, worktree};
     use crate::protocol::handler::RouteRequest;
@@ -1409,9 +1410,9 @@ mod removal_plan_tests {
 
     use super::*;
     use crate::features::workbench::removal::{Removal, RemovalTarget};
-    use crate::features::worktree::removal_plan::{
-        RemovalContext, involved, loss_lines, multi_roots, payload,
-    };
+    #[cfg(unix)]
+    use crate::features::worktree::removal_plan::multi_roots;
+    use crate::features::worktree::removal_plan::{RemovalContext, involved, loss_lines, payload};
 
     fn bench_at(path: &str, nodes: Vec<NodeConfig>) -> WorkbenchConfig {
         WorkbenchConfig::new("deck", path, nodes)
