@@ -11,16 +11,26 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-use macos::candidates;
+use macos::{candidates, shell};
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-use linux::candidates;
+use linux::{candidates, shell};
 
 // Sem lista de instaladores conhecida, o `PATH` herdado segue como está.
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn candidates(_home: &Path) -> Vec<PathBuf> {
     Vec::new()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn shell() -> PathBuf {
+    PathBuf::from("/bin/sh")
+}
+
+/// O shell em que os terminais sobem (decisão 53).
+pub fn user_shell() -> PathBuf {
+    shell()
 }
 
 /// Os diretórios de instalador deste sistema, na ordem em que entram na frente

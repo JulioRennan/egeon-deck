@@ -7,3 +7,4 @@ pub mod environment;
 pub mod link;
 pub mod model;
 pub mod peer;
+pub mod shell;

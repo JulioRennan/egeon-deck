@@ -114,14 +114,14 @@ desktop /usr/bin/egeon-deck > "$PKG/usr/share/applications/$APP_ID.desktop"
 # O ícone é 1024×1024, fora dos tamanhos do tema hicolor; pixmaps aceita qualquer um.
 cp "$ICON" "$PKG/usr/share/pixmaps/egeon-deck.png"
 # O Flutter abre a libEGL e a GLES com dlopen ao criar a janela: o ldd não
-# as vê, e sem elas a UI morre no Ubuntu mínimo. O zsh é o shell de todo
-# terminal do Egeon (/bin/zsh, como no macOS), e o Ubuntu não o traz.
+# as vê, e sem elas a UI morre no Ubuntu mínimo. O zsh não entra: no Linux o
+# terminal sobe no shell do usuário (decisão 53).
 cat > "$PKG/DEBIAN/control" <<EOF
 Package: egeon-deck
 Version: $DEB_VERSION
 Architecture: $DEB_ARCH
 Maintainer: Duck Coder Tecnologia
-Depends: libgtk-3-0, libegl1, libgles2, zsh
+Depends: libgtk-3-0, libegl1, libgles2
 Section: devel
 Priority: optional
 Homepage: https://github.com/JulioRennan/egeon-deck

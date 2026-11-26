@@ -69,6 +69,7 @@ fn a_linha_de_comando_o_catalogo_e_as_regras_saem_como_no_swift() {
             catalog.as_deref(),
             rules.as_deref(),
             HOOK_FILE,
+            DEFAULT_SHELL,
         );
 
         let expected: Value = parse(&read(&root().join("esperado/launch").join(&name))).unwrap();
@@ -246,6 +247,7 @@ fn nota_de_log_quando_o_marcador_nao_sobe() {
         catalog(&case.node).as_deref(),
         None,
         HOOK_FILE,
+        DEFAULT_SHELL,
     );
     assert_eq!(plan.command, "codex '--model' 'gpt-5'");
     assert_eq!(plan.prompt_to_inject, None);

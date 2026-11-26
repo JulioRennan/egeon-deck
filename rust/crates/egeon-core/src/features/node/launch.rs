@@ -20,7 +20,8 @@ use crate::features::agent::rules::agent_rules_block;
 use crate::features::processes::mark;
 use crate::features::terminal::model::{TERM, shell_quote};
 
-/// O comando de um nó de shell sem comando próprio.
+/// O comando de um nó de shell sem comando próprio no macOS. No Linux vem do
+/// shell do usuário (`terminal::shell::LaunchShell::interactive`).
 pub const DEFAULT_SHELL: &str = "exec /bin/zsh -l";
 
 /// O que sobe: a linha, o papel que ainda precisa ser digitado na TUI e se o
@@ -39,13 +40,15 @@ pub struct LaunchPlan {
 }
 
 /// A linha de comando do nó. `catalog` é [`catalog`], `rules` o bloco de
-/// [`agent_rules_block`] e `hook_file` o `claude-hooks.json`.
+/// [`agent_rules_block`], `hook_file` o `claude-hooks.json` e `default_shell`
+/// o que sobe no nó sem comando ([`DEFAULT_SHELL`] no macOS).
 pub fn launch_plan(
     node: &NodeConfig,
     profile: Option<&AgentProfile>,
     catalog: Option<&str>,
     rules: Option<&str>,
     hook_file: &str,
+    default_shell: &str,
 ) -> LaunchPlan {
     let plain = |command: String| LaunchPlan {
         command,
@@ -57,7 +60,7 @@ pub fn launch_plan(
         .cmd
         .clone()
         .or_else(|| profile.map(|p| p.command.join(" ")))
-        .unwrap_or_else(|| DEFAULT_SHELL.to_owned());
+        .unwrap_or_else(|| default_shell.to_owned());
 
     let (NodeKind::Agent, Some(profile)) = (node.kind, profile) else {
         return plain(base);

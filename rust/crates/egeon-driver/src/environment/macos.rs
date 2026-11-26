@@ -19,3 +19,8 @@ pub(super) fn candidates(home: &Path) -> Vec<PathBuf> {
         PathBuf::from("/usr/local/bin"),
     ]
 }
+
+/// Todo terminal roda no `/bin/zsh`, o padrão do sistema, como no Swift.
+pub(super) fn shell() -> PathBuf {
+    PathBuf::from("/bin/zsh")
+}

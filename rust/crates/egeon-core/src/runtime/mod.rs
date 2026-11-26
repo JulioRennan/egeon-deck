@@ -237,6 +237,7 @@ async fn load_org(config: &Config, drivers: &Drivers) -> org::Org {
     .collect();
     let cli_binary = config.cli_binary.clone();
     let flavor = config.flavor.identifier().to_owned();
+    let user_shell = crate::features::terminal::shell::LaunchShell::new(drivers.pty.user_shell());
     let loaded = tokio::task::spawn_blocking(move || {
         let git = Git::new(env);
         let mut loaded = org::load(&paths, &home, |path| main_repo(&git, path));
@@ -249,6 +250,15 @@ async fn load_org(config: &Config, drivers: &Drivers) -> org::Org {
         loaded
             .notes
             .extend(install_shell_hook(&paths.config("zsh")));
+        // Os rcfiles do bash só onde o shell do usuário é o bash (decisão 53):
+        // no macOS, que é sempre zsh, a pasta de dados fica como era.
+        if user_shell.kind == crate::features::terminal::shell::ShellKind::Bash {
+            loaded
+                .notes
+                .extend(crate::features::terminal::shell::install_bash_hook(
+                    &paths.config(crate::features::terminal::shell::BASH_DIR),
+                ));
+        }
         // O binário `egeon`, os ganchos do Claude (o `--settings` de cada agente
         // aponta para eles: sem eles o CLI não relata início, fim de turno nem
         // pedido de permissão) e as skills: só o que mudou desde o último

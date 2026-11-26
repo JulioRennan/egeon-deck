@@ -55,6 +55,8 @@ pub struct FakePty {
     pub spawned: Mutex<Vec<Spawned>>,
     next_pid: AtomicU32,
     pub journal: Journal,
+    /// O shell do usuário; `None` é o do macOS.
+    pub shell: Option<PathBuf>,
 }
 
 impl FakePty {
@@ -115,6 +117,12 @@ impl PtyDriver for FakePty {
 
     fn path_dirs(&self, home: &Path) -> Vec<PathBuf> {
         vec![home.join(".fake/bin")]
+    }
+
+    fn user_shell(&self) -> PathBuf {
+        self.shell
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(crate::features::terminal::model::LAUNCH_SHELL))
     }
 }
 

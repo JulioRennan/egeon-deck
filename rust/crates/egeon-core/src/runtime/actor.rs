@@ -60,8 +60,9 @@ use super::{Config, Drivers, Snapshot};
 use crate::commons::ids::WorkbenchId;
 use crate::features::chat::runtime::Complete;
 use crate::features::processes::{mark, tree};
-use crate::features::terminal::model::{LAUNCH_SHELL, TERM, launch_args, paste_bytes};
+use crate::features::terminal::model::{TERM, paste_bytes};
 use crate::features::terminal::peer::owner;
+use crate::features::terminal::shell::{BASH_DIR, LaunchShell, Role};
 use crate::ports::procs::ProcessDriver;
 use crate::ports::pty::{PtyEvent, PtyExit, PtySession, PtySignal, PtySize, PtySpec};
 use crate::ports::screen::Screen;
@@ -1033,7 +1034,7 @@ impl Actor {
 
         let command = spec.command.filter(|c| !c.trim().is_empty());
         let id = self.fresh_id();
-        self.spawn_terminal(id, None, &cwd, command, env, size)
+        self.spawn_terminal(id, None, &cwd, command, Role::Raw, env, size)
     }
 
     /// O ambiente-base de todo filho: o do app sem as `CLAUDE_CODE*` e sem a
@@ -1046,16 +1047,23 @@ impl Actor {
         )
     }
 
+    /// O shell em que os terminais sobem: o do driver (decisão 53).
+    pub(super) fn launch_shell(&self) -> LaunchShell {
+        LaunchShell::new(self.drivers.pty.user_shell())
+    }
+
     /// Lança o processo atrás de um pty e guarda o nó. A linha é sempre
-    /// `zsh -lc "cd '<cwd>'; clear; <command>"`: o `cd` vai só na linha, como
-    /// no Swift — uma pasta que sumiu não impede o nó de subir, e o erro do
-    /// `cd` aparece na tela.
+    /// `<shell> -lc "cd '<cwd>'; clear; <command>"` (`features::terminal::shell`):
+    /// o `cd` vai só na linha, como no Swift — uma pasta que sumiu não impede o
+    /// nó de subir, e o erro do `cd` aparece na tela.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn spawn_terminal(
         &mut self,
         id: NodeId,
         address: Option<String>,
         cwd: &std::path::Path,
         command: Option<String>,
+        role: Role,
         env: Vec<(String, String)>,
         size: Size,
     ) -> Result<TerminalInfo, NodeError> {
@@ -1067,12 +1075,18 @@ impl Actor {
             .screens
             .create(size)
             .map_err(|e| NodeError::Screen(e.to_string()))?;
+        let launch = self.launch_shell().launch(
+            cwd,
+            command.as_deref(),
+            role,
+            &self.config.paths.config(BASH_DIR),
+        );
         let child = self
             .drivers
             .pty
             .spawn(PtySpec {
-                program: PathBuf::from(LAUNCH_SHELL),
-                args: launch_args(cwd, command.as_deref()),
+                program: launch.program,
+                args: launch.args,
                 env,
                 cwd: None,
                 size: PtySize {

@@ -122,4 +122,8 @@ pub trait PtyDriver: Send + Sync {
     /// ordem em que entram na frente do `PATH`. Quais existem e a composição do
     /// ambiente são do core (`features::terminal::environment`).
     fn path_dirs(&self, home: &Path) -> Vec<PathBuf>;
+    /// O shell em que os terminais sobem (decisão 53): o `/bin/zsh` no macOS,
+    /// o do usuário no Linux. Como cada um é chamado é do core
+    /// (`features::terminal::shell`).
+    fn user_shell(&self) -> PathBuf;
 }

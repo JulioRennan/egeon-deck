@@ -9,6 +9,14 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Alterado
+
+- No Linux, terminais e agentes sobem no seu shell (bash, zsh ou fish), com a sua configuração (`~/.bashrc`, `~/.profile`): o PATH, o nvm e o `claude` instalado pelo npm valem dentro do Egeon, e o zsh deixa de ser exigido (decisão 53).
+
+### Corrigido
+
+- O pacote .deb abre a janela num Ubuntu mínimo: declara as bibliotecas gráficas (libEGL, GLES) que o app usa.
+
 ## [2.0.0-alpha.1] - 2026-11-25
 
 Primeira versão do app novo (Rust + Flutter), para teste: macOS e Linux. Não se atualiza sozinha; a próxima se instala à mão.

@@ -14,6 +14,7 @@ use crate::features::node::launch::{
     ChildContext, catalog, launch_plan, node_environment, rules_for,
 };
 use crate::features::node::model::{NodeConfig, NodeKind};
+use crate::features::terminal::shell::{BASH_DIR, Role};
 use crate::features::workbench::frames::apply_default_frames;
 use crate::features::workbench::model::WorkbenchConfig;
 use crate::features::workspace::routes::OrgEffect;
@@ -124,12 +125,15 @@ impl Actor {
         }
         let node = &node;
         let address = bench.address_of(node);
+        let shell = self.launch_shell();
+        let bash_dir = paths.config(BASH_DIR);
         let plan = launch_plan(
             node,
             profile.as_ref(),
             catalog(node).as_deref(),
             rules_for(node, bench.rules.as_deref()).as_deref(),
             &hook_file,
+            &shell.interactive(Role::Shell, &bash_dir),
         );
         // Como o Swift ao criar o terminal (`main.swift`, `conversationStarted`):
         // a linha acima já leva a conversa, e da próxima subida em diante ela é
@@ -177,6 +181,13 @@ impl Actor {
             address,
             cwd: PathBuf::from(&directory.path),
             command: plan.command,
+            // Quem tem perfil sobe como agente; o resto é o nó `shell`, o
+            // mesmo critério do `ZDOTDIR` em `node_environment`.
+            shell_role: if profile.is_some() {
+                Role::Agent
+            } else {
+                Role::Shell
+            },
             env,
             hooked,
             role,
@@ -212,6 +223,7 @@ impl Actor {
             address,
             cwd,
             command,
+            shell_role,
             env,
             hooked,
             role,
@@ -231,6 +243,7 @@ impl Actor {
             Some(address.clone()),
             &cwd,
             Some(command),
+            shell_role,
             env,
             super::DEFAULT_SIZE,
         ) {
@@ -298,6 +311,7 @@ struct Launch {
     address: String,
     cwd: PathBuf,
     command: String,
+    shell_role: Role,
     env: Vec<(String, String)>,
     hooked: bool,
     role: Option<String>,
@@ -330,6 +344,7 @@ mod tests {
             address: "deck/dev".into(),
             cwd: PathBuf::from("/tmp/deck"),
             command: "true".into(),
+            shell_role: Role::Shell,
             env: Vec::new(),
             hooked: false,
             role: None,

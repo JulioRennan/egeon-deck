@@ -22,4 +22,8 @@ impl PtyDriver for SystemPty {
     fn path_dirs(&self, home: &Path) -> Vec<PathBuf> {
         environment::path_dirs(home)
     }
+
+    fn user_shell(&self) -> PathBuf {
+        environment::user_shell()
+    }
 }

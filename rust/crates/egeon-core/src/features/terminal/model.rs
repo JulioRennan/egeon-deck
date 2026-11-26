@@ -1,13 +1,9 @@
 //! Regras puras do nó de terminal, porte do `TerminalNode` e do `Dispatcher`.
 
-use std::path::Path;
-
-/// O shell que lança todo terminal, como no Swift: o comando é montado como
-/// linha e entregue a `zsh -lc`.
+/// O shell que lança todo terminal no macOS, como no Swift: o comando é
+/// montado como linha e entregue a `zsh -lc`. No Linux é o do usuário
+/// (`shell::LaunchShell`, decisão 53).
 pub const LAUNCH_SHELL: &str = "/bin/zsh";
-
-/// O comando de um nó de shell sem comando próprio.
-pub const DEFAULT_COMMAND: &str = "exec /bin/zsh -l";
 
 /// O `TERM` de todo filho, por cima do que vier do ambiente do app.
 pub const TERM: &str = "xterm-256color";
@@ -16,22 +12,6 @@ pub const TERM: &str = "xterm-256color";
 /// execução.
 pub fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', r"'\''"))
-}
-
-/// Os argumentos de `zsh` para lançar `command` em `cwd`.
-///
-/// O `clear` vem do Swift: o `cd` e o perfil do login podem escrever antes do
-/// programa, e a tela começa limpa.
-pub fn launch_args(cwd: &Path, command: Option<&str>) -> Vec<String> {
-    let command = command
-        .map(str::trim)
-        .filter(|c| !c.is_empty())
-        .unwrap_or(DEFAULT_COMMAND);
-    let line = format!(
-        "cd {}; clear; {command}",
-        shell_quote(&cwd.to_string_lossy())
-    );
-    vec!["-lc".to_owned(), line]
 }
 
 /// Os bytes de uma colagem: embrulhada nos marcadores do bracketed paste
@@ -79,22 +59,6 @@ mod tests {
             "'com espaço $HOME; rm'"
         );
         assert_eq!(shell_quote("o'brien"), r"'o'\''brien'");
-    }
-
-    #[test]
-    fn lanca_shell_de_login_na_pasta() {
-        assert_eq!(
-            launch_args(Path::new("/Users/eu/meu projeto"), None),
-            vec!["-lc", "cd '/Users/eu/meu projeto'; clear; exec /bin/zsh -l"]
-        );
-        assert_eq!(
-            launch_args(Path::new("/tmp"), Some("  ")),
-            vec!["-lc", "cd '/tmp'; clear; exec /bin/zsh -l"]
-        );
-        assert_eq!(
-            launch_args(Path::new("/tmp"), Some("make test")),
-            vec!["-lc", "cd '/tmp'; clear; make test"]
-        );
     }
 
     #[test]
