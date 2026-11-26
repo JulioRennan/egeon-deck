@@ -6,7 +6,8 @@
 //! mesmo `node_modules` — por isso a cópia é por entrada, em paralelo, e o
 //! clone é do [`FileCloner`] (o driver).
 
-use std::path::Path;
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -165,6 +166,38 @@ pub fn install_script(path: &Path, make_executable: &dyn Fn(&Path)) {
     }
 }
 
+/// O bash que roda o script do usuário: o `/bin/bash` onde ele existe (macOS
+/// e Linux, como no Swift); senão o do Git for Windows, achado pelo `git` do
+/// `PATH`. Nunca o `bash` solto: no Windows a busca do sistema olha o
+/// System32 antes do `PATH`, e o `bash.exe` de lá roda o script dentro do
+/// Linux do WSL. `None` quando não há nenhum dos dois.
+fn script_bash(env: &[(OsString, OsString)]) -> Option<PathBuf> {
+    const SYSTEM_BASH: &str = "/bin/bash";
+    if Path::new(SYSTEM_BASH).is_file() {
+        return Some(PathBuf::from(SYSTEM_BASH));
+    }
+    let path = env
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("PATH"))
+        .map(|(_, value)| value.as_os_str())?;
+    git_bash(path)
+}
+
+/// O `bash.exe` que vem com o Git for Windows. O instalador padrão só põe a
+/// pasta `Git\cmd` no `PATH`; o bash mora ao lado, em `Git\bin`.
+fn git_bash(path: &OsStr) -> Option<PathBuf> {
+    std::env::split_paths(path).find_map(|dir| {
+        if !["git.exe", "git"]
+            .iter()
+            .any(|name| dir.join(name).is_file())
+        {
+            return None;
+        }
+        let bash = dir.parent()?.join("bin").join("bash.exe");
+        bash.is_file().then_some(bash)
+    })
+}
+
 /// Copia para a worktree tudo que o git não versiona: arquivos novos e também
 /// os ignorados — `.env`, `node_modules`, `.dart_tool`, `Pods`, `build`. Sem
 /// isso a worktree nasce sem configuração e sem dependências, e a "segunda
@@ -202,7 +235,11 @@ pub fn copy_unversioned(
     }
 
     // O script do usuário: roda como ele escreveu, e a última linha é o resumo.
-    let output = std::process::Command::new("/bin/bash")
+    let Some(bash) = script_bash(git.env()) else {
+        crate::log!("worktree: sem bash para rodar {}", script.display());
+        return "sem bash para rodar o script de cópia".to_owned();
+    };
+    let output = std::process::Command::new(bash)
         .arg(script)
         .arg(source)
         .arg(destination)
@@ -220,4 +257,31 @@ pub fn copy_unversioned(
     text.lines()
         .last()
         .map_or_else(|| "cópia concluída".to_owned(), str::to_owned)
+}
+
+#[cfg(test)]
+mod bash_tests {
+    use super::*;
+
+    /// Uma instalação falsa do Git for Windows: `Git\cmd\git.exe` no `PATH` e
+    /// o `bash.exe` em `Git\bin`.
+    #[test]
+    fn o_bash_vem_do_git_do_path_e_nunca_solto() -> std::io::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let git = dir.path().join("Git");
+        std::fs::create_dir_all(git.join("cmd"))?;
+        std::fs::create_dir_all(git.join("bin"))?;
+        std::fs::write(git.join("cmd").join("git.exe"), "")?;
+        let elsewhere = dir.path().join("outra");
+        std::fs::create_dir_all(&elsewhere)?;
+        let path = std::env::join_paths([elsewhere.clone(), git.join("cmd")]).unwrap_or_default();
+
+        // Sem o bash ao lado: nada, em vez de um `bash` qualquer.
+        assert_eq!(git_bash(&path), None);
+        std::fs::write(git.join("bin").join("bash.exe"), "")?;
+        assert_eq!(git_bash(&path), Some(git.join("bin").join("bash.exe")));
+        // Sem git no PATH, também nada.
+        assert_eq!(git_bash(elsewhere.as_os_str()), None);
+        Ok(())
+    }
 }
