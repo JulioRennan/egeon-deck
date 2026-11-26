@@ -10,8 +10,16 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 IMAGE=egeon-linux-dev
+# EGEON_LINUX_PLATFORM=linux/amd64 compila o x86_64 numa máquina arm64
+# (emulado, bem mais lento): imagem, volumes e alvo próprios.
+PLATFORM=()
+if [ -n "${EGEON_LINUX_PLATFORM:-}" ]; then
+  PLATFORM=(--platform "$EGEON_LINUX_PLATFORM")
+  IMAGE="$IMAGE-${EGEON_LINUX_PLATFORM##*/}"
+  EGEON_LINUX_TARGET_SUFFIX="${EGEON_LINUX_TARGET_SUFFIX:-}-${EGEON_LINUX_PLATFORM##*/}"
+fi
 docker image inspect "$IMAGE" >/dev/null 2>&1 \
-  || docker build -t "$IMAGE" "$ROOT/scripts/linux"
+  || docker build ${PLATFORM[@]+"${PLATFORM[@]}"} -t "$IMAGE" "$ROOT/scripts/linux"
 
 TTY=()
 [ -t 0 ] && TTY=(-it)
@@ -22,7 +30,7 @@ SUFFIX="${EGEON_LINUX_TARGET_SUFFIX:-}"
 # sufixo com a dele, para dois agentes não compilarem por cima um do outro.
 # Quatro jobs: o Zig e o ld em paralelo estouraram os 7,6 GB da VM do Docker.
 # O bash 3.2 do macOS, com set -u, trata array vazio como variável indefinida.
-exec docker run --rm ${TTY[@]+"${TTY[@]}"} \
+exec docker run --rm ${TTY[@]+"${TTY[@]}"} ${PLATFORM[@]+"${PLATFORM[@]}"} \
   -v "$ROOT:/src" \
   -v egeon-linux-cargo:/root/.cargo/registry \
   -v egeon-linux-pub:/root/.pub-cache \

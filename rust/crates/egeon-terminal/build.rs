@@ -174,6 +174,13 @@ fn build_from_source(work: &Path, source: &Path, deps: &Path, target: &str) -> R
     run(Command::new("zig")
         .current_dir(&source_dir)
         .env("ZIG_GLOBAL_CACHE_DIR", &zig_cache)
+        // O build do Ghostty tira a versão do `git` da pasta do fonte. Extraído
+        // dentro do `target/`, o fonte cai no repositório do Egeon, e uma tag
+        // nossa no HEAD (v2.0.0-alpha.1) derruba o build ("tagged releases
+        // must be in vX.Y.Z format matching build.zig"). Sem repositório, ele
+        // usa a versão do tarball, como no build de pacote.
+        .env("GIT_CEILING_DIRECTORIES", work)
+        .env("GIT_DIR", source_dir.join(".git-inexistente"))
         .arg("build")
         .arg("--prefix")
         .arg(&prefix)
