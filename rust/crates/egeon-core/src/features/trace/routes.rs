@@ -123,7 +123,7 @@ mod tests {
             now(),
         );
         assert_eq!(reply.status, 200);
-        let file = dir.path().join("aaaa1111/trace.md");
+        let file = dir.path().join("aaaa1111").join("trace.md");
         assert_eq!(
             reply.json,
             json!({"ok": true, "address": "deck/revisor", "file": file.to_string_lossy()})

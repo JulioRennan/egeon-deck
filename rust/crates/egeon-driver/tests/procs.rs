@@ -1,6 +1,8 @@
 //! Processos de verdade: um zsh interativo num pty, com filhos reais. Nada
 //! aqui toca `~/.egeon`.
 
+#![cfg(unix)]
+
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Arc;

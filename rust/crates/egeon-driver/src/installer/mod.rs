@@ -13,6 +13,10 @@ use macos as platform;
 mod linux;
 #[cfg(target_os = "linux")]
 use linux as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 /// O instalador do sistema em que o programa roda.
 #[derive(Debug, Clone, Copy, Default)]
