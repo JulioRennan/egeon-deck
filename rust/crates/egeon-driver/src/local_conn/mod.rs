@@ -6,18 +6,23 @@ use egeon_core::ports::local_conn::{LocalConnDriver, LocalConnError, LocalListen
 
 #[cfg(unix)]
 mod unix;
+#[cfg(unix)]
+use unix as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 /// O driver de conexão local do sistema em que o app roda.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SystemLocalConn;
 
-#[cfg(unix)]
 impl LocalConnDriver for SystemLocalConn {
     fn listen(&self, path: &Path) -> Result<Box<dyn LocalListener>, LocalConnError> {
-        unix::listen(path)
+        platform::listen(path)
     }
 
     fn probe(&self, path: &Path) -> Probe {
-        unix::probe(path)
+        platform::probe(path)
     }
 }

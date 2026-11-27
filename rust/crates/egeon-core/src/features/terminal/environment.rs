@@ -67,37 +67,73 @@ pub fn compose(
     // Na frente de tudo: o `egeon` é do flavor que lançou este processo, e um
     // homônimo em /usr/local/bin faria o agente do dev falar com o socket do
     // estável.
-    let current = environment.get("PATH").map(String::as_str);
-    let path = format!(
-        "{}:{}",
-        cli_dir.display(),
-        enriched_path(current, path_dirs, exists)
-    );
-    environment.insert("PATH".to_string(), path);
+    let key = path_key(&environment);
+    let current = environment.get(&key).map(String::as_str);
+    let mut parts = vec![cli_dir.to_string_lossy().into_owned()];
+    parts.extend(enriched_parts(current, path_dirs, exists));
+    environment.insert(key, join(&parts));
     environment.into_iter().collect()
+}
+
+/// A chave do `PATH`. No Windows ela costuma ser `Path` e não tem caixa: um
+/// `PATH` novo ao lado do `Path` herdado deixaria o filho com dois, e qual
+/// vale fica ao acaso. `PATH` exato ganha, como sempre no unix.
+fn path_key(environment: &BTreeMap<String, String>) -> String {
+    if environment.contains_key("PATH") {
+        return "PATH".to_owned();
+    }
+    environment
+        .keys()
+        .find(|key| key.eq_ignore_ascii_case("PATH"))
+        .cloned()
+        .unwrap_or_else(|| "PATH".to_owned())
+}
+
+/// As entradas do `PATH`, com o separador do sistema (`:` no unix, `;` no
+/// Windows).
+fn split(path: &str) -> Vec<String> {
+    std::env::split_paths(path)
+        .map(|part| part.to_string_lossy().into_owned())
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+/// O `PATH` de volta, com o separador do sistema. A entrada que contém o
+/// próprio separador não cabe num `PATH` e fica de fora.
+fn join(parts: &[String]) -> String {
+    let valid = parts
+        .iter()
+        .filter(|part| std::env::join_paths([part.as_str()]).is_ok());
+    std::env::join_paths(valid)
+        .map(|joined| joined.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// Os diretórios de instalador que existem e ainda não estão no `PATH` entram na
 /// frente, na ordem da lista: o que o usuário instalou ganha da versão que vem
 /// com o sistema.
-fn enriched_path(
+fn enriched_parts(
     current: Option<&str>,
     path_dirs: &[PathBuf],
     exists: impl Fn(&Path) -> bool,
-) -> String {
-    let mut parts: Vec<String> = current
-        .unwrap_or("")
-        .split(':')
-        .filter(|part| !part.is_empty())
-        .map(str::to_string)
-        .collect();
+) -> Vec<String> {
+    let mut parts = split(current.unwrap_or(""));
     for candidate in path_dirs.iter().rev() {
         let text = candidate.to_string_lossy().into_owned();
         if !parts.contains(&text) && exists(candidate) {
             parts.insert(0, text);
         }
     }
-    parts.join(":")
+    parts
+}
+
+#[cfg(test)]
+fn enriched_path(
+    current: Option<&str>,
+    path_dirs: &[PathBuf],
+    exists: impl Fn(&Path) -> bool,
+) -> String {
+    join(&enriched_parts(current, path_dirs, exists))
 }
 
 #[cfg(test)]
@@ -188,11 +224,38 @@ mod tests {
         assert_eq!(get(&result, "EGEON_OUTRA"), Some("fica"));
     }
 
+    /// Um `PATH` com o separador do sistema em que o teste roda.
+    fn path(parts: &[&str]) -> String {
+        join(&parts.iter().map(|p| p.to_string()).collect::<Vec<_>>())
+    }
+
     #[test]
     fn cli_vai_na_frente_de_tudo_no_path() {
-        let result = build(&[("PATH", "/usr/bin:/bin")], &[], |_| false);
+        let result = build(&[("PATH", &path(&["/usr/bin", "/bin"]))], &[], |_| false);
 
-        assert_eq!(get(&result, "PATH"), Some("/egeon/bin:/usr/bin:/bin"));
+        assert_eq!(
+            get(&result, "PATH"),
+            Some(path(&["/egeon/bin", "/usr/bin", "/bin"]).as_str())
+        );
+    }
+
+    /// No Windows a variável herdada é `Path`: o filho fica com ela, e não com
+    /// duas.
+    #[test]
+    fn a_chave_do_path_herdado_e_mantida_sem_caixa() {
+        let result = build(&[("Path", "/usr/bin")], &[], |_| false);
+
+        assert_eq!(
+            get(&result, "Path"),
+            Some(path(&["/egeon/bin", "/usr/bin"]).as_str())
+        );
+        assert_eq!(get(&result, "PATH"), None);
+        let both = build(&[("PATH", "/a"), ("Path", "/b")], &[], |_| false);
+        assert_eq!(
+            get(&both, "PATH"),
+            Some(path(&["/egeon/bin", "/a"]).as_str())
+        );
+        assert_eq!(get(&both, "Path"), Some("/b"));
     }
 
     #[test]
@@ -207,19 +270,28 @@ mod tests {
 
         assert_eq!(
             get(&result, "PATH"),
-            Some("/egeon/bin:/Users/x/.local/bin:/opt/homebrew/bin:/usr/bin")
+            Some(
+                path(&[
+                    "/egeon/bin",
+                    "/Users/x/.local/bin",
+                    "/opt/homebrew/bin",
+                    "/usr/bin"
+                ])
+                .as_str()
+            )
         );
     }
 
     #[test]
     fn diretorio_que_ja_esta_no_path_nao_muda_de_lugar() {
-        let result = build(&[("PATH", "/usr/bin:/opt/homebrew/bin")], &[], |p| {
+        let current = path(&["/usr/bin", "/opt/homebrew/bin"]);
+        let result = build(&[("PATH", &current)], &[], |p| {
             p == Path::new("/opt/homebrew/bin")
         });
 
         assert_eq!(
             get(&result, "PATH"),
-            Some("/egeon/bin:/usr/bin:/opt/homebrew/bin")
+            Some(path(&["/egeon/bin", "/usr/bin", "/opt/homebrew/bin"]).as_str())
         );
     }
 
@@ -228,8 +300,9 @@ mod tests {
     #[test]
     fn enriquecer_o_path_ja_enriquecido_nao_muda_nada() {
         let dirs = dirs();
-        let once = enriched_path(Some("/usr/bin:/bin"), &dirs, |_| true);
-        assert_ne!(once, "/usr/bin:/bin", "o teste precisa enriquecer de fato");
+        let current = path(&["/usr/bin", "/bin"]);
+        let once = enriched_path(Some(&current), &dirs, |_| true);
+        assert_ne!(once, current, "o teste precisa enriquecer de fato");
         assert_eq!(enriched_path(Some(&once), &dirs, |_| true), once);
     }
 
@@ -237,6 +310,9 @@ mod tests {
     fn sem_path_herdado_o_filho_ainda_recebe_o_cli() {
         let result = build(&[], &[], |p| p == Path::new("/usr/local/bin"));
 
-        assert_eq!(get(&result, "PATH"), Some("/egeon/bin:/usr/local/bin"));
+        assert_eq!(
+            get(&result, "PATH"),
+            Some(path(&["/egeon/bin", "/usr/local/bin"]).as_str())
+        );
     }
 }

@@ -132,7 +132,7 @@ async fn formulario_de_worktree_sem_bancada_le_a_pasta_ou_o_projeto() {
 #[tokio::test]
 async fn multi_projeto_tem_formulario_proprio_e_branch_por_repositorio() {
     let dir = TempHome::new();
-    let root = std::fs::canonicalize(&dir.0).unwrap();
+    let root = crate::commons::paths::canonicalize(&dir.0).unwrap();
     let make = |name: &str| {
         let repo = root.join(name);
         std::fs::create_dir_all(&repo).unwrap();
@@ -254,7 +254,13 @@ async fn salvar_template_planeja_grava_e_atualiza_o_de_origem() {
     assert_eq!(ui.reply(5).await["template"], "dupla");
 
     // O template apagado à mão: atualizar não vira "salvar como".
-    std::fs::write(h._home.0.join("data/templates.json"), "{}").unwrap();
+    std::fs::write(
+        h._home
+            .0
+            .join(crate::features::path_text::native("data/templates.json")),
+        "{}",
+    )
+    .unwrap();
     ui.send(json!({"id": 6, "cmd": "save_template", "workbench": "1a2b3c4d"}))
         .await;
     assert_eq!(
