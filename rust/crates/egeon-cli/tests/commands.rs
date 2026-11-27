@@ -157,7 +157,7 @@ fn plan_e_apply_levam_o_plano_do_stdin() {
 }
 
 #[test]
-fn o_bom_do_powershell_sai_do_stdin_de_plan_apply_send_e_trace() {
+fn os_boms_do_powershell_saem_do_stdin_de_plan_apply_send_e_trace() {
     // Os bytes que o PowerShell 5.1 mandou no Windows: quebra, BOM, texto.
     let plan = "{\"nodes\": []}\n";
     for (args, route) in [
@@ -171,6 +171,14 @@ fn o_bom_do_powershell_sai_do_stdin_de_plan_apply_send_e_trace() {
         assert_post(&server, route, plan);
         egeon(&server, args, format!("\n\u{feff}{plan}").as_bytes());
         assert_post(&server, route, &format!("\n{plan}"));
+        egeon(&server, args, format!("\u{feff}\u{feff}{plan}").as_bytes());
+        assert_post(&server, route, plan);
+        egeon(
+            &server,
+            args,
+            format!("\n\u{feff}\r\n\u{feff}{plan}").as_bytes(),
+        );
+        assert_post(&server, route, &format!("\n\r\n{plan}"));
     }
     let server = FakeServer::ok("{}");
     let inside = "texto com \u{feff} no meio\n";
