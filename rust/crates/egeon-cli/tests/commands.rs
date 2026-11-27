@@ -157,6 +157,28 @@ fn plan_e_apply_levam_o_plano_do_stdin() {
 }
 
 #[test]
+fn o_bom_do_powershell_sai_do_stdin_de_plan_apply_send_e_trace() {
+    // Os bytes que o PowerShell 5.1 mandou no Windows: quebra, BOM, texto.
+    let plan = "{\"nodes\": []}\n";
+    for (args, route) in [
+        (&["plan"][..], "/maestro/apply?dry=1"),
+        (&["apply"][..], "/maestro/apply"),
+        (&["send", "deck/b"][..], "/message?target=deck/b"),
+        (&["trace"][..], "/trace"),
+    ] {
+        let server = FakeServer::ok("{}");
+        egeon(&server, args, format!("\u{feff}{plan}").as_bytes());
+        assert_post(&server, route, plan);
+        egeon(&server, args, format!("\n\u{feff}{plan}").as_bytes());
+        assert_post(&server, route, &format!("\n{plan}"));
+    }
+    let server = FakeServer::ok("{}");
+    let inside = "texto com \u{feff} no meio\n";
+    egeon(&server, &["send", "deck/b"], inside.as_bytes());
+    assert_post(&server, "/message?target=deck/b", inside);
+}
+
+#[test]
 fn allow_deny_e_always() {
     let server = FakeServer::ok("{}");
     egeon(&server, &["allow", "a 1"], b"");

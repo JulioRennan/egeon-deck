@@ -203,10 +203,27 @@ fn post(io: &mut Streams, sock: &Path, target: Vec<u8>, body: Body) -> i32 {
             let mut bytes = Vec::new();
             // Stdin ilegível vale como vazio: o app responde o que faltou.
             let _ = io.stdin.read_to_end(&mut bytes);
-            bytes
+            without_bom(bytes)
         }
     };
     call(io, sock, "POST", &target, Some(&bytes))
+}
+
+const BOM: &[u8] = b"\xEF\xBB\xBF";
+
+/// O PowerShell 5.1 com `$OutputEncoding` UTF-8 põe o BOM na frente do que
+/// manda pelo pipe, às vezes depois de uma quebra de linha; o JSON com ele é
+/// recusado. Um BOM nunca é conteúdo, então sai em todo sistema, e o espaço
+/// antes dele fica como veio.
+fn without_bom(mut bytes: Vec<u8>) -> Vec<u8> {
+    let start = bytes
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .unwrap_or(bytes.len());
+    if bytes[start..].starts_with(BOM) {
+        bytes.drain(start..start + BOM.len());
+    }
+    bytes
 }
 
 /// `curl -sS --fail-with-body`: o corpo sai no stdout mesmo com erro HTTP, e o
