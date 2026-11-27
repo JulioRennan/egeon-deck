@@ -118,8 +118,9 @@ está em uso: não tocar no bundle nem nos arquivos dele.
 
 Decisão 52. O GitHub Actions (`.github/workflows/release.yml`) compila e a
 máquina do Julio assina e publica (`scripts/release.sh`). Alvos por enquanto:
-**macOS Apple Silicon** (`EgeonDeck-macos-arm64.zip`) e **Linux x86_64**
-(`EgeonDeck-linux-x86_64.AppImage` e `egeon-deck_X.Y.Z_amd64.deb`). Só com
+**macOS Apple Silicon** (`EgeonDeck-macos-arm64.zip`), **Linux x86_64**
+(`EgeonDeck-linux-x86_64.AppImage` e `egeon-deck_X.Y.Z_amd64.deb`) e **Windows
+x64** (`EgeonDeck-windows-x86_64.zip`, sem atualização automática). Só com
 pedido explícito do Julio.
 
 Beta é versão com sufixo (`2.0.0-beta.1`): sai como **pré-release**, fora da

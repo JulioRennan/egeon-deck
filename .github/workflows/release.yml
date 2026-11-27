@@ -96,8 +96,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  # Windows (decisão 54). Ainda fora do `needs` da release: o porte está em
-  # curso, e uma falha aqui não pode segurar a beta do macOS e do Linux.
+  # Windows (decisão 54).
   windows:
     runs-on: windows-2022
     defaults:
@@ -176,7 +175,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [macos, linux]
+    needs: [macos, linux, windows]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
