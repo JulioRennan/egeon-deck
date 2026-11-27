@@ -1,6 +1,7 @@
 //! Traz o libghostty-vt do projeto Ghostty e o liga estático (decisões 14 e 52
-//! de `docs/migracao/3-proposta.html`): no macOS, o binário oficial; no Linux,
-//! que não tem binário oficial, compilado aqui do tarball de fonte com Zig.
+//! de `docs/migracao/3-proposta.html`): no macOS e no Windows, o binário
+//! oficial (decisão 54); no Linux, que não tem binário oficial, compilado aqui
+//! do tarball de fonte com Zig.
 //!
 //! A origem é fixa: versão, URLs e sha256 abaixo, tirados do `SHA256SUMS`
 //! publicado com a versão. O que foi baixado é conferido toda vez que este
@@ -24,6 +25,13 @@ const APPLE_LIB_IN_ZIP: &str = "ghostty-vt.xcframework/macos-arm64_x86_64/libgho
 /// O `.a` acima, tirado do zip conferido. Conferir o que vai para o link, e não
 /// só o zip, pega o cache mexido sem extrair de novo a cada build.
 const APPLE_LIB_SHA256: &str = "5388c66b81d8fadc63d4fd6ca8984d2be4645a98d2397ad9d43437a6b96c7cf5";
+/// `ghostty-vt-1.0.1-x86_64-windows-gnu.zip` em `SHA256SUMS` da 1.0.1.
+const WINDOWS_SHA256: &str = "8e2eb9e1822e85d786b456c8beb86f49d09c318c91f0c2913f91e7ffa12cda29";
+/// A biblioteca estática do zip. Ela usa símbolos do runtime do mingw e seções
+/// que o `link.exe` da Microsoft recusa (README do zip): por isso o alvo é o
+/// `x86_64-pc-windows-gnu`.
+const WINDOWS_LIB_IN_ZIP: &str = "ghostty-vt-1.0.1-x86_64-windows-gnu/lib/ghostty-vt-static.lib";
+const WINDOWS_LIB_SHA256: &str = "1823d68fdaf030aba675ee992882f6bd507c00c8789a8f62e8fe634a7395bbd3";
 /// `libghostty-vt-1.0.1.tar.gz` e `-deps.tar.gz` em `SHA256SUMS` da 1.0.1: o
 /// fonte e os pacotes Zig de que ele precisa, para compilar sem rede.
 const SOURCE_SHA256: &str = "333dfce97641ef9b536bb9e08907ad86abaaada50e8f7417b70d9284adef37aa";
@@ -55,6 +63,11 @@ fn main() -> Res<()> {
     };
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=static=ghostty-vt");
+    if env::var("CARGO_CFG_TARGET_OS")? == "windows" {
+        // O README do zip: a estática importa do `ntdll` além do que o mingw
+        // já liga.
+        println!("cargo:rustc-link-lib=dylib=ntdll");
+    }
     Ok(())
 }
 
@@ -62,6 +75,7 @@ fn official_lib() -> Res<PathBuf> {
     match env::var("CARGO_CFG_TARGET_OS")?.as_str() {
         "macos" => apple_lib(&cache_dir()?),
         "linux" => linux_lib(&cache_dir()?),
+        "windows" => windows_lib(&cache_dir()?),
         os => Err(format!(
             "libghostty-vt {VERSION}: sem receita para o alvo {os}. \
              Aponte {LIB_DIR_ENV} para uma pasta com libghostty-vt.a."
@@ -104,6 +118,34 @@ fn apple_lib(cache: &Path) -> Res<PathBuf> {
     fs::create_dir_all(&lib_dir)?;
     extract(&zip_path, APPLE_LIB_IN_ZIP, &lib)?;
     check(&lib, APPLE_LIB_SHA256)?;
+    Ok(lib_dir)
+}
+
+/// O zip oficial só traz x86_64 e aarch64 para o ABI gnu; a decisão 54 é só
+/// o x86_64. A estática vem com o nome do MSVC (`.lib`) e é extraída com o do
+/// mingw (`libghostty-vt.a`), que é o que o `-l` do ld procura.
+fn windows_lib(cache: &Path) -> Res<PathBuf> {
+    let arch = env::var("CARGO_CFG_TARGET_ARCH")?;
+    let abi = env::var("CARGO_CFG_TARGET_ENV")?;
+    if arch != "x86_64" || abi != "gnu" {
+        return Err(format!(
+            "libghostty-vt {VERSION} no Windows: só o alvo x86_64-pc-windows-gnu \
+             (o alvo é {arch}-{abi}). A estática não liga com o link.exe do MSVC."
+        )
+        .into());
+    }
+    let lib_dir = cache.join("x86_64-windows-gnu").join("lib");
+    let lib = lib_dir.join("libghostty-vt.a");
+    println!("cargo:rerun-if-changed={}", lib.display());
+    if lib.exists() && sha256(&lib)? == WINDOWS_LIB_SHA256 {
+        return Ok(lib_dir);
+    }
+
+    let name = format!("ghostty-vt-{VERSION}-x86_64-windows-gnu.zip");
+    let zip_path = fetch(cache, &name, WINDOWS_SHA256)?;
+    fs::create_dir_all(&lib_dir)?;
+    extract(&zip_path, WINDOWS_LIB_IN_ZIP, &lib)?;
+    check(&lib, WINDOWS_LIB_SHA256)?;
     Ok(lib_dir)
 }
 

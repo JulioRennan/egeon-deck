@@ -30,7 +30,7 @@ pub fn config_file(config_dir: Option<&str>, home: &Path) -> PathBuf {
 /// O caminho como o Claude grava a chave: `realpath`, que mantém o `/private`
 /// de `/private/tmp`.
 pub fn real(path: &Path) -> String {
-    fs::canonicalize(path)
+    crate::commons::paths::canonicalize(path)
         .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()
         .into_owned()

@@ -228,10 +228,10 @@ impl Actor {
                 .filter_map(|n| n.cwd.as_deref())
                 .map(|cwd| {
                     let path = expand_tilde(cwd, home);
-                    if path.starts_with('/') {
+                    if crate::features::path_text::is_absolute(&path) {
                         path
                     } else {
-                        format!("{root}/{path}")
+                        crate::features::path_text::join(&root, &path)
                     }
                 });
             let list = paths.entry(bench.name.clone()).or_default();
