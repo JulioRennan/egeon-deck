@@ -843,7 +843,11 @@ mod tests {
         assert_eq!(reply.json["ok"], true);
         assert_eq!(reply.json["workbench"], "deck");
         let archived = reply.json["archived"].as_str().expect("caminho");
-        assert!(archived.contains("/w1/chat-archive/chat-"), "{archived}");
+        let sep = std::path::MAIN_SEPARATOR;
+        assert!(
+            archived.contains(&format!("{sep}w1{sep}chat-archive{sep}chat-")),
+            "{archived}"
+        );
         assert!(std::path::Path::new(archived).exists());
         assert!(!dir.path().join("w1/chat.jsonl").exists());
         assert!(matches!(effects.as_slice(), [ChatEffect::Ui(update)] if update.rev == 3));

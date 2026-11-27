@@ -30,7 +30,10 @@ pub enum Language {
 
 impl Language {
     pub fn detect_path(path: &str) -> Language {
-        let name = path.split('/').rfind(|s| !s.is_empty()).unwrap_or(path);
+        let name = path
+            .split(crate::features::path_text::is_separator)
+            .rfind(|s| !s.is_empty())
+            .unwrap_or(path);
         let Some(dot) = name.rfind('.').filter(|d| *d != 0) else {
             return Language::Plain;
         };

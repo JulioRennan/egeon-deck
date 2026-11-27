@@ -232,7 +232,10 @@ pub fn expand_tilde(path: &str, home: &Path) -> PathBuf {
     if path == "~" {
         return home.to_path_buf();
     }
-    match path.strip_prefix("~/") {
+    match path
+        .strip_prefix('~')
+        .and_then(|p| p.strip_prefix(crate::features::path_text::is_separator))
+    {
         Some(rest) => home.join(rest),
         None => PathBuf::from(path),
     }
@@ -317,13 +320,10 @@ impl AgentProfile {
             .iter()
             .flatten()
             .map(|(key, value)| {
-                let mut resolved = value.replace("$HOME", &home_text);
-                if resolved == "~" {
-                    resolved = home_text.to_string();
-                }
-                if let Some(rest) = resolved.strip_prefix("~/") {
-                    resolved = format!("{home_text}/{rest}");
-                }
+                let resolved = crate::features::path_text::expand_tilde(
+                    &value.replace("$HOME", &home_text),
+                    &home_text,
+                );
                 (key.clone(), resolved)
             })
             .collect()
