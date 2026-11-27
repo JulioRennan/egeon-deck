@@ -110,4 +110,64 @@ void keyMonitorTests() {
       expect(reachesPty(meta: true, character: 'v'), isTrue);
     });
   });
+
+  group('texto direto no Windows', () {
+    String? typed(
+      KeyEvent event, {
+      bool ctrl = false,
+      bool alt = false,
+      bool meta = false,
+      TargetPlatform platform = TargetPlatform.windows,
+    }) => typedTextOnWindows(
+      event,
+      ctrl: ctrl,
+      alt: alt,
+      meta: meta,
+      platform: platform,
+    );
+
+    final h = down(LogicalKeyboardKey.keyH, PhysicalKeyboardKey.keyH, 'h');
+
+    test('a letra digitada vai como texto', () {
+      expect(typed(h), 'h');
+      expect(
+        typed(down(LogicalKeyboardKey.space, PhysicalKeyboardKey.space, ' ')),
+        ' ',
+      );
+    });
+
+    test('fora do Windows continua com o método de entrada', () {
+      expect(typed(h, platform: TargetPlatform.macOS), isNull);
+      expect(typed(h, platform: TargetPlatform.linux), isNull);
+    });
+
+    test('Ctrl ou Alt sozinhos são atalho, não texto', () {
+      expect(typed(h, ctrl: true), isNull);
+      expect(typed(h, alt: true), isNull);
+    });
+
+    test('⌘, soltar a tecla, tecla morta e controle não digitam', () {
+      expect(typed(h, meta: true), isNull);
+      expect(
+        typed(
+          KeyUpEvent(
+            physicalKey: PhysicalKeyboardKey.keyH,
+            logicalKey: LogicalKeyboardKey.keyH,
+            timeStamp: Duration.zero,
+          ),
+        ),
+        isNull,
+      );
+      expect(
+        typed(down(LogicalKeyboardKey.keyE, PhysicalKeyboardKey.keyE)),
+        isNull,
+      );
+      expect(
+        typed(
+          down(LogicalKeyboardKey.keyC, PhysicalKeyboardKey.keyC, '\u0003'),
+        ),
+        isNull,
+      );
+    });
+  });
 }

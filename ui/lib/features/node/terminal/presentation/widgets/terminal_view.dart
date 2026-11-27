@@ -171,6 +171,19 @@ class _TerminalViewState extends State<TerminalView> {
         return KeyEventResult.handled;
       }
     }
+    // Antes do mapper: o AltGr (Ctrl+Alt) digita, e o mapper o tomaria por
+    // Ctrl+Alt+letra. Enter, Tab, Esc e Backspace chegam com caractere de
+    // controle, as setas sem caractere: continuam no mapper.
+    final typed = typedTextOnWindows(
+      event,
+      ctrl: keyboard.isControlPressed,
+      alt: keyboard.isAltPressed,
+      meta: keyboard.isMetaPressed,
+    );
+    if (typed != null) {
+      widget.onText(typed);
+      return KeyEventResult.handled;
+    }
     final key = mapTerminalKey(event, keyboard);
     if (key == null) return KeyEventResult.ignored;
     widget.onKey(key);

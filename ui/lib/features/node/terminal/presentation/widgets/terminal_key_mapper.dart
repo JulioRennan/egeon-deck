@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../domain/entities/terminal_key.dart';
@@ -68,6 +69,32 @@ TerminalKey? mapTerminalKey(KeyEvent event, HardwareKeyboard keyboard) {
     return TerminalKey(key: label, ctrl: ctrl, alt: alt, shift: shift);
   }
   return null;
+}
+
+/// O texto que a tecla digita, para entregar sem passar pelo método de entrada.
+///
+/// No Windows o texto do terminal não chegava pelo `TextInputClient` (a caixa
+/// de chat, um `TextField`, recebia; o terminal só via Enter e Backspace). Lá a
+/// tecla já traz o caractere do layout, então a UI o manda direto e devolve
+/// "tratada", o que também impede o motor de entregar o mesmo texto de novo.
+/// Sem caractere (tecla morta, modificador) ou com Ctrl/Alt sozinhos (que são
+/// atalho, não texto) devolve `null` e a tecla segue o caminho de sempre. Ctrl
+/// e Alt juntos são o AltGr do Windows, que digita (`@`, `/`, `€`).
+String? typedTextOnWindows(
+  KeyEvent event, {
+  required bool ctrl,
+  required bool alt,
+  required bool meta,
+  TargetPlatform? platform,
+}) {
+  if ((platform ?? defaultTargetPlatform) != TargetPlatform.windows) {
+    return null;
+  }
+  if (event is KeyUpEvent || meta || ctrl != alt) return null;
+  final character = event.character;
+  if (character == null || character.isEmpty) return null;
+  final printable = character.runes.every((r) => r >= 0x20 && r != 0x7f);
+  return printable ? character : null;
 }
 
 bool _isControl(String s) => s.runes.length == 1 && s.runes.first < 0x20;
