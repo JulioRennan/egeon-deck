@@ -18,6 +18,7 @@ import '../../domain/entities/canvas_component.dart';
 import '../../domain/entities/canvas_tool.dart';
 import 'canvas_bench_actions.dart';
 import 'canvas_menus.dart';
+import '../../../../commons/utils/app_shortcut.dart';
 
 /// A barra de ações do canvas, em vidro, no topo e ao centro: ferramentas,
 /// zoom, a bancada (template e worktree) e enquadrar. É o único desfoque do
@@ -118,7 +119,7 @@ class CanvasToolbar extends StatelessWidget {
             key: const ValueKey('zoom-out'),
             icon: EgIcons.minus,
             tooltip: 'Afastar',
-            shortcut: '⌘−',
+            shortcut: appShortcutLabel('−', macOnly: true),
             onPressed: () => onZoom(-1),
           ),
           _ZoomLabel(zoom: zoom, onPressed: onResetZoom),
@@ -126,7 +127,7 @@ class CanvasToolbar extends StatelessWidget {
             key: const ValueKey('zoom-in'),
             icon: EgIcons.plus,
             tooltip: 'Aproximar',
-            shortcut: '⌘=',
+            shortcut: appShortcutLabel('=', macOnly: true),
             onPressed: () => onZoom(1),
           ),
           if (actions != null || onPickColor != null) ...[
@@ -209,7 +210,7 @@ class _ZoomLabel extends StatelessWidget {
     final c = context.eg;
     return Tooltip(
       message: 'Voltar para 100%',
-      shortcut: '⌘0',
+      shortcut: appShortcutLabel('0', macOnly: true),
       child: Pressable(
         key: const ValueKey('zoom-label'),
         onPressed: onPressed,

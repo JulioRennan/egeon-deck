@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../../../commons/utils/app_shortcut.dart';
 import '../../../../core/domain/entities/view_mode.dart';
 
 /// O que um atalho da casca pode pedir.
@@ -52,7 +53,8 @@ class ShellShortcutActions {
 
 /// Os atalhos do app que valem em qualquer lugar da janela, com o terminal
 /// focado ou não. Teclas com ⌘ nunca chegam ao terminal — só o colar —, então
-/// o evento sobe até aqui.
+/// o evento sobe até aqui. Fora do macOS o modificador é Ctrl+Shift no lugar
+/// do ⌘ (`app_shortcut.dart`, decisão 55).
 ///
 /// - ⌘/ abre e fecha a gaveta de bancadas · ⌘K abre para buscar
 /// - ⌥⌘1 canvas · ⌥⌘2 chat
@@ -78,7 +80,11 @@ class ShellShortcuts extends StatelessWidget {
 
   KeyEventResult _arrows(FocusNode node, KeyEvent event) {
     // Segurar a tecla repete a troca, como o menu do AppKit.
-    if (event is KeyUpEvent || !HardwareKeyboard.instance.isMetaPressed) {
+    // Só no macOS: fora dele as setas com Ctrl+Shift são do terminal e as abas
+    // trocam por Ctrl+Tab e Ctrl+PgUp/PgDn.
+    if (!usesCommandKey ||
+        event is KeyUpEvent ||
+        !isAppModifierPressed(HardwareKeyboard.instance)) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
@@ -103,41 +109,43 @@ class ShellShortcuts extends StatelessWidget {
 
   Widget _shortcuts() => CallbackShortcuts(
     bindings: {
-      const SingleActivator(LogicalKeyboardKey.slash, meta: true):
-          actions.toggleSidebar,
-      const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
-          actions.findBench,
-      const SingleActivator(
-        LogicalKeyboardKey.digit1,
-        meta: true,
-        alt: true,
-      ): () =>
-          actions.showView(ViewMode.canvas),
-      const SingleActivator(
-        LogicalKeyboardKey.digit2,
-        meta: true,
-        alt: true,
-      ): () =>
-          actions.showView(ViewMode.chat),
-      const SingleActivator(LogicalKeyboardKey.bracketRight, meta: true):
-          actions.forward,
-      const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true):
-          actions.back,
-      const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
-          actions.closeTab,
+      appActivator(LogicalKeyboardKey.slash): actions.toggleSidebar,
+      appActivator(LogicalKeyboardKey.keyK): actions.findBench,
+      // ⌥⌘1 e ⌥⌘2 só no macOS: fora dele Ctrl+Shift+1…9 são as abas, e o
+      // canvas e o chat ficam no botão da barra de cima e no menu ☰.
+      if (usesCommandKey) ...{
+        appActivator(LogicalKeyboardKey.digit1, alt: true): () =>
+            actions.showView(ViewMode.canvas),
+        appActivator(LogicalKeyboardKey.digit2, alt: true): () =>
+            actions.showView(ViewMode.chat),
+      },
+      appActivator(LogicalKeyboardKey.bracketRight): actions.forward,
+      appActivator(LogicalKeyboardKey.bracketLeft): actions.back,
+      appActivator(LogicalKeyboardKey.keyW): actions.closeTab,
       for (var n = 1; n <= 9; n++)
-        SingleActivator(_digits[n - 1], meta: true): () => actions.pickTab(n),
+        appActivator(_digits[n - 1]): () => actions.pickTab(n),
       // ⇧⌘T e não ⌘T: no Swift o ⌘T arma a ferramenta de terminal.
-      const SingleActivator(LogicalKeyboardKey.keyT, meta: true, shift: true):
-          ?actions.copyTargets,
-      const SingleActivator(LogicalKeyboardKey.keyP, meta: true, alt: true):
-          ?actions.showProcesses,
-      const SingleActivator(LogicalKeyboardKey.equal, meta: true):
-          ?actions.zoomIn,
-      const SingleActivator(LogicalKeyboardKey.minus, meta: true):
-          ?actions.zoomOut,
-      const SingleActivator(LogicalKeyboardKey.digit0, meta: true):
-          ?actions.resetZoom,
+      appActivator(LogicalKeyboardKey.keyT, shift: true): ?actions.copyTargets,
+      appActivator(LogicalKeyboardKey.keyP, alt: true): ?actions.showProcesses,
+      // Zoom por teclado só no macOS: fora dele Ctrl+Shift+- e Ctrl+Shift+=
+      // chegam ao terminal, e o zoom fica na Ctrl+roda, no botão e no ☰.
+      if (usesCommandKey) ...{
+        appActivator(LogicalKeyboardKey.equal): ?actions.zoomIn,
+        appActivator(LogicalKeyboardKey.minus): ?actions.zoomOut,
+        appActivator(LogicalKeyboardKey.digit0): ?actions.resetZoom,
+      } else ...{
+        const SingleActivator(LogicalKeyboardKey.tab, control: true):
+            actions.nextTab,
+        const SingleActivator(
+          LogicalKeyboardKey.tab,
+          control: true,
+          shift: true,
+        ): actions.previousTab,
+        const SingleActivator(LogicalKeyboardKey.pageDown, control: true):
+            actions.nextTab,
+        const SingleActivator(LogicalKeyboardKey.pageUp, control: true):
+            actions.previousTab,
+      },
     },
     child: child,
   );
