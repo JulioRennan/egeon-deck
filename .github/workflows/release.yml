@@ -166,6 +166,12 @@ jobs:
         run: |
           mkdir -p dist
           cd ui/build/windows/x64/runner/Release
+          # O runner do Flutter liga no runtime do Visual C++, que o runner do
+          # CI tem e um Windows limpo não: sem estas três, "MSVCP140.dll não
+          # foi encontrado" ao abrir. A Microsoft permite levá-las junto do exe.
+          for dll in msvcp140.dll vcruntime140.dll vcruntime140_1.dll; do
+            cp "/c/Windows/System32/$dll" .
+          done
           7z a -tzip "$GITHUB_WORKSPACE/dist/EgeonDeck-windows-x86_64.zip" . >/dev/null
       - uses: actions/upload-artifact@v4
         with:
