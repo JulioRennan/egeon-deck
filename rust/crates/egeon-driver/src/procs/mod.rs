@@ -1,6 +1,7 @@
 //! Tabela de processos e sinais: implementa `ports::procs::ProcessDriver`.
 
 use std::collections::HashMap;
+#[cfg(unix)]
 use std::io;
 
 use egeon_core::ports::procs::{
@@ -15,10 +16,23 @@ use macos as platform;
 mod linux;
 #[cfg(target_os = "linux")]
 use linux as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
+#[cfg(windows)]
+use windows::send;
 
 /// A pasta atual de um processo, para quem já tem o pid (o terminal).
 pub(crate) fn cwd_of(pid: u32) -> Option<std::path::PathBuf> {
     platform::cwd_of(pid)
+}
+
+/// Pid, pai e nome de cada processo do usuário, para quem já está no driver
+/// (o Job do terminal no Windows). Vazio se a tabela não abre.
+#[cfg(windows)]
+pub(crate) fn tree() -> Vec<RawProcess> {
+    platform::list(ProcessDetail::Tree).unwrap_or_default()
 }
 
 /// O driver de processos do sistema em que o programa roda.
@@ -43,6 +57,7 @@ impl ProcessDriver for SystemProcs {
     }
 }
 
+#[cfg(unix)]
 /// `kill(0)` e `kill(-1)` atingiriam o grupo do chamador ou o sistema todo, e o
 /// pid 1 é o `launchd`: nada disso passa por um pid vindo da tabela.
 fn send(pid: u32, signal: ProcessSignal) -> Result<(), ProcessError> {

@@ -1,6 +1,8 @@
 //! Sinais de verdade enviados ao próprio processo de teste. Um teste só: os
 //! sinais são do processo inteiro e se cruzariam entre testes em paralelo.
 
+#![cfg(unix)]
+
 use std::time::Duration;
 
 use egeon_driver::signals::shutdown;
