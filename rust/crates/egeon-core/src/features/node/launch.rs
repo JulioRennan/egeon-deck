@@ -208,11 +208,17 @@ fn paragraphs(parts: &[&str]) -> String {
 /// sobe sem vizinho pode ganhar um no minuto seguinte. O texto é curto de
 /// propósito: ele entra em toda conversa deste terminal, e é prefixo de cache —
 /// quanto menos muda, melhor.
-pub fn catalog(node: &NodeConfig) -> Option<String> {
+///
+/// `syntax` é a do shell em que o agente roda os comandos: no PowerShell o
+/// texto vai por here-string, e não por heredoc (decisão 54).
+pub fn catalog(node: &NodeConfig, syntax: ShellSyntax) -> Option<String> {
     if node.kind != NodeKind::Agent {
         return None;
     }
-    let mut out = CATALOG.to_owned();
+    let mut out = match syntax {
+        ShellSyntax::Posix => CATALOG.to_owned(),
+        ShellSyntax::PowerShell => POWERSHELL_CATALOG.to_owned(),
+    };
     if node.is_maestro() {
         out.push_str("\n\n");
         out.push_str(MAESTRO_SECTION);
@@ -234,10 +240,35 @@ const COMMANDS: &str = "  egeon peers                     quem você pode aciona
   pedido: … — entrega: …
   MB";
 
-static CATALOG: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+/// O padrão do PowerShell 5.1 para o que vai a um programa pelo pipe é
+/// ASCII, que troca acento por `?`; o `'@` que fecha o here-string só vale
+/// no começo da linha, por isso o exemplo não tem recuo.
+const POWERSHELL_COMMANDS: &str = "  egeon peers                     quem você pode acionar agora
+  egeon status                    quem VOCÊ é: endereço, papel, bancada
+  egeon peek <endereço> [linhas]  o que ele mostra agora, sem interromper
+  egeon send <endereço>           manda para ele o texto do stdin
+  egeon trace                     registra o texto do stdin na trilha da bancada
+
+No PowerShell, defina o UTF-8 sem BOM antes de passar texto ao `egeon` (o padrão troca \
+acento por `?`) e mande o texto por here-string, com o `'@` que fecha no começo da linha:
+
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+@'
+(o que você quer dizer)
+'@ | egeon send <endereço>
+@'
+pedido: … — entrega: …
+'@ | egeon trace";
+
+static CATALOG: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| catalog_with(COMMANDS));
+
+static POWERSHELL_CATALOG: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| catalog_with(POWERSHELL_COMMANDS));
+
+fn catalog_with(commands: &str) -> String {
     paragraphs(&[
         "Este terminal é um nó do Egeon Deck e tem vizinhos endereçáveis. Use o comando `egeon`:",
-        COMMANDS,
+        commands,
         "Mensagem que chega marcada com `[ED] mensagem de <alguém>` veio de um terminal que \
          parou e espera o seu resultado — ele não vê a sua tela. Termine respondendo a ele com \
          `egeon send`, uma ou duas linhas: o que você entregou, ou por que não deu. E se você \
@@ -255,7 +286,7 @@ static CATALOG: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
          que você entregou (ou onde parou). Quem escreveu, CLI, modelo e conversa são \
          carimbados pelo app; não os repita.",
     ])
-});
+}
 
 /// O que só o maestro lê (ADR-066). Curto como o resto do catálogo: o manual
 /// mora na skill `egeon-maestro` e no `egeon guide`.

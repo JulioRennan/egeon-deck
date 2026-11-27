@@ -130,7 +130,7 @@ impl Actor {
         let plan = launch_plan(
             node,
             profile.as_ref(),
-            catalog(node).as_deref(),
+            catalog(node, shell.syntax()).as_deref(),
             rules_for(node, bench.rules.as_deref()).as_deref(),
             &hook_file,
             &shell.interactive(Role::Shell, &bash_dir),

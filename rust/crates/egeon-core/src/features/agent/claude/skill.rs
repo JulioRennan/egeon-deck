@@ -15,10 +15,12 @@
 //! `--settings`): não há flag que entregue skill de fora. Uma pasta só, com nome
 //! nosso, reescrita a cada arranque; nada mais na config é tocado (ADR-054).
 
+use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::features::agent::model::{AgentProfile, expand_tilde};
+use crate::features::terminal::shell::ShellSyntax;
 
 /// O nome da pasta é o nome da skill: é dele que sai o `/egeon`.
 pub const NAME: &str = "egeon";
@@ -45,14 +47,79 @@ pub fn body() -> &'static str {
     BODY.trim_end_matches('\n')
 }
 
+const POSIX_MESSAGES: &str = "    egeon send <endereço> <<'MB'    manda o texto para ele
+    (o que você quer dizer)
+    MB
+    egeon trace <<'MB'              registra na trilha da bancada
+    pedido: … — entrega: …
+    MB
+";
+
+/// O padrão do PowerShell 5.1 para o que vai a um programa pelo pipe é
+/// ASCII, que troca acento por `?`; o `'@` que fecha o here-string só vale no
+/// começo da linha, por isso o exemplo sai do bloco recuado.
+const POWERSHELL_MESSAGES: &str =
+    "    egeon send <endereço>           manda para ele o texto do stdin
+    egeon trace                     registra o texto do stdin na trilha da bancada
+
+No PowerShell, defina o UTF-8 sem BOM antes de passar texto ao `egeon`
+(o padrão do PowerShell 5.1 troca acento por `?`) e mande o texto por
+here-string, com o `'@` que fecha no começo da linha:
+
+```powershell
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+@'
+(o que você quer dizer)
+'@ | egeon send <endereço>
+@'
+pedido: … — entrega: …
+'@ | egeon trace
+```
+";
+
+const POSIX_TASKS: &str =
+    "    egeon task ask <id> <<'MB'      pergunta sobre ela — aparece na tarefa
+    (a pergunta)
+    MB
+    egeon task note <id> <<'MB'     comenta nela: achado, decisão, o que fez
+    (o comentário)
+    MB
+";
+
+const POWERSHELL_TASKS: &str =
+    "    egeon task ask <id>             pergunta sobre ela (texto no stdin) — aparece na tarefa
+    egeon task note <id>            comenta nela (texto no stdin): achado, decisão, o que fez
+
+```powershell
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+@'
+(a pergunta)
+'@ | egeon task ask <id>
+```
+";
+
+/// A skill para o shell em que o agente roda os comandos: no PowerShell
+/// (Windows, decisão 54) os exemplos são em PowerShell, no lugar do heredoc
+/// do bash; o resto é o mesmo texto.
+pub fn text(syntax: ShellSyntax) -> Cow<'static, str> {
+    match syntax {
+        ShellSyntax::Posix => Cow::Borrowed(body()),
+        ShellSyntax::PowerShell => Cow::Owned(
+            body()
+                .replacen(POSIX_MESSAGES, POWERSHELL_MESSAGES, 1)
+                .replacen(POSIX_TASKS, POWERSHELL_TASKS, 1),
+        ),
+    }
+}
+
 /// As skills que o app publica: a dos vizinhos e o manual do maestro (ADR-066).
 /// Vão as duas para toda configuração — a do maestro diz logo no começo que só
-/// vale para o terminal que o usuário marcou.
-pub fn published(maestro: &PublishedSkill) -> Vec<PublishedSkill> {
+/// vale para o terminal que o usuário marcou. `syntax` é a do shell do usuário.
+pub fn published(maestro: &PublishedSkill, syntax: ShellSyntax) -> Vec<PublishedSkill> {
     vec![
         PublishedSkill {
             name: NAME.to_owned(),
-            body: body().to_owned(),
+            body: text(syntax).into_owned(),
         },
         maestro.clone(),
     ]

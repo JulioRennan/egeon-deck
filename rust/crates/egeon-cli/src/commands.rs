@@ -17,8 +17,12 @@ use crate::http::{self, HttpError, Limit};
 pub const USAGE: &str = include_str!("usage.txt");
 
 /// O manual do maestro, embutido: um CLI sem skill precisa dele mesmo quando o
-/// maestro ainda não foi ligado.
+/// maestro ainda não foi ligado. No Windows, o de exemplos em PowerShell
+/// (decisão 54).
+#[cfg(not(windows))]
 const GUIDE: &str = include_str!("guide.md");
+#[cfg(windows)]
+const GUIDE: &str = include_str!("guide-powershell.md");
 
 pub struct Streams<'a> {
     pub stdin: &'a mut dyn Read,
@@ -203,10 +207,35 @@ fn post(io: &mut Streams, sock: &Path, target: Vec<u8>, body: Body) -> i32 {
             let mut bytes = Vec::new();
             // Stdin ilegível vale como vazio: o app responde o que faltou.
             let _ = io.stdin.read_to_end(&mut bytes);
-            bytes
+            if cfg!(windows) {
+                without_bom(bytes)
+            } else {
+                bytes
+            }
         }
     };
     call(io, sock, "POST", &target, Some(&bytes))
+}
+
+const BOM: &[u8] = b"\xEF\xBB\xBF";
+
+/// O PowerShell 5.1 com `$OutputEncoding` UTF-8 põe o BOM na frente do que
+/// manda pelo pipe, às vezes depois de uma quebra de linha, e a ferramenta do
+/// Claude Code chega a pôr dois; o JSON com eles é recusado. Só no Windows
+/// (decisão 54): no macOS e no Linux o stdin segue como no legado. O espaço
+/// entre eles fica como veio.
+fn without_bom(mut bytes: Vec<u8>) -> Vec<u8> {
+    let mut start = 0;
+    loop {
+        start += bytes[start..]
+            .iter()
+            .take_while(|b| b.is_ascii_whitespace())
+            .count();
+        if !bytes[start..].starts_with(BOM) {
+            return bytes;
+        }
+        bytes.drain(start..start + BOM.len());
+    }
 }
 
 /// `curl -sS --fail-with-body`: o corpo sai no stdout mesmo com erro HTTP, e o

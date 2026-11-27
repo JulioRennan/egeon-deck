@@ -13,6 +13,7 @@ use super::claude::profile::claude_code;
 use super::claude::slash_catalog::{self, Frontmatter};
 use super::claude::{hooks, model_registry, skill, trust, trust_seeder};
 use super::*;
+use crate::features::terminal::shell::ShellSyntax;
 
 fn fresh_dir(name: &str) -> tempfile::TempDir {
     tempfile::Builder::new()
@@ -1425,7 +1426,7 @@ fn install_escreve_em_toda_config_e_reescreve() {
         name: "egeon-maestro".into(),
         body: "---\nname: egeon-maestro\n---\nmanual".into(),
     };
-    let published = skill::published(&maestro);
+    let published = skill::published(&maestro, ShellSyntax::Posix);
 
     let written = skill::install(&configs, &published, None);
     let expected: Vec<PathBuf> = configs
@@ -1461,6 +1462,30 @@ fn install_escreve_em_toda_config_e_reescreve() {
     );
 }
 
+/// Decisão 54: no PowerShell a skill dos vizinhos manda o UTF-8 sem BOM e o
+/// here-string; no macOS e no Linux o texto é o de antes.
+#[test]
+fn no_powershell_a_skill_traz_os_exemplos_em_powershell() {
+    assert_eq!(skill::text(ShellSyntax::Posix), skill::body());
+    let powershell = skill::text(ShellSyntax::PowerShell);
+    assert!(!powershell.contains("<<"), "{powershell}");
+    let lines: Vec<&str> = powershell.lines().collect();
+    let count = |wanted: &str| lines.iter().filter(|l| **l == wanted).count();
+    assert_eq!(
+        (
+            count("$OutputEncoding = [Text.UTF8Encoding]::new($false)"),
+            count("@'"),
+            count("'@ | egeon send <endereço>"),
+            count("'@ | egeon trace"),
+            count("'@ | egeon task ask <id>"),
+        ),
+        (2, 3, 1, 1, 1),
+        "{powershell}"
+    );
+    assert!(powershell.contains("    egeon task done <id> [nota]     marca a tarefa como feita"));
+    assert!(powershell.ends_with(skill::body().lines().last().unwrap()));
+}
+
 #[test]
 fn install_apaga_a_pasta_da_primeira_tentativa() {
     let root = fresh_dir("skill-");
@@ -1469,10 +1494,13 @@ fn install_apaga_a_pasta_da_primeira_tentativa() {
     let configs = vec![root.path().join(".claude")];
     skill::install(
         &configs,
-        &skill::published(&skill::PublishedSkill {
-            name: "m".into(),
-            body: "m".into(),
-        }),
+        &skill::published(
+            &skill::PublishedSkill {
+                name: "m".into(),
+                body: "m".into(),
+            },
+            ShellSyntax::Posix,
+        ),
         Some(&legacy),
     );
     assert!(!legacy.exists());
@@ -1970,7 +1998,11 @@ fn gravacao_atomica_nao_deixa_arquivo_temporario() {
         name: "m".into(),
         body: "m".into(),
     };
-    let written = skill::install(&configs, &skill::published(&maestro), None);
+    let written = skill::install(
+        &configs,
+        &skill::published(&maestro, ShellSyntax::Posix),
+        None,
+    );
     for file in written {
         let tmp = format!("{}.tmp", file.display());
         assert!(!Path::new(&tmp).exists(), "{tmp}");
@@ -2041,7 +2073,9 @@ fn resolve_acha_o_binario_com_o_sufixo_de_executavel_do_sistema() {
 /// maestro (`maestro::guide`); aqui só a régua que a publicação exige.
 #[test]
 fn skill_do_maestro_tem_frontmatter_legivel_e_com_porteiro() {
-    let skill_text = crate::features::maestro::guide::skill();
+    let skill_text = crate::features::maestro::guide::skill(
+        crate::features::terminal::shell::ShellSyntax::Posix,
+    );
     let front = frontmatter_of(&skill_text);
     assert!(front.contains("name: egeon-maestro"));
     assert!(front.contains("description: >-"));
