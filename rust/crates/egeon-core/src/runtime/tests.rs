@@ -126,6 +126,7 @@ impl Harness {
             std::fs::write(&file, text).unwrap();
             // O que mora em `bin/` é programa: o catálogo só vale para um
             // `claude` que o PATH do filho acha e que roda.
+            #[cfg(unix)]
             if name.starts_with("bin/") {
                 use std::os::unix::fs::PermissionsExt;
                 std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -347,11 +348,17 @@ async fn cria_terminal_com_shell_de_login_na_pasta() {
         vec![&("TERM".to_owned(), "xterm-256color".to_owned())]
     );
     // O `egeon` mora na pasta de dados, como `Flavor.config("bin")`.
-    let bin = h._home.0.join("data/bin").to_string_lossy().into_owned();
+    let bin = h
+        ._home
+        .0
+        .join("data")
+        .join("bin")
+        .to_string_lossy()
+        .into_owned();
     assert!(
         spec.env
             .iter()
-            .any(|(k, v)| k == "PATH" && v.starts_with(&bin))
+            .any(|(k, v)| k.eq_ignore_ascii_case("PATH") && v.starts_with(&bin))
     );
     // O ambiente do filho não leva as `CLAUDE_CODE*` nem a procedência
     // herdada (quem marca é o terminal que lança), seja o que o teste herdou.
@@ -1187,6 +1194,7 @@ async fn nos_sem_frame_usam_a_janela_da_ui_ao_abrir() {
 /// Decisão 39: a pasta que o sistema não deixa ler trava a bancada; "pedir
 /// de novo" confere outra vez; liberada, a cortina sai na releitura. Os
 /// botões não abrem nada na tela (o `FakeOpener` só anota).
+#[cfg(unix)]
 #[tokio::test]
 async fn cortina_sem_acesso_trava_e_destrava_a_bancada() {
     if crate::commons::testing::running_as_root() {
@@ -1230,6 +1238,7 @@ async fn cortina_sem_acesso_trava_e_destrava_a_bancada() {
 /// O `restartAgents` do Swift ao destravar: liberada a pasta, todo agente
 /// da bancada sobe de novo (o que subiu com ela negada estava fora dela), e
 /// o shell fica como estava.
+#[cfg(unix)]
 #[tokio::test]
 async fn destravar_reergue_os_agentes_e_nao_os_shells() {
     if crate::commons::testing::running_as_root() {
@@ -1379,7 +1388,7 @@ async fn heranca_de_confianca_grava_na_config_de_cada_no() {
         ]
     })
     .await;
-    let inside = h._home.0.join("data/claude-in");
+    let inside = h._home.0.join("data").join("claude-in");
     let pty = h.pty.clone();
     eventually(|| {
         let pty = pty.clone();
@@ -1523,7 +1532,7 @@ fn two_benches(dir: &std::path::Path) -> Vec<(&'static str, String)> {
 }
 
 async fn saved_eventually(h: &Harness, check: impl Fn(&Value) -> bool) -> Value {
-    let path = h._home.0.join("data/workbenches.json");
+    let path = h._home.0.join("data").join("workbenches.json");
     for _ in 0..500 {
         if let Ok(text) = std::fs::read_to_string(&path)
             && let Ok(value) = serde_json::from_str::<Value>(&text)
@@ -1832,14 +1841,14 @@ async fn terminais_dos_nos_sobem_com_o_ambiente_do_swift() {
     assert_eq!(env_of(&shell, "EGEON_DECK"), Some("egeon-next"));
     // O sabor estável não exporta `EGEON_FLAVOR`, nem vazio.
     assert_eq!(env_of(&shell, "EGEON_FLAVOR"), None);
-    let zsh = h._home.0.join("data/zsh");
+    let zsh = h._home.0.join("data").join("zsh");
     assert_eq!(
         env_of(&shell, "ZDOTDIR"),
         Some(zsh.to_string_lossy().as_ref())
     );
     assert!(zsh.join(".zshrc").exists());
     // O `--settings` do agente aponta para os ganchos, escritos na partida.
-    let hooks = h._home.0.join("data/claude-hooks.json");
+    let hooks = h._home.0.join("data").join("claude-hooks.json");
     assert!(hooks.exists(), "claude-hooks.json não foi escrito");
     assert_eq!(
         env_of(&shell, "EGEON_TARGET"),
@@ -2174,7 +2183,8 @@ async fn remover_bancada_planeja_apaga_da_lista_e_responde_pela_rota() {
 // ── Workspaces e projetos (org, `node_commands.rs`) ────────────────────────
 
 fn workspaces_on_disk(h: &Harness) -> Value {
-    let text = std::fs::read_to_string(h._home.0.join("data/workspaces.json")).unwrap_or_default();
+    let text =
+        std::fs::read_to_string(h._home.0.join("data").join("workspaces.json")).unwrap_or_default();
     serde_json::from_str(&text).unwrap_or(Value::Null)
 }
 
@@ -2192,7 +2202,7 @@ async fn spaces_eventually(h: &Harness, check: impl Fn(&Value) -> bool) -> Value
 #[tokio::test]
 async fn criar_salvar_e_remover_workspace() {
     let dir = TempHome::new();
-    let pasta = dir.0.join("repos/api");
+    let pasta = dir.0.join(crate::features::path_text::native("repos/api"));
     std::fs::create_dir_all(&pasta).unwrap();
     let h = Harness::start_with_files(&two_benches(&dir.0)).await;
     let mut ui = h.ui().await;
@@ -2286,7 +2296,7 @@ async fn criar_salvar_e_remover_workspace() {
 #[tokio::test]
 async fn projetos_entram_saem_e_bancada_segura_o_projeto() {
     let dir = TempHome::new();
-    let pasta = dir.0.join("repos/web");
+    let pasta = dir.0.join(crate::features::path_text::native("repos/web"));
     std::fs::create_dir_all(&pasta).unwrap();
     let h = Harness::start_with_files(&two_benches(&dir.0)).await;
     let mut ui = h.ui().await;
@@ -2387,7 +2397,12 @@ async fn criar_projeto_pelo_comando_cria_a_pasta_e_o_git() {
     assert_eq!(reply["ok"], true, "{reply}");
     assert_eq!(reply["created"], true);
     assert!(reply.get("tree").is_none());
-    assert!(parent.join("novo").is_dir() && !parent.join("novo/.git").exists());
+    assert!(
+        parent.join("novo").is_dir()
+            && !parent
+                .join(crate::features::path_text::native("novo/.git"))
+                .exists()
+    );
     ui.send(json!({"id": 2, "cmd": "create_project", "workspace": geral, "name": "a/b"}))
         .await;
     assert_eq!(
@@ -2418,7 +2433,9 @@ fn git_in(dir: &std::path::Path, args: &[&str]) {
 /// Repositório com um commit e um `.env` que o git não versiona, numa pasta
 /// canônica (o git devolve o caminho real).
 fn repo_with_env(home: &TempHome) -> PathBuf {
-    let repo = std::fs::canonicalize(&home.0).unwrap().join("repo");
+    let repo = crate::commons::paths::canonicalize(&home.0)
+        .unwrap()
+        .join("repo");
     std::fs::create_dir_all(&repo).unwrap();
     git_in(&repo, &["init", "-q", "-b", "main", "."]);
     git_in(&repo, &["config", "user.email", "t@e"]);
@@ -2445,9 +2462,9 @@ async fn worktree_abre_bancada_nova_ativa_e_copia_o_nao_versionado() {
     assert_eq!(body["ok"], true);
     assert_eq!(body["workbench"], "feature-x");
     assert_eq!(body["branch"], "feature/x");
-    let wt = std::fs::canonicalize(&dir.0)
-        .unwrap()
-        .join("worktrees/repo/feature-x");
+    let wt = crate::commons::paths::canonicalize(&dir.0).unwrap().join(
+        crate::features::path_text::native("worktrees/repo/feature-x"),
+    );
     assert_eq!(body["path"], wt.to_string_lossy().as_ref());
     assert!(wt.join("a.txt").exists());
 
@@ -2501,9 +2518,9 @@ async fn worktree_de_um_terminal_so_reaponta_o_no_sem_conversa() {
     let h = Harness::start_with_files(&[("workbenches.json", benches.to_string())]).await;
     let (status, body) = h.get("/worktree?target=deck%2Fsh&branch=spike").await;
     assert_eq!(status, 200, "{body}");
-    let wt = std::fs::canonicalize(&dir.0)
+    let wt = crate::commons::paths::canonicalize(&dir.0)
         .unwrap()
-        .join("worktrees/repo/spike");
+        .join(crate::features::path_text::native("worktrees/repo/spike"));
     assert_eq!(body["node"], "sh");
     assert_eq!(body["reused"], false);
     assert_eq!(body["path"], wt.to_string_lossy().as_ref());
@@ -2514,7 +2531,7 @@ async fn worktree_de_um_terminal_so_reaponta_o_no_sem_conversa() {
         node["cwd"]
             .as_str()
             .unwrap()
-            .ends_with("worktrees/repo/spike")
+            .ends_with(&crate::features::path_text::native("worktrees/repo/spike"))
     );
     let (status, body) = h.get("/worktree?target=deck%2Ffantasma&branch=x").await;
     assert_eq!(
@@ -2649,7 +2666,9 @@ async fn limpar_a_bancada_arquiva_chat_e_trilha_e_responde_no_fim() {
         ("agents.json", agents.to_string()),
     ])
     .await;
-    let bench_dir = h._home.0.join("data/workbenches/1a2b3c4d");
+    let bench_dir = h._home.0.join(crate::features::path_text::native(
+        "data/workbenches/1a2b3c4d",
+    ));
     std::fs::create_dir_all(&bench_dir).unwrap();
     std::fs::write(bench_dir.join("chat.jsonl"), "{\"k\":1}\n").unwrap();
     std::fs::write(bench_dir.join("trace.md"), "# trilha\n").unwrap();
@@ -2664,7 +2683,8 @@ async fn limpar_a_bancada_arquiva_chat_e_trilha_e_responde_no_fim() {
     let chat = body["archived"].as_str().unwrap();
     let trace = body["trace"].as_str().unwrap();
     assert!(
-        chat.contains("chat-archive/chat-") && trace.contains("trace-archive/trace-"),
+        chat.contains(&crate::features::path_text::native("chat-archive/chat-"))
+            && trace.contains(&crate::features::path_text::native("trace-archive/trace-")),
         "{body}"
     );
     assert!(std::path::Path::new(chat).exists() && std::path::Path::new(trace).exists());
@@ -2994,10 +3014,14 @@ async fn no_de_agente_por_dentro_e_o_dial_que_assenta() {
 
     ui.send(json!({"id": 2, "cmd": "effort_move", "workbench": "1a2b3c4d", "node": "claude", "index": 0}))
         .await;
-    // O estado novo sai antes da resposta.
-    let moved = ui.until(|v| v["topic"] == "node/1a2b3c4d/claude").await;
+    // O estado novo sai antes da resposta: se ela viesse antes, o `until`
+    // a consumiria e o `reply` não a acharia. Filtra pelo `pending` porque a
+    // leitura do transcript, disparada pela assinatura, republica o nó a
+    // qualquer momento — às vezes entre a assinatura e o `effort_move`.
+    let moved = ui
+        .until(|v| v["topic"] == "node/1a2b3c4d/claude" && v["agent"]["dial"]["pending"] == true)
+        .await;
     assert_eq!(ui.reply(2).await["ok"], true);
-    assert_eq!(moved["agent"]["dial"]["pending"], true, "{moved}");
     let first = moved["agent"]["dial"]["levels"][0]
         .as_str()
         .unwrap()
@@ -3038,7 +3062,7 @@ async fn no_web_por_dentro_navega_e_troca_de_perfil() {
     assert_eq!(ui.reply(3).await["ok"], true);
     assert_ne!(after["web"]["profile_id"], json!(id));
     saved_eventually(&h, |v| v[0]["nodes"][1]["profile"] == "trabalho").await;
-    let profiles = h._home.0.join("data/web-profiles.json");
+    let profiles = h._home.0.join("data").join("web-profiles.json");
     for _ in 0..200 {
         if std::fs::read_to_string(&profiles).is_ok_and(|t| t.contains("trabalho")) {
             break;
@@ -3186,7 +3210,7 @@ async fn formulario_de_worktree_le_o_resumo_e_o_veredito_sem_criar_nada() {
         plan["folder"]
             .as_str()
             .unwrap()
-            .ends_with("worktrees/repo/nova"),
+            .ends_with(&crate::features::path_text::native("worktrees/repo/nova")),
         "{plan}"
     );
 
@@ -3197,7 +3221,7 @@ async fn formulario_de_worktree_le_o_resumo_e_o_veredito_sem_criar_nada() {
         "bancada desconhecida 'ffffffff'"
     );
     assert!(
-        !std::fs::canonicalize(&dir.0)
+        !crate::commons::paths::canonicalize(&dir.0)
             .unwrap()
             .join("worktrees")
             .exists(),
@@ -3222,13 +3246,13 @@ async fn worktree_move_current_reaponta_a_propria_bancada_e_responde_o_id() {
     let done = ui.reply(1).await;
     assert_eq!(done["ok"], true, "{done}");
     assert_eq!(done["workbench"], "1a2b3c4d", "a mesma bancada, pelo id");
-    let wt = std::fs::canonicalize(&dir.0)
+    let wt = crate::commons::paths::canonicalize(&dir.0)
         .unwrap()
-        .join("worktrees/repo/mover");
+        .join(crate::features::path_text::native("worktrees/repo/mover"));
     let saved = saved_eventually(&h, |v| {
-        v[0]["path"]
-            .as_str()
-            .is_some_and(|p| p.ends_with("worktrees/repo/mover"))
+        v[0]["path"].as_str().is_some_and(|p| {
+            p.ends_with(&crate::features::path_text::native("worktrees/repo/mover"))
+        })
     })
     .await;
     assert_eq!(saved.as_array().unwrap().len(), 1, "não nasce bancada nova");
@@ -3291,12 +3315,15 @@ async fn worktree_com_template_nasce_do_molde_e_responde_o_id_da_nova() {
 /// US-206: a worktree roda sobre uma cópia e leva segundos; o que você mexe
 /// nesse meio-tempo não pode ser desfeito quando ela termina. O gancho
 /// `post-checkout` atrasa o `git worktree add` o bastante para o teste mexer.
+#[cfg(unix)]
 #[tokio::test]
 async fn editar_durante_a_worktree_sobrevive_ao_reapontamento() {
     use std::os::unix::fs::PermissionsExt;
     let dir = TempHome::new();
     let repo = repo_with_env(&dir);
-    let hook = repo.join(".git/hooks/post-checkout");
+    let hook = repo.join(crate::features::path_text::native(
+        ".git/hooks/post-checkout",
+    ));
     std::fs::write(&hook, "#!/bin/sh\n/bin/sleep 1\n").unwrap();
     std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
     let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": repo.to_string_lossy(),
@@ -3318,9 +3345,9 @@ async fn editar_durante_a_worktree_sobrevive_ao_reapontamento() {
     let done = ui.reply(2).await;
     assert_eq!(done["ok"], true, "{done}");
     let saved = saved_eventually(&h, |v| {
-        v[0]["path"]
-            .as_str()
-            .is_some_and(|p| p.ends_with("worktrees/repo/mover"))
+        v[0]["path"].as_str().is_some_and(|p| {
+            p.ends_with(&crate::features::path_text::native("worktrees/repo/mover"))
+        })
     })
     .await;
     assert_eq!(saved[0]["nodes"][0]["x"], 777.0, "{saved}");
@@ -3567,9 +3594,9 @@ async fn worktree_de_uma_pasta_sem_origem_abre_bancada_nova_com_o_template() {
     assert_eq!(saved[0]["name"], "da-pasta");
     assert_eq!(saved[0]["template"], "dupla");
     assert_eq!(saved[0]["nodes"].as_array().unwrap().len(), 2);
-    let wt = std::fs::canonicalize(&dir.0)
-        .unwrap()
-        .join("worktrees/repo/da-pasta");
+    let wt = crate::commons::paths::canonicalize(&dir.0).unwrap().join(
+        crate::features::path_text::native("worktrees/repo/da-pasta"),
+    );
     assert!(wt.join("a.txt").exists());
     for _ in 0..500 {
         if wt.join(".env").exists() {
@@ -3650,7 +3677,7 @@ async fn no_novo_sem_frame_usa_a_janela_da_ui() {
 #[tokio::test]
 async fn formulario_de_terminal_novo_abre_com_o_claude_e_as_pastas() {
     let dir = TempHome::new();
-    std::fs::create_dir_all(dir.0.join("api/.git")).unwrap();
+    std::fs::create_dir_all(dir.0.join(crate::features::path_text::native("api/.git"))).unwrap();
     let mut files = two_benches(&dir.0);
     files.push((
         "components.json",
@@ -3760,7 +3787,8 @@ async fn criar_e_aplicar_pelo_formulario() {
     assert_eq!(node["model"], "opus");
     assert_eq!(node["prompt"], "revisa o core");
     assert_eq!(node["x"], 10.0);
-    let components = std::fs::read_to_string(h._home.0.join("data/components.json")).unwrap();
+    let components =
+        std::fs::read_to_string(h._home.0.join("data").join("components.json")).unwrap();
     assert!(components.contains("Revisor Rust"), "{components}");
 
     ui.send(
@@ -3942,7 +3970,9 @@ async fn abrir_a_pasta_do_no_vai_ao_opener() {
 async fn worktree_de_um_no_le_o_repo_dele_e_reaponta_so_ele() {
     let dir = TempHome::new();
     let repo = repo_with_env(&dir);
-    let bench_dir = std::fs::canonicalize(&dir.0).unwrap().join("bancada");
+    let bench_dir = crate::commons::paths::canonicalize(&dir.0)
+        .unwrap()
+        .join("bancada");
     std::fs::create_dir_all(&bench_dir).unwrap();
     let benches = json!([{"id": "1a2b3c4d", "name": "deck", "path": bench_dir.to_string_lossy(),
         "nodes": [{"type": "shell", "id": "back", "cwd": repo.to_string_lossy()},
@@ -3968,7 +3998,7 @@ async fn worktree_de_um_no_le_o_repo_dele_e_reaponta_so_ele() {
         plan["folder"]
             .as_str()
             .unwrap()
-            .ends_with("worktrees/repo/nova"),
+            .ends_with(&crate::features::path_text::native("worktrees/repo/nova")),
         "{plan}"
     );
 
@@ -3988,9 +4018,11 @@ async fn worktree_de_um_no_le_o_repo_dele_e_reaponta_so_ele() {
     assert_eq!(done["ok"], true, "{done}");
     assert_eq!(done["node"], "back");
     let saved = saved_eventually(&h, |v| {
-        v[0]["nodes"][0]["cwd"]
-            .as_str()
-            .is_some_and(|cwd| cwd.ends_with("worktrees/repo/fix-api"))
+        v[0]["nodes"][0]["cwd"].as_str().is_some_and(|cwd| {
+            cwd.ends_with(&crate::features::path_text::native(
+                "worktrees/repo/fix-api",
+            ))
+        })
     })
     .await;
     assert_eq!(saved.as_array().unwrap().len(), 1, "nenhuma bancada nova");
