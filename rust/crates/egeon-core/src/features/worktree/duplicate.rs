@@ -60,10 +60,9 @@ pub fn repointed(
                 return node;
             };
             let resolved = WorkbenchConfig::resolve(&cwd, origin_root, home);
-            let inside = format!("{}/", origin_root.trim_end_matches('/'));
             if resolved == origin_root {
                 node.cwd = None;
-            } else if let Some(relative) = resolved.strip_prefix(&inside) {
+            } else if let Some(relative) = path_text::inside(&resolved, origin_root) {
                 node.cwd = Some(relative.to_owned());
             } else {
                 crate::log!(
@@ -235,7 +234,7 @@ pub fn open_multi(
     for (link, member) in link_list.iter().zip(members) {
         let member_path = member.url_path(home);
         let repo_root = service::main_repo(git, &member_path).unwrap_or(member_path);
-        let destination = format!("{root}/{}", link.name);
+        let destination = path_text::join(&root, &link.name);
         let wanted = per_link.get(&link.name).map_or(branch, String::as_str);
         let opened =
             service::create(git, &repo_root, wanted, &destination, true).and_then(|created| {

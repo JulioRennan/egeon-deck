@@ -9,6 +9,10 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- App para Windows (x64, Windows 10 1809 ou mais novo): terminais no PowerShell, agentes, canvas, chat e a janela de Processos; sai num zip, sem instalador (decisão 54).
+
 ### Alterado
 
 - No Linux, terminais e agentes sobem no seu shell (bash, zsh ou fish), com a sua configuração (`~/.bashrc`, `~/.profile`): o PATH, o nvm e o `claude` instalado pelo npm valem dentro do Egeon, e o zsh deixa de ser exigido (decisão 53).
