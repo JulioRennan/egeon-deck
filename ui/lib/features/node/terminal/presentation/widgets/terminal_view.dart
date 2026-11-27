@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../../../../commons/utils/app_shortcut.dart';
 import '../../../../../theme/egeon_terminal_palette.dart';
 import '../../domain/entities/terminal_cursor.dart';
 import '../../domain/entities/terminal_effect.dart';
@@ -156,7 +157,7 @@ class _TerminalViewState extends State<TerminalView> {
     // sem ela as letras (que a UI deixa para o método de entrada) sumiriam.
     if (!_input.attached) _input.attach();
     final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isMetaPressed && event is! KeyUpEvent) {
+    if (isAppModifierPressed(keyboard) && event is! KeyUpEvent) {
       final key = event.logicalKey;
       if (key == LogicalKeyboardKey.keyV) {
         unawaited(_paste());

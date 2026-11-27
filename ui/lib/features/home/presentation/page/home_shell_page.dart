@@ -24,7 +24,9 @@ import '../forms/app_forms.dart';
 import '../forms/form_request.dart';
 import '../../../update/presentation/widgets/update_host.dart';
 import '../../../processes/presentation/widgets/processes_panel.dart';
+import '../../../../commons/utils/app_shortcut.dart';
 import '../widgets/app_menu.dart';
+import '../widgets/app_overflow_menu.dart';
 import '../../../../commons/widgets/shell_layers.dart';
 import '../widgets/usage_corner.dart';
 import '../widgets/root_layout.dart';
@@ -149,28 +151,29 @@ class _HomeShellPageState extends State<HomeShellPage> {
     final tabs = overlayContext.read<TabsCubit>();
     final navigation = overlayContext.read<NavigationCubit>();
     final sidebar = overlayContext.read<SidebarCubit>();
+    final menuActions = AppMenuActions(
+      showCanvas: () => shell.setView(ViewMode.canvas),
+      showChat: () => shell.setView(ViewMode.chat),
+      toggleSidebar: shell.toggleCollapsed,
+      findBench: () => _findBench(shell, sidebar),
+      nextTab: tabs.next,
+      previousTab: tabs.previous,
+      back: navigation.back,
+      forward: navigation.forward,
+      closeTab: tabs.closeActive,
+      pickTab: tabs.selectNumber,
+      showProcesses: () =>
+          unawaited(showProcessesWindow(appName: widget.title)),
+      canvas: inject<CanvasCommands>(),
+      copyTargets: shell.copyTargets,
+    );
     return UpdateHost(
       dialogContext: () => overlayContext,
       onShowProcesses: () =>
           unawaited(showProcessesWindow(appName: widget.title)),
       child: AppMenu(
         name: widget.appName,
-        actions: AppMenuActions(
-          showCanvas: () => shell.setView(ViewMode.canvas),
-          showChat: () => shell.setView(ViewMode.chat),
-          toggleSidebar: shell.toggleCollapsed,
-          findBench: () => _findBench(shell, sidebar),
-          nextTab: tabs.next,
-          previousTab: tabs.previous,
-          back: navigation.back,
-          forward: navigation.forward,
-          closeTab: tabs.closeActive,
-          pickTab: tabs.selectNumber,
-          showProcesses: () =>
-              unawaited(showProcessesWindow(appName: widget.title)),
-          canvas: inject<CanvasCommands>(),
-          copyTargets: shell.copyTargets,
-        ),
+        actions: menuActions,
         child: BlocBuilder<ShellCubit, ShellState>(
           builder: (context, view) {
             final bench = view.snapshot.bench;
@@ -207,6 +210,14 @@ class _HomeShellPageState extends State<HomeShellPage> {
                   child: SidebarPage(
                     commands: _commands(shell, ask),
                     onCollapse: () => shell.setCollapsed(true),
+                    // Sem barra de menus fora do macOS: o ☰ leva o menu do app.
+                    onAppMenu: usesCommandKey
+                        ? null
+                        : (menuContext, anchor) => showAppOverflowMenu(
+                            menuContext,
+                            anchor,
+                            menuActions,
+                          ),
                   ),
                 ),
               ),

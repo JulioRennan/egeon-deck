@@ -1,9 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../../commons/utils/app_shortcut.dart';
 import '../../domain/entities/terminal_key.dart';
 
 /// A tecla vai para o programa do terminal, ou é atalho do app?
+///
+/// [meta] é o modificador do app apertado (`isAppModifierPressed`): ⌘ no macOS,
+/// Ctrl+Shift fora dele (decisão 55).
 ///
 /// O atalho de trocar de aba (⌘1…⌘9, ⌘], ⌘→) chega com o terminal ainda
 /// focado e não pode contar como você digitando nele — sair da bancada apagava
@@ -22,7 +26,7 @@ bool reachesPty({required bool meta, String? character}) =>
 TerminalKey? mapTerminalKey(KeyEvent event, HardwareKeyboard keyboard) {
   if (event is KeyUpEvent) return null;
   if (!reachesPty(
-    meta: keyboard.isMetaPressed,
+    meta: isAppModifierPressed(keyboard),
     character: event.logicalKey.keyLabel,
   )) {
     return null;

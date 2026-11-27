@@ -1,3 +1,4 @@
+import 'package:egeon_deck/commons/utils/app_shortcut.dart';
 import 'package:egeon_deck/core/domain/entities/view_mode.dart';
 import 'package:egeon_deck/features/home/presentation/widgets/shell_shortcuts.dart';
 import 'package:egeon_deck/features/node/terminal/domain/usecase/resize_terminal.dart';
@@ -116,5 +117,75 @@ void main() {
     await tester.pump();
     expect(calls, ['modo:${ViewMode.chat.wire}']);
     expect(repository.keys, isEmpty);
+  });
+
+  // Fora do macOS (decisão 55): Ctrl+Shift é o modificador do app; Ctrl puro
+  // continua do programa.
+  group('Windows e Linux', () {
+    setUp(() => debugUsesCommandKey = false);
+    tearDown(() => debugUsesCommandKey = true);
+
+    Future<void> ctrlShift(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+    }
+
+    testWidgets('Ctrl+Shift+1, ] e W são da casca e não chegam ao pty', (
+      tester,
+    ) async {
+      await mount(tester);
+      await ctrlShift(tester, LogicalKeyboardKey.digit1);
+      await ctrlShift(tester, LogicalKeyboardKey.bracketRight);
+      await ctrlShift(tester, LogicalKeyboardKey.keyW);
+      expect(calls, ['aba1', 'avançar', 'fechar']);
+      expect(repository.keys, isEmpty);
+      expect(repository.texts, isEmpty);
+    });
+
+    testWidgets('Ctrl+C sem Shift segue interrompendo o agente', (
+      tester,
+    ) async {
+      await mount(tester);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(repository.keys.single.ctrl, isTrue);
+      expect(repository.keys.single.key, 'c');
+      expect(calls, isEmpty);
+    });
+
+    testWidgets('Ctrl+Shift+V cola, e vai como paste', (tester) async {
+      await mount(tester);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async => call.method == 'Clipboard.getData'
+            ? <String, Object?>{'text': 'echo oi'}
+            : null,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await ctrlShift(tester, LogicalKeyboardKey.keyV);
+      await tester.pump();
+      expect(repository.pastes, ['echo oi']);
+      expect(repository.keys, isEmpty);
+      expect(calls, isEmpty);
+    });
+
+    testWidgets('Ctrl+Shift+1 é a aba 1, não o canvas: o ⌥⌘1 não existe', (
+      tester,
+    ) async {
+      await mount(tester);
+      await ctrlShift(tester, LogicalKeyboardKey.digit2);
+      expect(calls, ['aba2']);
+    });
   });
 }

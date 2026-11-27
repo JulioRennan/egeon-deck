@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:egeon_deck/commons/utils/app_shortcut.dart';
 import 'package:egeon_deck/core/adapters/app_windows.dart';
 import 'package:egeon_deck/commons/widgets/form_kit.dart';
 
@@ -501,6 +502,31 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Todas as bancadas'));
       await settleDrawer(tester);
       expect(find.byType(SidebarPanel), findsOneWidget);
+    });
+
+    testWidgets('no macOS não há ☰: o menu é a barra do sistema', (
+      tester,
+    ) async {
+      await mount(tester);
+      expect(find.bySemanticsLabel('Menu do app'), findsNothing);
+    });
+
+    testWidgets('fora do macOS o ☰ do cabeçalho abre o menu do app', (
+      tester,
+    ) async {
+      debugUsesCommandKey = false;
+      addTearDown(() => debugUsesCommandKey = true);
+      await mount(tester);
+      await tester.tap(find.bySemanticsLabel('Menu do app'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Processos…'), findsOneWidget);
+      expect(find.text('Ctrl+Shift+P'), findsOneWidget);
+      expect(find.text('Limpar órfãos automaticamente'), findsOneWidget);
+      expect(find.text('Fechar a aba'), findsOneWidget);
+      expect(find.text('Ctrl+Shift+W'), findsOneWidget);
+      expect(find.text('Ver como chat'), findsOneWidget);
+      expect(find.text('Aproximar'), findsOneWidget);
     });
 
     testWidgets('⌘K abre a gaveta', (tester) async {
