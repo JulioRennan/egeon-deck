@@ -52,6 +52,18 @@ fn base_env() -> Vec<(String, String)> {
     ]
 }
 
+/// O ambiente do processo de teste mais o `TERM`, como o app passa ao nó
+/// (`terminal::environment::from_process`). Com só o `base_env`, a linha do
+/// nó levou ~22 s no runner do CI, contra 3,5 s do `Set-Location` no passo
+/// que roda com o ambiente completo (ci/win-bom2).
+fn process_env() -> Vec<(String, String)> {
+    std::env::vars_os()
+        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+        .filter(|(key, _)| !key.eq_ignore_ascii_case("TERM"))
+        .chain([("TERM".into(), "xterm-256color".into())])
+        .collect()
+}
+
 fn cmd(command: &str) -> PtySpec {
     PtySpec {
         program: system_root().join("System32").join("cmd.exe"),
@@ -77,7 +89,7 @@ fn powershell(script: &str) -> PtySpec {
             "-Command".into(),
             script.to_string(),
         ],
-        env: base_env(),
+        env: process_env(),
         cwd: None,
         size: SIZE,
     }
@@ -577,7 +589,7 @@ fn node_shell(dir: &std::path::Path, command: Option<&str>, role: Role) -> PtySp
     PtySpec {
         program: launch.program,
         args: launch.args,
-        env: base_env(),
+        env: process_env(),
         // O processo abre na pasta de cima: quem leva o shell até a pasta é
         // o `Set-Location` da linha, que é o que o teste prova.
         cwd: dir.parent().map(std::path::Path::to_path_buf),
