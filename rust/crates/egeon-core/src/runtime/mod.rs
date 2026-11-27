@@ -281,6 +281,7 @@ async fn load_org(config: &Config, drivers: &Drivers) -> org::Org {
                 links: links.as_ref(),
                 // Até o corte só a pasta do app recebe as skills (decisão 36).
                 flavor: &flavor,
+                syntax: user_shell.syntax(),
             }));
         if loaded.needs_save {
             let org = &loaded.org;

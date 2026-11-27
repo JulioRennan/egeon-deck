@@ -62,7 +62,7 @@ fn a_linha_de_comando_o_catalogo_e_as_regras_saem_como_no_swift() {
     let agents = profiles();
     for (name, case) in cases() {
         let profile = case.profile.as_deref().and_then(|k| agents.get(k));
-        let catalog = catalog(&case.node);
+        let catalog = catalog(&case.node, ShellSyntax::Posix);
         let rules = rules_for(&case.node, case.rules.as_deref());
         let plan = launch_plan(
             &case.node,
@@ -246,7 +246,7 @@ fn nota_de_log_quando_o_marcador_nao_sobe() {
     let plan = launch_plan(
         &case.node,
         agents.get("codex"),
-        catalog(&case.node).as_deref(),
+        catalog(&case.node, ShellSyntax::Posix).as_deref(),
         None,
         HOOK_FILE,
         DEFAULT_SHELL,
@@ -265,17 +265,26 @@ fn nota_de_log_quando_o_marcador_nao_sobe() {
 #[test]
 fn so_agente_tem_catalogo_e_o_maestro_e_o_aprovador_somam_secoes() {
     let mut node = NodeConfig::new(NodeKind::Agent, "a");
-    let plain = catalog(&node).unwrap();
+    let plain = catalog(&node, ShellSyntax::Posix).unwrap();
     assert!(plain.starts_with("Este terminal é um nó do Egeon Deck"));
     assert!(!plain.contains("MAESTRO"));
     node.maestro = Some(true);
-    let maestro = catalog(&node).unwrap();
+    let maestro = catalog(&node, ShellSyntax::Posix).unwrap();
     assert!(maestro.contains("Você é o MAESTRO desta bancada"));
     assert!(
         maestro.contains("O usuário também te deu o poder de responder os pedidos de permissão")
     );
-    assert_eq!(catalog(&NodeConfig::new(NodeKind::Shell, "s")), None);
-    assert_eq!(catalog(&NodeConfig::new(NodeKind::Web, "w")), None);
+    assert_eq!(
+        catalog(&NodeConfig::new(NodeKind::Shell, "s"), ShellSyntax::Posix),
+        None
+    );
+    assert_eq!(
+        catalog(
+            &NodeConfig::new(NodeKind::Web, "w"),
+            ShellSyntax::PowerShell
+        ),
+        None
+    );
 }
 
 #[test]
@@ -295,6 +304,28 @@ fn flavor_estavel_nao_exporta_a_variavel() {
     assert_eq!(get(&env, "EGEON_FLAVOR"), Some("dev"));
 }
 
+// Decisão 54: no PowerShell o catálogo manda o UTF-8 sem BOM e o
+// here-string; o resto do texto é o mesmo do macOS.
+#[test]
+fn no_powershell_o_catalogo_manda_o_utf8_e_o_here_string() {
+    let mut node = NodeConfig::new(NodeKind::Agent, "a");
+    node.maestro = Some(true);
+    let posix = catalog(&node, ShellSyntax::Posix).unwrap();
+    let powershell = catalog(&node, ShellSyntax::PowerShell).unwrap();
+    assert!(posix.contains("egeon send <endereço> <<'MB'"));
+    assert!(!posix.contains("$OutputEncoding"));
+    assert!(!powershell.contains("<<'"), "{powershell}");
+    assert!(
+        powershell.contains(
+            "\n$OutputEncoding = [Text.UTF8Encoding]::new($false)\n@'\n(o que você quer dizer)\n'@ | egeon send <endereço>\n@'\npedido: … — entrega: …\n'@ | egeon trace\n"
+        ),
+        "{powershell}"
+    );
+    let tail = |text: &str| text[text.find("Mensagem que chega").unwrap()..].to_owned();
+    assert_eq!(tail(&powershell), tail(&posix));
+    assert!(powershell.starts_with("Este terminal é um nó do Egeon Deck"));
+}
+
 /// No PowerShell (Windows, decisão 54) a mesma linha sai na sintaxe dele: sem
 /// `||`, que o 5.1 não tem, e com a aspa simples dobrada em vez de `'\''`.
 #[test]
@@ -311,7 +342,7 @@ fn no_powershell_a_retomada_e_as_aspas_saem_no_jeito_dele() {
             launch_plan(
                 &case.node,
                 profile,
-                catalog(&case.node).as_deref(),
+                catalog(&case.node, syntax).as_deref(),
                 rules_for(&case.node, case.rules.as_deref()).as_deref(),
                 HOOK_FILE,
                 DEFAULT_SHELL,

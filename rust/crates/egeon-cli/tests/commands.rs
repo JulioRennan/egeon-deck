@@ -156,6 +156,53 @@ fn plan_e_apply_levam_o_plano_do_stdin() {
     assert_post(&server, "/maestro/apply", plan);
 }
 
+// Decisão 54: só no Windows.
+#[cfg(windows)]
+#[test]
+fn os_boms_do_powershell_saem_do_stdin_de_plan_apply_send_e_trace() {
+    // Os bytes que o PowerShell 5.1 mandou no Windows: quebra, BOM, texto.
+    let plan = "{\"nodes\": []}\n";
+    for (args, route) in [
+        (&["plan"][..], "/maestro/apply?dry=1"),
+        (&["apply"][..], "/maestro/apply"),
+        (&["send", "deck/b"][..], "/message?target=deck/b"),
+        (&["trace"][..], "/trace"),
+    ] {
+        let server = FakeServer::ok("{}");
+        egeon(&server, args, format!("\u{feff}{plan}").as_bytes());
+        assert_post(&server, route, plan);
+        egeon(&server, args, format!("\n\u{feff}{plan}").as_bytes());
+        assert_post(&server, route, &format!("\n{plan}"));
+        egeon(&server, args, format!("\u{feff}\u{feff}{plan}").as_bytes());
+        assert_post(&server, route, plan);
+        egeon(
+            &server,
+            args,
+            format!("\n\u{feff}\r\n\u{feff}{plan}").as_bytes(),
+        );
+        assert_post(&server, route, &format!("\n\r\n{plan}"));
+    }
+    let server = FakeServer::ok("{}");
+    let inside = "texto com \u{feff} no meio\n";
+    egeon(&server, &["send", "deck/b"], inside.as_bytes());
+    assert_post(&server, "/message?target=deck/b", inside);
+}
+
+// No macOS e no Linux o stdin segue como no legado: o BOM chega ao app.
+#[cfg(not(windows))]
+#[test]
+fn fora_do_windows_o_bom_chega_intacto() {
+    let plan = "\u{feff}\u{feff}{\"nodes\": []}\n";
+    for (args, route) in [
+        (&["plan"][..], "/maestro/apply?dry=1"),
+        (&["send", "deck/b"][..], "/message?target=deck/b"),
+    ] {
+        let server = FakeServer::ok("{}");
+        egeon(&server, args, plan.as_bytes());
+        assert_post(&server, route, plan);
+    }
+}
+
 #[test]
 fn allow_deny_e_always() {
     let server = FakeServer::ok("{}");
@@ -201,11 +248,18 @@ fn guide_imprime_o_manual_embutido_sem_o_app() {
 // inteiro e sem expandir nada, e mais um `\n` — o heredoc do Swift.
 #[test]
 fn guide_e_exatamente_o_texto_do_core_com_uma_quebra_no_fim() {
-    use egeon_core::features::maestro::guide::TEXT;
+    use egeon_core::features::maestro::guide::text;
+    use egeon_core::features::terminal::shell::ShellSyntax;
+    // No Windows, o de exemplos em PowerShell (decisão 54).
+    let syntax = if cfg!(windows) {
+        ShellSyntax::PowerShell
+    } else {
+        ShellSyntax::Posix
+    };
     let nowhere = tempfile::tempdir().unwrap();
     let outcome = egeon_at(&nowhere.path().join("sem-socket"), &["guide"], b"");
     assert_eq!(outcome.code, 0);
-    assert_eq!(outcome.out_text(), format!("{TEXT}\n"));
+    assert_eq!(outcome.out_text(), format!("{}\n", text(syntax)));
     assert_eq!(outcome.err, "");
 }
 

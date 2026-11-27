@@ -25,6 +25,7 @@ use crate::features::agent::claude::{hooks, skill, write_atomic};
 use crate::features::agent::model::{AgentProfile, expand_tilde};
 use crate::features::agent::store::Profiles;
 use crate::features::maestro::guide;
+use crate::features::terminal::shell::ShellSyntax;
 use crate::ports::links::FileLinks;
 
 /// A pasta de configuração do Claude Code que o app novo cria dentro da pasta
@@ -48,6 +49,8 @@ pub struct Installation<'a> {
     pub links: &'a dyn FileLinks,
     /// O `Flavor::identifier()`: `egeon-next*` até o corte, `egeon*` depois.
     pub flavor: &'a str,
+    /// A do shell do usuário: o manual do maestro traz os exemplos nela.
+    pub syntax: ShellSyntax,
 }
 
 impl Installation<'_> {
@@ -185,9 +188,9 @@ fn install_skills(plan: &Installation<'_>, problems: &mut Vec<String>) {
     };
     let maestro = skill::PublishedSkill {
         name: guide::SKILL_NAME.to_owned(),
-        body: guide::skill(),
+        body: guide::skill(plan.syntax),
     };
-    let published = skill::published(&maestro);
+    let published = skill::published(&maestro, plan.syntax);
     for config in config_directories(plan, profile, problems) {
         for one in &published {
             let file = skill::skill_file(&config, &one.name);
@@ -278,6 +281,7 @@ mod tests {
                 environment: env,
                 links: &self.links,
                 flavor,
+                syntax: ShellSyntax::Posix,
             })
         }
 
@@ -348,10 +352,36 @@ mod tests {
         );
         assert_eq!(
             fs::read_to_string(World::skill(&w.own(), "egeon-maestro")).unwrap(),
-            guide::skill()
+            guide::skill(ShellSyntax::Posix)
         );
         assert!(!w.home.join(".claude/skills").exists());
         assert!(!w.home.join(".claude-agro/skills").exists());
+    }
+
+    /// Decisão 54: com o PowerShell como shell do usuário, as duas skills
+    /// trazem os exemplos em PowerShell.
+    #[test]
+    fn no_powershell_as_skills_vem_em_powershell() {
+        let w = World::new();
+        let problems = install(&Installation {
+            paths: &w.paths,
+            bundled_egeon: Some(w.source.clone()),
+            profiles: &w.profiles,
+            user_home: &w.home,
+            environment: &|_| None,
+            links: &w.links,
+            flavor: NEXT,
+            syntax: ShellSyntax::PowerShell,
+        });
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(
+            fs::read_to_string(World::skill(&w.own(), "egeon-maestro")).unwrap(),
+            guide::skill(ShellSyntax::PowerShell)
+        );
+        assert_eq!(
+            fs::read_to_string(World::skill(&w.own(), "egeon")).unwrap(),
+            skill::text(ShellSyntax::PowerShell)
+        );
     }
 
     #[test]
@@ -529,7 +559,7 @@ mod tests {
                 );
                 assert_eq!(
                     fs::read_to_string(World::skill(config, "egeon-maestro")).unwrap(),
-                    guide::skill()
+                    guide::skill(ShellSyntax::Posix)
                 );
             }
             assert!(!World::skill(&w.own(), "egeon").exists(), "{flavor}");
