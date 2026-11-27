@@ -172,7 +172,17 @@ class _TerminalViewState extends State<TerminalView> {
       }
     }
     final key = mapTerminalKey(event, keyboard);
-    if (key == null) return KeyEventResult.ignored;
+    if (key == null) {
+      final typed = typedTextOnWindows(
+        event,
+        ctrl: keyboard.isControlPressed,
+        alt: keyboard.isAltPressed,
+        meta: keyboard.isMetaPressed,
+      );
+      if (typed == null) return KeyEventResult.ignored;
+      widget.onText(typed);
+      return KeyEventResult.handled;
+    }
     widget.onKey(key);
     return KeyEventResult.handled;
   }
