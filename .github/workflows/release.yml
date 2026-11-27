@@ -135,10 +135,28 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           workspaces: rust -> target
+      # O PowerShell 5.1 carrega os módulos (Set-Location, Write-Output) na
+      # primeira chamada, e num runner frio isso passa de 30 s. Aquecer uma vez
+      # deixa o runner como um PC em uso, e os testes medem o terminal, não isso.
+      - name: Aquece o PowerShell
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: Set-Location -LiteralPath .; Write-Output pronto; Start-Sleep -Milliseconds 1
       - name: Testes do core
         if: ${{ !cancelled() }}
         working-directory: rust
         run: cargo test --workspace --no-fail-fast
+      # Em série, um teste por vez: separa corrida entre testes de carga da máquina.
+      - name: Terminal do Windows, em série
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        working-directory: rust
+        run: cargo test -p egeon-driver --test pty_windows -- --test-threads=1
+      # O ConPTY já travou de forma intermitente: uma rodada verde só não prova.
+      - name: Terminal do Windows, 5 vezes
+        if: ${{ !cancelled() }}
+        working-directory: rust
+        run: for i in 1 2 3 4 5; do echo "== rodada $i"; cargo test -p egeon-driver --test pty_windows || exit 1; done
       - name: Core (release)
         if: ${{ !cancelled() }}
         run: |

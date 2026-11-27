@@ -85,8 +85,8 @@ pub fn inspect(
         .filter(|node| node.kind != NodeKind::Web)
         .map(|node| {
             let path = config.resolved_directory(node, home);
-            let inside = path == workbench_root
-                || path.starts_with(&format!("{}/", workbench_root.trim_end_matches('/')));
+            let inside =
+                path == workbench_root || path_text::inside(&path, workbench_root).is_some();
             // Pasta que não existe não tem repositório para inspecionar, e
             // chamar o git nela só produziria erro. O nó aparece na lista de
             // qualquer jeito: é a chance de você ver que ele está quebrado.
