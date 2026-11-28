@@ -221,8 +221,13 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
 
     // Fechar uma janela secundária a esconde: o desktop_multi_window guarda a
     // janela na lista dele, e o Dart a reabre achando-a ali.
+    //
+    // EGEON_DESTROY_ON_CLOSE=1 deixa o desktop_multi_window destruir a janela
+    // como ele faz por padrão: chave de diagnóstico, para o teste na VM
+    // comparar a queda ao reabrir uma janela escondida (a pilha cai no ANGLE,
+    // ao desenhar) com a janela criada de novo.
     case WM_CLOSE:
-      if (state->secondary) {
+      if (state->secondary && !EnvEquals(L"EGEON_DESTROY_ON_CLOSE", L"1")) {
         SaveFrame(state);
         ShowWindow(window, SW_HIDE);
         return 0;

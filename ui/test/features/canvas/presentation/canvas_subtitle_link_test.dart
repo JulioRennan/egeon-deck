@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/in_memory_canvas_repository.dart';
 import '../../../support/pump_canvas.dart';
 
+import 'package:egeon_deck/commons/utils/app_shortcut.dart';
+
 /// O subtítulo do card (`NodeView.swift`): sem ⌘ é cabeçalho e arrasta; com ⌘
 /// o clique abre a pasta do terminal no Finder. O web não tem pasta.
 void main() {
@@ -78,6 +80,30 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
     await tester.pump();
     await tester.tap(subtitle('w'));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    expect(opened, isEmpty);
+  });
+
+  testWidgets('fora do macOS é o Ctrl-clique que abre a pasta', (tester) async {
+    debugUsesCommandKey = false;
+    addTearDown(() => debugUsesCommandKey = true);
+    final (_, opened) = await mount(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.tap(subtitle('sh'));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(opened, ['sh']);
+  });
+
+  testWidgets('fora do macOS a tecla Win não abre a pasta', (tester) async {
+    debugUsesCommandKey = false;
+    addTearDown(() => debugUsesCommandKey = true);
+    final (_, opened) = await mount(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    await tester.tap(subtitle('sh'));
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await tester.pump();
     expect(opened, isEmpty);

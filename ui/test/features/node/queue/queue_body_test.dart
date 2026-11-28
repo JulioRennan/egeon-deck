@@ -15,6 +15,8 @@ import 'package:egeon_deck/commons/widgets/eg/spinner.dart';
 
 import '../../../support/eg_host.dart';
 
+import 'package:egeon_deck/commons/utils/app_shortcut.dart';
+
 Future<TestGesture> pumpQueue(
   WidgetTester tester,
   InMemoryQueueRepository repo,
@@ -459,6 +461,90 @@ void main() {
     await tester.pump();
     expect(repo.openedImages.single.$2, 'p.png');
   });
+
+  testWidgets('fora do macOS é o Ctrl+V que cola a imagem na tarefa', (
+    tester,
+  ) async {
+    debugUsesCommandKey = false;
+    addTearDown(() => debugUsesCommandKey = true);
+    final repo = InMemoryQueueRepository(queue: seeded());
+    await pumpQueue(tester, repo);
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('egeon/image-drop'),
+      (call) async => call.method == 'pastedImage'
+          ? {
+              'png': Uint8List.fromList([9, 9]),
+            }
+          : null,
+    );
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.getData') return {'text': ''};
+      if (call.method == 'Clipboard.hasStrings') return {'value': false};
+      return null;
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('egeon/image-drop'),
+        null,
+      );
+      messenger.setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+    final typing = find.descendant(
+      of: find.byKey(const ValueKey('new-field-0')),
+      matching: find.byType(EditableText),
+    );
+    await tester.tap(typing);
+    await tester.enterText(typing, 'olha o header');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    final created = repo.queue.items.last;
+    expect(created.text, 'olha o header');
+    expect(repo.attached[created.id]!.single.bytes, [9, 9]);
+  });
+
+  testWidgets(
+    'fora do macOS AltGr+V digita: não cola a área de transferência',
+    (tester) async {
+      debugUsesCommandKey = false;
+      addTearDown(() => debugUsesCommandKey = true);
+      final repo = InMemoryQueueRepository(queue: seeded());
+      await pumpQueue(tester, repo);
+      final messenger = tester.binding.defaultBinaryMessenger;
+      var reads = 0;
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('egeon/image-drop'),
+        (call) async {
+          if (call.method == 'pastedImage') reads++;
+          return null;
+        },
+      );
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(
+          const MethodChannel('egeon/image-drop'),
+          null,
+        ),
+      );
+      final typing = find.descendant(
+        of: find.byKey(const ValueKey('new-field-0')),
+        matching: find.byType(EditableText),
+      );
+      await tester.tap(typing);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV, character: '@');
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      await tester.pump();
+      expect(reads, 0, reason: 'AltGr+V não é o colar');
+    },
+  );
 
   group('⌘V', () {
     /// A área de transferência como o plugin do runner a lê (`pastedImage`) e o

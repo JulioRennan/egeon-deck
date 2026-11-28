@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../../../commons/widgets/pasted_image.dart';
 import '../../../../../theme/egeon_colors.dart';
+import '../../../../../commons/utils/app_shortcut.dart';
 
 /// Campo de texto corrido da fila: várias linhas, Enter confirma e ⇧Enter
 /// quebra a linha, Esc sai, e ⌘V com imagem na área de transferência vira print
@@ -79,7 +80,7 @@ class _QueueTextFieldState extends State<QueueTextField> {
           : KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.keyV &&
-        HardwareKeyboard.instance.isMetaPressed &&
+        isPrimaryModifierPressed(HardwareKeyboard.instance) &&
         widget.onPasteImage != null &&
         !widget.readOnly) {
       unawaited(_paste());

@@ -37,6 +37,7 @@ class SidebarPanel extends StatefulWidget {
     this.findRequests,
     this.takeFindPending,
     this.onCollapse,
+    this.onAppMenu,
     super.key,
   });
 
@@ -57,6 +58,10 @@ class SidebarPanel extends StatefulWidget {
 
   /// Recolher a gaveta (o último botão do cabeçalho).
   final VoidCallback? onCollapse;
+
+  /// O menu ☰ do app (fora do macOS): quem o abre recebe o `context` da
+  /// barra, que é onde os cubits do app estão.
+  final void Function(BuildContext context, Rect anchor)? onAppMenu;
 
   @override
   State<SidebarPanel> createState() => _SidebarPanelState();
@@ -202,6 +207,9 @@ class _SidebarPanelState extends State<SidebarPanel> {
           onFilters: _filtersPopover,
           filterCount: filters.count,
           onCollapse: widget.onCollapse,
+          onAppMenu: widget.onAppMenu == null
+              ? null
+              : (anchor) => widget.onAppMenu!(context, anchor),
         ),
         const SizedBox(height: EgeonSpace.s2),
         if (!filters.isEmpty)
