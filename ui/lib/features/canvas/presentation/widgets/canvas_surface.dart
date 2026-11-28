@@ -27,6 +27,7 @@ import 'edge_controls.dart';
 import 'edge_painter.dart';
 import 'surface_probe.dart';
 import 'tool_overlay.dart';
+import '../../../../commons/utils/app_shortcut.dart';
 
 /// O corpo de um card, por tipo de nó. Quem compõe a tela decide o que mostrar
 /// (terminal, web, fila): o canvas só posiciona.
@@ -299,9 +300,10 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
         onPointerUp: _endPan,
         onPointerCancel: _endPan,
         onPointerSignal: (event) {
-          // ⌘+scroll: zoom ancorado no cursor, como no Figma.
+          // ⌘+scroll (Ctrl+scroll fora do macOS): zoom ancorado no cursor, como no
+          // Figma.
           if (event is PointerScrollEvent &&
-              HardwareKeyboard.instance.isMetaPressed) {
+              isPrimaryModifierPressed(HardwareKeyboard.instance)) {
             GestureBinding.instance.pointerSignalResolver.register(event, (_) {
               _cubit.wheelZoom(
                 event.scrollDelta.dy,
@@ -317,7 +319,7 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
         onPointerPanZoomUpdate: (e) {
           if (e.scale != 1) {
             _cubit.pinchZoom(_pinchFrom, e.scale, e.localPosition);
-          } else if (HardwareKeyboard.instance.isMetaPressed) {
+          } else if (isPrimaryModifierPressed(HardwareKeyboard.instance)) {
             // ⌘ + dois dedos: o mesmo zoom no cursor da ⌘+roda, de qualquer
             // ponto do canvas, inclusive sobre um terminal. O trackpad manda
             // o deslocamento dos dedos, o contrário do da roda.
@@ -425,14 +427,15 @@ class _CanvasSurfaceState extends State<CanvasSurface> {
     },
     onPointerSignal: (event) {
       if (event is PointerScrollEvent &&
-          !HardwareKeyboard.instance.isMetaPressed) {
+          !isPrimaryModifierPressed(HardwareKeyboard.instance)) {
         GestureBinding.instance.pointerSignalResolver.register(event, (_) {
           _cubit.scroll(event.scrollDelta);
         });
       }
     },
     onPointerPanZoomUpdate: (e) {
-      if (e.scale == 1 && !HardwareKeyboard.instance.isMetaPressed) {
+      if (e.scale == 1 &&
+          !isPrimaryModifierPressed(HardwareKeyboard.instance)) {
         _cubit.trackpadPan(e.panDelta);
       }
     },

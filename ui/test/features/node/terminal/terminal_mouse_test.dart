@@ -21,6 +21,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/eg_host.dart';
 import '../../../support/fake_terminal_repository.dart';
 
+import 'package:egeon_deck/commons/utils/app_shortcut.dart';
+
 /// Mouse, seleção, rolagem, cópia e efeitos (US-405, lado UI). A UI manda tudo
 /// cru; quem decide é o core.
 void main() {
@@ -397,6 +399,57 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await tester.pump();
     expect(clipboardWrites, isEmpty);
+  });
+
+  group('Ctrl sobre um link, fora do macOS', () {
+    setUp(() => debugUsesCommandKey = false);
+    tearDown(() => debugUsesCommandKey = true);
+
+    testWidgets('Ctrl+scroll é zoom do canvas: o terminal o ignora', (
+      tester,
+    ) async {
+      await pumpTerminal(tester);
+      final mouse = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(mouse.hover(cellAt(5, 5)));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendEventToBinding(
+        mouse.scroll(Offset(0, -cell.cellHeight * 5)),
+      );
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(repository.pointers, isEmpty);
+    });
+
+    testWidgets('com Ctrl a mão pergunta ao core, e o clique vai com meta', (
+      tester,
+    ) async {
+      await pumpTerminal(tester);
+      repository.linkUnderCursor = true;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(cellAt(3.5, 2.5));
+      await tester.pump();
+      await tester.pump();
+      expect(repository.hovers, isNotEmpty);
+
+      await mouse.down(cellAt(3.5, 2.5));
+      await mouse.up();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(repository.pointers.map((p) => p.meta), everyElement(isTrue));
+    });
+
+    testWidgets('a tecla Win não pergunta por link', (tester) async {
+      await pumpTerminal(tester);
+      repository.linkUnderCursor = true;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(cellAt(3.5, 2.5));
+      await tester.pump();
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      expect(repository.hovers, isEmpty);
+    });
   });
 
   group('efeitos', () {

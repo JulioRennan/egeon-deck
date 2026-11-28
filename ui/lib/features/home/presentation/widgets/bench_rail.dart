@@ -15,6 +15,7 @@ import '../../../../theme/egeon_tokens.dart';
 import '../../../../theme/egeon_type.dart';
 import '../../../tabs/domain/entities/workbench_tab.dart';
 import 'drawer_hover.dart';
+import '../../../../commons/utils/app_shortcut.dart';
 
 /// O trilho de bancadas à esquerda: duas pastilhas de vidro, uma com "Nova
 /// bancada" e outra com "Todas as bancadas" (abre a gaveta, com o total de
@@ -108,7 +109,7 @@ class BenchRail extends StatelessWidget {
                               ToolButton(
                                 icon: EgIcons.sidebar,
                                 tooltip: 'Todas as bancadas',
-                                shortcut: '⌘/',
+                                shortcut: appShortcutLabel('/'),
                                 selected: drawerOpen,
                                 onPressed: onToggleDrawer,
                               ),
@@ -346,7 +347,7 @@ class RailBench extends StatelessWidget {
                     MenuItem(
                       'Fechar bancada',
                       icon: EgIcons.x,
-                      shortcut: '⌘W',
+                      shortcut: appShortcutLabel('W'),
                       onSelected: onClose,
                     ),
                   ],

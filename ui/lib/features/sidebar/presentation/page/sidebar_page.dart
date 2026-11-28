@@ -13,12 +13,20 @@ import '../widgets/sidebar_panel.dart';
 /// formulário volta para a casca por [commands]. Precisa de um [SidebarCubit]
 /// acima, que a casca provê: ela também muda a aba quando o core pede de fora.
 class SidebarPage extends StatelessWidget {
-  const SidebarPage({required this.commands, this.onCollapse, super.key});
+  const SidebarPage({
+    required this.commands,
+    this.onCollapse,
+    this.onAppMenu,
+    super.key,
+  });
 
   final SidebarCommands commands;
 
   /// Recolher a gaveta: o último botão do cabeçalho.
   final VoidCallback? onCollapse;
+
+  /// O menu ☰ do app, fora do macOS (decisão 55).
+  final void Function(BuildContext context, Rect anchor)? onAppMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +44,7 @@ class SidebarPage extends StatelessWidget {
           takeFindPending: cubit.takeFindPending,
           commands: commands,
           onCollapse: onCollapse,
+          onAppMenu: onAppMenu,
           onDrop: (item, target) => _drop(cubit, item, target),
           onPlan: cubit.planMove,
           groups: GroupActions(

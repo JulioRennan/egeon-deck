@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/in_memory_canvas_repository.dart';
 import '../../../support/pump_canvas.dart';
 
+import 'package:egeon_deck/commons/utils/app_shortcut.dart';
+
 /// Dois dedos no trackpad: sem ⌘ o canvas anda; com ⌘, zoom no cursor —
 /// como a ⌘+roda (auditoria, Canvas).
 void main() {
@@ -46,5 +48,20 @@ void main() {
 
     expect(state(tester).viewport.zoom, before.zoom);
     expect(state(tester).viewport.origin, isNot(before.origin));
+  });
+
+  testWidgets('fora do macOS, Ctrl + dois dedos aproximam no cursor', (
+    tester,
+  ) async {
+    debugUsesCommandKey = false;
+    addTearDown(() => debugUsesCommandKey = true);
+    await pumpCanvas(tester, InMemoryCanvasRepository());
+    final before = state(tester).viewport.zoom;
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await twoFingers(tester, const Offset(600, 600), const Offset(0, 60));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+    expect(state(tester).viewport.zoom, isNot(before));
   });
 }

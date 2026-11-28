@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../../../../commons/utils/app_shortcut.dart';
 import '../../../../../theme/egeon_terminal_palette.dart';
 import '../../domain/entities/terminal_cursor.dart';
 import '../../domain/entities/terminal_effect.dart';
@@ -140,9 +141,8 @@ class _TerminalViewState extends State<TerminalView> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.metaLeft ||
-        event.logicalKey == LogicalKeyboardKey.metaRight) {
-      // ⌘ apertado ou solto: a mão aparece (ou some) sem mexer o mouse.
+    if (isPrimaryModifierKey(event.logicalKey)) {
+      // ⌘ (Ctrl fora do macOS) apertado ou solto: a mão aparece (ou some) sem mexer o mouse.
       _linkCell = null;
       _refreshLink();
     }
@@ -156,7 +156,11 @@ class _TerminalViewState extends State<TerminalView> {
     // sem ela as letras (que a UI deixa para o método de entrada) sumiriam.
     if (!_input.attached) _input.attach();
     final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isMetaPressed && event is! KeyUpEvent) {
+    // Ctrl+Tab e Ctrl+PgUp/PgDn trocam de aba fora do macOS: sobem à casca.
+    if (isTabSwitchKey(event.logicalKey, keyboard)) {
+      return KeyEventResult.ignored;
+    }
+    if (isAppModifierPressed(keyboard) && event is! KeyUpEvent) {
       final key = event.logicalKey;
       if (key == LogicalKeyboardKey.keyV) {
         unawaited(_paste());
@@ -227,7 +231,9 @@ class _TerminalViewState extends State<TerminalView> {
       ctrl: keyboard.isControlPressed,
       alt: keyboard.isAltPressed,
       shift: keyboard.isShiftPressed,
-      meta: keyboard.isMetaPressed,
+      // O core abre o link no soltar com `meta`; fora do macOS o gesto é o
+      // Ctrl-clique (decisão 55) e vai com o mesmo nome no fio.
+      meta: isPrimaryModifierPressed(keyboard),
       lines: lines,
     );
   }
@@ -249,7 +255,9 @@ class _TerminalViewState extends State<TerminalView> {
   void _refreshLink() {
     final at = _hoverAt;
     final ask = widget.onLinkHover;
-    if (at == null || ask == null || !HardwareKeyboard.instance.isMetaPressed) {
+    if (at == null ||
+        ask == null ||
+        !isPrimaryModifierPressed(HardwareKeyboard.instance)) {
       _linkCell = null;
       _setLinkCursor(false);
       return;
@@ -327,9 +335,9 @@ class _TerminalViewState extends State<TerminalView> {
   }
 
   void _onSignal(PointerSignalEvent event) {
-    // ⌘+scroll é zoom do canvas.
+    // ⌘+scroll (Ctrl+scroll fora do macOS) é zoom do canvas.
     if (event is! PointerScrollEvent ||
-        HardwareKeyboard.instance.isMetaPressed ||
+        isPrimaryModifierPressed(HardwareKeyboard.instance) ||
         widget.onPointer == null) {
       return;
     }
@@ -406,10 +414,10 @@ class _TerminalViewState extends State<TerminalView> {
                 onPointerCancel: _onPointerUp,
                 onPointerSignal: _onSignal,
                 onPointerPanZoomUpdate: (e) {
-                  // Com ⌘ o gesto é zoom do canvas, não rolagem da tela.
+                  // Com ⌘ (Ctrl fora do macOS) o gesto é zoom do canvas, não rolagem da tela.
                   if (e.scale == 1 &&
                       widget.onPointer != null &&
-                      !HardwareKeyboard.instance.isMetaPressed) {
+                      !isPrimaryModifierPressed(HardwareKeyboard.instance)) {
                     _wheel(e.panDelta.dy, e);
                   }
                 },
