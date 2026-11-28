@@ -4,12 +4,16 @@
 
 #include <commctrl.h>
 #include <dwmapi.h>
+#include <dxgi1_6.h>
+#include <wrl/client.h>
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 #include <flutter_windows.h>
 
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
@@ -375,7 +379,149 @@ void OnMethodCall(
   }
 }
 
+// ---- relatório da GPU ------------------------------------------------------
+
+struct AdapterInfo {
+  bool found = false;
+  std::string name;
+  LUID luid = {};
+  bool software = false;
+};
+
+std::string Utf8(const wchar_t* wide) {
+  const int size =
+      WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+  if (size <= 1) return std::string();
+  std::string out(static_cast<size_t>(size), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, wide, -1, &out[0], size, nullptr, nullptr);
+  out.resize(static_cast<size_t>(size) - 1);
+  return out;
+}
+
+AdapterInfo Describe(IDXGIAdapter* adapter) {
+  AdapterInfo info;
+  DXGI_ADAPTER_DESC desc = {};
+  if (adapter != nullptr && SUCCEEDED(adapter->GetDesc(&desc))) {
+    info.found = true;
+    info.name = Utf8(desc.Description);
+    info.luid = desc.AdapterLuid;
+    // O Microsoft Basic Render Driver (WARP) é o 0x1414.
+    info.software = desc.VendorId == 0x1414;
+  }
+  return info;
+}
+
+std::string LuidText(const LUID& luid) {
+  char text[24];
+  std::snprintf(text, sizeof(text), "%08lx:%08lx",
+                static_cast<unsigned long>(luid.HighPart),
+                static_cast<unsigned long>(luid.LowPart));
+  return text;
+}
+
+std::string Text(const AdapterInfo& info) {
+  if (!info.found) return "indisponível";
+  return "\"" + info.name + "\" LUID " + LuidText(info.luid) +
+         (info.software ? " (software)" : "");
+}
+
+// O mesmo adaptador que o motor pede por preferência (manager.cc,
+// GetGpuLuidByPreference): o primeiro de `EnumAdapterByGpuPreference`.
+AdapterInfo RequestedAdapter(DXGI_GPU_PREFERENCE preference) {
+  Microsoft::WRL::ComPtr<IDXGIFactory1> factory1;
+  if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory1)))) return {};
+  Microsoft::WRL::ComPtr<IDXGIFactory6> factory6;
+  if (FAILED(factory1.As(&factory6))) return {};
+  Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+  if (FAILED(factory6->EnumAdapterByGpuPreference(
+          0, preference, IID_PPV_ARGS(&adapter)))) {
+    return {};
+  }
+  return Describe(adapter.Get());
+}
+
+// A mesma leitura do EGEON_SECONDARY_GPU que o plugin faz em
+// `SecondaryGpuPreference`: none, high ou (o padrão) low.
+const char* SecondaryGpuSetting() {
+  static char value[16];
+  const DWORD length = GetEnvironmentVariableA("EGEON_SECONDARY_GPU", value,
+                                               static_cast<DWORD>(sizeof(value)));
+  if (length > 0 && length < sizeof(value)) {
+    if (strcmp(value, "none") == 0) return "none";
+    if (strcmp(value, "high") == 0) return "high";
+  }
+  return "low";
+}
+
+void GpuLog(const std::string& line) {
+  SYSTEMTIME now;
+  GetLocalTime(&now);
+  char stamp[40];
+  std::snprintf(stamp, sizeof(stamp), "%04d-%02d-%02d %02d:%02d:%02d ",
+                now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute,
+                now.wSecond);
+  const std::string text = std::string(stamp) + line + "\r\n";
+  OutputDebugStringA(text.c_str());
+  const std::wstring folder = StateFile();
+  if (folder.empty()) return;
+  const std::wstring path =
+      folder.substr(0, folder.find_last_of(L'\\')) + L"\\gpu.log";
+  HANDLE file = CreateFileW(path.c_str(), FILE_APPEND_DATA,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) return;
+  DWORD written = 0;
+  WriteFile(file, text.data(), static_cast<DWORD>(text.size()), &written,
+            nullptr);
+  CloseHandle(file);
+}
+
+// A identidade COM do adaptador do motor principal. O adaptador sai do
+// ID3D11Device do motor (IDXGIDevice::GetAdapter): motores que dividem o
+// display do ANGLE dividem o dispositivo e recebem o MESMO objeto; dispositivos
+// separados, mesmo na mesma GPU, recebem objetos distintos. O ponteiro fica
+// guardado para o endereço não ser reaproveitado por outro objeto.
+Microsoft::WRL::ComPtr<IUnknown>& MainAdapterIdentity() {
+  static Microsoft::WRL::ComPtr<IUnknown> identity;
+  return identity;
+}
+
 }  // namespace
+
+void EgeonReportGpu(flutter::FlutterViewController* controller,
+                    bool secondary) {
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+  const bool read = controller->engine()->GetGraphicsAdapter(&adapter);
+  const AdapterInfo used = read ? Describe(adapter.Get()) : AdapterInfo();
+  Microsoft::WRL::ComPtr<IUnknown> identity;
+  if (read) adapter.As(&identity);
+  if (!secondary) {
+    MainAdapterIdentity() = identity;
+    GpuLog("janela principal: adaptador em uso " + Text(used));
+    return;
+  }
+  const std::string setting = SecondaryGpuSetting();
+  // Com `none` o motor não pede adaptador nenhum.
+  const AdapterInfo requested =
+      setting == "none"
+          ? AdapterInfo()
+          : RequestedAdapter(setting == "high"
+                                 ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE
+                                 : DXGI_GPU_PREFERENCE_MINIMUM_POWER);
+  const IUnknown* main_identity = MainAdapterIdentity().Get();
+  std::string verdict;
+  if (identity == nullptr || main_identity == nullptr) {
+    verdict = "display INDETERMINADO: o motor não informou o adaptador";
+  } else if (identity.Get() == main_identity) {
+    verdict = "display COMPARTILHADO com o principal (mesmo dispositivo D3D11)";
+  } else {
+    verdict = "display PRÓPRIO (dispositivo D3D11 distinto do principal)";
+  }
+  const std::string asked =
+      setting == "none" ? std::string("nenhum") : Text(requested);
+  GpuLog("janela secundária: EGEON_SECONDARY_GPU=" + setting + "; pedido " +
+         asked + "; em uso " + Text(used) + "; " + verdict);
+}
 
 void EgeonAttachWindowChannel(flutter::FlutterViewController* controller,
                               bool secondary) {

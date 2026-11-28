@@ -580,32 +580,18 @@ impl FileCloner for FakeCloner {
     }
 }
 
-/// Links e permissões de verdade, pelo `std` do sistema: o teste vê o disco.
+/// Não toca o disco: link e bit de execução de verdade mudam por sistema, e o
+/// core não tem `cfg`. Nenhum teste do core lê o link nem o bit; as chamadas
+/// reais são testadas no driver (`egeon-driver/tests/file_clone.rs`).
 #[derive(Default)]
 pub struct FakeLinks;
 
 impl FileLinks for FakeLinks {
-    #[cfg(unix)]
-    fn symlink(&self, target: &Path, link: &Path) -> std::io::Result<()> {
-        std::os::unix::fs::symlink(target, link)
+    fn symlink(&self, _target: &Path, _link: &Path) -> std::io::Result<()> {
+        Ok(())
     }
-    #[cfg(windows)]
-    fn symlink(&self, target: &Path, link: &Path) -> std::io::Result<()> {
-        if target.is_dir() {
-            std::os::windows::fs::symlink_dir(target, link)
-        } else {
-            std::os::windows::fs::symlink_file(target, link)
-        }
-    }
-    #[cfg(unix)]
-    fn make_executable(&self, path: &Path) -> std::io::Result<()> {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
-    }
-    // Sem bit de execução no Windows.
-    #[cfg(windows)]
-    fn make_executable(&self, path: &Path) -> std::io::Result<()> {
-        std::fs::metadata(path).map(|_| ())
+    fn make_executable(&self, _path: &Path) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
