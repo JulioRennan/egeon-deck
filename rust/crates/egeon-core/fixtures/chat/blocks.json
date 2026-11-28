@@ -1,0 +1,375 @@
+{
+  "blocks": [
+    {
+      "at": "1970-01-01T00:16:40.000Z",
+      "depth": 0,
+      "first": true,
+      "from": null,
+      "id": "p|u1",
+      "kind": "prompt",
+      "last": true,
+      "mention": false,
+      "messageKey": "p|u1",
+      "pending": false,
+      "quote": null,
+      "text": "faz",
+      "to": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      }
+    },
+    {
+      "at": null,
+      "cost": {
+        "detail": "Este turno: entrada 0 · saída 1,00M · cache escrito 0 · cache lido 0",
+        "text": "US$ 20,00"
+      },
+      "depth": 0,
+      "first": true,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "h|u1",
+      "kind": "header",
+      "last": false,
+      "messageKey": "r|u1",
+      "quote": null
+    },
+    {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "spans": [
+            {
+              "kind": "text",
+              "text": "Vou olhar."
+            }
+          ]
+        }
+      ],
+      "depth": 0,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|0",
+      "kind": "prose",
+      "last": false,
+      "messageKey": "r|u1"
+    },
+    {
+      "code": "let a = 1",
+      "depth": 0,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|1",
+      "kind": "code",
+      "language": "swift",
+      "last": false,
+      "messageKey": "r|u1",
+      "spans": [
+        [
+          {
+            "kind": "keyword",
+            "text": "let"
+          },
+          {
+            "kind": "plain",
+            "text": " a = "
+          },
+          {
+            "kind": "number",
+            "text": "1"
+          }
+        ]
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "spans": [
+            {
+              "kind": "text",
+              "text": "Depois disso."
+            }
+          ]
+        }
+      ],
+      "depth": 0,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|2",
+      "kind": "prose",
+      "last": false,
+      "messageKey": "r|u1"
+    },
+    {
+      "depth": 0,
+      "expanded": true,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|3",
+      "kind": "step",
+      "last": false,
+      "messageKey": "r|u1",
+      "step": {
+        "detail": "swift test",
+        "glyph": "$",
+        "isError": false,
+        "text": "Roda"
+      }
+    },
+    {
+      "depth": 0,
+      "diff": [
+        "@@ -1 +1 @@",
+        "-a",
+        "+b"
+      ],
+      "file": "a.swift",
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|4",
+      "kind": "diff",
+      "last": false,
+      "messageKey": "r|u1"
+    },
+    {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "spans": [
+            {
+              "kind": "text",
+              "text": "Pronto."
+            }
+          ]
+        }
+      ],
+      "depth": 0,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|5",
+      "kind": "prose",
+      "last": false,
+      "messageKey": "r|u1"
+    },
+    {
+      "depth": 0,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "s|u1",
+      "kind": "status",
+      "last": true,
+      "live": {
+        "state": "thinking"
+      },
+      "messageKey": "r|u1"
+    },
+    {
+      "at": "1970-01-01T00:17:00.000Z",
+      "depth": 0,
+      "first": true,
+      "from": "back",
+      "id": "p|f2",
+      "kind": "prompt",
+      "last": true,
+      "mention": false,
+      "messageKey": "p|f2",
+      "pending": false,
+      "quote": null,
+      "text": "cita a anterior",
+      "to": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      }
+    },
+    {
+      "at": "1970-01-01T00:17:10.000Z",
+      "depth": 0,
+      "first": true,
+      "from": null,
+      "id": "e|front|1030.0",
+      "kind": "prompt",
+      "last": true,
+      "mention": false,
+      "messageKey": "e|front|1030.0",
+      "pending": true,
+      "quote": null,
+      "text": "eco",
+      "to": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      }
+    },
+    {
+      "depth": 0,
+      "first": true,
+      "from": {
+        "address": "deck/back",
+        "id": "back",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "t|back",
+      "kind": "typing",
+      "last": true,
+      "messageKey": "t|back"
+    },
+    {
+      "at": "1970-01-01T00:16:49.000Z",
+      "cost": null,
+      "depth": 0,
+      "first": true,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "h|u1",
+      "kind": "header",
+      "last": false,
+      "messageKey": "r|u1",
+      "quote": null
+    },
+    {
+      "count": 3,
+      "depth": 0,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "g|u1|0",
+      "kind": "group",
+      "last": false,
+      "lastStep": "três",
+      "level": "summary",
+      "messageKey": "r|u1"
+    },
+    {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "spans": [
+            {
+              "kind": "text",
+              "text": "No meio."
+            }
+          ]
+        }
+      ],
+      "depth": 0,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|3",
+      "kind": "prose",
+      "last": false,
+      "messageKey": "r|u1"
+    },
+    {
+      "code": "let a = 1",
+      "depth": 0,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|4",
+      "kind": "code",
+      "language": "swift",
+      "last": false,
+      "messageKey": "r|u1",
+      "spans": [
+        [
+          {
+            "kind": "keyword",
+            "text": "let"
+          },
+          {
+            "kind": "plain",
+            "text": " a = "
+          },
+          {
+            "kind": "number",
+            "text": "1"
+          }
+        ]
+      ]
+    },
+    {
+      "depth": 0,
+      "expanded": false,
+      "first": false,
+      "from": {
+        "address": "deck/front",
+        "id": "front",
+        "isAgent": true,
+        "role": null
+      },
+      "id": "b|u1|5",
+      "kind": "step",
+      "last": true,
+      "messageKey": "r|u1",
+      "step": {
+        "detail": "d",
+        "glyph": "$",
+        "isError": false,
+        "text": "quatro"
+      }
+    }
+  ]
+}

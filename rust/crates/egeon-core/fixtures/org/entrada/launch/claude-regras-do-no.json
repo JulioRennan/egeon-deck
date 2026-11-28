@@ -1,0 +1,1 @@
+{"node": {"type": "agent", "id": "dev", "agent": "claude", "conversationId": "c1", "rules": "regra do nó", "byAgent": {"claude": {"rules": "regra do claude", "prompt": "papel do claude"}}, "prompt": "papel geral"}, "profile": "claude", "rules": "regra da bancada"}

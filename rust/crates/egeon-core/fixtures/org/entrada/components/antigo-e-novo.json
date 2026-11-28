@@ -1,0 +1,19 @@
+{
+  "vscode": {"name": "vscode", "kind": "editor"},
+  "revisor-antigo": {
+    "name": "revisor-antigo", "kind": "agent", "agent": "claude",
+    "model": "opus", "config": "~/.claude-agro", "cmd": "claude --foo",
+    "prompt": "revise", "rules": "em português", "cwd": "app"
+  },
+  "revisor-novo": {
+    "name": "revisor-novo", "kind": "agent", "agent": "claude", "maestro": true,
+    "cwd": "app", "prompt": "você revisa o diff", "rules": "escreva em português",
+    "byAgent": {
+      "claude": {"config": "~/.claude-agro", "model": "opus", "effort": "high"},
+      "opencode": {"rules": "aqui, comente em inglês"}
+    }
+  },
+  "build": {"name": "build", "kind": "shell", "cmd": "make -j8", "cwd": "."},
+  "mapa-vazio": {"name": "mapa-vazio", "kind": "agent", "agent": "codex", "byAgent": {}},
+  "ja-no-mapa": {"name": "ja-no-mapa", "kind": "agent", "agent": "claude", "model": "velho", "byAgent": {"claude": {"model": "novo"}}}
+}

@@ -5066,3 +5066,29 @@ porque o campo novo não invalidava o cache sozinho: o binário é o mesmo.
 
 **Verificação.** `ContextGaugeTests` e `ContextTokensTests`; no DEV, o card antes e
 depois de `POST /node/clear`.
+
+## ADR-092 — Projeto novo nasce de dentro do workspace
+
+**Problema.** O workspace só recebia pasta que já existia. Começar um repositório
+novo era sair para o terminal, `mkdir`, `git init`, e voltar ao "Editar
+workspace…" para adicioná-lo.
+
+**Decisão.**
+
+- "Novo projeto…" no menu do workspace na barra lateral: nome, pasta-mãe e
+  "Iniciar repositório git" (ligado). Cria a pasta, roda o `git init` e põe o
+  projeto no fim da lista, com o workspace aberto para ele aparecer.
+- A pasta-mãe sugerida é a mais comum entre os projetos de pasta do workspace;
+  empate fica com a do mais recente. Sem projeto de pasta, `~/Documents`.
+  Multi-projeto não conta: a pasta dele é a de links do app.
+- Pasta que já existe com o nome é adotada, não recusada: é o "adicionar" de
+  sempre, e o `git init` só roda se ela não for repositório. Arquivo no caminho,
+  nome com `/` ou `:`, nome começando com ponto e pasta que já é projeto do
+  workspace voltam ao formulário com o aviso e o que foi digitado.
+- O "Adicionar pastas…" do formulário do workspace ganhou o botão de nova pasta
+  do painel do macOS.
+- `POST /project/new?workspace=&name=[&parent=][&git=0]` faz o mesmo sem o
+  formulário.
+
+**Verificação.** `NewProjectTests`; no DEV, `POST /project/new` criando com e sem
+git, e recusando repetido, nome com barra e pasta-mãe inexistente.

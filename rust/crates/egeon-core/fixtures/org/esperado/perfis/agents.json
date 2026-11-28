@@ -1,0 +1,188 @@
+{
+  "claude" : {
+    "attention" : {
+      "marker" : {
+        "ask" : "[[ED:ask]]",
+        "done" : "[[ED:ok]]",
+        "enabled" : true,
+        "instruction" : "Protocolo Egeon: termine TODA resposta com um marcador sozinho na última linha, sem nada depois dele.\n{done} — terminei e não dependo de você.\n{ask} — parei e dependo de uma resposta sua: dúvida, escolha, permissão ou informação que falta.\n{wait} — parei, mas deixei trabalho rodando em segundo plano (comando em background, subagente, vizinho acionado) e volto sozinho quando ele acabar.\nSe você fez uma pergunta ao usuário, o marcador é {ask}. Um marcador só, sempre por último.",
+        "wait" : "[[ED:wait]]"
+      },
+      "minWorkMs" : 2000,
+      "patterns" : [
+
+      ],
+      "sound" : "Tink",
+      "volume" : 0.3
+    },
+    "clear" : "\/clear",
+    "command" : [
+      "claude"
+    ],
+    "configEnv" : "CLAUDE_CONFIG_DIR",
+    "configGlob" : "~\/.claude*",
+    "displayName" : "Claude Code",
+    "effort" : [
+      "--effort",
+      "{effort}"
+    ],
+    "effortEnv" : "CLAUDE_CODE_EFFORT_LEVEL",
+    "efforts" : [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "idle" : {
+      "ms" : 1500,
+      "strategy" : "silence",
+      "warmupMs" : 4000
+    },
+    "inject" : {
+      "mode" : "bracketed-paste",
+      "submit" : "\r",
+      "submitDelayMs" : 150
+    },
+    "model" : [
+      "--model",
+      "{model}"
+    ],
+    "models" : [
+      "fable",
+      "opus",
+      "sonnet",
+      "haiku",
+      "opusplan"
+    ],
+    "newSession" : [
+      "--session-id",
+      "{sessionId}"
+    ],
+    "reportSession" : [
+      "--settings",
+      "{file}"
+    ],
+    "resume" : [
+      "--resume",
+      "{sessionId}"
+    ],
+    "systemPrompt" : [
+      "--append-system-prompt",
+      "{prompt}"
+    ],
+    "ultracode" : [
+      "--effort",
+      "ultracode"
+    ]
+  },
+  "codex" : {
+    "attention" : {
+      "marker" : {
+        "ask" : "[[ED:ask]]",
+        "done" : "[[ED:ok]]",
+        "enabled" : true,
+        "instruction" : "Protocolo Egeon: termine TODA resposta com um marcador sozinho na última linha, sem nada depois dele.\n{done} — terminei e não dependo de você.\n{ask} — parei e dependo de uma resposta sua: dúvida, escolha, permissão ou informação que falta.\n{wait} — parei, mas deixei trabalho rodando em segundo plano (comando em background, subagente, vizinho acionado) e volto sozinho quando ele acabar.\nSe você fez uma pergunta ao usuário, o marcador é {ask}. Um marcador só, sempre por último.",
+        "wait" : "[[ED:wait]]"
+      },
+      "minWorkMs" : 2000,
+      "patterns" : [
+
+      ],
+      "sound" : "Tink",
+      "volume" : 0.3
+    },
+    "command" : [
+      "codex"
+    ],
+    "configEnv" : "CODEX_HOME",
+    "configGlob" : "~\/.codex*",
+    "displayName" : "Codex CLI",
+    "idle" : {
+      "ms" : 1500,
+      "strategy" : "silence",
+      "warmupMs" : 4000
+    },
+    "inject" : {
+      "mode" : "bracketed-paste",
+      "submit" : "\r",
+      "submitDelayMs" : 150
+    },
+    "model" : [
+      "--model",
+      "{model}"
+    ],
+    "models" : [
+
+    ]
+  },
+  "gemini" : {
+    "attention" : {
+      "marker" : {
+        "ask" : "[[ED:ask]]",
+        "done" : "[[ED:ok]]",
+        "enabled" : true,
+        "instruction" : "Protocolo Egeon: termine TODA resposta com um marcador sozinho na última linha, sem nada depois dele.\n{done} — terminei e não dependo de você.\n{ask} — parei e dependo de uma resposta sua: dúvida, escolha, permissão ou informação que falta.\n{wait} — parei, mas deixei trabalho rodando em segundo plano (comando em background, subagente, vizinho acionado) e volto sozinho quando ele acabar.\nSe você fez uma pergunta ao usuário, o marcador é {ask}. Um marcador só, sempre por último.",
+        "wait" : "[[ED:wait]]"
+      },
+      "minWorkMs" : 2000,
+      "patterns" : [
+
+      ],
+      "sound" : "Tink",
+      "volume" : 0.3
+    },
+    "command" : [
+      "gemini"
+    ],
+    "displayName" : "Gemini CLI",
+    "idle" : {
+      "ms" : 1500,
+      "strategy" : "silence",
+      "warmupMs" : 4000
+    },
+    "inject" : {
+      "mode" : "bracketed-paste",
+      "submit" : "\r",
+      "submitDelayMs" : 150
+    },
+    "model" : [
+      "--model",
+      "{model}"
+    ],
+    "models" : [
+
+    ]
+  },
+  "opencode" : {
+    "attention" : {
+      "marker" : {
+        "ask" : "[[ED:ask]]",
+        "done" : "[[ED:ok]]",
+        "enabled" : true,
+        "instruction" : "Protocolo Egeon: termine TODA resposta com um marcador sozinho na última linha, sem nada depois dele.\n{done} — terminei e não dependo de você.\n{ask} — parei e dependo de uma resposta sua: dúvida, escolha, permissão ou informação que falta.\n{wait} — parei, mas deixei trabalho rodando em segundo plano (comando em background, subagente, vizinho acionado) e volto sozinho quando ele acabar.\nSe você fez uma pergunta ao usuário, o marcador é {ask}. Um marcador só, sempre por último.",
+        "wait" : "[[ED:wait]]"
+      },
+      "minWorkMs" : 2000,
+      "patterns" : [
+
+      ],
+      "sound" : "Tink",
+      "volume" : 0.3
+    },
+    "command" : [
+      "opencode"
+    ],
+    "displayName" : "OpenCode",
+    "idle" : {
+      "ms" : 1200,
+      "strategy" : "silence",
+      "warmupMs" : 4000
+    },
+    "inject" : {
+      "mode" : "bracketed-paste",
+      "submit" : "\r",
+      "submitDelayMs" : 150
+    }
+  }
+}

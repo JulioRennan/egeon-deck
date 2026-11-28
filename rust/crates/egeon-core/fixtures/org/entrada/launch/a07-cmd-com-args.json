@@ -1,0 +1,1 @@
+{"node": {"type": "agent", "id": "a", "agent": "claude", "cmd": "claude --verbose", "prompt": "p", "model": "opus"}, "profile": "claude"}

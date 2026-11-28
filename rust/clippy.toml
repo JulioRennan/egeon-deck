@@ -1,0 +1,5 @@
+# Teste pode e deve parar no primeiro erro; a regra de não entrar em pânico é
+# do caminho normal.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

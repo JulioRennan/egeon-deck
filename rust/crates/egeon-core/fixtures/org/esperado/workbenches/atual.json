@@ -1,0 +1,96 @@
+[
+  {
+    "color" : "teal",
+    "edges" : [
+      {
+        "from" : "dev",
+        "maxSends" : 5,
+        "to" : "revisor"
+      },
+      {
+        "from" : "revisor",
+        "maxSends" : 2,
+        "to" : "dev"
+      },
+      {
+        "from" : "dev",
+        "to" : "docs"
+      }
+    ],
+    "id" : "3f9a2c1d",
+    "name" : "deck",
+    "nodes" : [
+      {
+        "agent" : "claude",
+        "byAgent" : {
+          "codex" : {
+            "config" : "~\/.codex",
+            "prompt" : "no codex, resuma antes"
+          },
+          "opencode" : {
+            "rules" : "aqui, comente em inglês"
+          }
+        },
+        "component" : "revisor",
+        "config" : "~\/.claude-agro",
+        "conversationId" : "0b7e6a52-1c4f-4e0a-9d63-2f1c8a7b5d10",
+        "conversationStarted" : true,
+        "cwd" : "packages\/api",
+        "effort" : "high",
+        "h" : 480,
+        "id" : "dev",
+        "maestro" : true,
+        "model" : "opus",
+        "prompt" : "Você é o dev.\nEscreva em português, com \"aspas\" e acentuação: ação\/coração — 🦆",
+        "rules" : "peça antes de commitar",
+        "transcript" : "\/Users\/x\/.claude-agro\/projects\/p\/0b7e.jsonl",
+        "type" : "agent",
+        "ultracode" : true,
+        "w" : 640.5,
+        "x" : -120,
+        "y" : 40.25
+      },
+      {
+        "agent" : "codex",
+        "cwd" : "..\/vizinho",
+        "h" : 300,
+        "id" : "revisor",
+        "type" : "agent",
+        "w" : 400,
+        "x" : 700,
+        "y" : 0
+      },
+      {
+        "cmd" : "make -j8",
+        "id" : "sh",
+        "type" : "shell"
+      },
+      {
+        "id" : "docs",
+        "profile" : "agro",
+        "type" : "web",
+        "url" : "http:\/\/localhost:3000\/farms\/123"
+      },
+      {
+        "id" : "fila",
+        "type" : "queue"
+      }
+    ],
+    "path" : "~\/Documents\/deck",
+    "project" : "a1b2c3d4",
+    "rules" : "escreva em português\npeça antes de commitar",
+    "tabActive" : true,
+    "tabOrder" : 0,
+    "template" : "padrao",
+    "view" : "chat"
+  },
+  {
+    "color" : "blue",
+    "id" : "9e8d7c6b",
+    "name" : "deck-2",
+    "nodes" : [
+
+    ],
+    "path" : "\/Users\/x\/Documents\/deck-worktrees\/feature-x"
+  }
+]

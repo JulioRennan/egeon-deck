@@ -1,0 +1,69 @@
+import 'dart:async';
+
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../domain/entities/agent_status.dart';
+import '../../domain/entities/model_choice.dart';
+import '../../domain/errors/agent_error.dart';
+import '../../domain/usecase/choose_agent_option.dart';
+import '../../domain/usecase/clear_agent.dart';
+import '../../domain/usecase/watch_agent.dart';
+
+part 'agent_state.dart';
+
+/// Um cubit por agente. É dono da assinatura da faixa do cabeçalho: abre ao
+/// nascer e cancela no `close()`. O core manda o estado inteiro a cada
+/// mudança — a UI não aplica diferença.
+class AgentCubit extends Cubit<AgentState> {
+  AgentCubit({
+    required this.nodeId,
+    required WatchAgent watch,
+    required this._choose,
+    required this._clear,
+  }) : super(const AgentWaiting()) {
+    _subscription = watch(nodeId).listen(_onStatus, onError: _onUnreadable);
+  }
+
+  final String nodeId;
+  final ChooseAgentOption _choose;
+  final ClearAgent _clear;
+  StreamSubscription<AgentStatus>? _subscription;
+
+  void _onStatus(AgentStatus status) => emit(AgentShown(status));
+
+  /// A assinatura falhou (a conexão com o core caiu): a faixa do agente não
+  /// pode ficar vazia. Sem nada na tela ainda, vale o que se sabe (o CLI
+  /// padrão, sem limpar); com a faixa já à vista, ela fica como está até o
+  /// próximo estado. Leitura de estado ilegível o repositório já resolve.
+  void _onUnreadable(Object error, StackTrace stack) {
+    if (error is! AgentError) return;
+    if (state is AgentWaiting) {
+      emit(const AgentShown(AgentStatus(clearable: false)));
+    }
+  }
+
+  void chooseModel(String? model) => _fire(_choose(nodeId, ModelPick(model)));
+
+  void moveEffort(int index) => _fire(_choose(nodeId, EffortMove(index)));
+
+  void toggleEffortAuto() => _fire(_choose(nodeId, const EffortToggleAuto()));
+
+  void settleEffort() => _fire(_choose(nodeId, const EffortSettle()));
+
+  void setUltracode({required bool on}) =>
+      _fire(_choose(nodeId, UltracodePick(on: on)));
+
+  void clearConversation() => _fire(_clear(nodeId));
+
+  /// Comando é "mande e siga": o estado que o core mandar a seguir já
+  /// corrige a tela se ele recusar.
+  void _fire(Future<void> future) => unawaited(
+    future.catchError((_) {}, test: (error) => error is AgentError),
+  );
+
+  @override
+  Future<void> close() async {
+    await _subscription?.cancel();
+    return super.close();
+  }
+}

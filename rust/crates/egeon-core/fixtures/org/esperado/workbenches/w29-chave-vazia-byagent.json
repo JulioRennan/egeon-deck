@@ -1,0 +1,19 @@
+[
+  {
+    "color" : "blue",
+    "id" : "b1",
+    "name" : "d",
+    "nodes" : [
+      {
+        "byAgent" : {
+          "" : {
+            "model" : "m"
+          }
+        },
+        "id" : "a",
+        "type" : "agent"
+      }
+    ],
+    "path" : "\/p"
+  }
+]

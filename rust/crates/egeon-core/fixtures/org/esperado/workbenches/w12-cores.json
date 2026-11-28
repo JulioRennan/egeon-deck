@@ -1,0 +1,38 @@
+[
+  {
+    "color" : "blue",
+    "id" : "b1",
+    "name" : "d",
+    "nodes" : [
+
+    ],
+    "path" : "\/p"
+  },
+  {
+    "color" : "violet",
+    "id" : "b2",
+    "name" : "e",
+    "nodes" : [
+
+    ],
+    "path" : "\/q"
+  },
+  {
+    "color" : "pink",
+    "id" : "b3",
+    "name" : "f",
+    "nodes" : [
+
+    ],
+    "path" : "\/r"
+  },
+  {
+    "color" : "cyan",
+    "id" : "b4",
+    "name" : "g",
+    "nodes" : [
+
+    ],
+    "path" : "\/s"
+  }
+]

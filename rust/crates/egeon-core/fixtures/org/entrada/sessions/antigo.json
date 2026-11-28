@@ -1,0 +1,7 @@
+[
+  {"name": "sessao-antiga", "path": "~/antiga", "nodes": [
+    {"type": "agent", "id": "a", "agent": "claude", "sessionId": "S1", "sessionStarted": true},
+    {"type": "editor", "id": "code"}
+  ]},
+  {"id": "00ff00ff", "name": "outra", "path": "/tmp/outra", "nodes": []}
+]

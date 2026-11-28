@@ -1,0 +1,14 @@
+[
+  {
+    "color" : "blue",
+    "id" : "b1",
+    "name" : "d",
+    "nodes" : [
+      {
+        "id" : "a",
+        "type" : "agent"
+      }
+    ],
+    "path" : "\/p"
+  }
+]

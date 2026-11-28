@@ -1,0 +1,26 @@
+[
+  {
+    "color" : "blue",
+    "edges" : [
+      {
+        "from" : "a",
+        "maxSends" : 5,
+        "to" : "b"
+      }
+    ],
+    "id" : "b1",
+    "name" : "deck",
+    "nodes" : [
+      {
+        "agent" : "claude",
+        "h" : 4,
+        "id" : "a",
+        "type" : "agent",
+        "w" : 3,
+        "x" : 1,
+        "y" : 2
+      }
+    ],
+    "path" : "~\/d"
+  }
+]

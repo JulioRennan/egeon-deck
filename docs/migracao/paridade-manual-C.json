@@ -1,0 +1,270 @@
+{
+  "MultiProjectTests.testDecodesOldProjectsAsFolders": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::projeto_antigo_abre_como_pasta"
+    ]
+  },
+  "MultiProjectTests.testMembersRoundTrip": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::membros_vao_e_voltam"
+    ]
+  },
+  "MultiProjectTests.testMembersSkipMissingAndMulti": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::membros_pulam_o_que_sumiu_e_o_multi",
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::membros_do_multi_na_ordem_dele_sem_os_que_sumiram"
+    ]
+  },
+  "MultiProjectTests.testNewMultiResolvesFoldersToProjectIDs": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::multi_novo_resolve_as_pastas_para_ids"
+    ]
+  },
+  "MultiProjectTests.testMultiCanUseFolderAddedInTheSameForm": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::multi_pode_usar_pasta_adicionada_no_mesmo_formulario"
+    ]
+  },
+  "MultiProjectTests.testEditingKeepsIDAndFolderMatchingIgnoresMultis": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::editar_guarda_o_id_e_a_pasta_ignora_multis"
+    ]
+  },
+  "MultiProjectTests.testRemovedMultiWithWorkbenchesStays": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::multi_tirado_com_bancada_fica"
+    ]
+  },
+  "MultiProjectTests.testRemovedMultiWithoutWorkbenchesGoes": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::multi_tirado_sem_bancada_vai_embora"
+    ]
+  },
+  "MultiProjectTests.testLinkNamesDisambiguateSameFolderName": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::nomes_de_link_desambiguam_a_mesma_pasta"
+    ]
+  },
+  "MultiProjectTests.testWorktreeRootLivesUnderCommonParentAndProjectName": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::raiz_da_worktree_mora_sob_o_pai_comum_e_o_nome_do_projeto"
+    ]
+  },
+  "MultiProjectTests.testCommonParentFallsBackToFirstWhenOnlyRootIsShared": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::pai_comum_cai_no_primeiro_quando_so_a_raiz_e_comum"
+    ]
+  },
+  "MultiProjectTests.testMovingTiedProjectsToAnotherWorkspaceIsRefused": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::projeto_amarrado_nao_muda_de_workspace"
+    ]
+  },
+  "MultiProjectTests.testLinkSyncCreatesReplacesAndKeepsForeignFiles": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::sincronizar_cria_troca_e_guarda_o_que_nao_e_link"
+    ]
+  },
+  "MultiProjectTests.testPruneRootOnlyRemovesLinkOnlyFolders": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::podar_so_apaga_pasta_so_de_links",
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::subpastas_de_verdade_nao_incluem_links"
+    ]
+  },
+  "MultiProjectBranchTests.testEveryRepoFollowsTheWorkbenchBranchByDefault": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::todo_repo_segue_a_branch_da_bancada_por_padrao"
+    ]
+  },
+  "MultiProjectBranchTests.testOverrideChangesOnlyThatRepo": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::a_troca_muda_so_aquele_repo"
+    ]
+  },
+  "MultiProjectBranchTests.testRootIsNamedAfterTheWorkbenchBranchWhateverTheRepoBranches": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::a_raiz_leva_o_nome_da_branch_da_bancada_seja_qual_for_a_do_repo"
+    ]
+  },
+  "FolderSuggestionsTests.testOnlyWhatIsInsideTheWorkbenchRelative": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::so_o_que_esta_dentro_da_bancada_relativo"
+    ]
+  },
+  "FolderSuggestionsTests.testRepoChildrenAreFoldersOrLinksWithGit": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::filhos_de_repo_sao_pastas_ou_links_com_git"
+    ],
+    "nota": "o teste Rust também confere que pasta oculta com .git fica de fora"
+  },
+  "RootOptionTests.testRootIsShownForEmpty": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::a_raiz_aparece_como_root_para_vazio"
+    ]
+  },
+  "RootOptionTests.testFolderOptionsStartAtRootAndKeepACustomCurrent": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::a_lista_de_pasta_comeca_na_raiz_e_guarda_a_atual_customizada"
+    ]
+  },
+  "ShellCommandTests.testAgentLegacyRootCmdStillMigratesToByAgent": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/node/tests.rs::campos_da_raiz_antigos_viram_o_mapa_do_cli"
+    ],
+    "nota": "confere que cmd da raiz vai para o mapa do CLI e não é regravado na raiz; que `command` fica nulo vem implícito"
+  },
+  "LastConfigTests.testRememberAndForget": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::lembrar_e_esquecer",
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::lembrar_a_configuracao_e_apagar_com_o_padrao"
+    ]
+  },
+  "ConfigItemsTests.testDefaultIsShownByPathAndNotRepeated": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/node/tests.rs::o_padrao_aparece_pelo_caminho_e_nao_se_repete"
+    ]
+  },
+  "ConfigItemsTests.testMissingCurrentIsKept": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/node/tests.rs::a_atual_que_sumiu_da_lista_fica"
+    ]
+  },
+  "ConfigItemsTests.testProfileDefaultComesFromTheGlob": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/agent/tests.rs::configuracoes_incluem_a_do_ambiente_sem_repetir",
+      "rust/crates/egeon-core/src/features/agent/tests.rs::configuracoes_descobertas_so_diretorios"
+    ],
+    "nota": "config_glob == ~/.claude* num teste; default_config_path == ~/.claude no outro"
+  },
+  "MultiRequiresWorktreeTests.testOnlyMultiRequiresWorktree": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::so_o_multi_exige_worktree"
+    ]
+  },
+  "NewProjectTests.testSuggestsTheParentMostProjectsShare": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::sugere_a_pasta_mae_que_mais_projetos_dividem"
+    ]
+  },
+  "NewProjectTests.testTieGoesToTheNewestProject": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::empate_fica_com_o_projeto_mais_novo"
+    ]
+  },
+  "NewProjectTests.testIgnoresMultiProjectsAndFallsBackWhenEmpty": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::ignora_multi_projeto_e_cai_no_padrao_quando_vazio"
+    ]
+  },
+  "NewProjectTests.testNewFolderIsCreatedWithTildePath": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::pasta_nova_e_criada_com_caminho_com_til"
+    ]
+  },
+  "NewProjectTests.testExistingFolderIsAdoptedNotRecreated": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::pasta_existente_e_adotada_nao_recriada"
+    ]
+  },
+  "NewProjectTests.testRefusals": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::recusas",
+      "rust/crates/egeon-core/src/features/workspace/tests_multi.rs::as_mensagens_das_recusas"
+    ]
+  },
+  "WorkspaceMoveTests.testWorkspaceChangesPlace": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::workspace_muda_de_lugar"
+    ]
+  },
+  "WorkspaceMoveTests.testProjectMovesInsideAndBetweenWorkspaces": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::projeto_anda_dentro_e_entre_workspaces"
+    ]
+  },
+  "WorkspaceMoveTests.testWorkbenchReordersInsideItsProject": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::bancada_reordena_dentro_do_projeto"
+    ]
+  },
+  "WorkspaceMoveTests.testWorkbenchChangesProjectAndLandsAmongItsNewSiblings": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::bancada_muda_de_projeto_e_cai_entre_as_novas_vizinhas"
+    ]
+  },
+  "WorkspaceMoveTests.testProjectGoesInAndOutOfTheDrawer": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::projeto_entra_e_sai_da_gaveta"
+    ]
+  },
+  "WorkspaceMoveTests.testMapPointsEveryMovedIndexToItsNewHome": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::mapa_leva_cada_indice_movido_para_a_casa_nova"
+    ]
+  },
+  "WorkspaceTests.testProjectOwnsPathIgnoringTildeAndTrailingSlash": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::projeto_e_dono_do_caminho_ignorando_til_e_barra_final"
+    ]
+  },
+  "WorkspaceTests.testProjectForFolderNamesAfterFolderAndAbbreviates": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::projeto_para_pasta_leva_o_nome_da_pasta_e_abrevia"
+    ]
+  },
+  "WorkspaceTests.testDecodeFillsIDAndProjectNameDefaults": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::leitura_preenche_id_e_nome_do_projeto"
+    ]
+  },
+  "WorkspaceTests.testWorkbenchProjectRoundTrips": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workbench/tests.rs::todo_campo_da_bancada_vai_e_volta"
+    ],
+    "nota": "o campo `project` da bancada vai e volta junto com os demais"
+  },
+  "WorkspaceTests.testReconcileCreatesDefaultWorkspaceAndOneProjectPerRepo": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::concilia_cria_o_workspace_padrao_e_um_projeto_por_repo"
+    ]
+  },
+  "WorkspaceTests.testReconcileBindsWorktreeToMainRepoProject": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::concilia_liga_a_worktree_ao_projeto_do_repo_principal"
+    ]
+  },
+  "WorkspaceTests.testReconcileKeepsExistingAssignmentAndReportsNoChange": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::concilia_guarda_a_atribuicao_existente_e_diz_que_nada_mudou"
+    ]
+  },
+  "WorkspaceTests.testReconcileReassignsUnknownProjectID": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::concilia_realoca_id_de_projeto_desconhecido"
+    ]
+  },
+  "WorkspaceTests.testReconcileCreatesMissingProjectInFirstWorkspace": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests.rs::concilia_cria_o_projeto_que_falta_no_primeiro_workspace"
+    ]
+  },
+  "WorkspaceTests.testRowsFollowWorkspaceProjectOrderThenOrphans": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::linhas_seguem_workspace_projeto_e_depois_as_orfas"
+    ]
+  },
+  "WorkspaceTests.testCollapsedWorkspaceHidesProjectsAndCollapsedProjectHidesWorkbenches": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::workspace_recolhido_esconde_projetos_e_projeto_recolhido_esconde_bancadas"
+    ],
+    "dart": [
+      "ui/test/features/sidebar/sidebar_page_test.dart::workspace recolhido esconde os projetos"
+    ],
+    "nota": "a conta das linhas é do core; o Dart só confere que a barra esconde os projetos do workspace recolhido"
+  },
+  "WorkspaceTests.testMembershipAndAncestors": {
+    "rust": [
+      "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::pertencimento_e_ancestrais"
+    ]
+  }
+}

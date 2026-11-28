@@ -1,0 +1,1 @@
+{"node": {"type": "agent", "id": "dev", "agent": "claude", "conversationId": "0b7e6a52", "conversationStarted": true, "model": "opus", "effort": "high", "prompt": "papel com 'aspas' e $vars"}, "profile": "claude"}

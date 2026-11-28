@@ -1,0 +1,21 @@
+[
+  {
+    "id" : "w",
+    "name" : "A",
+    "projects" : [
+      {
+        "id" : "p",
+        "name" : "n",
+        "path" : "\/p"
+      },
+      {
+        "id" : "q",
+        "members" : [
+
+        ],
+        "name" : "m",
+        "path" : "\/q"
+      }
+    ]
+  }
+]

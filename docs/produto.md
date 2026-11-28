@@ -1,0 +1,245 @@
+# Egeon Deck — conceitos do produto
+
+> Era o `CLAUDE.md` do app Swift, que saiu desta branch (continua na `main`).
+> Os conceitos e as funcionalidades valem para o app novo; os caminhos de
+> arquivo Swift citados abaixo estão na `main`.
+
+App macOS de uso pessoal: um **canvas infinito onde cada nó é uma ferramenta de
+trabalho real** — terminal, agente de IA, navegador. O ponto é dirigir
+vários agentes em paralelo: cada um vive num terminal endereçável, recebe prompt
+por injeção e avisa quando precisa de você. Um usuário, sem distribuição.
+
+```
+app/          executável Swift (SPM) → EgeonDeck.app
+docs/         00-prior-art · 01-decisoes (ADRs) · 02-mvp
+poc/          protótipos descartados
+```
+
+## Módulos
+
+Modular com MVC por dentro: todo módulo em `Features/`, sempre
+`Models/ · Views/ · Controllers/ · Features/` (submódulo, recursivo). `Core`
+fica fora — é o que as features dividem.
+
+```
+app/Sources/EgeonDeck/
+├── Core/            Flavor · Log · ControlSocket · Peer · AppControl · Glass
+│                    └ Features/EgeonCLI (o comando `egeon`)
+├── Features/
+│   ├── Canvas/          grid, arestas (EdgeController), toolbar
+│   ├── Chat/            o modo chat — participantes, composer, thread
+│   ├── Code/            código como texto — DiffHunk/DiffView (lado a lado),
+│   │                    Language (por extensão), SyntaxLite (realce por linha)
+│   ├── Dispatch/        fila, injeção, Target, guardas de cadeia
+│   ├── Home/            RootView, ViewToolbar, WorkbenchShell, Sidebar
+│   ├── Maestro/         o nó que monta a bancada — plano, planejador, manual
+│   ├── Nodes/           NodeConfig, NodeView, NodeTemplate + concretos
+│   │   └ Features/AgentNode (contrato genérico → Features/ClaudeCode)
+│   ├── Notifications/   Activity, HookEvent, Spinner, AttentionSound
+│   ├── Processes/       procedência dos processos — marca, leitura, janela
+│   ├── Trace/           trilha da bancada — TraceEntry, TraceLog, ShellHook
+│   ├── Usage/           consumo e custo — registro por bancada, tabela de preços,
+│                        pastilha e detalhe (ADR-085)
+│   ├── Update/          atualização do app — versão, assinatura, troca do bundle,
+│   │                    aviso ao abrir e menu (ADR-089)
+│   ├── Workbench/       WorkbenchConfig, Store, WorkbenchTemplate, worktree
+│   └── Workspace/       workspace → projeto: WorkspaceConfig, Store, Tree,
+│                        pastilha (imagem/inicial) e formulário (ADR-043)
+└── main.swift       AppDelegate — único fora de módulo; vira App aos poucos
+```
+
+## Skills
+
+- **`estrutura-de-modulos`** (`.claude/skills/`) — onde código novo vive, as
+  regras de colocação e o processo de mudança. **Consultar antes de criar
+  arquivo, mover código ou decidir onde uma feature mora.**
+- **`protocolo-entre-agentes`** (`.claude/skills/`) — o mapa da camada de
+  coordenação: marcadores `[[ED:*]]`, ganchos, `egeon`, guardas de cadeia,
+  envelope. **Consultar antes de mexer em Dispatch, Notifications, EgeonCLI ou
+  arestas.**
+
+## Conceitos, em uma linha cada
+
+- **Workspace → Projeto → Bancada** (ADR-043) — workspace é nome + foto (ou a
+  inicial) + pastas; cada pasta é um projeto — e "Novo projeto…", no menu do
+  workspace, cria a pasta (com `git init`) sem sair do app (ADR-092); a bancada guarda o `project`
+  (id) a que pertence. Bancada em worktree é do projeto do repositório
+  principal. Todos os workspaces ficam à vista na barra, expansíveis; o
+  arquivo é `workspaces.json`, e `GET /workspaces` devolve a árvore. Os três
+  níveis se **reposicionam arrastando** na barra — bancada muda de projeto, e
+  o mapa de índices leva junto os terminais na tela (ADR-051); `GET /move`
+  faz o mesmo de fora. Cada workspace tem uma **gaveta**: projeto guardado
+  (escolha sua, arrastando ou pelo menu — nunca por tempo sem uso) sai da
+  lista de cima; a gaveta aparece mesmo vazia, porque é o alvo do arrasto
+  (ADR-052). **Multi-projeto** (ADR-065) é projeto feito de outros do mesmo
+  workspace (`members`): a pasta dele é `projects/<id>/` com um link por repo,
+  e em worktree vira `worktrees/<multi>/<branch>/<repo>`.
+- **Bancada** — uma frente de trabalho: pasta + nós abertos sobre ela.
+- **Nó** — um card: `shell` · `agent` · `web` · `queue` (a fila de prompts, ADR-088; o `editor`, VSCode, saiu — ADR-076). `NodeConfig` é a
+  montagem; conversa nunca é copiada junto (`withoutConversation`).
+- **Endereço** — `bancada/id` (ex. `deck/revisor`); estável. A bancada tem
+  ainda um `id` próprio (8 hex) que sobrevive a rename e não se repete — é por
+  ele que o app guarda o que é de uma bancada (`shells`, `edgeControllers`,
+  abas); posição na lista envelhece, e `WorkbenchLookup` faz a tradução.
+- **Aresta** — `from` pode acionar `to`. Vive na **bancada**, não no nó; nasce
+  bidirecional; guardas: aresta obrigatória, `maxSends` e fila por remetente — o
+  limite é só o da aresta (ADR-077).
+- **Conversa** — `conversationId` por nó agente; o CLI chama de sessão.
+- **Visualização** — canvas · chat (⌥⌘1/2); o card é o MESMO `NodeView`, o
+  dono é o `WorkbenchShell`. Em chat o canvas fica montado por baixo, coberto
+  (o pty precisa do passe de layout), e o terminal mostrado no chat é o card
+  reparentado. O mosaico saiu (ADR-073).
+- **Barra lateral** (ADR-082) — duas abas: Todas (a árvore) e Ativas (as de
+  pé, soltas, pela última execução — `WorkbenchClock.lastActive` —, divididas
+  em últimas 24 h e paradas há mais). `/sidebar?tab=all|active`.
+- **Abas** (ADR-061) — as bancadas ABERTAS numa faixa no topo do conteúdo, com
+  os mesmos badges da barra lateral; a lateral continua sendo o catálogo (tudo
+  que existe). **Fechar a aba não encerra a bancada**: sai da faixa, os
+  terminais seguem rodando e ela volta pela lateral. `openTabs` (à vista) e
+  `shells` (de pé) são conjuntos diferentes. ⌘]/⌘[ percorrem a faixa, ⌘1…⌘9 vão
+  direto, ⌘W fecha a aba, ⌘→/⌘← vão para a aba do lado (desabilitados dentro de
+  caixa de texto, onde a seta é da edição). **Arrastar a aba reordena**
+  (ADR-062): a pastilha acompanha o cursor e as vizinhas deslizam — a linha de
+  inserção fica só na barra lateral, onde o destino é ambíguo. A faixa vai para
+  o disco (`tabOrder`/`tabActive`) e volta no arranque, com teto de seis.
+  Confere-se por `GET /tabs` (`?close=<bancada>` fecha,
+  `?move=<bancada>&to=<n>` reordena).
+- **Chat** — spec em `docs/03-spec-chat.md`. Participantes com cor própria e
+  estado, composer estilo Slack, envio real, thread por turno com passos e
+  citações. **Linha do tempo plana** (ADR-042): cada turno de cada agente é
+  uma bolha, inclusive o que veio de outro agente ("✦ front" em cima); a marca
+  é só o `@destinatário`, e só quando a mensagem não é contínua; nada
+  aninha. A thread é um `NSTableView` com **uma linha por bloco** da cadeia
+  (`ChatBlock`), alturas medidas na fila de fundo (`ChatBlockLayout`) e diff
+  por id entre montagens (`ChatThreadController`). A bolha desenha a
+  **cadeia** do turno na ordem (prosa, passo, diff, prosa — `ChatTurn.parts`)
+  — passo de comando nasce **recolhido**, só o título com `▸`, e clique abre;
+  passos contíguos viram **uma capa** ("⚙ 3 passos"), e o clique nela
+  aprofunda — resumo, títulos, tudo aberto (ADR-049) —, mas fecha se você já
+  abriu um passo à mão, e "tudo aberto" abre os passos de verdade, cada um
+  ainda seu (ADR-053); o passo da capa é
+  sub-bolha, recuada um tab e com caixa própria (ADR-050);
+  **diff nunca recolhe** (o `DiffView` lado a lado está sempre lá) e leitura
+  mostra o arquivo com o formatador (ADR-044/046) — e cresce ao vivo enquanto
+  o agente trabalha, lendo a cauda do transcript dele — a partir do prompt do
+  turno — só nesse intervalo (ADR-039). O que já fechou sai do
+  **histórico do app** (`ChatHistory`,
+  `workbenches/<id>/chat.jsonl`, gravado no `Stop`), não do transcript do
+  CLI. Botão de limpar a bancada (barra lateral, botão direito): `clear` do perfil em cada
+  agente e, **depois de eles assentarem**, chat arquivado como
+  `chat-archive/chat-<início>_<fim>.jsonl` e trilha como
+  `trace-archive/trace-<início>_<fim>.md`
+  (`POST /workbench/clear`, que só responde no fim; só o chat:
+  `POST /chat/clear`) (ADR-037/059). Enquanto isso a bancada fica com a cortina
+  de "um instante" (`BusyOverlay`) e não aceita clique; no fim o chat esquece o
+  que guardava em memória (`clearedHistory` — eco não confirmado e turno ao
+  vivo), que era a bolha órfã que sobrava. A thread
+  desce sozinha quando você está no fim: o fim é medido depois do passe de
+  layout, a descida animada em curso conta como fim, e enviar sempre desce
+  (ADR-045).
+
+## Funcionalidades, por cima
+
+- Agentes conversam via `egeon peers` / `egeon send` — topologia consultada em
+  tempo real; quem falou vem do pid do socket, nunca do texto. `egeon tasks` / `egeon task done|ask|note <id>`
+  marcam, perguntam e comentam nas tarefas de uma fila de prompts (ADR-088). `egeon status` diz
+  ao agente quem ELE é (endereço, papel, bancada) e `egeon peek <endereço>` lê a
+  tela do vizinho sem interromper — só de quem ele já pode acionar. No Claude
+  Code o app publica uma **skill** (`ClaudeSkill` → `skills/egeon/SKILL.md` no
+  root de CADA `~/.claude*`, porque skill é por configuração e cada nó escolhe a
+  sua) para que "pede pro fulano" acione o vizinho em vez de abrir um subagente
+  do CLI (ADR-054). Quem **recebe** um pedido de outro agente responde a ele ao
+  terminar — e avisa antes de parar para perguntar ao usuário (ADR-058).
+- Estado do terminal por gancho do CLI (`stop`/`ask`/`prompt` → `/activity`);
+  laranja interrompe (permissão), verde só informa (terminou), e a ampulheta
+  "⏳ em segundo plano" é o turno que fechou com trabalho de fundo rodando —
+  no Claude Code, lido do `background_tasks` do `Stop`; nos outros, do
+  `[[ED:wait]]` (ADR-063/067). "⏳ aguardando <vizinho>" é quem acionou agente
+  e espera a volta: não apita, nem com `[[ED:ask]]` (ADR-067).
+- **Permissão pelo chat** (ADR-068): o gancho `PermissionRequest` abre o
+  pedido no `PermissionDesk` e espera; a faixa acima do composer responde
+  (`/permission/answer`), e tecla no terminal ou turno que segue fecham o
+  pedido sem resposta — o diálogo da TUI continua valendo. `GET /permissions`
+  lista os abertos. A pergunta do `AskUserQuestion` chega pelo mesmo gancho e
+  vira botões de opção (`choice=` ou corpo `answers`).
+- Worktree por bancada E por terminal (formulário decide pela branch).
+- Modelo, esforço e ultracode por nó de agente: formulário e uma faixa própria
+  no cabeçalho (`accessoryRow` → `ModelRow`), à direita. Os modelos e os níveis
+  que cada um aceita vêm da tabela **dentro do binário do Claude Code**
+  (`ClaudeModelCatalog`, cache em `claude-models.json`); sem ela, os apelidos
+  do `agents.json`. Ultracode ocupa o `--effort`, e o nível vai por
+  `CLAUDE_CODE_EFFORT_LEVEL`. Trocar reinicia o processo e retoma a conversa
+  (ADR-064). A mesma faixa mostra o contexto em uso, lido do transcript, e tem o
+  ícone de limpar só aquele agente (ADR-091).
+- **Maestro** (ADR-066) — nó de agente marcado no formulário (`NodeConfig.maestro`)
+  ganha `egeon bench`/`models`/`plan`/`apply`: monta a própria bancada por um plano
+  JSON declarativo (`MaestroPlan` → `MaestroPlanner` valida inteiro → 
+  `MaestroController` aplica por closures). Não se reconfigura, não faz maestro,
+  não reinicia nó em turno (segundo plano só com `force`); é o mestre da bancada —
+  alcança todos e todos o alcançam sem aresta desenhada (`MaestroLinks`); time que
+  muda rearruma o canvas (`MaestroLayout`); todo `apply` vai para a trilha. Recebe os pedidos de ferramenta do time em uma linha e responde com `egeon allow`/`deny` — sempre, sem caixa à parte (ADR-080). O manual é a skill `egeon-maestro`
+  (`MaestroGuide`, publicada pelo `ClaudeSkill`) e o `egeon guide`.
+- **Papel e regras** são campos separados (ADR-056): papel é quem o terminal é;
+  regra é como se trabalha, e a da **bancada** (menu de contexto na barra) vale
+  para todos os agentes dela, somada à do nó. No system prompt as regras entram
+  DEPOIS do papel — é o que faz a restrição valer sobre a diretriz geral.
+  Editar reinicia o agente e retoma a conversa, como a troca de modelo.
+- Templates de bancada e de nó copiam valores na criação, nunca ficam atados. O
+  **componente de nó é cross-CLI** (ADR-057): `name`, `kind`, `cwd`, `prompt` e
+  `rules` valem em qualquer um; comando, config e modelo moram em `byAgent`, e
+  a regra de um CLI SUBSTITUI a geral.
+- Trilha da bancada: ao fim de cada turno o agente roda `egeon trace` (uma ou
+  duas linhas); o app carimba quem/CLI/modelo/conversa e anexa em
+  `~/.egeon*/workbenches/<id>/trace.md` — um arquivo por bancada, para
+  auditar (ADR-036). Tudo que é DE uma bancada mora na pasta dela, e a pasta é
+  o `id` (8 hex, nasce com a bancada), não o nome.
+- **Processos** (ADR-083) — todo nó sobe com `EGEON_NODE`/`EGEON_DECK` no
+  ambiente, herdado por tudo que ele abre; a janela Processos… (⌥⌘P), o
+  `egeon ps` e `/processes` mostram o que é do app e os órfãos (marcados, fora
+  de qualquer Egeon vivo), e encerram por SIGTERM. Nó que morre leva a árvore
+  inteira (a saída do app não, por causa do `install.sh`), e o `OrphanReaper`
+  encerra órfão com mais de 1 h a cada 10 min, poupando o daemon do Claude Code.
+  App de desktop que um nó abriu (marca no processo do app) fecha com o último
+  que o usa — conexão viva ou, no Docker, container de bancada de pé (ADR-084,
+  `AppKeeper`, `GET /apps`).
+- **Consumo** (ADR-085) — `UsageStore` soma o `message.usage` dos transcripts
+  (subagentes inclusos) em `workbenches/<id>/usage.json`, por nó e tarifa, lendo
+  só o que cresceu; o passado entra pela conversa carimbada na trilha. Preço em camadas
+  (`PriceTable`): embutida, o catálogo do binário do Claude Code por cima e o
+  `pricing.json` (só exceções) por cima de tudo; o custo **congela quando
+  entra** (`Spend`) — preço novo vale dali para frente. Lateral: a soma; canvas: barra de ações no topo e, embaixo, a
+  informativa (`CanvasInfoBar`: cronômetro e custo — o clique abre o detalhe);
+  chat: os dois embaixo da coluna, custo por agente e por turno no cabeçalho.
+  `GET /usage[?show=1][&prices=1]`.
+- **Atualização** (ADR-089) — avisa ao abrir, com menu "Procurar atualizações…" e
+  "Atualizar automaticamente" (baixa sozinho, troca ao fechar; nunca reinicia por
+  conta própria). Só instala zip assinado pela chave de release, que mora no Keychain
+  (`tools/release-key.swift`) e sem a qual o `release.sh` não publica. `GET /update`.
+- Drag & drop de arquivo → paste no terminal (imagem vira anexo no Claude Code).
+- Voz pelo CLI dentro do pty (mic atribuído ao bundle do app).
+
+## Desenvolvimento
+
+| | estável | dev |
+|---|---|---|
+| bundle | `/Applications/Egeon Deck.app` | `app/build/EgeonDeck Dev.app` |
+| config · socket | `~/.egeon/` | `~/.egeon-dev/` |
+| log | `~/egeon.log` | `~/egeon-dev.log` |
+
+- `./app/dev.sh` reconstrói o DEV. **Rebuild do estável mata os agentes em
+  andamento** — só com pedido explícito (`./app/install.sh`).
+- Todo caminho novo passa por `Flavor.current.config(_:)`.
+- **Encerre o app antes de tocar no bundle dele** — `rm -rf` num app vivo pula
+  o `applicationWillTerminate`, que grava o workbenches.json.
+- **Teste unitário é parte da entrega**: código novo com lógica testável —
+  modelo, parsing, guarda, controller — nasce com teste em `EgeonDeckTests`,
+  e lógica que se move ganha teste junto. `swift test` antes de commitar.
+  A cobertura hoje é pequena (190 testes); a regra existe para ela só crescer.
+- **Verificar é executar, compilar não é verificar**: dispare por `/dispatch`,
+  confira por `/peek` e pelo log. Rotas úteis: `/targets` `/dispatch` `/peek`
+  `/chat` `/compose` `/edge` `/layout` `/geometry` `/status` `/workspaces`
+  `/maestro?target=&on=1` —
+  socket unix, HTTP mínimo:
+  `curl --unix-socket ~/.egeon-dev/sock http://eg/targets`
+- Config do usuário em `~/.egeon/` (tudo editável à mão); `bin/egeon`,
+  `agent-hook.sh` e `claude-hooks.json` são regenerados a cada arranque.
