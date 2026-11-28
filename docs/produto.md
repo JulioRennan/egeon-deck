@@ -1,19 +1,8 @@
-# Egeon Deck — o app Swift (legado)
+# Egeon Deck — conceitos do produto
 
-> **Só referência.** Este é o app de hoje, em Swift/AppKit, movido para cá para a
-> migração Rust + Flutter (ver o `CLAUDE.md` da raiz). Ele é a especificação do
-> porte: os conceitos e as funcionalidades abaixo são o que o app novo tem de
-> fazer igual.
->
-> - **Não se corrige nem se evolui nada aqui.** O comportamento é portado como
->   está; defeito encontrado é anotado, não consertado.
-> - Os caminhos `app/…` deste arquivo são relativos a esta pasta (`legado/`).
-> - Os scripts (`dev.sh`, `install.sh`, `release.sh`) não foram ajustados à
->   mudança de pasta; o `release.sh` procura `tools/` a partir de onde é rodado.
-> - As skills `estrutura-de-modulos` e `protocolo-entre-agentes` descrevem este
->   código. O número de testes citado abaixo está desatualizado: são 633.
-> - O mapa lido deste código está em `docs/migracao/1-hoje.html` (inventário) e
->   `docs/migracao/2-arquitetura-atual.html` (estrutura).
+> Era o `CLAUDE.md` do app Swift, que saiu desta branch (continua na `main`).
+> Os conceitos e as funcionalidades valem para o app novo; os caminhos de
+> arquivo Swift citados abaixo estão na `main`.
 
 App macOS de uso pessoal: um **canvas infinito onde cada nó é uma ferramenta de
 trabalho real** — terminal, agente de IA, navegador. O ponto é dirigir

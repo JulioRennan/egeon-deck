@@ -6,7 +6,6 @@
 #   design/brand/export.sh            exporta
 #   design/brand/export.sh --check    só diz se algum destino está desatualizado
 #
-# legado/ não é tocado: o app Swift fica como está até o corte.
 set -euo pipefail
 
 BRAND="$(cd "$(dirname "$0")" && pwd)"

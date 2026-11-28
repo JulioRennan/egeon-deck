@@ -35,14 +35,13 @@ Hoje é só a fundação: os crates compilam e não têm lógica.
 Se o código precisa de `cfg` por sistema operacional, é **driver**. Se não, é
 **core** — inclusive arquivos, git, rede, relógio e o protocolo do socket.
 
-## Portar do Swift
+## Comportamento antigo
 
-1. Ache o código em `legado/app/Sources/EgeonDeck/` e o destino dele nas tabelas
-   de `docs/migracao/1-hoje.html`.
-2. Porte o comportamento como está, sem corrigir.
-3. Traga os testes de `legado/app/Tests/EgeonDeckTests/` junto.
-4. Arquivo de `~/.egeon` lido aqui tem de abrir igual: as migrações de formato
-   estão em `docs/migracao/1-hoje.html`, seção "Arquivos em disco".
+O Swift saiu desta branch; quando precisar do comportamento antigo, leia a
+`main` (`git show main:app/Sources/EgeonDeck/...`) e as tabelas de
+`docs/migracao/1-hoje.html`. Arquivo de `~/.egeon` lido aqui tem de abrir igual:
+as migrações de formato estão em `docs/migracao/1-hoje.html`, seção "Arquivos em
+disco".
 
 ## Comandos
 

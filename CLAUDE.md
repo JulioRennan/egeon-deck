@@ -13,14 +13,14 @@ Nesta branch (`migracao-flutter`) o app está sendo reescrito de ponta a ponta,
 ```
 rust/      o app novo, lado Rust — core, terminal, driver, montagem e o `egeon`
 ui/        o app novo, lado Flutter — a interface
-legado/    o app Swift de hoje (app/, tools/, poc/) — só referência para o porte
 docs/      00-prior-art · 01-decisoes (ADRs) · 02-mvp · 03-spec-chat · migracao/
 design/    a marca (logo, ícone) e o design system Graphite — o descritivo
 site/      a página do projeto
 ```
 
-Cada pasta tem o seu `CLAUDE.md`. Por enquanto `rust/` e `ui/` têm só a
-fundação: compilam, mas não há lógica portada.
+Cada pasta tem o seu `CLAUDE.md`. O porte está completo e estável; daqui em
+diante são ajustes. O app Swift saiu desta branch (continua na `main` e no
+histórico do git).
 
 ## Onde está cada coisa
 
@@ -29,7 +29,7 @@ fundação: compilam, mas não há lógica portada.
 | O que foi decidido na migração e o que ainda está aberto | `docs/migracao/3-proposta.html` |
 | O que o app faz hoje, arquivo por arquivo, rota por rota | `docs/migracao/1-hoje.html` |
 | Como o Swift está montado por dentro | `docs/migracao/2-arquitetura-atual.html` |
-| Conceitos e funcionalidades do produto (a especificação do porte) | `legado/CLAUDE.md` |
+| Conceitos e funcionalidades do produto (era o `CLAUDE.md` do Swift) | `docs/produto.md` |
 | Por que cada decisão antiga foi tomada | `docs/01-decisoes.md` |
 | A marca e o manual do design system | `design/README.md` |
 
@@ -59,15 +59,13 @@ UI (Flutter) ──socket──▶ CORE (Rust) ──interfaces──▶ DRIVER 
 - **`estrutura-flutter`** — features/core/commons/theme, papel de cada peça,
   lista de features, eventos. **Consultar antes de criar arquivo, widget, cubit
   ou dependência em `ui/`.**
-- `estrutura-de-modulos` e `protocolo-entre-agentes` — descrevem o Swift de
-  `legado/`. Úteis para entender o que está sendo portado.
+- `estrutura-de-modulos` e `protocolo-entre-agentes` — descrevem o Swift (na
+  `main`). Úteis para entender de onde veio cada conceito.
 
 ## Regras da migração
 
-- **Porte fiel.** O comportamento do Swift é portado como está. Nada é corrigido
-  nem evoluído em `legado/`; defeito encontrado é anotado, não consertado.
-- **Lógica portada traz os testes junto.** Os 633 testes de
-  `legado/app/Tests` são a régua de paridade.
+- **O Swift saiu da árvore.** Para consultar o comportamento antigo, leia a
+  `main` ou o histórico (`git show main:app/...`); não traga o código de volta.
 - **Os arquivos de `~/.egeon` continuam abrindo.** Mesmos caminhos, mesmos
   formatos, com as migrações de formato que o Swift carrega.
 - **O socket mantém as rotas de hoje** — agentes e scripts existentes não podem
@@ -107,7 +105,7 @@ está em uso: não tocar no bundle nem nos arquivos dele.
   o que o usuário vê não entram. Formato Keep a Changelog, versões SemVer.
   **Versão só sobe com tag lançada a pedido**: sem pedido explícito de
   release/nova versão, tudo fica em `[Unreleased]`. O processo está em
-  "Lançar uma versão", abaixo; o do Swift, em `legado/CLAUDE.md`.
+  "Lançar uma versão", abaixo; o do Swift, em `docs/produto.md`.
 - **Decisões viram ADR** em `docs/01-decisoes.md` — leia antes de propor rota
   para editor, portal de janela, tmux ou detecção de ociosidade: já custaram
   protótipo.

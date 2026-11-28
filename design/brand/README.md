@@ -30,7 +30,6 @@ fontes vetoriais (`logo/*.svg`, o arquivo do editor) junto dos PNG.
 | App novo, estável (`ui/macos/Runner/Assets.xcassets/AppIcon.appiconset`, 16 a 1024) | `app-icon.png` | `export.sh` |
 | Site (`site/assets/icon.png` 1024 e `icon-256.png`) | `app-icon.png` | `export.sh` |
 | App novo, dev (`AppIconDev.icns` dentro do bundle) | `app-icon-dev.png` | o `ui/scripts/make.sh` gera a cada montagem |
-| App Swift (`legado/app/Resources/icon*.png`) | — | não muda: o legado fica como está até o corte |
 
 ## Trocar o logo
 

@@ -9,6 +9,8 @@ set -euo pipefail
 
 aqui="$(cd "$(dirname "$0")" && pwd)"
 raiz="$(cd "$aqui/../../../../../.." && pwd)"
+# O Swift saiu da árvore: para regerar, restaure-o antes (git worktree add
+# /tmp/swift main && ln -s /tmp/swift legado, por exemplo).
 fontes="$raiz/legado/app/Sources/EgeonDeck/Features"
 entrada="${1:-$aqui/../entrada}"
 saida="${2:-$aqui/../esperado}"

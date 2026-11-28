@@ -109,9 +109,8 @@ Enquanto só houver macOS, cada módulo tem um arquivo de plataforma.
 
 ## Porte do Swift
 
-- A referência é `legado/app`. Não se corrige nada lá; o comportamento é
-  portado como está.
-- Lógica portada traz junto os testes do Swift (`legado/app/Tests`).
+- O Swift saiu desta branch; a referência do comportamento antigo é a `main`
+  (`git show main:app/...`).
 - Os arquivos de `~/.egeon` têm de continuar abrindo: as migrações de formato
   estão em `docs/migracao/1-hoje.html`, seção "Arquivos em disco".
 
