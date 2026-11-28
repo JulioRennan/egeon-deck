@@ -1,0 +1,42 @@
+name: egeon_deck
+description: "Egeon Deck"
+publish_to: 'none'
+
+version: 2.0.0-alpha.1+1
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  desktop_drop: ^0.8.4
+  # Cópia do 0.3.1 com um ajuste no Windows (third_party/.../EGEON.md).
+  desktop_multi_window:
+    path: third_party/desktop_multi_window
+  file_selector: ^1.1.0
+  flutter:
+    sdk: flutter
+  flutter_bloc: ^9.1.1
+  get_it: ^9.3.0
+  material_ui: ^1.11.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+# O app tem de abrir offline: as fontes do design system vão embutidas
+# (variáveis, normal e itálico; licença OFL em assets/fonts).
+flutter:
+  fonts:
+    - family: Noto Sans
+      fonts:
+        - asset: assets/fonts/NotoSans-Variable.ttf
+        - asset: assets/fonts/NotoSans-Italic-Variable.ttf
+          style: italic
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Variable.ttf
+        - asset: assets/fonts/JetBrainsMono-Italic-Variable.ttf
+          style: italic

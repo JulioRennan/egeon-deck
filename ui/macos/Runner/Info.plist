@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconFile</key>
+	<string></string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>$(PRODUCT_COPYRIGHT)</string>
+	<key>NSMainNibFile</key>
+	<string>MainMenu</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<!-- Notificação nasce como alerta (fica até você fechar), não faixa que some
+	     sozinha. Só vale no primeiro registro do app; depois manda o Ajustes. -->
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
+	<!-- Texto do diálogo de permissão do macOS. Sem ele o sistema mostra um
+	     pedido genérico ou nega direto. -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>O Egeon Deck abre os projetos e terminais das suas sessões.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Acesso a projetos que estejam na Mesa.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Acesso a projetos que estejam em Transferências.</string>
+	<!-- O modo de voz do CLI grava pelo módulo nativo dele, dentro do pty que
+	     este app segura. O TCC atribui o microfone ao processo RESPONSÁVEL, que é
+	     este bundle e não o claude; sem esta chave não há negativa: o sistema
+	     aborta o processo (namespace TCC, SIGABRT). -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Egeon Deck usa o microfone para o ditado por voz dos agentes que rodam nos terminais.</string>
+	<!-- O nó web abre servidor local (http://127.0.0.1, o npm run dev); sem esta
+	     exceção o ATS bloqueia HTTP e a página mostra erro. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

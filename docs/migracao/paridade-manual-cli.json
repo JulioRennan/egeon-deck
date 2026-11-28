@@ -1,0 +1,32 @@
+{
+ "AppClaimsTests.testAppWithoutMarkIsNeverClosed": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/tests.rs::app_sem_marca_nunca_e_fechado"
+  ]
+ },
+ "AppClaimsTests.testOpenerLeavingClosesTheApp": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/tests.rs::quem_abriu_saindo_fecha_o_app"
+  ]
+ },
+ "AppClaimsTests.testHeirIsTheLastUser": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/tests.rs::o_herdeiro_e_o_ultimo_a_usar"
+  ]
+ },
+ "AppClaimsTests.testDeadHeirDoesNotHoldTheApp": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/tests.rs::herdeiro_morto_nao_segura_o_app"
+  ]
+ },
+ "AppClaimsTests.testOpenerIsOnlyTheAppTheLaunchdOpened": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/tests.rs::o_opener_e_so_o_app_que_o_launchd_abriu"
+  ]
+ },
+ "AppClaimsTests.testContainerOwners": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/tests.rs::donos_dos_containers"
+  ]
+ }
+}

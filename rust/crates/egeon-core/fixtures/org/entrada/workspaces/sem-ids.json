@@ -1,0 +1,5 @@
+[
+  {"name": "Duck", "projects": [{"path": "/repos/deck"}, {"path": "~/repos/nexus/", "name": "Nexus", "stored": false}]},
+  {"name": "Agro", "projects": null, "campoNovo": 1},
+  {"name": "Vazio"}
+]

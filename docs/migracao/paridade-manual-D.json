@@ -1,0 +1,928 @@
+{
+ "ActivityTests.testOnlyAskingInterrupts": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/activity/tests.rs::only_asking_and_failed_interrupt"
+  ],
+  "dart": [],
+  "nota": "o Rust também cobre Failed (ADR-072)"
+ },
+ "AttentionRingTests.testOrangeBeatsGreen": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/activity/tests.rs::orange_beats_green"
+  ],
+  "dart": []
+ },
+ "AttentionRingTests.testHiddenUntilTurnedOn": {
+  "nao": "CALayer/NSView do AppKit (camada, animação, frame); o anel é widget da UI (commons/widgets/attention_ring.dart) e não tem teste em Dart"
+ },
+ "AttentionRingTests.testBothTonesSpinAndOffStops": {
+  "nao": "CALayer/NSView do AppKit (camada, animação, frame); o anel é widget da UI (commons/widgets/attention_ring.dart) e não tem teste em Dart"
+ },
+ "AttentionRingTests.testFollowsTheHostSize": {
+  "nao": "CALayer/NSView do AppKit (camada, animação, frame); o anel é widget da UI (commons/widgets/attention_ring.dart) e não tem teste em Dart"
+ },
+ "ApiFailureTests.testStatesInTheRestOfTheApp": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/activity/tests.rs::only_asking_and_failed_interrupt",
+   "rust/crates/egeon-core/src/features/activity/tests.rs::failed_tells_why",
+   "rust/crates/egeon-core/src/features/activity/tests.rs::states_that_come_back_alone_do_not_notify"
+  ],
+  "dart": [],
+  "nota": "a cor vermelha de Failed é da UI e não tem teste"
+ },
+ "AppClaimsTests.testSocketPeers": {
+  "rust": [
+   "rust/crates/egeon-core/src/ports/procs.rs::socket_ligado_ao_app_aparece_como_conectado",
+   "rust/crates/egeon-driver/src/apps/mod.rs::lsof_liga_cada_socket_ao_processo_dono"
+  ],
+  "dart": []
+ },
+ "AppEnvironmentTests.testEnrichedPathKeepsCurrentAndDoesNotDuplicate": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/terminal/environment.rs::diretorio_que_ja_esta_no_path_nao_muda_de_lugar",
+   "rust/crates/egeon-core/src/features/terminal/environment.rs::cli_vai_na_frente_de_tudo_no_path",
+   "rust/crates/egeon-core/src/features/terminal/environment.rs::enriquecer_o_path_ja_enriquecido_nao_muda_nada"
+  ],
+  "dart": []
+ },
+ "AppEnvironmentTests.testEnrichedPathOnlyAddsDirectoriesThatExist": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/terminal/environment.rs::diretorios_existentes_entram_na_frente_na_ordem_da_lista",
+   "rust/crates/egeon-core/src/features/terminal/environment.rs::sem_path_herdado_o_filho_ainda_recebe_o_cli"
+  ],
+  "dart": [],
+  "nota": "a existência vem de um predicado injetado, não do disco"
+ },
+ "AppEnvironmentTests.testShellQuoteNeutralizesMetacharacters": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/terminal/model.rs::shell_quote_neutraliza_metacaracteres"
+  ],
+  "dart": []
+ },
+ "AppEnvironmentTests.testChildEnvironmentDropsClaudeCodeVariables": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/terminal/environment.rs::filho_nao_herda_variaveis_claude_code",
+   "rust/crates/egeon-core/src/features/terminal/environment.rs::cli_vai_na_frente_de_tudo_no_path",
+   "rust/crates/egeon-driver/tests/environment.rs::filho_lancado_nao_enxerga_claude_code_nem_procedencia_herdada"
+  ],
+  "dart": []
+ },
+ "AppUpdateTests.testVersionsCompareAsNumbers": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/update/tests.rs::versoes_comparam_como_numeros"
+  ],
+  "dart": []
+ },
+ "AppUpdateTests.testReleaseParsing": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/update/tests.rs::leitura_da_release"
+  ],
+  "dart": []
+ },
+ "AppUpdateTests.testPolicyNeverDownloadsWithoutTheOptionAndPromptsOnlyAtLaunchOrOnRequest": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/update/tests.rs::a_politica_nunca_baixa_sem_a_opcao_e_so_avisa_na_abertura_ou_a_pedido"
+  ],
+  "dart": []
+ },
+ "AppUpdateTests.testPromptSaysWhatRestartingCostsAndWhatTheClickAuthorizes": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/update/tests.rs::o_aviso_diz_o_que_reiniciar_custa_e_o_que_o_clique_autoriza"
+  ],
+  "dart": []
+ },
+ "AppUpdateTests.testPublishedKeyIsAUsableKey": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/update/tests.rs::a_chave_publicada_e_uma_chave_usavel"
+  ],
+  "dart": []
+ },
+ "AppUpdateTests.testPrepareStagesASignedNewerApp": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/update/tests.rs::prepare_deixa_pronto_um_app_assinado_e_mais_novo",
+   "rust/crates/egeon-driver/tests/installer.rs::prepara_o_app_assinado_ao_lado_do_destino"
+  ],
+  "dart": [],
+  "nota": "a regra no core (instalador de mentira) e o app assinado de verdade no driver"
+ },
+ "AppUpdateTests.testPrepareRefusesWhatItCannotTrust": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/update/tests.rs::prepare_recusa_o_que_nao_da_para_confiar",
+   "rust/crates/egeon-driver/tests/installer.rs::app_adulterado_nao_chega_ao_destino"
+  ],
+  "dart": [],
+  "nota": "assinatura/versão/app errado no core; codesign do bundle adulterado no driver"
+ },
+ "AppUpdateTests.testSwapReplacesTheBundleAndLeavesNothingBehind": {
+  "rust": [
+   "rust/crates/egeon-driver/tests/installer.rs::troca_o_bundle_e_nao_deixa_nada_para_tras"
+  ],
+  "dart": []
+ },
+ "AppUpdateTests.testSwapWaitsForTheAppToLeave": {
+  "rust": [
+   "rust/crates/egeon-driver/tests/installer.rs::a_troca_espera_o_app_sair"
+  ],
+  "dart": []
+ },
+ "CanvasDocumentGrowthTests.testPanPastRightEdgeGrowsDocument": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/canvas_viewport_test.dart::pan além da borda direita cresce o documento"
+  ]
+ },
+ "CanvasDocumentGrowthTests.testPanPastBottomEdgeGrowsDocument": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/canvas_viewport_test.dart::pan além da borda de baixo cresce o documento"
+  ]
+ },
+ "CanvasDocumentGrowthTests.testDocumentNeverShrinks": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/canvas_viewport_test.dart::o documento nunca encolhe"
+  ]
+ },
+ "CanvasDocumentGrowthTests.testGrowthStopsAtCeiling": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/canvas_viewport_test.dart::o crescimento para no teto"
+  ]
+ },
+ "CanvasFitTests.testFitsWideContentByWidth": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/canvas_viewport_test.dart::conteúdo largo cabe pela largura"
+  ]
+ },
+ "CanvasFitTests.testNeverZoomsInPastOneHundred": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/canvas_viewport_test.dart::nunca amplia além de 100%"
+  ]
+ },
+ "CanvasFitTests.testClampsToMinimumStep": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/canvas_viewport_test.dart::prende no menor passo"
+  ]
+ },
+ "CanvasFitTests.testDegenerateInputsFallBackToOne": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/canvas_viewport_test.dart::entradas degeneradas caem em 1"
+  ]
+ },
+ "EdgeControllerTests.testEdgeIsBornBidirectional": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/canvas/tests.rs::a_ligacao_nasce_nos_dois_sentidos"
+  ],
+  "dart": []
+ },
+ "EdgeControllerTests.testDuplicateEdgeIsIgnored": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/canvas/tests.rs::ligacao_repetida_e_ignorada"
+  ],
+  "dart": []
+ },
+ "EdgeControllerTests.testRemoveTakesBothDirections": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/canvas/tests.rs::remover_leva_os_dois_sentidos"
+  ],
+  "dart": []
+ },
+ "EdgeControllerTests.testApplyEmptyDirectionCreatesThenOnlyQueries": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/canvas/tests.rs::direcao_vazia_cria_e_depois_so_consulta"
+  ],
+  "dart": []
+ },
+ "EdgeControllerTests.testApplyNoneUndoesTheEdge": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/canvas/tests.rs::none_desfaz_a_ligacao"
+  ],
+  "dart": []
+ },
+ "EdgeControllerTests.testApplyRejectsUnknownNode": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/canvas/tests.rs::no_desconhecido_ou_igual_e_recusado"
+  ],
+  "dart": []
+ },
+ "EdgeControllerTests.testCycleIsFoundBreadthFirst": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/canvas/tests.rs::o_ciclo_e_achado_em_largura"
+  ],
+  "dart": []
+ },
+ "EdgeCurveTests.testStackedCardsConnectBottomToTop": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/edge_curve_test.dart::cards empilhados ligam a base ao topo"
+  ]
+ },
+ "EdgeCurveTests.testSlightlyShiftedColumnIsStillStacked": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/edge_curve_test.dart::coluna levemente deslocada ainda é empilhada"
+  ]
+ },
+ "EdgeCurveTests.testSideBySideStaysDirect": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/edge_curve_test.dart::lado a lado continua direta"
+  ]
+ },
+ "EdgeCurveTests.testTargetBehindAndNotStackedStillLoops": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/edge_curve_test.dart::destino atrás e fora da coluna ainda volta por baixo"
+  ]
+ },
+ "EdgeCurveTests.testOverlappingCardsDoNotStack": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/edge_curve_test.dart::cards sobrepostos não ganham rota vertical"
+  ]
+ },
+ "EdgeCurveTests.testStackedEndpointsPointAlongTheColumn": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/edge_curve_test.dart::as pontas da rota empilhada apontam ao longo da coluna"
+  ]
+ },
+ "EdgeCurveTests.testControlsCenterOnAVerticalEdge": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/canvas/domain/edge_curve_test.dart::os controles ficam no meio da linha de pé e acima na deitada"
+  ]
+ },
+ "EdgeLinkTests.testPairOrdersByName": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/edge/model.rs::par_ordena_por_nome"
+  ],
+  "dart": []
+ },
+ "EdgeLinkTests.testCollapseJoinsBothDirectionsIntoOneLink": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/edge/model.rs::colapsar_junta_os_dois_sentidos_numa_ligacao"
+  ],
+  "dart": []
+ },
+ "EdgeLinkTests.testCollapseLimitOfAToBWins": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/edge/model.rs::colapsar_vale_o_limite_de_a_para_b"
+  ],
+  "dart": []
+ },
+ "EdgeLinkTests.testCycledNeverReachesNoDirection": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/edge/model.rs::ciclo_nunca_chega_a_nenhum_sentido"
+  ],
+  "dart": []
+ },
+ "EdgeLinkTests.testEdgesMaterializesOnlyActiveDirections": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/edge/model.rs::so_os_sentidos_ativos_viram_arestas"
+  ],
+  "dart": []
+ },
+ "EdgeLinkTests.testLinkEqualityIgnoresDirection": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/edge/model.rs::igualdade_da_ligacao_ignora_a_direcao"
+  ],
+  "dart": []
+ },
+ "EdgeLinkTests.testDecodeDistinguishesAbsentFromNull": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/edge/model.rs::leitura_distingue_ausente_de_null"
+  ],
+  "dart": []
+ },
+ "EdgeLinkTests.testEdgeEqualityIgnoresLimit": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/edge/model.rs::igualdade_da_aresta_ignora_o_limite"
+  ],
+  "dart": []
+ },
+ "HandCursorTests.testClickableViewsDefineTheirCursor": {
+  "rust": [],
+  "dart": [
+   "ui/test/commons/hand_cursor_test.dart::pega o clicável sem cursor e deixa passar o que tem a mão"
+  ],
+  "nota": "a régua (expectHandOnEveryClickable, em ui/test/support/hand_cursor.dart) roda sobre cada tela; a lista fixa de classes do Swift não existe em Flutter"
+ },
+ "HandCursorTests.testTheHandCoversTheWholeViewOnlyWhenClickable": {
+  "nao": "resetCursorRects de NSView/NSButton (AppKit); em Flutter a mão é um MouseRegion e a régua da outra é o que há"
+ },
+ "NodeConfigTests.testLegacySessionIdIsAbsorbedOnLoad": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::nome_antigo_da_sessao_e_absorvido_na_carga"
+  ],
+  "dart": []
+ },
+ "NodeConfigTests.testLegacyNamesNeverGoBackToDisk": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::nomes_antigos_nunca_voltam_ao_disco"
+  ],
+  "dart": []
+ },
+ "NodeConfigTests.testMigrationDoesNotOverwriteNewName": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::migracao_nao_sobrescreve_o_nome_novo"
+  ],
+  "dart": []
+ },
+ "NodeConfigTests.testWithoutConversationClearsConversationAndKeepsAssembly": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::sem_conversa_limpa_a_conversa_e_guarda_a_montagem"
+  ],
+  "dart": []
+ },
+ "NodeConfigTests.testFormEditKeepsConversationWithSameCLIAndFolder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::edicao_do_formulario_guarda_a_conversa_com_mesmo_cli_e_pasta"
+  ],
+  "dart": []
+ },
+ "NodeConfigTests.testFormEditDropsConversationWhenFolderOrCLIChanges": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::edicao_largua_a_conversa_se_a_pasta_ou_o_cli_mudam"
+  ],
+  "dart": []
+ },
+ "NodeConfigTests.testFormEditKeepsWebAddress": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::edicao_do_formulario_guarda_o_endereco_web"
+  ],
+  "dart": []
+ },
+ "NodeTemplateTests.testCaptureCopiesAssemblyOnly": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::captura_copia_so_a_montagem"
+  ],
+  "dart": []
+ },
+ "NodeTemplateTests.testInstantiateBuildsNodeWithoutConversation": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::instanciar_monta_o_no_sem_conversa"
+  ],
+  "dart": []
+ },
+ "NodeTemplateTests.testIdentifierIsPredictable": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::identificador_e_previsivel"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testTheRoleCrossesEveryCLI": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::o_papel_atravessa_todo_cli"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testCLISpecificValuesDoNotLeak": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::valor_de_um_cli_nao_vaza_para_outro"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testEditingUnderAnotherCLIKeepsWhatTheFirstOneHad": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::editar_sob_outro_cli_guarda_o_que_o_primeiro_tinha"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testRememberingOneCLIKeepsTheOthers": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::lembrar_um_cli_guarda_os_outros"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testReopeningDoesNotPromoteOneCLIsTextToGeneral": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::reabrir_nao_promove_o_texto_de_um_cli_a_geral"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testTheAgentMapSurvivesInTheNode": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::o_mapa_de_cli_sobrevive_no_no"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testRulesOverrideRatherThanAdd": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::regra_por_cli_substitui_em_vez_de_somar"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testInstantiateUsesTheChosenCLI": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::instanciar_usa_o_cli_escolhido"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testLegacyRootFieldsBecomeTheAgentMap": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::campos_da_raiz_antigos_viram_o_mapa_do_cli",
+   "rust/crates/egeon-core/src/features/node/tests.rs::comando_de_shell_fica_na_raiz_e_o_mapa_ja_escrito_ganha"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testCaptureSplitsRoleFromCLI": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::captura_separa_o_papel_do_cli"
+  ],
+  "dart": []
+ },
+ "NodeTemplateCrossCLITests.testEffortTravelsWithItsCLI": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::esforco_viaja_com_o_cli"
+  ],
+  "dart": []
+ },
+ "EgeonCLIBodyTests.testPeekIsOfferedAndDocumented": {
+  "rust": [
+   "rust/crates/egeon-cli/tests/commands.rs::peek_leva_as_linhas_so_quando_dadas",
+   "rust/crates/egeon-cli/tests/commands.rs::sem_argumento_ou_comando_desconhecido_imprime_o_uso_e_sai_com_2"
+  ],
+  "dart": [],
+  "nota": "o script bash virou o binário `egeon`; o teste confere a rota /peek e o texto de uso embutido (24 linhas, até o allow)"
+ },
+ "EgeonCLIBodyTests.testMaestroCommandsAndGuide": {
+  "rust": [
+   "rust/crates/egeon-cli/tests/commands.rs::leituras_sao_get_e_devolvem_o_corpo_como_veio",
+   "rust/crates/egeon-cli/tests/commands.rs::plan_e_apply_levam_o_plano_do_stdin",
+   "rust/crates/egeon-cli/tests/commands.rs::guide_imprime_o_manual_embutido_sem_o_app"
+  ],
+  "dart": []
+ },
+ "RetiredNodeTests.testWorkbenchDropsEditorAndKeepsTheRest": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::bancada_tira_o_editor_e_guarda_o_resto"
+  ],
+  "dart": []
+ },
+ "RetiredNodeTests.testOtherBadNodeIsStillAnError": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::outro_no_ruim_continua_sendo_erro"
+  ],
+  "dart": []
+ },
+ "RetiredNodeTests.testWorkbenchTemplateDropsEditor": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests.rs::template_de_bancada_tira_o_editor"
+  ],
+  "dart": []
+ },
+ "RetiredNodeTests.testNodeComponentOfEditorKindIsSkipped": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/node/tests.rs::componente_do_tipo_editor_e_pulado"
+  ],
+  "dart": []
+ },
+ "ShellEncoderTests.testEncodesSpacePlusAndUTF8ByteByByte": {
+  "rust": [
+   "rust/crates/egeon-cli/src/encode.rs::espaco_mais_e_utf8_byte_a_byte"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testDestinationFallsBackToFirstLinked": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::destino_cai_no_primeiro_ligado"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testMoveStaysInsideTheList": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::mover_fica_dentro_da_lista"
+  ],
+  "dart": [
+   "ui/test/features/node/queue/prompt_queue_test.dart::subir e descer não sai da lista"
+  ]
+ },
+ "PromptQueueTests.testDragMoveCountsOnlyTheRowsThatStayed": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::arrasto_conta_so_as_linhas_que_ficaram"
+  ],
+  "dart": [
+   "ui/test/features/node/queue/prompt_queue_test.dart::o arrasto conta só as linhas que ficaram no lugar"
+  ]
+ },
+ "PromptQueueTests.testRunnerWaitsForWorkThenFinishesAndSendsNextOnlyInAuto": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::o_runner_espera_o_trabalho_fecha_e_so_no_automatico_manda_o_proximo"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testRunnerGivesUpOnLostDelivery": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::o_runner_desiste_de_entrega_perdida"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testRunnerStartsAutoWhenIdleAndNothingInFlight": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::o_runner_comeca_o_automatico_quando_ocioso_e_nada_em_andamento"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testAutoWalksTheQueueOneTurnAtATime": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::o_automatico_anda_a_fila_um_turno_por_vez"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testManualSendWithoutLinkOrWithFailureKeepsItemPending": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::envio_manual_sem_ligacao_ou_com_falha_mantem_o_item_pendente"
+  ],
+  "dart": [
+   "ui/test/features/node/queue/queue_cubit_test.dart::sem ligação, mandar mostra o aviso e ele some sozinho"
+  ]
+ },
+ "PromptQueueTests.testSendingOverAnInFlightItemClosesIt": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::mandar_por_cima_de_um_item_em_andamento_o_encerra"
+  ],
+  "dart": [
+   "ui/test/features/node/queue/queue_cubit_test.dart::mandar por cima de uma em andamento fecha a anterior"
+  ]
+ },
+ "PromptQueueTests.testImagesGoAsAbsolutePathsAndLeaveWithTheItem": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::imagens_vao_como_caminho_absoluto_e_saem_com_o_item"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testTargetsChangingNotifiesTheView": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::mudar_os_ligados_avisa_a_view"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testEnterAfterAnOpenTaskInsertsBelowItAndBlankOnesGoAway": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::enter_depois_de_uma_tarefa_aberta_insere_abaixo_e_as_em_branco_somem"
+  ],
+  "dart": [
+   "ui/test/features/node/queue/queue_cubit_test.dart::Enter numa tarefa aberta abre outra logo abaixo dela"
+  ]
+ },
+ "PromptQueueTests.testCheckboxMarksDoneByHandAndBack": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::checkbox_marca_feito_a_mao_e_volta"
+  ],
+  "dart": [
+   "ui/test/features/node/queue/queue_cubit_test.dart::o checkbox marca e desmarca à mão; limpar tira o que foi"
+  ]
+ },
+ "PromptQueueTests.testAttachAndDetachImages": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::anexar_e_desanexar_imagens"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testFooterOnlyGoesToAgentsAndCarriesTheShortID": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::rodape_so_vai_para_agente_e_leva_o_id_curto"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testAgentTicksAsksAndNotesByShortID": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::o_agente_marca_pergunta_e_comenta_pelo_id_curto"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testOpenQuestionHoldsTheQueueUntilYouReply": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::pergunta_aberta_segura_a_fila_ate_voce_responder"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testCommentBeforeSendingGoesWithTheTask": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::comentario_antes_de_enviar_vai_com_a_tarefa"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testOldFileWithoutThreadStillLoads": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::arquivo_antigo_sem_thread_ainda_abre"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testHeadlineIsTheFirstLineShortened": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::a_manchete_e_a_primeira_linha_encurtada"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testReplySaysWhichTaskByItsFirstLine": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::a_resposta_diz_de_que_tarefa_fala_pela_primeira_linha"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testChatSummarySaysWhatTheQueueNeeds": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::o_resumo_do_chat_diz_o_que_a_fila_precisa"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testSentTaskOnlyMovesOnThroughTheThread": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::tarefa_enviada_so_anda_pela_thread"
+  ],
+  "dart": []
+ },
+ "PromptQueueTests.testTaskDoneByHandCanStillBeEdited": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/queue/tests.rs::tarefa_feita_a_mao_ainda_pode_ser_editada"
+  ],
+  "dart": []
+ },
+ "TabDragLayoutTests.testOffsetsStackWithTheGap": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::deslocamentos_empilham_com_o_vao"
+  ],
+  "dart": [
+   "ui/test/features/tabs/tab_drag_layout_test.dart::os x empilham com o espaço entre as pastilhas"
+  ]
+ },
+ "TabDragLayoutTests.testStandingStillKeepsThePosition": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::parado_guarda_a_posicao"
+  ],
+  "dart": [
+   "ui/test/features/tabs/tab_drag_layout_test.dart::parado, a pastilha mantém a posição"
+  ]
+ },
+ "TabDragLayoutTests.testTouchingTheNeighbourIsNotEnough": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::encostar_na_vizinha_nao_basta"
+  ],
+  "dart": [
+   "ui/test/features/tabs/tab_drag_layout_test.dart::encostar na vizinha não basta: só troca depois do centro dela"
+  ]
+ },
+ "TabDragLayoutTests.testDraggingToTheEndAndToTheStart": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::arrastar_ate_o_fim_e_ate_o_comeco"
+  ],
+  "dart": [
+   "ui/test/features/tabs/tab_drag_layout_test.dart::arrastar até o fim e até o começo"
+  ]
+ },
+ "TabDragLayoutTests.testBeyondTheEdgesClampsInsteadOfOverflowing": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::alem_das_bordas_prende_em_vez_de_estourar"
+  ],
+  "dart": [
+   "ui/test/features/tabs/tab_drag_layout_test.dart::para fora da faixa prende nas pontas em vez de estourar o índice"
+  ]
+ },
+ "TabDragLayoutTests.testMovedTakesOutAndPutsBackIn": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::moved_tira_e_poe_de_volta"
+  ],
+  "dart": [
+   "ui/test/features/tabs/tab_drag_layout_test.dart::moved tira de um lugar e põe no outro"
+  ]
+ },
+ "TabDragLayoutTests.testUnknownIndexIsInert": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workbench/tests_tabs.rs::indice_desconhecido_e_inerte"
+  ],
+  "dart": [
+   "ui/test/features/tabs/tab_drag_layout_test.dart::índice desconhecido é inerte: bancada que saiu no meio do arrasto"
+  ]
+ },
+ "SidebarDropTests.testCountSealCentersTheDigit": {
+  "rust": [],
+  "dart": [
+   "ui/test/commons/count_seal_test.dart::o dígito $value fica no centro do selo"
+  ],
+  "nota": "um teste por valor (1, 5 e 12)"
+ },
+ "SidebarDropTests.testWorkbenchDropsIntoTheProjectUnderTheCursor": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/sidebar/sidebar_drop_test.dart::a bancada cai no projeto sob o cursor"
+  ]
+ },
+ "SidebarDropTests.testMovingDownInsideTheSameProjectDiscountsItself": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/sidebar/sidebar_drop_test.dart::para baixo no próprio projeto a linha que sai não conta"
+  ]
+ },
+ "SidebarDropTests.testDraggingEndsInAMoveAndTheGuideGoesAway": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/sidebar/sidebar_page_test.dart::a bancada cai no fim do projeto, com guia onde vai entrar",
+   "ui/test/features/sidebar/sidebar_page_test.dart::desistir no meio não move nada"
+  ],
+  "nota": "o laço começar/arrastar/soltar/desistir é testado com gestos no widget"
+ },
+ "SidebarDropTests.testDroppingBelowTheDrawerStoresTheProject": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/workspace/tests_tree.rs::soltar_na_gaveta_guarda_o_projeto_e_fora_dela_tira"
+  ],
+  "dart": [
+   "ui/test/features/sidebar/sidebar_drop_test.dart::a gaveta: abaixo da tampa guarda; acima dela, tira",
+   "ui/test/features/sidebar/sidebar_drop_test.dart::a gaveta existe mesmo vazia ou fechada: é o alvo do primeiro guardado"
+  ]
+ },
+ "SidebarDropTests.testProjectAndWorkspaceTargets": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/sidebar/sidebar_drop_test.dart::projeto solto sobre outro workspace entra nele",
+   "ui/test/features/sidebar/sidebar_drop_test.dart::o workspace passa pela metade do card vizinho para trocar",
+   "ui/test/features/sidebar/sidebar_page_test.dart::as órfãs não se arrastam"
+  ]
+ },
+ "TraceEntryTests.testMarkdownStampsWhoAndWith": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/trace/tests.rs::markdown_carimba_quem_e_com_que"
+  ],
+  "dart": []
+ },
+ "TraceEntryTests.testMissingIdentityLeavesNoStampLine": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/trace/tests.rs::sem_identidade_nao_deixa_linha_de_carimbo"
+  ],
+  "dart": []
+ },
+ "TraceEntryTests.testTextIsTrimmedAndCapped": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/trace/tests.rs::texto_e_aparado_e_cortado"
+  ],
+  "dart": []
+ },
+ "TraceEntryTests.testSplitsAddress": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/trace/tests.rs::separa_o_endereco"
+  ],
+  "dart": []
+ },
+ "TraceLogTests.testFolderIsTheWorkbenchID": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/trace/tests.rs::a_pasta_e_o_id_da_bancada"
+  ],
+  "dart": []
+ },
+ "TraceLogTests.testArchiveMovesTraceAndNextEntryStartsFresh": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/trace/tests.rs::arquivar_move_a_trilha_e_a_proxima_entrada_abre_outra"
+  ],
+  "dart": []
+ },
+ "TraceLogTests.testHeaderCarriesNameAndIDOnceThenAgentsInterleaveInOrder": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/trace/tests.rs::cabecalho_uma_vez_e_os_agentes_em_ordem"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testDescendantsOfTheAppAreOwnedAndInheritTheNode": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::descendentes_do_app_sao_dele_e_herdam_o_no"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testUnreadableShellTakesTheNodeFromItsChild": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::shell_ilegivel_pega_o_no_do_filho"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testMarkedProcessOutsideTheAppIsAnOrphanWithItsChildren": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::marcado_fora_do_app_e_orfao_com_os_filhos"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testOtherFlavorAndItsTreeAreNotOurs": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::outro_flavor_e_a_arvore_dele_nao_sao_nossos",
+   "rust/crates/egeon-core/src/features/processes/model.rs::core_novo_e_outro_app_e_tem_deck_proprio"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testAppOpenedFromATerminalIsNotAnOrphan": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::app_aberto_de_um_terminal_nao_e_orfao"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testLegacyTargetWithoutDeckStillCounts": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::alvo_antigo_sem_deck_ainda_conta"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testProcargsParsing": {
+  "rust": [
+   "rust/crates/egeon-driver/src/procs/macos.rs::procargs_separa_argumentos_do_ambiente"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testOrderAndAge": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::ordem_e_idade"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testChildEnvironmentDropsInheritedMarks": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/terminal/environment.rs::procedencia_herdada_sai_pela_lista_da_montagem",
+   "rust/crates/egeon-driver/tests/environment.rs::filho_lancado_nao_enxerga_claude_code_nem_procedencia_herdada"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testCLIOffersPs": {
+  "rust": [
+   "rust/crates/egeon-cli/tests/commands.rs::ps_orphans_e_kill"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testDescendantsCrossProcessGroups": {
+  "rust": [
+   "rust/crates/egeon-core/src/ports/procs.rs::descendentes_atravessam_grupos_e_deixam_a_raiz_de_fora"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testReapTakesOldOrphansButSparesTheClaudeDaemon": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::limpeza_leva_orfao_velho_e_poupa_o_daemon_do_claude"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testPolicyFileFillsMissingKeys": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::arquivo_da_politica_completa_o_que_falta"
+  ],
+  "dart": []
+ },
+ "ProcessTableTests.testRelaunchLoopWithoutReadableMarkIsAdoptedByItsChildren": {
+  "rust": [
+   "rust/crates/egeon-core/src/features/processes/model.rs::laco_que_relanca_sem_marca_legivel_e_adotado_pelos_filhos"
+  ],
+  "dart": []
+ },
+ "ActivityTests.testColorSeparatesTheTwoStops": {
+  "rust": [
+   "rust/crates/egeon-core/src/runtime/org.rs::rotulo_glifo_e_cor_do_cabecalho"
+  ],
+  "dart": [],
+  "nota": "o rótulo, o glifo e o tom do cabeçalho saem prontos do core (`activity_view`); a UI só desenha"
+ },
+ "ActivityTests.testLabels": {
+  "rust": [
+   "rust/crates/egeon-core/src/runtime/org.rs::rotulo_glifo_e_cor_do_cabecalho"
+  ],
+  "dart": [],
+  "nota": "o rótulo, o glifo e o tom do cabeçalho saem prontos do core (`activity_view`); a UI só desenha"
+ },
+ "ActivityTests.testBackgroundIsAnHourglassWithoutAlarm": {
+  "rust": [
+   "rust/crates/egeon-core/src/runtime/actor/dispatch_commands.rs::segundo_plano_e_ampulheta_sem_alarme"
+  ],
+  "dart": [],
+  "nota": "o Dispatcher põe a ampulheta pelo [[ED:wait]] com fundo, e o activity_view do core dá rótulo, glifo e tom"
+ },
+ "ActivityTests.testAwaitingNamesThePeers": {
+  "rust": [
+   "rust/crates/egeon-core/src/runtime/actor/dispatch_commands.rs::aguardando_diz_o_nome_dos_vizinhos"
+  ],
+  "dart": [],
+  "nota": "quem acionou o vizinho fica aguardando com o nome dele; o activity_view junta os nomes com vírgula, sem tom"
+ },
+ "KeyMonitorTests.testPlainKeysReachThePty": {
+  "rust": [
+   "rust/crates/egeon-core/src/runtime/actor/dispatch_commands.rs::digitar_no_terminal_fecha_a_permissao_e_zera_a_cadeia"
+  ],
+  "dart": [
+   "ui/test/features/node/terminal/terminal_key_mapper_test.dart::as teclas comuns chegam ao pty"
+  ],
+  "nota": "qual tecla chega ao pty é da UI (`reachesPty`); a tecla que chega vira `dispatch_user_typed` no core"
+ },
+ "KeyMonitorTests.testTabShortcutsDoNotCountAsTyping": {
+  "rust": [],
+  "dart": [
+   "ui/test/features/node/terminal/terminal_key_mapper_test.dart::os atalhos de aba não contam como digitação"
+  ],
+  "nota": "qual tecla chega ao pty é da UI (`reachesPty`); a tecla que chega vira `dispatch_user_typed` no core"
+ },
+ "KeyMonitorTests.testPasteStillCounts": {
+  "rust": [
+   "rust/crates/egeon-core/src/runtime/actor/dispatch_commands.rs::digitar_no_terminal_fecha_a_permissao_e_zera_a_cadeia"
+  ],
+  "dart": [
+   "ui/test/features/node/terminal/terminal_key_mapper_test.dart::colar continua contando"
+  ],
+  "nota": "qual tecla chega ao pty é da UI (`reachesPty`); a tecla que chega vira `dispatch_user_typed` no core"
+ }
+}

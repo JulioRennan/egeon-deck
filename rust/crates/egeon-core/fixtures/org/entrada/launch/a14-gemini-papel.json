@@ -1,0 +1,1 @@
+{"node": {"type": "agent", "id": "a", "agent": "gemini", "prompt": "aspas 'simples' \"duplas\" $HOME `id` $(whoami) \\barra\nlinha2\ttab ; && | > < * ? [x] ! # ~ 🦆 ação", "model": "gemini-2.5"}, "profile": "gemini"}

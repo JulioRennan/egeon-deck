@@ -1,6 +1,6 @@
 # Build artifacts
-app/.build/
-app/build/
+legado/app/.build/
+legado/app/build/
 
 # Runtime state — dados de sessão, não fonte.
 # Barra no meio do padrão ancora na raiz, então precisa de **/ para pegar as
@@ -8,7 +8,7 @@ app/build/
 .mega-brain/
 .egeon/
 **/.omc/
-poc/.state/
+legado/poc/.state/
 
 # `.claude/` NÃO entra aqui: skill é fonte do projeto, não estado de máquina.
 # Ela diz onde código novo vai e quais são as leis de dependência — perder isso no
@@ -25,3 +25,7 @@ docs/_diff-test.md
 # macOS
 .DS_Store
 dist/
+
+# Rust
+rust/target/
+docs/migracao/__pycache__/

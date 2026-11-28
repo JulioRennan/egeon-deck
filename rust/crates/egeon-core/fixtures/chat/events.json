@@ -1,0 +1,177 @@
+{
+  "events": [
+    {
+      "ops": [
+        {
+          "list": [
+            {
+              "activity": "working",
+              "address": "deck/front",
+              "id": "front",
+              "isAgent": true,
+              "needsAttention": false,
+              "role": null,
+              "screen": "w1.front",
+              "status": "trabalhando…",
+              "statusTone": "agent"
+            },
+            {
+              "activity": "waiting",
+              "address": "deck/back",
+              "id": "back",
+              "isAgent": true,
+              "needsAttention": false,
+              "role": null,
+              "screen": "w1.back",
+              "status": "",
+              "tone": "green"
+            }
+          ],
+          "op": "participants"
+        }
+      ],
+      "rev": 1,
+      "topic": "chat/w1",
+      "workbench": "w1"
+    },
+    {
+      "ops": [
+        {
+          "list": [
+            {
+              "asking": false,
+              "id": "fila1",
+              "summary": "2 pendentes · com front"
+            }
+          ],
+          "op": "queues"
+        }
+      ],
+      "rev": 2,
+      "topic": "chat/w1",
+      "workbench": "w1"
+    },
+    {
+      "ops": [
+        {
+          "list": [
+            {
+              "asking": false,
+              "id": "fila1",
+              "summary": "2 pendentes · com front"
+            },
+            {
+              "asking": true,
+              "id": "fila2",
+              "summary": "? pergunta"
+            }
+          ],
+          "op": "queues"
+        }
+      ],
+      "rev": 3,
+      "topic": "chat/w1",
+      "workbench": "w1"
+    },
+    {
+      "ops": [
+        {
+          "list": [
+            {
+              "detail": "rm -rf x",
+              "id": "p1",
+              "tool": "Bash"
+            },
+            {
+              "id": "p2",
+              "questions": [
+                {
+                  "multiSelect": false,
+                  "options": [
+                    "azul",
+                    "verde"
+                  ],
+                  "question": "Qual cor?"
+                }
+              ],
+              "tool": "AskUserQuestion"
+            }
+          ],
+          "op": "permissions"
+        }
+      ],
+      "rev": 4,
+      "topic": "chat/w1",
+      "workbench": "w1"
+    },
+    {
+      "ops": [
+        {
+          "list": [],
+          "op": "permissions"
+        }
+      ],
+      "rev": 5,
+      "topic": "chat/w1",
+      "workbench": "w1"
+    }
+  ],
+  "subscribe": {
+    "ops": [
+      {
+        "blocks": [],
+        "op": "reset"
+      },
+      {
+        "list": [
+          {
+            "activity": "working",
+            "address": "deck/front",
+            "id": "front",
+            "isAgent": true,
+            "needsAttention": false,
+            "role": null,
+            "screen": "w1.front",
+            "status": "trabalhando…",
+            "statusTone": "agent"
+          },
+          {
+            "activity": "waiting",
+            "address": "deck/back",
+            "id": "back",
+            "isAgent": true,
+            "needsAttention": false,
+            "role": null,
+            "screen": "w1.back",
+            "status": "",
+            "tone": "green"
+          }
+        ],
+        "op": "participants"
+      },
+      {
+        "list": [
+          {
+            "asking": false,
+            "id": "fila1",
+            "summary": "2 pendentes · com front"
+          },
+          {
+            "asking": true,
+            "id": "fila2",
+            "summary": "? pergunta"
+          }
+        ],
+        "op": "queues"
+      },
+      {
+        "list": [],
+        "op": "permissions"
+      }
+    ],
+    "rev": 5,
+    "topic": "chat/w1",
+    "workbench": "w1"
+  },
+  "topic": "chat/w1"
+}

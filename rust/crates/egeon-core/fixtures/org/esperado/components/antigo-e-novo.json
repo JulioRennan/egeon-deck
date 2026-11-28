@@ -1,0 +1,57 @@
+{
+  "build" : {
+    "cmd" : "make -j8",
+    "cwd" : ".",
+    "kind" : "shell",
+    "name" : "build"
+  },
+  "ja-no-mapa" : {
+    "agent" : "claude",
+    "byAgent" : {
+      "claude" : {
+        "model" : "novo"
+      }
+    },
+    "kind" : "agent",
+    "name" : "ja-no-mapa"
+  },
+  "mapa-vazio" : {
+    "agent" : "codex",
+    "kind" : "agent",
+    "name" : "mapa-vazio"
+  },
+  "revisor-antigo" : {
+    "agent" : "claude",
+    "byAgent" : {
+      "claude" : {
+        "cmd" : "claude --foo",
+        "config" : "~\/.claude-agro",
+        "model" : "opus"
+      }
+    },
+    "cwd" : "app",
+    "kind" : "agent",
+    "name" : "revisor-antigo",
+    "prompt" : "revise",
+    "rules" : "em português"
+  },
+  "revisor-novo" : {
+    "agent" : "claude",
+    "byAgent" : {
+      "claude" : {
+        "config" : "~\/.claude-agro",
+        "effort" : "high",
+        "model" : "opus"
+      },
+      "opencode" : {
+        "rules" : "aqui, comente em inglês"
+      }
+    },
+    "cwd" : "app",
+    "kind" : "agent",
+    "maestro" : true,
+    "name" : "revisor-novo",
+    "prompt" : "você revisa o diff",
+    "rules" : "escreva em português"
+  }
+}

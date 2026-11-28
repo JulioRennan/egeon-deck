@@ -1,0 +1,12 @@
+# Quebra de linha \n em todo arquivo de texto, também no checkout do Windows:
+# textos embutidos com include_str! (o guia do maestro, o uso do egeon) e os
+# fixtures dos testes comparam byte a byte, e o \r\n do autocrlf os quebrava.
+* text=auto eol=lf
+
+# Binários: o git não mexe.
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.zip binary
+*.gz binary

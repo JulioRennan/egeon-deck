@@ -1,0 +1,490 @@
+{
+  "access_ask_again": {
+    "access": "denied",
+    "message": "Sem acesso a a pasta Documentos: libere o Egeon Deck em Ajustes › Privacidade › Arquivos e Pastas.",
+    "ok": true,
+    "re": 407
+  },
+  "alvos_copiados": {
+    "ok": true,
+    "re": 166,
+    "text": "deck/claude\ndeck/sh"
+  },
+  "bancada_criada": {
+    "ok": true,
+    "re": 118,
+    "workbench": "5e6f7a8b"
+  },
+  "chat_complete": {
+    "items": [
+      {
+        "detail": "deck/rev",
+        "insert": "@rev ",
+        "kind": "agent",
+        "label": "@rev"
+      }
+    ],
+    "ok": true,
+    "range": [
+      8,
+      11
+    ],
+    "re": 209
+  },
+  "chat_new_queue": {
+    "node": "fila1",
+    "ok": true,
+    "re": 405
+  },
+  "chat_snapshot": {
+    "blocks": [],
+    "ok": true,
+    "re": 201,
+    "rev": 42
+  },
+  "components": {
+    "components": [
+      {
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core",
+        "subtitle": "Claude Code",
+        "template": {
+          "agent": "claude",
+          "byAgent": {
+            "claude": {
+              "model": "claude-opus-5-5"
+            }
+          },
+          "cwd": "api",
+          "kind": "agent",
+          "name": "revisor",
+          "prompt": "revisa o core"
+        }
+      }
+    ],
+    "ok": true,
+    "re": 156
+  },
+  "copy": {
+    "ok": true,
+    "re": 325,
+    "text": "cargo test\nok"
+  },
+  "erro": {
+    "error": "terminal desconhecido 't9'",
+    "ok": false,
+    "re": 6
+  },
+  "erro_bancada": {
+    "error": "bancada desconhecida '1a2b3c4d'",
+    "ok": false,
+    "re": 103
+  },
+  "erro_fila": {
+    "error": "item a1b2c3 não existe na fila",
+    "ok": false,
+    "re": 307
+  },
+  "erro_remover_bancada": {
+    "error": "Já apagadas: /Users/eu/Documents/worktrees/nexus-api/x.\n\nNão consegui apagar:\n/Users/eu/Documents/worktrees/nexus-backend/x: permissão negada",
+    "ok": false,
+    "re": 122
+  },
+  "erro_workspace_com_bancadas": {
+    "error": "\"Agro\" ainda tem 2 bancada(s). Remova as bancadas antes de remover o workspace.",
+    "ok": false,
+    "re": 112
+  },
+  "link_hover": {
+    "link": true,
+    "ok": true,
+    "re": 327
+  },
+  "lista": {
+    "ok": true,
+    "re": 12,
+    "terminals": [
+      {
+        "alive": true,
+        "cols": 80,
+        "cwd": "/Users/eu/projeto",
+        "id": "t1",
+        "pid": 4242,
+        "rows": 24
+      },
+      {
+        "alive": false,
+        "cols": 80,
+        "command": "make test",
+        "cwd": "/Users/eu/projeto",
+        "exit_code": 0,
+        "id": "t1",
+        "pid": 4242,
+        "rows": 24
+      }
+    ]
+  },
+  "multi_name": {
+    "name": "nexus-backend + nexus-front",
+    "ok": true,
+    "re": 138
+  },
+  "no_aplicado": {
+    "node": "revisor",
+    "ok": true,
+    "re": 155
+  },
+  "no_criado": {
+    "node": "revisor",
+    "ok": true,
+    "re": 125
+  },
+  "node_folder": {
+    "cwd": "api",
+    "ok": true,
+    "re": 153,
+    "shown": "api"
+  },
+  "node_form": {
+    "cli": "claude",
+    "clis": [
+      {
+        "key": "claude",
+        "name": "Claude Code"
+      },
+      {
+        "key": "codex",
+        "name": "Codex"
+      }
+    ],
+    "components": [
+      {
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core",
+        "subtitle": "Claude Code",
+        "template": {
+          "agent": "claude",
+          "byAgent": {
+            "claude": {
+              "model": "claude-opus-5-5"
+            }
+          },
+          "cwd": "api",
+          "kind": "agent",
+          "name": "revisor",
+          "prompt": "revisa o core"
+        }
+      }
+    ],
+    "folders": [
+      {
+        "shown": "root",
+        "value": ""
+      },
+      {
+        "shown": "api",
+        "value": "api"
+      }
+    ],
+    "ok": true,
+    "re": 150,
+    "screen": {
+      "config_env": "CLAUDE_CONFIG_DIR",
+      "config_items": [
+        {
+          "title": "~/.claude"
+        },
+        {
+          "title": "~/.claude-agro",
+          "value": "/Users/voce/.claude-agro"
+        }
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "fields": {
+        "effort": "high",
+        "model": "claude-opus-5-5",
+        "prompt": "revisa o core"
+      },
+      "models": [
+        {
+          "label": "padrão do CLI"
+        },
+        {
+          "id": "claude-opus-5-5",
+          "label": "Opus 5.5"
+        }
+      ],
+      "template": {
+        "agent": "claude",
+        "byAgent": {
+          "claude": {
+            "model": "claude-opus-5-5"
+          }
+        },
+        "cwd": "api",
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core"
+      }
+    },
+    "template": {
+      "agent": "claude",
+      "byAgent": {
+        "claude": {
+          "model": "claude-opus-5-5"
+        }
+      },
+      "cwd": "api",
+      "kind": "agent",
+      "name": "revisor",
+      "prompt": "revisa o core"
+    }
+  },
+  "node_form_screen": {
+    "config_env": "CLAUDE_CONFIG_DIR",
+    "config_items": [
+      {
+        "title": "~/.claude"
+      },
+      {
+        "title": "~/.claude-agro",
+        "value": "/Users/voce/.claude-agro"
+      }
+    ],
+    "efforts": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "fields": {
+      "effort": "high",
+      "model": "claude-opus-5-5",
+      "prompt": "revisa o core"
+    },
+    "models": [
+      {
+        "label": "padrão do CLI"
+      },
+      {
+        "id": "claude-opus-5-5",
+        "label": "Opus 5.5"
+      }
+    ],
+    "ok": true,
+    "re": 152,
+    "template": {
+      "agent": "claude",
+      "byAgent": {
+        "claude": {
+          "model": "claude-opus-5-5"
+        }
+      },
+      "cwd": "api",
+      "kind": "agent",
+      "name": "revisor",
+      "prompt": "revisa o core"
+    }
+  },
+  "ok": {
+    "ok": true,
+    "re": 1
+  },
+  "plan_move": {
+    "lands": {
+      "parent": "9f8e7d6c",
+      "to": 1
+    },
+    "ok": true,
+    "re": 109
+  },
+  "plan_remove_workbench": {
+    "live": true,
+    "ok": true,
+    "re": 135,
+    "worktrees": [
+      {
+        "branch": "feat/login",
+        "owners": [
+          "bancada"
+        ],
+        "path": "/Users/eu/Documents/worktrees/nexus-backend/feat-login",
+        "repo": "nexus-backend",
+        "used_by": null
+      },
+      {
+        "branch": "fix/front",
+        "owners": [
+          "front"
+        ],
+        "path": "/Users/eu/Documents/worktrees/nexus-front/fix-front",
+        "repo": "nexus-front",
+        "used_by": "front-fix"
+      }
+    ]
+  },
+  "processes": {
+    "enabled": true,
+    "ok": true,
+    "orphans": 1,
+    "processes": [
+      {
+        "age": "19 d 4 h",
+        "command": "node server.js",
+        "node": "deck/claude",
+        "orphan": true,
+        "pid": 4242
+      },
+      {
+        "age": "42 s",
+        "command": "claude --resume abc",
+        "orphan": false,
+        "pid": 4243
+      }
+    ],
+    "re": 334,
+    "summary": "1 no app · 1 órfão · limpeza a cada 10 min"
+  },
+  "processes_erro_leitura": {
+    "error": "a leitura dos processos não terminou",
+    "ok": false,
+    "re": 334
+  },
+  "processes_reap_ensaio": {
+    "detail": "Recebem SIGTERM — o mesmo que fechar o terminal deles.",
+    "ok": true,
+    "re": 335,
+    "title": "Encerrar 1 processo órfão?"
+  },
+  "projeto_criado": {
+    "ok": true,
+    "project": "p3",
+    "re": 113
+  },
+  "queue_add": {
+    "item": "d4e5f6",
+    "ok": true,
+    "re": 305
+  },
+  "removal_losses": {
+    "losses": [
+      "nexus-backend · feat/login",
+      "1 arquivo(s) com mudanças não commitadas:",
+      "   M src/main.rs",
+      "",
+      "nexus-api · feat/login",
+      "1 arquivo(s) novo(s), nunca commitados."
+    ],
+    "ok": true,
+    "re": 167
+  },
+  "suggest_parent": {
+    "ok": true,
+    "parent": "~/Documents/agro",
+    "re": 137
+  },
+  "template_plan": {
+    "exists": true,
+    "nodes": 3,
+    "ok": true,
+    "re": 163,
+    "summary": "2 agentes, 1 terminal — com posição, tamanho, pasta de cada nó e ~/Documents/agro como pasta inicial.",
+    "template": "dupla"
+  },
+  "template_salvo": {
+    "ok": true,
+    "re": 164,
+    "template": "dupla"
+  },
+  "templates": {
+    "ok": true,
+    "re": 139,
+    "templates": [
+      {
+        "base_path": "~/Documents/agro",
+        "name": "dupla",
+        "nodes": 2,
+        "view": "chat"
+      }
+    ]
+  },
+  "terminal_criado": {
+    "alive": true,
+    "cols": 80,
+    "cwd": "/Users/eu/projeto",
+    "id": "t1",
+    "ok": true,
+    "pid": 4242,
+    "re": 4,
+    "rows": 24
+  },
+  "workspace_criado": {
+    "ok": true,
+    "re": 110,
+    "workspace": "9f8e7d6c"
+  },
+  "worktree_criada": {
+    "ok": true,
+    "re": 124,
+    "workbench": "5e6f7a8b"
+  },
+  "worktree_info": {
+    "nodes": [
+      {
+        "branch": "fix/api",
+        "exists": true,
+        "inside": false,
+        "node": "back",
+        "path": "~/Documents/agro/nexus-api",
+        "repo": "nexus-api",
+        "state": "own_worktree"
+      },
+      {
+        "exists": true,
+        "inside": true,
+        "node": "claude",
+        "path": "~/Documents/agro/nexus-backend",
+        "repo": "nexus-backend",
+        "state": "follows_workbench"
+      },
+      {
+        "exists": false,
+        "inside": false,
+        "node": "docs",
+        "path": "~/Documents/notas",
+        "state": "no_repo"
+      }
+    ],
+    "ok": true,
+    "re": 140,
+    "repo": "nexus-backend",
+    "suggested_branch": "main-2",
+    "summary": "nexus-backend · main · limpo · 2 worktrees"
+  },
+  "worktree_info_multi": {
+    "multi": {
+      "project": "Nexus",
+      "repos": [
+        "nexus-backend",
+        "nexus-front"
+      ]
+    },
+    "nodes": [],
+    "ok": true,
+    "re": 160,
+    "suggested_branch": "",
+    "summary": ""
+  },
+  "worktree_plan": {
+    "folder": "~/Documents/worktrees/nexus-backend/feature-PROJ-1234",
+    "message": "segue origin/feature/PROJ-1234",
+    "ok": true,
+    "re": 141,
+    "verdict": "follow_remote"
+  }
+}

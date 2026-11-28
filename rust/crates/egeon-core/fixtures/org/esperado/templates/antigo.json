@@ -1,0 +1,36 @@
+{
+  "mosaico" : {
+    "nodes" : [
+
+    ],
+    "view" : "canvas"
+  },
+  "padrao" : {
+    "basePath" : "~\/Documents\/deck",
+    "nodes" : [
+      {
+        "agent" : "claude",
+        "conversationId" : "VELHA",
+        "conversationStarted" : true,
+        "h" : 200,
+        "id" : "a",
+        "transcript" : "\/t.jsonl",
+        "type" : "agent",
+        "w" : 300,
+        "x" : 10,
+        "y" : 20
+      },
+      {
+        "id" : "docs",
+        "type" : "web",
+        "url" : "http:\/\/localhost:3000"
+      }
+    ],
+    "view" : "chat"
+  },
+  "sem-nada" : {
+    "nodes" : [
+
+    ]
+  }
+}

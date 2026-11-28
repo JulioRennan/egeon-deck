@@ -1,0 +1,217 @@
+# Compila o app novo em cada plataforma e cria a release como RASCUNHO
+# (decisão 52). Quem assina e publica é o `scripts/release.sh`, na máquina que
+# guarda a chave das atualizações: ela nunca vem ao GitHub.
+#
+# Disparo: a tag vX.Y.Z (o release.sh a cria); um push de branch ci/** ou o
+# botão do Actions só compilam e guardam os arquivos, sem release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+    # Um push de branch ci/<qualquer> compila e guarda os arquivos sem release:
+    # é como se valida o pipeline (o workflow_dispatch só vale quando o arquivo
+    # está na main).
+    branches: ["ci/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      # Só Apple Silicon por enquanto: sem o alvo x86_64 instalado, o
+      # embed_core.sh embute o core só de arm64.
+      - name: Rust (arm64)
+        run: rustup toolchain install stable --profile minimal -c clippy,rustfmt
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: ui/.fvmrc
+          channel: stable
+          cache: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+      - name: Testes do core
+        working-directory: rust
+        run: cargo test --workspace --no-fail-fast
+      - name: Testes da UI
+        working-directory: ui
+        run: flutter test
+      - name: App
+        working-directory: ui
+        # O make.sh chama `fvm flutter`; no CI o flutter já está no PATH.
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          # shellcheck disable=SC2016 # o $1 e o $@ são do script que nasce aqui.
+          printf '#!/bin/sh\n[ "$1" = flutter ] && shift\nexec flutter "$@"\n' > "$RUNNER_TEMP/bin/fvm"
+          chmod +x "$RUNNER_TEMP/bin/fvm"
+          PATH="$RUNNER_TEMP/bin:$PATH" EG_SIGN_ID=- scripts/make.sh release stable
+      - name: Empacota
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent "ui/build/EgeonDeck Next.app" dist/EgeonDeck-macos-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+          if-no-files-found: error
+
+  linux:
+    strategy:
+      fail-fast: false
+      # Só x86_64 por enquanto; o aarch64 volta com uma linha
+      # (runner ubuntu-22.04-arm, arch aarch64): o package.sh já sabe gerar.
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      # A mesma imagem do desenvolvimento local (scripts/linux): o que passa no
+      # container da sua máquina passa aqui.
+      - name: Imagem Linux
+        run: docker build -t egeon-linux-dev scripts/linux
+      - name: Testes do core
+        run: scripts/linux/run.sh cargo test --workspace --manifest-path rust/Cargo.toml
+      - name: Testes da UI
+        run: scripts/linux/run.sh bash -lc 'cd ui && flutter test'
+      - name: AppImage e .deb
+        run: scripts/linux/run.sh scripts/linux/package.sh "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  # Windows (decisão 54).
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: ui/.fvmrc
+          channel: stable
+          cache: true
+      # A UI antes do Rust: enquanto o porte anda, cada rodada dá o sinal da UI
+      # mesmo com o lado Rust incompleto.
+      - name: Testes da UI
+        working-directory: ui
+        run: flutter test
+      # Roda mesmo com teste falhando: o C++ do runner só compila aqui, e o
+      # sinal dele não pode esperar o último teste passar.
+      - name: UI (release)
+        if: ${{ !cancelled() }}
+        working-directory: ui
+        run: flutter build windows --release
+      # O alvo gnu e não o msvc: o libghostty-vt estático não liga com o
+      # link.exe da Microsoft. O toolchain gnu do rustup traz o próprio mingw.
+      # Daqui em diante roda mesmo com a UI falhando: um lado não pode esconder
+      # o outro enquanto o porte anda.
+      - name: Rust (x86_64-pc-windows-gnu)
+        if: ${{ !cancelled() }}
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal -c clippy,rustfmt
+          rustup default stable-x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ !cancelled() }}
+        with:
+          workspaces: rust -> target
+      # O PowerShell 5.1 carrega os módulos (Set-Location, Write-Output) na
+      # primeira chamada, e num runner frio isso passa de 30 s. Aquecer uma vez
+      # deixa o runner como um PC em uso, e os testes medem o terminal, não isso.
+      - name: Aquece o PowerShell
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: Set-Location -LiteralPath .; Write-Output pronto; Start-Sleep -Milliseconds 1
+      - name: Testes do core
+        if: ${{ !cancelled() }}
+        working-directory: rust
+        run: cargo test --workspace --no-fail-fast
+      # Em série, um teste por vez: separa corrida entre testes de carga da máquina.
+      - name: Terminal do Windows, em série
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        working-directory: rust
+        run: cargo test -p egeon-driver --test pty_windows -- --test-threads=1
+      # O ConPTY já travou de forma intermitente: uma rodada verde só não prova.
+      - name: Terminal do Windows, 5 vezes
+        if: ${{ !cancelled() }}
+        working-directory: rust
+        run: for i in 1 2 3 4 5; do echo "== rodada $i"; cargo test -p egeon-driver --test pty_windows || exit 1; done
+      - name: Core (release)
+        if: ${{ !cancelled() }}
+        run: |
+          cargo build --release --manifest-path rust/Cargo.toml -p egeon-app -p egeon-cli
+          # O lançador da UI procura o core ao lado do próprio executável.
+          cp rust/target/release/egeon-app.exe rust/target/release/egeon.exe ui/build/windows/x64/runner/Release/
+      - name: Empacota
+        run: |
+          mkdir -p dist
+          cd ui/build/windows/x64/runner/Release
+          # O runner do Flutter liga no runtime do Visual C++, que o runner do
+          # CI tem e um Windows limpo não: sem estas três, "MSVCP140.dll não
+          # foi encontrado" ao abrir. A Microsoft permite levá-las junto do exe.
+          for dll in msvcp140.dll vcruntime140.dll vcruntime140_1.dll; do
+            cp "/c/Windows/System32/$dll" .
+          done
+          7z a -tzip "$GITHUB_WORKSPACE/dist/EgeonDeck-windows-x86_64.zip" . >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Notas do CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "CHANGELOG sem a seção [$version]"; exit 1; }
+      - name: Rascunho
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Release que já existe (a tag foi refeita) só ganha os arquivos novos,
+          # no lugar dos antigos: quem já tem o link continua baixando dela.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            exit 0
+          fi
+          # Tag com sufixo (v2.0.0-alpha.1) sai como pré-release.
+          pre=()
+          case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --draft --verify-tag ${pre[@]+"${pre[@]}"} \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md

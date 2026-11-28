@@ -1,0 +1,26 @@
+[
+  {
+    "color" : "blue",
+    "id" : "ada4e819",
+    "name" : "sessao-antiga",
+    "nodes" : [
+      {
+        "agent" : "claude",
+        "conversationId" : "S1",
+        "conversationStarted" : true,
+        "id" : "a",
+        "type" : "agent"
+      }
+    ],
+    "path" : "~\/antiga"
+  },
+  {
+    "color" : "violet",
+    "id" : "00ff00ff",
+    "name" : "outra",
+    "nodes" : [
+
+    ],
+    "path" : "\/tmp\/outra"
+  }
+]

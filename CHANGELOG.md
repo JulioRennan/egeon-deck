@@ -9,6 +9,77 @@ citados entre parênteses.
 
 ## [Unreleased]
 
+### Adicionado
+
+- App para Windows (x64, Windows 10 1809 ou mais novo): terminais no PowerShell, agentes, canvas, chat e a janela de Processos; sai num zip, sem instalador (decisão 54).
+
+### Alterado
+
+- No Windows e no Linux os atalhos do app passam a ser Ctrl+Shift (Ctrl+Shift+P abre Processos, Ctrl+Shift+W fecha a aba, Ctrl+Shift+1…9, Ctrl+Tab e Ctrl+PgUp/PgDn vão às abas…) no lugar do ⌘, que lá é a tecla Win/Super; no terminal, Ctrl+Shift+C copia, Ctrl+Shift+V cola e Ctrl+C continua interrompendo. Sem barra de menus, o menu ☰ no cabeçalho da barra lateral reúne os itens do menu do app; o macOS não muda (decisão 55).
+- No Windows e no Linux o Ctrl faz o papel do ⌘ nos gestos: Ctrl-clique abre o link (no terminal e no subtítulo do card), Ctrl+roda dá zoom no canvas e Ctrl+V cola na fila (decisão 55).
+- No Linux, terminais e agentes sobem no seu shell (bash, zsh ou fish), com a sua configuração (`~/.bashrc`, `~/.profile`): o PATH, o nvm e o `claude` instalado pelo npm valem dentro do Egeon, e o zsh deixa de ser exigido (decisão 53).
+
+### Corrigido
+
+- O pacote .deb abre a janela num Ubuntu mínimo: declara as bibliotecas gráficas (libEGL, GLES) que o app usa.
+
+## [2.0.0-alpha.1] - 2026-11-25
+
+Primeira versão do app novo (Rust + Flutter), para teste: macOS e Linux. Não se atualiza sozinha; a próxima se instala à mão.
+
+### Adicionado
+
+- "Novo projeto…" no menu do workspace: dá nome, escolhe a pasta-mãe (sugere a que os projetos dele já dividem) e cria a pasta, com `git init` se quiser, sem sair do app (ADR-092).
+- A gaveta de bancadas abre ao passar o mouse na faixa do trilho, à esquerda da bancada, e fecha ao tirar; clicar no botão a deixa aberta (decisão 44).
+- App para Linux (x86_64 e arm64): AppImage, que se atualiza sozinho como no macOS, e .deb, que avisa da versão nova com o link; terminais, agentes, notificações e a janela de Processos (decisão 52).
+
+### Alterado
+
+- A janela Processos volta a ser uma janela própria do sistema, como no Egeon de hoje: dá para movê-la para fora do app ou para outra tela, e ela reabre onde estava (decisão 51).
+- Ao abrir o app, os projetos que têm bancada aparecem abertos e no topo do workspace.
+- A cor da bancada na moldura fica mais forte.
+- Escolher uma bancada pela gaveta não a fecha mais; ela fecha pelo clique fora, pelo Esc, pelo ⌘/ ou quando o mouse sai.
+- O trilho à esquerda mostra as bancadas ativas, na ordem da aba Ativas, em vez das abas abertas; ⌘1…⌘9 seguem essa lista.
+- A janela perde a barra de título: a faixa de cima agora tem voltar e avançar (⌘[ ⌘]), a troca Canvas | Chat (só ícones, com o nome e o atalho na dica) e o caminho projeto / bancada, e arrasta a janela; a área da bancada ganha uma moldura com a cor dela. A faixa de abas sai da casca (decisão 45).
+- A barra lateral vira a gaveta de bancadas: abre pelo trilho de bancadas à esquerda (cada bancada com as iniciais na cor dela e o estado), por cima do canvas ou ao lado no chat, fecha com Esc; ⌘K também a abre (decisão 46).
+- A barra lateral ganha o visual novo: cabeçalho com Todas | Ativas (com o ponto de atenção), busca por bancada, projeto e workspace (⌘K a abre e foca) e "Novo"; as linhas mostram o estado em texto curto e, embaixo, o custo, e o ⋯ de cada nível abre um menu de vidro (salvar como template, copiar caminho do projeto…) (decisão 44).
+- A barra lateral ganha o painel de filtros: mostrar só o que espera você, está em trabalho ou terminou, agrupar por workspace › projeto ou por última atividade, e ver um workspace só; o botão mostra quantos filtros estão ligados. O item arrastado ganha sombra (decisão 44).
+- O canvas ganha o visual novo: fundo liso com grade de pontos, barra de ações em vidro (ferramentas, zoom, template e worktree, enquadrar), dica "Esc cancela" enquanto uma ferramenta de criar está ligada, e Esc desliga a ferramenta (decisão 44).
+- No canvas, Shell e Terminal de agente são ferramentas separadas (o shell nasce na hora, sem formulário); o menu do agente mostra os componentes salvos com CLI, modelo e esforço; o menu Template ▾ salva ou atualiza o template; e a cor da bancada se troca por uma grade de 12 cores na barra. As ligações ficam cinza e a selecionada fica azul, com o rótulo do limite (decisão 44).
+- Os cards do canvas ganham o visual novo: moldura com anel (agente na cor de identidade, "precisa de você" em laranja, maestro com faixa, etiqueta e anel maior), cabeçalho com o ponto de estado, caminho curto e ações; linha de controles do agente com modelo, esforço (com Automático no menu), ultracode e contexto (menus de vidro e o diálogo de limpar o contexto); o terminal passa para a fonte JetBrains Mono 14 e a paleta nova (decisão 44).
+- O card web ganha a barra nova (voltar, avançar, recarregar, endereço no campo do tema e o perfil num menu), e a fila de prompts passa para as cores do tema, com o spinner na tarefa que o agente está fazendo (decisão 44).
+- O chat ganha o visual novo: mensagem sua na bolha, respostas corridas com nome na cor do agente, capa de passos, diff lado a lado com número de linha e a conversa vazia com um convite. A coluna de participantes vai para a esquerda, a permissão (Permitir · Sempre · Negar) fica dentro do composer, e o composer vira um cartão de vidro com "Para <agente>" e os botões de / e @. No chat, o composer flutua sobre a conversa, no mesmo lugar do canvas. O composer também aparece embaixo do canvas, para falar com um agente sem sair dele; a hora e o custo de cada resposta ficam ao lado do nome, sempre à vista; e cada agente tem a mesma cor no canvas e no chat (decisões 44 e 45).
+- O consumo da bancada vira um chip de vidro no canto, no canvas e no chat, com o cronômetro (trabalhando e esperando você) e o custo; o clique abre o painel com os tempos, o topo por agente e, em Por modelo, o total por tarifa, a tabela de preços e "Zerar cronômetro" (decisão 44).
+- Os formulários (bancada, workspace, projeto, multi-projeto, worktree, terminal e agente) e os diálogos de confirmar, perguntar e avisar ganham o visual novo: janela de 440, campos, caixas, rádios e seleção do tema, Cancelar discreto e, nas ações que apagam, a lixeira em vermelho. A cor da bancada se escolhe na mesma grade de 12 cores (decisão 44).
+- O trilho de bancadas ganha arrastar para reordenar e, no botão direito, "Fechar bancada" (a bancada segue rodando), além do ⌘W (decisão 45).
+- A janela Processos ganha a tabela do tema: processo com o ponto de estado, a etiqueta "órfão", o nó na cor dele, PID e tempo, e o filtro Todos | Órfãos (decisão 44).
+- O aviso de "você está na última versão" e os outros avisos de uma linha do app viram um aviso passageiro no pé da tela, e o de versão nova usa a caixa do tema (decisão 44).
+- O aviso do shell e as cortinas "Um instante" e "Sem acesso à pasta" usam o visual novo, com vidro e os botões do tema (decisão 44).
+- O card do maestro fica sempre amarelo — faixa no topo, cabeçalho tingido, nome, etiqueta "maestro", borda e brilho —, em vez da cor do agente (decisão 44).
+- A fila de prompts usa os botões, o menu e a caixa "Automático" do tema (decisão 44).
+- Noto Sans e JetBrains Mono vêm embutidas no app, que passa a abrir com o mesmo texto offline e em qualquer máquina (decisão 44).
+- A gaveta de bancadas fica como no design: sem título nem ✕, uma linha só com as abas Todas | Ativas (sublinhado que desliza), buscar, filtrar, novo e recolher; cada bancada mostra todos os estados de uma vez ("1 terminou", "2 em trabalho") e o traço dela sobre o fio da árvore; o nome do projeto fica em destaque e o lugar dos selos de stack está reservado (decisão 44).
+- A barra de ações usa o ícone de enquadrar da v3 (cantos com alvo); o menu de componentes pinta o nome na cor e mostra o esforço em português, o select de esforço do formulário de agente também, e o botão de limpar o contexto do card vira o ↻ da v3 (decisão 44).
+- No trilho, o selo de pedidos no botão da gaveta fica menor, em pílula laranja, e o ponto verde de "terminou" também aparece na bancada que está na tela (decisão 45).
+- A linha de controles do agente ganha fios entre os grupos e o ↻ de limpar o contexto (o Automático do esforço fica no menu dele); o card da fila mostra "Fila de prompts" (decisão 44).
+- O card da fila mostra embaixo do título quantas tarefas esperam ("nada pendente", "2 pendentes"), como no Swift (decisão 44).
+- O menu do workspace ganha "Recolher tudo", que fecha todos os projetos abertos dele (decisão 44).
+
+### Corrigido
+
+- Colar e copiar no terminal voltam a funcionar pelo ⌘V/⌘C e pelo menu Editar.
+- Colar, copiar, selecionar tudo e desfazer (⌘V, ⌘C, ⌘A, ⌘Z) funcionam nos campos das janelas de formulário (nova bancada, terminal, workspace, renomear).
+- Os menus da barra do macOS (o do app, Editar, Canvas…) não fecham mais sozinhos logo depois de abertos.
+- Os cards de uma bancada não somem mais quando um agente fica aguardando um vizinho: o canvas ficava vazio até ele responder.
+- O app de teste (dev) não liga mais ao app de uso por engano: build de depuração e o bundle "Dev" sempre usam a pasta do dev, mesmo quando o macOS perde a variável que os distinguia.
+- O custo dos agentes em modelos que só o Claude Code instalado conhece (como o Fable 5.2) volta a ser calculado; o que já tinha sido contado sem preço ganha o valor, e o `pricing.json` editado vale sem reabrir o app (ADR-085).
+- O modo de voz do Claude Code grava no terminal: o app pede o microfone ao macOS, como o Egeon de hoje; o navegador volta a abrir servidores locais (http://127.0.0.1).
+- Ícone novo: a mão do maestro segurando os fios de vários terminais, flat e monocromático; o app de desenvolvimento ganha a mesma mão em branco sobre azul (decisão 44).
+- Clicar num botão não deixa mais a borda de foco presa nele (abas Todas/Ativas, trilho, barra de ações e demais botões) (decisão 44).
+- Em janela estreita a barra de ações do canvas não passa mais por baixo do chip de consumo (anda para a esquerda até o chip), o chat com a gaveta aberta não estoura, e a janela ganha um tamanho mínimo de 1000 × 600 (decisão 44).
+- Os botões vermelho, amarelo e verde da janela ficam na mesma linha de voltar, avançar, Canvas | Chat e do caminho da bancada (decisão 45).
+- O esforço do agente aparece em português na faixa do card e no menu (baixo, médio, alto, extra alto, máximo), como no design (decisão 44).
+
 ## [1.8.0] - 2026-11-04
 
 ### Adicionado

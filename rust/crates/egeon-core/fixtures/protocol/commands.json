@@ -1,0 +1,1102 @@
+{
+  "access_ask_again": {
+    "cmd": "access_ask_again",
+    "id": 407,
+    "workbench": "1a2b3c4d"
+  },
+  "access_open_settings": {
+    "cmd": "access_open_settings",
+    "id": 406,
+    "workbench": "1a2b3c4d"
+  },
+  "activate_workbench": {
+    "cmd": "activate_workbench",
+    "id": 103,
+    "workbench": "1a2b3c4d"
+  },
+  "add_project": {
+    "cmd": "add_project",
+    "id": 114,
+    "path": "~/Documents/agro/nexus-backend",
+    "workspace": "9f8e7d6c"
+  },
+  "apply_node": {
+    "cmd": "apply_node",
+    "form": {
+      "fields": {
+        "agent": "claude",
+        "cwd": "api",
+        "kind": "agent",
+        "maestro": true,
+        "name": "revisor"
+      },
+      "save_component": true,
+      "shown": {
+        "cli": "claude",
+        "effort": "high",
+        "model": "claude-opus-5-5",
+        "prompt": "revisa o core"
+      },
+      "template": {
+        "agent": "claude",
+        "byAgent": {
+          "claude": {
+            "model": "claude-opus-5-5"
+          }
+        },
+        "cwd": "api",
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core"
+      }
+    },
+    "id": 155,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "chat_clear": {
+    "cmd": "chat_clear",
+    "id": 204,
+    "workbench": "1a2b3c4d"
+  },
+  "chat_complete": {
+    "caret": 11,
+    "cmd": "chat_complete",
+    "id": 209,
+    "text": "pede ao @re",
+    "workbench": "1a2b3c4d"
+  },
+  "chat_more": {
+    "cmd": "chat_more",
+    "id": 203,
+    "workbench": "1a2b3c4d"
+  },
+  "chat_new_queue": {
+    "agent": "claude",
+    "cmd": "chat_new_queue",
+    "id": 405,
+    "workbench": "1a2b3c4d"
+  },
+  "chat_send": {
+    "cmd": "chat_send",
+    "id": 205,
+    "quote": "r|u1",
+    "text": "revisa o delta da US-105",
+    "to": [
+      "claude",
+      "rev"
+    ],
+    "workbench": "1a2b3c4d"
+  },
+  "chat_snapshot": {
+    "cmd": "chat_snapshot",
+    "id": 201,
+    "workbench": "1a2b3c4d"
+  },
+  "chat_step": {
+    "block": "b|u1|2",
+    "cmd": "chat_step",
+    "id": 202,
+    "workbench": "1a2b3c4d"
+  },
+  "clear_workbench": {
+    "cmd": "clear_workbench",
+    "id": 123,
+    "workbench": "1a2b3c4d"
+  },
+  "clipboard_reply": {
+    "cmd": "clipboard_reply",
+    "id": 326,
+    "node": "1a2b3c4d.claude",
+    "text": "o que estava copiado"
+  },
+  "close_terminal": {
+    "cmd": "close_terminal",
+    "id": 13,
+    "node": "t1"
+  },
+  "close_workbench": {
+    "cmd": "close_workbench",
+    "id": 104,
+    "workbench": "1a2b3c4d"
+  },
+  "components": {
+    "cmd": "components",
+    "id": 156
+  },
+  "copy": {
+    "cmd": "copy",
+    "id": 325,
+    "node": "1a2b3c4d.claude"
+  },
+  "copy_targets": {
+    "cmd": "copy_targets",
+    "id": 166
+  },
+  "create_node": {
+    "agent": "claude",
+    "cmd": "create_node",
+    "component": "revisor",
+    "frame": {
+      "h": 420.0,
+      "w": 640.0,
+      "x": 120.0,
+      "y": 80.5
+    },
+    "id": 125,
+    "type": "agent",
+    "workbench": "1a2b3c4d"
+  },
+  "create_node_form": {
+    "cmd": "create_node",
+    "form": {
+      "fields": {
+        "agent": "claude",
+        "cwd": "api",
+        "kind": "agent",
+        "maestro": true,
+        "name": "revisor"
+      },
+      "save_component": true,
+      "shown": {
+        "cli": "claude",
+        "effort": "high",
+        "model": "claude-opus-5-5",
+        "prompt": "revisa o core"
+      },
+      "template": {
+        "agent": "claude",
+        "byAgent": {
+          "claude": {
+            "model": "claude-opus-5-5"
+          }
+        },
+        "cwd": "api",
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core"
+      }
+    },
+    "frame": {
+      "h": 420.0,
+      "w": 640.0,
+      "x": 120.0,
+      "y": 80.5
+    },
+    "id": 154,
+    "type": "agent",
+    "workbench": "1a2b3c4d"
+  },
+  "create_node_form_visivel": {
+    "cmd": "create_node",
+    "form": {
+      "fields": {
+        "agent": "claude",
+        "cwd": "api",
+        "kind": "agent",
+        "maestro": true,
+        "name": "revisor"
+      },
+      "save_component": true,
+      "shown": {
+        "cli": "claude",
+        "effort": "high",
+        "model": "claude-opus-5-5",
+        "prompt": "revisa o core"
+      },
+      "template": {
+        "agent": "claude",
+        "byAgent": {
+          "claude": {
+            "model": "claude-opus-5-5"
+          }
+        },
+        "cwd": "api",
+        "kind": "agent",
+        "name": "revisor",
+        "prompt": "revisa o core"
+      }
+    },
+    "id": 335,
+    "type": "agent",
+    "visible": {
+      "h": 420.0,
+      "w": 640.0,
+      "x": 120.0,
+      "y": 80.5
+    },
+    "workbench": "1a2b3c4d"
+  },
+  "create_node_web": {
+    "cmd": "create_node",
+    "frame": {
+      "h": 420.0,
+      "w": 640.0,
+      "x": 120.0,
+      "y": 80.5
+    },
+    "id": 126,
+    "type": "web",
+    "url": "https://docs.rs",
+    "workbench": "1a2b3c4d"
+  },
+  "create_project": {
+    "cmd": "create_project",
+    "git": true,
+    "id": 113,
+    "name": "nexus-api",
+    "parent": "~/Documents/agro",
+    "workspace": "9f8e7d6c"
+  },
+  "create_terminal": {
+    "cmd": "create_terminal",
+    "cols": 80,
+    "cwd": "/Users/eu/projeto",
+    "id": 4,
+    "rows": 24
+  },
+  "create_terminal_minimo": {
+    "cmd": "create_terminal",
+    "id": 5
+  },
+  "create_workbench": {
+    "cmd": "create_workbench",
+    "id": 118,
+    "path": "~/Documents/agro/nexus-backend",
+    "project": "p1",
+    "template": "dupla"
+  },
+  "create_workspace": {
+    "cmd": "create_workspace",
+    "id": 110,
+    "name": "Agro"
+  },
+  "drop_caminhos": {
+    "cmd": "drop",
+    "id": 328,
+    "node": "1a2b3c4d.claude",
+    "paths": [
+      "/tmp/um arquivo.pdf",
+      "/tmp/outro.swift"
+    ]
+  },
+  "drop_imagem": {
+    "cmd": "drop",
+    "id": 329,
+    "node": "1a2b3c4d.claude",
+    "png": "iVBORw0KGgo="
+  },
+  "effort_move": {
+    "cmd": "effort_move",
+    "id": 301,
+    "index": 3,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "effort_settle": {
+    "cmd": "effort_settle",
+    "id": 303,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "effort_toggle_auto": {
+    "cmd": "effort_toggle_auto",
+    "id": 302,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "input": {
+    "cmd": "input",
+    "id": 6,
+    "node": "t1",
+    "text": "echo oi\r"
+  },
+  "key_ctrl_c": {
+    "cmd": "key",
+    "id": 8,
+    "key": "c",
+    "mods": {
+      "ctrl": true
+    },
+    "node": "t1"
+  },
+  "key_enter": {
+    "cmd": "key",
+    "id": 7,
+    "key": "enter",
+    "mods": {},
+    "node": "t1"
+  },
+  "key_pageup_alt": {
+    "cmd": "key",
+    "id": 10,
+    "key": "pageup",
+    "mods": {
+      "alt": true,
+      "meta": true
+    },
+    "node": "t1"
+  },
+  "key_texto": {
+    "cmd": "key",
+    "id": 9,
+    "key": "a",
+    "mods": {
+      "shift": true
+    },
+    "node": "t1",
+    "text": "A"
+  },
+  "link": {
+    "both": false,
+    "cmd": "link",
+    "from": "claude",
+    "id": 130,
+    "to": "rev",
+    "workbench": "1a2b3c4d"
+  },
+  "link_hover": {
+    "cmd": "link_hover",
+    "id": 327,
+    "node": "1a2b3c4d.claude",
+    "x": 12.25,
+    "y": 4.0
+  },
+  "link_ida_e_volta": {
+    "both": true,
+    "cmd": "link",
+    "from": "claude",
+    "id": 131,
+    "max_sends": 3,
+    "to": "rev",
+    "workbench": "1a2b3c4d"
+  },
+  "list_terminals": {
+    "cmd": "list_terminals",
+    "id": 12
+  },
+  "move_drawer": {
+    "cmd": "move",
+    "id": 108,
+    "item": "9f8e7d6c",
+    "kind": "drawer",
+    "to": 0
+  },
+  "move_node": {
+    "cmd": "move_node",
+    "frame": {
+      "h": 420.0,
+      "w": 640.0,
+      "x": 120.0,
+      "y": 80.5
+    },
+    "id": 128,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "move_store": {
+    "cmd": "move",
+    "id": 107,
+    "item": "p2",
+    "kind": "store",
+    "parent": "9f8e7d6c",
+    "to": 1
+  },
+  "move_tab": {
+    "cmd": "move_tab",
+    "id": 105,
+    "to": 0,
+    "workbench": "1a2b3c4d"
+  },
+  "move_workbench": {
+    "cmd": "move",
+    "id": 106,
+    "item": "1a2b3c4d",
+    "kind": "workbench",
+    "parent": "p1",
+    "to": 2
+  },
+  "multi_name": {
+    "cmd": "multi_name",
+    "folders": [
+      "~/Documents/agro/nexus-backend",
+      "~/Documents/agro/nexus-front"
+    ],
+    "id": 138,
+    "workspace": "9f8e7d6c"
+  },
+  "multi_name_workspace_novo": {
+    "cmd": "multi_name",
+    "folders": [
+      "~/Documents/agro/nexus-backend",
+      "~/Documents/agro/nexus-front"
+    ],
+    "id": 143
+  },
+  "multi_project": {
+    "cmd": "multi_project",
+    "id": 117,
+    "members": [
+      "p1",
+      "p2"
+    ],
+    "name": "nexus",
+    "workspace": "9f8e7d6c"
+  },
+  "node_clear": {
+    "cmd": "node_clear",
+    "id": 304,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "node_folder": {
+    "cmd": "node_folder",
+    "id": 153,
+    "path": "/Users/voce/deck/api",
+    "workbench": "1a2b3c4d"
+  },
+  "node_form": {
+    "cmd": "node_form",
+    "id": 150,
+    "workbench": "1a2b3c4d"
+  },
+  "node_form_do_no": {
+    "cmd": "node_form",
+    "id": 151,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "node_form_screen": {
+    "cli": "codex",
+    "cmd": "node_form_screen",
+    "config": "/Users/voce/.codex-x",
+    "id": 152,
+    "shown": {
+      "cli": "claude",
+      "effort": "high",
+      "model": "claude-opus-5-5",
+      "prompt": "revisa o core"
+    },
+    "template": {
+      "agent": "claude",
+      "byAgent": {
+        "claude": {
+          "model": "claude-opus-5-5"
+        }
+      },
+      "cwd": "api",
+      "kind": "agent",
+      "name": "revisor",
+      "prompt": "revisa o core"
+    },
+    "workbench": "1a2b3c4d"
+  },
+  "open_node_folder": {
+    "cmd": "open_node_folder",
+    "id": 331,
+    "node": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "open_url": {
+    "cmd": "open_url",
+    "id": 450,
+    "url": "https://example.com/docs"
+  },
+  "open_workbench": {
+    "cmd": "open_workbench",
+    "id": 102,
+    "workbench": "1a2b3c4d"
+  },
+  "paste": {
+    "cmd": "paste",
+    "id": 14,
+    "node": "t1",
+    "text": "ls -la\necho 'colado'\n"
+  },
+  "permission_answer": {
+    "answer": "always",
+    "cmd": "permission_answer",
+    "id": 206,
+    "request": "p7",
+    "workbench": "1a2b3c4d"
+  },
+  "permission_answer_escolha": {
+    "choice": "Sim, e não pergunte de novo",
+    "cmd": "permission_answer",
+    "id": 207,
+    "request": "p8",
+    "workbench": "1a2b3c4d"
+  },
+  "permission_answer_varias": {
+    "answers": {
+      "Quais testes?": [
+        "unidade",
+        "contrato"
+      ],
+      "Qual banco?": [
+        "Postgres"
+      ]
+    },
+    "cmd": "permission_answer",
+    "id": 208,
+    "request": "p9",
+    "workbench": "1a2b3c4d"
+  },
+  "plan_move": {
+    "cmd": "plan_move",
+    "id": 109,
+    "item": "p2",
+    "kind": "project",
+    "parent": "9f8e7d6c",
+    "to": 1
+  },
+  "plan_remove_workbench": {
+    "cmd": "plan_remove_workbench",
+    "id": 135,
+    "workbench": "1a2b3c4d"
+  },
+  "pointer_press": {
+    "button": "left",
+    "cmd": "pointer",
+    "id": 322,
+    "kind": "press",
+    "mods": {},
+    "node": "1a2b3c4d.claude",
+    "time_ms": 1000,
+    "x": 3.5,
+    "y": 2.0
+  },
+  "pointer_release_meta": {
+    "button": "left",
+    "cmd": "pointer",
+    "id": 323,
+    "kind": "release",
+    "mods": {
+      "meta": true
+    },
+    "node": "1a2b3c4d.claude",
+    "time_ms": 1080,
+    "x": 12.25,
+    "y": 4.0
+  },
+  "processes": {
+    "cmd": "processes",
+    "id": 334
+  },
+  "processes_kill": {
+    "cmd": "processes_kill",
+    "dry_run": false,
+    "id": 336,
+    "pids": [
+      4242,
+      4243
+    ]
+  },
+  "processes_reap_ensaio": {
+    "cmd": "processes_reap",
+    "dry_run": true,
+    "id": 335
+  },
+  "queue_add": {
+    "after": "a1b2c3",
+    "cmd": "queue_add",
+    "id": 305,
+    "node": "fila",
+    "text": "roda os testes",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_attach": {
+    "cmd": "queue_attach",
+    "id": 315,
+    "item": "a1b2c3",
+    "node": "fila",
+    "path": "/Users/eu/Desktop/tela.png",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_attach_colado": {
+    "cmd": "queue_attach",
+    "id": 332,
+    "item": "a1b2c3",
+    "node": "fila",
+    "png": "iVBORw0KGgo=",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_attach_solto": {
+    "cmd": "queue_attach",
+    "id": 333,
+    "node": "fila",
+    "open": "d4e5f6",
+    "path": "/Users/eu/Desktop/tela.png",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_clear_done": {
+    "cmd": "queue_clear_done",
+    "id": 314,
+    "node": "fila",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_detach": {
+    "cmd": "queue_detach",
+    "id": 316,
+    "image": "img-9f8e7d6c.png",
+    "item": "a1b2c3",
+    "node": "fila",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_move": {
+    "cmd": "queue_move",
+    "id": 308,
+    "item": "a1b2c3",
+    "node": "fila",
+    "to": 0,
+    "workbench": "1a2b3c4d"
+  },
+  "queue_open_image": {
+    "cmd": "queue_open_image",
+    "id": 350,
+    "image": "img-9f8e7d6c.png",
+    "item": "a1b2c3",
+    "node": "fila",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_remove": {
+    "cmd": "queue_remove",
+    "id": 307,
+    "item": "a1b2c3",
+    "node": "fila",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_reopen": {
+    "cmd": "queue_reopen",
+    "id": 310,
+    "item": "a1b2c3",
+    "node": "fila",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_reply": {
+    "cmd": "queue_reply",
+    "id": 312,
+    "item": "a1b2c3",
+    "node": "fila",
+    "text": "sim, pode",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_send_proximo": {
+    "cmd": "queue_send",
+    "id": 311,
+    "node": "fila",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_set": {
+    "auto": true,
+    "cmd": "queue_set",
+    "id": 313,
+    "node": "fila",
+    "target": "claude",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_toggle_done": {
+    "cmd": "queue_toggle_done",
+    "id": 309,
+    "item": "a1b2c3",
+    "node": "fila",
+    "workbench": "1a2b3c4d"
+  },
+  "queue_update": {
+    "cmd": "queue_update",
+    "id": 306,
+    "item": "a1b2c3",
+    "node": "fila",
+    "text": "roda os testes do core",
+    "workbench": "1a2b3c4d"
+  },
+  "reaper_enabled": {
+    "cmd": "reaper_enabled",
+    "id": 404,
+    "on": false
+  },
+  "removal_losses": {
+    "cmd": "removal_losses",
+    "id": 167,
+    "workbench": "1a2b3c4d"
+  },
+  "remove_node": {
+    "cmd": "remove_node",
+    "id": 129,
+    "node": "sh",
+    "workbench": "1a2b3c4d"
+  },
+  "remove_project": {
+    "cmd": "remove_project",
+    "dry_run": false,
+    "id": 116,
+    "project": "p2"
+  },
+  "remove_workbench": {
+    "cmd": "remove_workbench",
+    "id": 122,
+    "workbench": "1a2b3c4d",
+    "worktrees": true
+  },
+  "remove_workspace": {
+    "cmd": "remove_workspace",
+    "dry_run": true,
+    "id": 112,
+    "workspace": "9f8e7d6c"
+  },
+  "reset_clock": {
+    "cmd": "reset_clock",
+    "id": 160,
+    "workbench": "1a2b3c4d"
+  },
+  "resize": {
+    "cmd": "resize",
+    "cols": 120,
+    "id": 11,
+    "node": "t1",
+    "rows": 40
+  },
+  "retry": {
+    "cmd": "retry",
+    "id": 330,
+    "node": "claude",
+    "now": true,
+    "workbench": "1a2b3c4d"
+  },
+  "save_template": {
+    "cmd": "save_template",
+    "dry_run": false,
+    "id": 164,
+    "name": "dupla",
+    "workbench": "1a2b3c4d"
+  },
+  "save_template_dry_run": {
+    "cmd": "save_template",
+    "dry_run": true,
+    "id": 163,
+    "name": "dupla",
+    "workbench": "1a2b3c4d"
+  },
+  "save_template_origem": {
+    "cmd": "save_template",
+    "dry_run": false,
+    "id": 165,
+    "workbench": "1a2b3c4d"
+  },
+  "save_workspace": {
+    "cmd": "save_workspace",
+    "folders": [
+      "~/Documents/agro/nexus-backend",
+      "~/Documents/agro/nexus-front"
+    ],
+    "icon": "/Users/eu/Desktop/agro.png",
+    "id": 136,
+    "multis": [
+      {
+        "folders": [
+          "~/Documents/agro/nexus-backend",
+          "~/Documents/agro/nexus-front"
+        ],
+        "name": "nexus"
+      }
+    ],
+    "name": "Agro",
+    "workspace": "9f8e7d6c"
+  },
+  "save_workspace_multi_sem_nome": {
+    "cmd": "save_workspace",
+    "folders": [
+      "~/Documents/agro/nexus-backend",
+      "~/Documents/agro/nexus-front"
+    ],
+    "id": 144,
+    "multis": [
+      {
+        "folders": [
+          "~/Documents/agro/nexus-backend",
+          "~/Documents/agro/nexus-front"
+        ]
+      }
+    ],
+    "name": "Agro"
+  },
+  "scroll_fim": {
+    "cmd": "scroll",
+    "id": 321,
+    "node": "1a2b3c4d.claude",
+    "to": "bottom"
+  },
+  "scroll_linhas": {
+    "cmd": "scroll",
+    "id": 320,
+    "node": "1a2b3c4d.claude",
+    "to": {
+      "rows": -3
+    }
+  },
+  "select_all": {
+    "cmd": "select_all",
+    "id": 324,
+    "node": "1a2b3c4d.claude"
+  },
+  "set_edge_ciclo": {
+    "cmd": "set_edge",
+    "direction": "cycle",
+    "from": "claude",
+    "id": 133,
+    "to": "rev",
+    "workbench": "1a2b3c4d"
+  },
+  "set_edge_sem_limite": {
+    "cmd": "set_edge",
+    "direction": "<->",
+    "from": "claude",
+    "id": 134,
+    "max_sends": null,
+    "to": "rev",
+    "workbench": "1a2b3c4d"
+  },
+  "set_node": {
+    "cmd": "set_node",
+    "effort": null,
+    "id": 127,
+    "maestro": false,
+    "model": "sonnet",
+    "node": "claude",
+    "role": "revisor do lado Rust",
+    "workbench": "1a2b3c4d"
+  },
+  "set_project": {
+    "cmd": "set_project",
+    "collapsed": false,
+    "id": 115,
+    "project": "p1"
+  },
+  "set_workbench": {
+    "cmd": "set_workbench",
+    "color": "teal",
+    "id": 119,
+    "name": "deck",
+    "view": "chat",
+    "workbench": "1a2b3c4d"
+  },
+  "set_workbench_rules": {
+    "cmd": "set_workbench_rules",
+    "id": 120,
+    "rules": "não commite sem me perguntar",
+    "workbench": "1a2b3c4d"
+  },
+  "set_workbench_rules_apaga": {
+    "cmd": "set_workbench_rules",
+    "id": 121,
+    "rules": null,
+    "workbench": "1a2b3c4d"
+  },
+  "set_workspace": {
+    "cmd": "set_workspace",
+    "collapsed": true,
+    "icon": null,
+    "id": 111,
+    "name": "Agro e afins",
+    "workspace": "9f8e7d6c"
+  },
+  "subscribe_app": {
+    "cmd": "subscribe",
+    "id": 400,
+    "topic": "app"
+  },
+  "subscribe_chat": {
+    "cmd": "subscribe",
+    "id": 200,
+    "topic": "chat/1a2b3c4d"
+  },
+  "subscribe_node": {
+    "cmd": "subscribe",
+    "id": 300,
+    "topic": "node/1a2b3c4d/claude"
+  },
+  "subscribe_nodes": {
+    "cmd": "subscribe",
+    "id": 101,
+    "topic": "workbench/1a2b3c4d/nodes"
+  },
+  "subscribe_screen": {
+    "cmd": "subscribe",
+    "id": 1,
+    "topic": "screen/t1"
+  },
+  "subscribe_terminals": {
+    "cmd": "subscribe",
+    "id": 2,
+    "topic": "terminals"
+  },
+  "subscribe_workspaces": {
+    "cmd": "subscribe",
+    "id": 100,
+    "topic": "workspaces"
+  },
+  "suggest_parent": {
+    "cmd": "suggest_parent",
+    "id": 137,
+    "workspace": "9f8e7d6c"
+  },
+  "templates": {
+    "cmd": "templates",
+    "id": 139
+  },
+  "ui_focus": {
+    "app_active": true,
+    "cmd": "ui_focus",
+    "id": 330,
+    "node": {
+      "node": "claude",
+      "workbench": "1a2b3c4d"
+    },
+    "window": {
+      "h": 900.0,
+      "w": 1440.0
+    }
+  },
+  "ui_focus_fundo": {
+    "app_active": false,
+    "cmd": "ui_focus",
+    "id": 331
+  },
+  "ui_reply": {
+    "cmd": "ui_reply",
+    "id": 333,
+    "request": 7,
+    "value": "chat"
+  },
+  "ui_reply_geometria_vazia": {
+    "cmd": "ui_reply",
+    "id": 408,
+    "request": 8,
+    "value": {}
+  },
+  "unlink": {
+    "both": true,
+    "cmd": "unlink",
+    "from": "claude",
+    "id": 132,
+    "to": "rev",
+    "workbench": "1a2b3c4d"
+  },
+  "unsubscribe": {
+    "cmd": "unsubscribe",
+    "id": 3,
+    "topic": "screen/t1"
+  },
+  "update_answer": {
+    "accept": true,
+    "auto": false,
+    "cmd": "update_answer",
+    "id": 402,
+    "version": "1.7.0"
+  },
+  "update_auto": {
+    "cmd": "update_auto",
+    "id": 403,
+    "on": true
+  },
+  "update_menu": {
+    "cmd": "update_menu",
+    "id": 401
+  },
+  "web_navigate": {
+    "cmd": "web_navigate",
+    "id": 317,
+    "node": "docs",
+    "typed": "docs.rs/tokio",
+    "workbench": "1a2b3c4d"
+  },
+  "web_navigated": {
+    "cmd": "web_navigated",
+    "id": 318,
+    "node": "docs",
+    "url": "https://docs.rs/tokio/latest/tokio/",
+    "workbench": "1a2b3c4d"
+  },
+  "web_set_profile": {
+    "cmd": "web_set_profile",
+    "id": 319,
+    "node": "docs",
+    "profile": "trabalho",
+    "workbench": "1a2b3c4d"
+  },
+  "worktree": {
+    "branch": "feature/PROJ-1234",
+    "cmd": "worktree",
+    "destination": "move_current",
+    "id": 124,
+    "nodes": {
+      "back": "fix/api",
+      "sub": ""
+    },
+    "workbench": "1a2b3c4d"
+  },
+  "worktree_de_pasta": {
+    "branch": "feature/PROJ-1234",
+    "cmd": "worktree",
+    "destination": "new_workbench",
+    "id": 145,
+    "path": "~/Documents/agro/nexus-backend",
+    "project": "p1",
+    "template": "dupla"
+  },
+  "worktree_info": {
+    "cmd": "worktree_info",
+    "id": 140,
+    "workbench": "1a2b3c4d"
+  },
+  "worktree_info_de_pasta": {
+    "cmd": "worktree_info",
+    "id": 160,
+    "path": "~/Documents/agro/nexus-backend",
+    "project": "p1"
+  },
+  "worktree_info_no": {
+    "cmd": "worktree_info",
+    "id": 333,
+    "node": "back",
+    "workbench": "1a2b3c4d"
+  },
+  "worktree_multi": {
+    "branch": "feat/login",
+    "cmd": "worktree",
+    "destination": "new_workbench",
+    "id": 162,
+    "project": "m1",
+    "repos": {
+      "nexus-front": "fix/front"
+    },
+    "template": "dupla"
+  },
+  "worktree_no": {
+    "branch": "fix/api",
+    "cmd": "worktree",
+    "destination": "new_workbench",
+    "id": 332,
+    "node": "back",
+    "workbench": "1a2b3c4d"
+  },
+  "worktree_plan": {
+    "branch": "feature/PROJ-1234",
+    "cmd": "worktree_plan",
+    "id": 141,
+    "workbench": "1a2b3c4d"
+  },
+  "worktree_plan_de_pasta": {
+    "branch": "feature/PROJ-1234",
+    "cmd": "worktree_plan",
+    "id": 161,
+    "project": "p1"
+  },
+  "worktree_plan_no": {
+    "branch": "fix/api",
+    "cmd": "worktree_plan",
+    "id": 334,
+    "node": "back",
+    "workbench": "1a2b3c4d"
+  }
+}
