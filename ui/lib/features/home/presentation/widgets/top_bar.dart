@@ -12,6 +12,7 @@ import '../../../../core/domain/entities/workbench.dart';
 import '../../../../theme/egeon_colors.dart';
 import '../../../../theme/egeon_tokens.dart';
 import '../../../../theme/egeon_type.dart';
+import '../../../../commons/utils/app_shortcut.dart';
 
 /// A faixa de cima da janela (44, o `size.titlebar`): voltar e avançar
 /// (⌘[ ⌘]), Canvas | Chat só ícones (⌥⌘1 ⌥⌘2) e a trilha `projeto / bancada` com o nome
@@ -74,14 +75,14 @@ class TopBar extends StatelessWidget {
             IconButton(
               icon: EgIcons.chevronLeft,
               tooltip: 'Voltar',
-              shortcut: '⌘[',
+              shortcut: appShortcutLabel('['),
               onPressed: canGoBack ? onBack : null,
             ),
             const SizedBox(width: EgeonSpace.s1),
             IconButton(
               icon: EgIcons.chevronRight,
               tooltip: 'Avançar',
-              shortcut: '⌘]',
+              shortcut: appShortcutLabel(']'),
               onPressed: canGoForward ? onForward : null,
             ),
             const SizedBox(width: EgeonSpace.s2),

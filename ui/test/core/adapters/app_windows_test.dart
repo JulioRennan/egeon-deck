@@ -57,6 +57,19 @@ void main() {
     expect(WindowArguments.decode(arguments)?.kind, WindowKind.processes);
   });
 
+  test('duas aberturas seguidas criam uma janela só', () async {
+    existing = [
+      {'windowId': 'principal', 'windowArgument': ''},
+    ];
+    const windows = MultiWindowAppWindows();
+    await Future.wait([windows.open(processes), windows.open(processes)]);
+    expect(calls.where((c) => c.method == 'createWindow'), hasLength(1));
+
+    // Terminada a abertura, a guarda se solta: a próxima olha a lista de novo.
+    await windows.open(processes);
+    expect(calls.where((c) => c.method == 'createWindow'), hasLength(2));
+  });
+
   test('já aberta, traz a mesma para a frente em vez de outra', () async {
     existing = [
       {'windowId': 'principal', 'windowArgument': ''},

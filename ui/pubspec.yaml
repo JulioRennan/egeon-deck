@@ -9,7 +9,9 @@ environment:
 
 dependencies:
   desktop_drop: ^0.8.4
-  desktop_multi_window: ^0.3.1
+  # Cópia do 0.3.1 com um ajuste no Windows (third_party/.../EGEON.md).
+  desktop_multi_window:
+    path: third_party/desktop_multi_window
   file_selector: ^1.1.0
   flutter:
     sdk: flutter

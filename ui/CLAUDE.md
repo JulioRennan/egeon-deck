@@ -19,6 +19,7 @@ lib/
 └─ theme/
 macos/          o runner nativo
 windows/        o runner Win32 (decisão 54): canal egeon/window, janela única, dark
+third_party/    desktop_multi_window 0.3.1 com um ajuste no Windows (EGEON.md): GPU própria no motor da janela secundária
 test/
 ```
 

@@ -12,6 +12,7 @@ import '../../../../theme/egeon_colors.dart';
 import '../../../../theme/egeon_tokens.dart';
 import '../../../../theme/egeon_type.dart';
 import '../../domain/entities/sidebar_tab.dart';
+import '../../../../commons/utils/app_shortcut.dart';
 
 /// O cabeçalho da gaveta, numa linha só (a v3, `Sidebar`): as abas Todas N |
 /// Ativas N com o sublinhado que desliza (e o ponto de atenção na Ativas
@@ -34,6 +35,7 @@ class SidebarHeader extends StatelessWidget {
     this.filterCount = 0,
     this.searchFocus,
     this.onCollapse,
+    this.onAppMenu,
     super.key,
   });
 
@@ -59,6 +61,10 @@ class SidebarHeader extends StatelessWidget {
   /// aparece (a barra fora da gaveta).
   final VoidCallback? onCollapse;
 
+  /// O menu ☰ do app, fora do macOS (decisão 55): a âncora do botão, para o
+  /// menu abrir embaixo dele. Sem ele o botão não aparece.
+  final ValueChanged<Rect>? onAppMenu;
+
   /// A altura da linha das abas e dos botões.
   static const tabHeight = 36.0;
 
@@ -67,6 +73,7 @@ class SidebarHeader extends StatelessWidget {
     final c = context.eg;
     final newKey = GlobalKey();
     final filterKey = GlobalKey();
+    final menuKey = GlobalKey();
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.lineSubtle)),
@@ -101,7 +108,7 @@ class SidebarHeader extends StatelessWidget {
               _HeaderButton(
                 icon: EgIcons.search,
                 tooltip: 'Buscar bancada ou projeto',
-                shortcut: '⌘K',
+                shortcut: appShortcutLabel('K'),
                 onPressed: onToggleSearch,
               ),
               const SizedBox(width: EgeonSpace.s1),
@@ -139,6 +146,22 @@ class SidebarHeader extends StatelessWidget {
                 },
               ),
             ),
+            if (onAppMenu != null) ...[
+              const SizedBox(width: EgeonSpace.s1),
+              KeyedSubtree(
+                key: menuKey,
+                child: _HeaderButton(
+                  icon: _menuIcon,
+                  tooltip: 'Menu do app',
+                  onPressed: () {
+                    final box =
+                        menuKey.currentContext!.findRenderObject()!
+                            as RenderBox;
+                    onAppMenu!(box.localToGlobal(Offset.zero) & box.size);
+                  },
+                ),
+              ),
+            ],
             if (onCollapse != null) ...[
               const SizedBox(width: EgeonSpace.s1),
               _HeaderButton(
@@ -153,6 +176,10 @@ class SidebarHeader extends StatelessWidget {
     );
   }
 }
+
+/// Os três traços do ☰. Fica aqui e não em `EgIcons`, que espelha os nomes do
+/// DS: o ☰ só existe fora do macOS.
+const _menuIcon = EgIconData('menu', [EgPath('M3 4.5h10M3 8h10M3 11.5h10')]);
 
 /// Um botão da linha (`.sb-ib`): 30, raio 8, ícone de 16 em `textSecondary`;
 /// no hover `overlay6` e `textPrimary`; ligado, `accentSoft` e `accent`.

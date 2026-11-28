@@ -15,6 +15,8 @@ citados entre parênteses.
 
 ### Alterado
 
+- No Windows e no Linux os atalhos do app passam a ser Ctrl+Shift (Ctrl+Shift+P abre Processos, Ctrl+Shift+W fecha a aba, Ctrl+Shift+1…9, Ctrl+Tab e Ctrl+PgUp/PgDn vão às abas…) no lugar do ⌘, que lá é a tecla Win/Super; no terminal, Ctrl+Shift+C copia, Ctrl+Shift+V cola e Ctrl+C continua interrompendo. Sem barra de menus, o menu ☰ no cabeçalho da barra lateral reúne os itens do menu do app; o macOS não muda (decisão 55).
+- No Windows e no Linux o Ctrl faz o papel do ⌘ nos gestos: Ctrl-clique abre o link (no terminal e no subtítulo do card), Ctrl+roda dá zoom no canvas e Ctrl+V cola na fila (decisão 55).
 - No Linux, terminais e agentes sobem no seu shell (bash, zsh ou fish), com a sua configuração (`~/.bashrc`, `~/.profile`): o PATH, o nvm e o `claude` instalado pelo npm valem dentro do Egeon, e o zsh deixa de ser exigido (decisão 53).
 
 ### Corrigido

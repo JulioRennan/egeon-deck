@@ -6,6 +6,7 @@ import '../../../../../commons/widgets/eg/tooltip.dart';
 import '../../../../../commons/utils/path_names.dart';
 import '../../../../../theme/egeon_colors.dart';
 import '../../../../../theme/egeon_type.dart';
+import '../../../../../commons/utils/app_shortcut.dart';
 
 /// O caminho curto do cabeçalho: `~/…/a/b` quando passa de três partes.
 /// Endereço (o nó web) e o que não é caminho ficam como estão.
@@ -33,6 +34,10 @@ class SubtitleLink extends StatefulWidget {
 }
 
 class _SubtitleLinkState extends State<SubtitleLink> {
+  /// Onde o clique no link abre: o Finder no macOS, a pasta nos outros.
+  static String get _opensIn =>
+      usesCommandKey ? 'abre no Finder' : 'abre a pasta';
+
   var _hovering = false;
   var _command = false;
 
@@ -40,11 +45,9 @@ class _SubtitleLinkState extends State<SubtitleLink> {
     // A tecla do próprio evento: o conjunto de teclas apertadas pode ainda não
     // ter mudado quando o aviso chega.
     final key = event.logicalKey;
-    final command =
-        key == LogicalKeyboardKey.metaLeft ||
-            key == LogicalKeyboardKey.metaRight
+    final command = isPrimaryModifierKey(key)
         ? event is! KeyUpEvent
-        : HardwareKeyboard.instance.isMetaPressed;
+        : isPrimaryModifierPressed(HardwareKeyboard.instance);
     if (command != _command && mounted) setState(() => _command = command);
     return false;
   }
@@ -52,7 +55,7 @@ class _SubtitleLinkState extends State<SubtitleLink> {
   @override
   void initState() {
     super.initState();
-    _command = HardwareKeyboard.instance.isMetaPressed;
+    _command = isPrimaryModifierPressed(HardwareKeyboard.instance);
     HardwareKeyboard.instance.addHandler(_onKey);
   }
 
@@ -86,7 +89,7 @@ class _SubtitleLinkState extends State<SubtitleLink> {
     return Tooltip(
       message: open == null
           ? widget.text
-          : '${widget.text}  —  ⌘-clique abre no Finder',
+          : '${widget.text}  —  $primaryModifierName-clique $_opensIn',
       child: MouseRegion(
         // Translúcida para saber do mouse sem ⌘; quem decide se o clique passa
         // é o Listener de dentro (`opaque: false` aqui deixaria passar sempre).
@@ -102,7 +105,7 @@ class _SubtitleLinkState extends State<SubtitleLink> {
           onPointerDown: (e) {
             if (open != null &&
                 e.buttons == kPrimaryButton &&
-                HardwareKeyboard.instance.isMetaPressed) {
+                isPrimaryModifierPressed(HardwareKeyboard.instance)) {
               open();
             }
           },

@@ -9,6 +9,7 @@ import 'eg/text_area.dart';
 import 'eg/text_field.dart';
 import '../../theme/egeon_colors.dart';
 import '../../theme/egeon_type.dart';
+import '../utils/app_shortcut.dart';
 
 /// A largura que o [showFormDialog] deu à janela, para o [FormDialogBody].
 class _DialogWidth extends InheritedWidget {
@@ -43,9 +44,8 @@ Future<T?> showFormDialog<T>(
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: (_, event) =>
-          HardwareKeyboard.instance.isMetaPressed &&
-              event.logicalKey != LogicalKeyboardKey.metaLeft &&
-              event.logicalKey != LogicalKeyboardKey.metaRight
+          isAppModifierPressed(HardwareKeyboard.instance) &&
+              !isAppModifierKey(event.logicalKey)
           ? KeyEventResult.handled
           : KeyEventResult.ignored,
       // Os atalhos de texto (⌘V, ⌘C, ⌘A, ⌘Z) moram na raiz do `WidgetsApp`,

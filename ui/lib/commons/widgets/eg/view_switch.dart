@@ -6,6 +6,7 @@ import 'eg_icon.dart';
 import 'motion.dart';
 import 'pressable.dart';
 import 'tooltip.dart';
+import '../../utils/app_shortcut.dart';
 
 enum ViewSwitchMode { canvas, chat }
 
@@ -30,9 +31,19 @@ class ViewSwitch extends StatelessWidget {
   /// Nulo desabilita.
   final ValueChanged<ViewSwitchMode>? onChanged;
 
-  static const _options = [
-    (ViewSwitchMode.canvas, 'Canvas', '⌥⌘1', _canvasIcon),
-    (ViewSwitchMode.chat, 'Chat', '⌥⌘2', EgIcons.message),
+  static final _options = [
+    (
+      ViewSwitchMode.canvas,
+      'Canvas',
+      appShortcutLabel('1', alt: true, macOnly: true),
+      _canvasIcon,
+    ),
+    (
+      ViewSwitchMode.chat,
+      'Chat',
+      appShortcutLabel('2', alt: true, macOnly: true),
+      EgIcons.message,
+    ),
   ];
 
   @override

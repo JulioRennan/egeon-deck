@@ -45,8 +45,23 @@ abstract interface class AppWindows {
 class MultiWindowAppWindows implements AppWindows {
   const MultiWindowAppWindows();
 
+  /// A abertura em curso de cada tipo: duas chamadas próximas (tecla repetida,
+  /// dois cliques) veem a lista de janelas vazia e criariam dois motores, e a
+  /// segunda espera a primeira em vez de criar outro.
+  static final _opening = <WindowKind, Future<void>>{};
+
   @override
-  Future<void> open(WindowArguments arguments) async {
+  Future<void> open(WindowArguments arguments) {
+    final running = _opening[arguments.kind];
+    if (running != null) return running;
+    // Bloco, e não `=> remove(...)`: o `remove` devolve o próprio Future, e o
+    // `whenComplete` esperaria por ele mesmo.
+    return _opening[arguments.kind] = _open(arguments).whenComplete(() {
+      _opening.remove(arguments.kind);
+    });
+  }
+
+  Future<void> _open(WindowArguments arguments) async {
     for (final window in await WindowController.getAll()) {
       if (WindowArguments.decode(window.arguments)?.kind == arguments.kind) {
         await window.show();
