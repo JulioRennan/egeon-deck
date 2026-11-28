@@ -9,6 +9,9 @@ do código. `EGEON_SECONDARY_GPU=none` volta ao comportamento do pacote; `=high`
 alto desempenho. Se a configuração com LUID falhar (máquina sem D3D11 de
 hardware, que cai no WARP), o motor volta aos atributos do principal e os dois
 dividem o display de novo, sem aviso.
+O runner (`EgeonReportGpu`, em `windows/runner/window_channel.cpp`) anota em
+`%LOCALAPPDATA%\<appid>\gpu.log` o adaptador de cada motor e se a janela
+secundária ficou com display próprio ou compartilhado.
 
 Também sai a linha `resolution: workspace` do `pubspec.yaml`.
 

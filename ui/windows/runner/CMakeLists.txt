@@ -31,10 +31,14 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 
+# O código-fonte é UTF-8 (acentos em texto de log): sem isto o MSVC o lê na
+# página de código do sistema.
+target_compile_options(${BINARY_NAME} PRIVATE "/utf-8")
+
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
-target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "comctl32.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "comctl32.lib" "dxgi.lib")
 
 # O dev é o que um build que não é release pede (a mesma regra do EgeonFlavor).
 target_compile_definitions(${BINARY_NAME} PRIVATE

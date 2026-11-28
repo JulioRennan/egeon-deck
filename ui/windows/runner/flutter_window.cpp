@@ -16,6 +16,7 @@ void OnSecondaryWindowCreated(void* controller) {
       static_cast<flutter::FlutterViewController*>(controller);
   RegisterPlugins(view_controller->engine());
   EgeonAttachWindowChannel(view_controller, /*secondary=*/true);
+  EgeonReportGpu(view_controller, /*secondary=*/true);
 }
 
 }  // namespace
@@ -44,6 +45,7 @@ bool FlutterWindow::OnCreate() {
   DesktopMultiWindowSetWindowCreatedCallback(OnSecondaryWindowCreated);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   EgeonAttachWindowChannel(flutter_controller_.get(), /*secondary=*/false);
+  EgeonReportGpu(flutter_controller_.get(), /*secondary=*/false);
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();

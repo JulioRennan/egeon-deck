@@ -24,6 +24,13 @@
 void EgeonAttachWindowChannel(flutter::FlutterViewController* controller,
                               bool secondary);
 
+// Anota em `%LOCALAPPDATA%\<appid>\gpu.log` (e no OutputDebugString) qual
+// adaptador o motor da janela usa e, na secundária, se ela conseguiu um display
+// do ANGLE só dela ou caiu no compartilhado com o principal (ver `EGEON.md` do
+// desktop_multi_window). Chamada com a view já criada.
+void EgeonReportGpu(flutter::FlutterViewController* controller,
+                    bool secondary);
+
 // O dev é o que `EGEON_FLAVOR=dev` ou um build que não é release pedem: a
 // mesma regra do `EgeonFlavor` do Dart.
 bool EgeonIsDevFlavor();
